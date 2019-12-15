@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Microsoft.Z3;
+using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace QT
 {
@@ -50,16 +52,18 @@ namespace QT
 
     internal class Abs : SyntaxNode
     {
-        public Abs(SyntaxNode ty, SyntaxNode body)
+        public Abs(SyntaxNode argTy, SyntaxNode resultTy, SyntaxNode body)
         {
-            Ty = ty;
+            ArgTy = argTy;
+            ResultTy = resultTy;
             Body = body;
         }
 
-        public SyntaxNode Ty { get; }
+        public SyntaxNode ArgTy { get; }
+        public SyntaxNode ResultTy { get; }
         public SyntaxNode Body { get; }
 
-        public override string ToString() => $"(λ{Ty}.{Body})";
+        public override string ToString() => $"(λ{ArgTy}.{ResultTy}.{Body})";
     }
 
     internal class Id : SyntaxNode
@@ -72,7 +76,7 @@ namespace QT
 
         public SyntaxNode Left { get; }
         public SyntaxNode Right { get; }
-        
+
         public override string ToString() => $"Id {Left} {Right}";
     }
 
@@ -88,26 +92,50 @@ namespace QT
     {
         private static void Main(string[] args)
         {
+            Console.OutputEncoding = Encoding.UTF8;
+
             // fun (T : *) (x : T) => x
             var polyId =
                 new Abs(
                     new Star(),
+                    new Pi(new Var(0), new Var(1)),
                     new Abs(
                         new Var(0),
+                        new Var(1),
                         new Var(0)));
             Console.WriteLine(PrettyPrint(polyId));
             // fun (T : *) (x y : T) (eq : x = y) => (refl x : y = x)
             var refl =
                 new Abs(
                     new Star(),
+                    new Pi(
+                        new Var(0),
+                        new Pi(
+                            new Var(1),
+                            new Pi(
+                                new Id(new Var(1), new Var(0)),
+                                new Id(new Var(1), new Var(2))))),
                     new Abs(
                         new Var(0),
+                        new Pi(
+                            new Var(1),
+                            new Pi(
+                                new Id(new Var(1), new Var(0)),
+                                new Id(new Var(1), new Var(2)))),
                         new Abs(
                             new Var(1),
+                            new Pi(
+                                new Id(new Var(1), new Var(0)),
+                                new Id(new Var(1), new Var(2))),
                             new Abs(
                                 new Id(new Var(1), new Var(0)),
-                                new Refl(new Id(new Var(2)))))));
+                                new Id(new Var(1), new Var(2)),
+                                new Refl(new Var(2))))));
             Console.WriteLine(PrettyPrint(refl));
+            using (var tc = new TypeChecker())
+            {
+                Console.WriteLine(tc.Check(refl));
+            }
         }
 
         private static string PrettyPrint(SyntaxNode node)
@@ -131,19 +159,26 @@ namespace QT
                 {
                     case Star { }: return "*";
                     case Pi { Ty: var t, Body: var b }:
-                        string piTyS = Aux(t);
-                        string piIndexN = NextName();
-                        string piBodyS = Aux(b);
-                        return $"(Π({piIndexN} : {piTyS}).{piBodyS})";
+                        {
+                            string piTyS = Aux(t);
+                            string piIndexN = NextName();
+                            string piBodyS = Aux(b);
+                            names.RemoveAt(names.Count - 1);
+                            return $"(Π({piIndexN} : {piTyS}).{piBodyS})";
+                        }
                     case Var { Index: var i }: return GetName(i);
                     case App { Fun: var f, Arg: var a }: return $"{Aux(f)} {Aux(a)}";
-                    case Abs { Ty: var t, Body: var b }:
-                        string absTyS = Aux(t);
-                        string absIndexN = NextName();
-                        string absBodyS = Aux(b);
-                        return $"(λ({absIndexN} : {absTyS}).{absBodyS})";
+                    case Abs { ArgTy: var at, ResultTy: var rt, Body: var b }:
+                        {
+                            string argTy = Aux(at);
+                            string index = NextName();
+                            string resultTy = Aux(rt);
+                            string body = Aux(b);
+                            names.RemoveAt(names.Count - 1);
+                            return $"(λ({index} : {argTy}).{resultTy}.{body})";
+                        }
                     case Id { Left: var l, Right: var r }: return $"({Aux(l)} = {Aux(r)})";
-                    case Refl { Id: { Left: var l, Right: var r } }: return $"(Refl {Aux(l)} {Aux(r)})";
+                    case Refl { Body: var b }: return $"(Refl {Aux(b)})";
                     default: throw new Exception("Unreachable");
                 }
             };
