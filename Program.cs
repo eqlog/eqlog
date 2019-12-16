@@ -13,19 +13,25 @@ namespace QT
         {
             Console.OutputEncoding = Encoding.UTF8;
 
-//            const string Example = @"
-//def negb (b : bool) : bool :=
-//  elim b as b into (x : bool) : bool
-//  | : bool => false
-//  | : bool => true";
             const string Example = @"
+def negb (b : bool) : bool :=
+  elim b into (x : bool) : bool
+  | : bool => false
+  | : bool => true.
+
 def plus_0_r (a : nat) : Id (plus a _0) a :=
-  elim a as n into (n : nat) : Id (plus n _0) n
+  elim a into (n : nat) : Id (plus n _0) n
   | : Id (plus _0 _0) _0 => plus_0_l _0
   | (pred : nat)
-    (IH : Id (plus pred _0) pred) : Id (plus (S pred) _0) (S (plus pred _0)) =>
-    let _ : Id (plus (S pred) _0) (S (plus pred _0)) := plus_Sn_m pred _0 in
-    refl (S pred)
+    (IH : Id (plus pred _0) pred) : Id (plus (S pred) _0) (S pred) =>
+    let _ : Id (plus (S pred) _0) (S (plus pred _0)) :=
+      plus_Sn_m pred _0 in
+    refl (S pred).
+
+def func_with_many_args (a b c d e f g h i j k l m n o p q r s : nat) : nat := s.
+
+def test (arg_with_long_name : nat) : nat :=
+  func_with_many_args arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name.
 ";
 
 //            const string Example = @"

@@ -83,6 +83,18 @@ public partial class QtBaseListener : IQtListener {
 	/// <param name="context">The parse tree.</param>
 	public virtual void ExitExpr([NotNull] QtParser.ExprContext context) { }
 	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.argExpr"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void EnterArgExpr([NotNull] QtParser.ArgExprContext context) { }
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.argExpr"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void ExitArgExpr([NotNull] QtParser.ArgExprContext context) { }
+	/// <summary>
 	/// Enter a parse tree produced by <see cref="QtParser.letExpr"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>

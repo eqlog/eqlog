@@ -1,14 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace QT
 {
     internal abstract class SyntaxNode
     {
-        internal static string FormatCtxExtsWithTy(
-                IEnumerable<CtxExt> exts, Expr retTy)
-            => string.Concat(exts.Select(e => $"({e}) ")) + ": " + retTy;
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+            PrettyPrinter.Print(this, sb);
+            return sb.ToString();
+        }
     }
 
     internal class Unit : SyntaxNode
@@ -21,9 +25,6 @@ namespace QT
         }
 
         public IReadOnlyList<Def> Definitions => _defs;
-
-        public override string ToString()
-            => string.Join(Environment.NewLine + Environment.NewLine, _defs);
     }
 
     internal class Def : SyntaxNode
@@ -42,12 +43,6 @@ namespace QT
         public IReadOnlyList<CtxExt> CtxExts => _ctxExts;
         public Expr RetTy { get; }
         public Expr Body { get; }
-
-        public override string ToString()
-        {
-            string ctxExtsStr = SyntaxNode.FormatCtxExtsWithTy(_ctxExts, RetTy);
-            return $"def {Name} {ctxExtsStr} :={Environment.NewLine}  {Body}";
-        }
     }
 
     internal class CtxExt : SyntaxNode
@@ -60,9 +55,6 @@ namespace QT
 
         public string Name { get; }
         public Expr Type { get; }
-
-        public override string ToString()
-            => $"{Name} : {Type}";
     }
 
     internal abstract class Expr : SyntaxNode
@@ -83,9 +75,6 @@ namespace QT
         public Expr Type { get; }
         public Expr Val { get; }
         public Expr Body { get; }
-
-        public override string ToString()
-            => $"let {Id} : {Type} := {Val} in {Body}";
     }
 
     internal class IdExpr : Expr
@@ -96,9 +85,6 @@ namespace QT
         }
 
         public string Id { get; }
-
-        public override string ToString()
-            => Id;
     }
 
     internal class ElimExpr : Expr
@@ -106,28 +92,19 @@ namespace QT
         private readonly List<CtxExt> _intoExts;
         private readonly List<ElimCase> _cases;
 
-        public ElimExpr(Expr discriminee, string varName, List<CtxExt> intoExts,
+        public ElimExpr(Expr discriminee, List<CtxExt> intoExts,
                         Expr intoTy, List<ElimCase> cases)
         {
             Discriminee = discriminee;
-            VarName = varName;
             _intoExts = intoExts;
             IntoTy = intoTy;
             _cases = cases;
         }
 
         public Expr Discriminee { get; }
-        public string VarName { get; }
         public IReadOnlyList<CtxExt> IntoExts => _intoExts;
         public Expr IntoTy { get; }
         public IReadOnlyList<ElimCase> Cases => _cases;
-
-        public override string ToString()
-        {
-            string intoStr = SyntaxNode.FormatCtxExtsWithTy(IntoExts, IntoTy);
-            string cases = string.Concat(_cases.Select(c => Environment.NewLine + "| " + c));
-            return $"elim {Discriminee} as {VarName} into {intoStr}{cases}";
-        }
     }
 
     internal class ElimCase : SyntaxNode
@@ -143,26 +120,18 @@ namespace QT
         public IReadOnlyList<CtxExt> CaseExts => _caseExts;
         public Expr CaseTy { get; }
         public Expr Body { get; }
-
-        public override string ToString()
-        {
-            string extsStr = SyntaxNode.FormatCtxExtsWithTy(CaseExts, CaseTy);
-            return $"{extsStr} => {Body}";
-        }
     }
 
     internal class AppExpr : Expr
     {
-        public AppExpr(Expr fun, Expr arg)
+        private readonly List<Expr> _args;
+        public AppExpr(string id, List<Expr> args)
         {
-            Fun = fun;
-            Arg = arg;
+            Fun = id;
+            _args = args;
         }
 
-        public Expr Fun { get; }
-        public Expr Arg { get; }
-
-        public override string ToString()
-            => $"({Fun} {Arg})";
+        public string Fun { get; }
+        public IReadOnlyList<Expr> Args => _args;
     }
 }
