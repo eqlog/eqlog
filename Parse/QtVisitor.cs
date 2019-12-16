@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-// Generated from .\Qt.g4 by ANTLR 4.7.2
+// Generated from Qt.g4 by ANTLR 4.7.2
 
 // Unreachable code detected
 #pragma warning disable 0162
@@ -44,17 +44,11 @@ public interface IQtVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitDef([NotNull] QtParser.DefContext context);
 	/// <summary>
-	/// Visit a parse tree produced by <see cref="QtParser.param"/>.
+	/// Visit a parse tree produced by <see cref="QtParser.ctxExt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
-	Result VisitParam([NotNull] QtParser.ParamContext context);
-	/// <summary>
-	/// Visit a parse tree produced by <see cref="QtParser.ty"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	/// <return>The visitor result.</return>
-	Result VisitTy([NotNull] QtParser.TyContext context);
+	Result VisitCtxExt([NotNull] QtParser.CtxExtContext context);
 	/// <summary>
 	/// Visit a parse tree produced by <see cref="QtParser.expr"/>.
 	/// </summary>
@@ -73,4 +67,16 @@ public interface IQtVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <param name="context">The parse tree.</param>
 	/// <return>The visitor result.</return>
 	Result VisitIdExpr([NotNull] QtParser.IdExprContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="QtParser.elimExpr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitElimExpr([NotNull] QtParser.ElimExprContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="QtParser.elimCase"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitElimCase([NotNull] QtParser.ElimCaseContext context);
 }

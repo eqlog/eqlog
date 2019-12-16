@@ -13,18 +13,20 @@ namespace QT
         {
             Console.OutputEncoding = Encoding.UTF8;
 
+//            const string Example = @"
+//def negb (b : bool) : bool :=
+//  elim b as b into (x : bool) : bool
+//  | : bool => false
+//  | : bool => true";
             const string Example = @"
-def plus_0_r (a : nat) : a + 0 = a :=
-  match a return (n : nat) -> n + 0 = n with
-  | 0 => plus_0_l 0
-  | S n, (prev : n + 0 = n) =>
-    let _ : S n + 0 = S (n + 0) := plus_Sn_m n 0 in
-    refl (S n)
-  end
-
-def id (x : nat) : nat :=
-  let y : nat := x in
-  y";
+def plus_0_r (a : nat) : Id (plus a _0) a :=
+  elim a as n into (n : nat) : Id (plus n _0) n
+  | : Id (plus _0 _0) _0 => plus_0_l _0
+  | (pred : nat)
+    (IH : Id (plus pred _0) pred) : Id (plus (S pred) _0) (S (plus pred _0)) =>
+    let _ : Id (plus (S pred) _0) (S (plus pred _0)) := plus_Sn_m pred _0 in
+    refl (S pred)
+";
 
 //            const string Example = @"
 //def plus_0_r (a : nat) : a + 0 = a :=
