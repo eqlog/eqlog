@@ -1,9 +1,12 @@
-﻿using Antlr4.Runtime.Misc;
+﻿using Antlr4.Runtime;
+using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace QT.Parse
 {
@@ -16,6 +19,8 @@ namespace QT.Parse
         {
             if (context.parenthesized != null)
                 return context.parenthesized.Accept(this);
+            if (context.num != null)
+                return ExpandNum(context.num);
 
             return context.id.Accept(this);
         }
@@ -66,6 +71,16 @@ namespace QT.Parse
             return new ElimCase(caseExts, caseTy, body);
         }
 
+        private SyntaxNode ExpandNum(IToken num)
+        {
+            int val = int.Parse(num.Text, CultureInfo.InvariantCulture);
+            Expr unary = new IdExpr("O");
+            for (int i = 0; i < val; i++)
+                unary = new AppExpr("S", new List<Expr> { unary });
+
+            return unary;
+        }
+
         public SyntaxNode VisitExpr([NotNull] QtParser.ExprContext context)
         {
             if (context.parenthesized != null)
@@ -76,6 +91,21 @@ namespace QT.Parse
                 return context.id.Accept(this);
             if (context.elim != null)
                 return context.elim.Accept(this);
+            if (context.op != null)
+            {
+                string name = context.op.Text switch
+                {
+                    "+" => "plus",
+                    "=" => "id",
+                    _ => throw new Exception("Unhandled")
+                };
+                List<Expr> args = new List<Expr> { (Expr)context.left.Accept(this), (Expr)context.right.Accept(this) };
+                return new AppExpr(name, args);
+            }
+            if (context.num != null)
+            {
+                return ExpandNum(context.num);
+            }
 
             Debug.Assert(context.fun != null && context._args.Count > 0);
             return new AppExpr(context.fun.Text, context._args.Select(a => (Expr)a.Accept(this)).ToList());
