@@ -44,7 +44,7 @@ namespace QT
                     {
                         sb.Remove(letValStart, sb.Length - letValStart);
                         sb.Remove(sb.Length - 1, 1);
-                        sb.AppendLine().Append(' ', letLineStart + 2);
+                        sb.AppendLine().Append(' ', letIndex + 2);
                         Print(let.Val, sb);
                     }
                     sb.Append(" in").AppendLine();
