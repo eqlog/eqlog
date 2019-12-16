@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-// Generated from .\Qt.g4 by ANTLR 4.7.2
+// Generated from Qt.g4 by ANTLR 4.7.2
 
 // Unreachable code detected
 #pragma warning disable 0162
@@ -51,25 +51,15 @@ public interface IQtListener : IParseTreeListener {
 	/// <param name="context">The parse tree.</param>
 	void ExitDef([NotNull] QtParser.DefContext context);
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="QtParser.param"/>.
+	/// Enter a parse tree produced by <see cref="QtParser.ctxExt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void EnterParam([NotNull] QtParser.ParamContext context);
+	void EnterCtxExt([NotNull] QtParser.CtxExtContext context);
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="QtParser.param"/>.
+	/// Exit a parse tree produced by <see cref="QtParser.ctxExt"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	void ExitParam([NotNull] QtParser.ParamContext context);
-	/// <summary>
-	/// Enter a parse tree produced by <see cref="QtParser.ty"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	void EnterTy([NotNull] QtParser.TyContext context);
-	/// <summary>
-	/// Exit a parse tree produced by <see cref="QtParser.ty"/>.
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	void ExitTy([NotNull] QtParser.TyContext context);
+	void ExitCtxExt([NotNull] QtParser.CtxExtContext context);
 	/// <summary>
 	/// Enter a parse tree produced by <see cref="QtParser.expr"/>.
 	/// </summary>
@@ -100,4 +90,24 @@ public interface IQtListener : IParseTreeListener {
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	void ExitIdExpr([NotNull] QtParser.IdExprContext context);
+	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.elimExpr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void EnterElimExpr([NotNull] QtParser.ElimExprContext context);
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.elimExpr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void ExitElimExpr([NotNull] QtParser.ElimExprContext context);
+	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.elimCase"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void EnterElimCase([NotNull] QtParser.ElimCaseContext context);
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.elimCase"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void ExitElimCase([NotNull] QtParser.ElimCaseContext context);
 }

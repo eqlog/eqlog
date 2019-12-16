@@ -6,6 +6,9 @@ namespace QT
 {
     internal abstract class SyntaxNode
     {
+        internal static string FormatCtxExtsWithTy(
+                IEnumerable<CtxExt> exts, Expr retTy)
+            => string.Concat(exts.Select(e => $"({e}) ")) + ": " + retTy;
     }
 
     internal class Unit : SyntaxNode
@@ -25,54 +28,41 @@ namespace QT
 
     internal class Def : SyntaxNode
     {
-        private readonly List<Param> _params;
+        private readonly List<CtxExt> _ctxExts;
 
-        public Def(string name, List<Param> @params, Ty retTy, Expr body)
+        public Def(string name, List<CtxExt> ctxExts, Expr retTy, Expr body)
         {
             Name = name;
-            _params = @params;
+            _ctxExts = ctxExts;
             RetTy = retTy;
             Body = body;
         }
 
         public string Name { get; }
-        public IReadOnlyList<Param> Params => _params;
-        public Ty RetTy { get; }
+        public IReadOnlyList<CtxExt> CtxExts => _ctxExts;
+        public Expr RetTy { get; }
         public Expr Body { get; }
 
         public override string ToString()
         {
-            string paramsStr = string.Join(" ", Params.Select(p => $"({p})"));
-            return $"def {Name} {paramsStr} : {RetTy} :={Environment.NewLine}  {Body}";
+            string ctxExtsStr = SyntaxNode.FormatCtxExtsWithTy(_ctxExts, RetTy);
+            return $"def {Name} {ctxExtsStr} :={Environment.NewLine}  {Body}";
         }
     }
 
-    internal class Param : SyntaxNode
+    internal class CtxExt : SyntaxNode
     {
-        public Param(string name, Ty type)
+        public CtxExt(string name, Expr type)
         {
             Name = name;
             Type = type;
         }
 
         public string Name { get; }
-        public Ty Type { get; }
+        public Expr Type { get; }
 
         public override string ToString()
             => $"{Name} : {Type}";
-    }
-
-    internal class Ty : SyntaxNode
-    {
-        public Ty(string id)
-        {
-            Id = id;
-        }
-
-        public string Id { get; }
-
-        public override string ToString()
-            => Id;
     }
 
     internal abstract class Expr : SyntaxNode
@@ -81,7 +71,7 @@ namespace QT
 
     internal class LetExpr : Expr
     {
-        public LetExpr(string id, Ty type, Expr val, Expr body)
+        public LetExpr(string id, Expr type, Expr val, Expr body)
         {
             Id = id;
             Type = type;
@@ -90,7 +80,7 @@ namespace QT
         }
 
         public string Id { get; }
-        public Ty Type { get; }
+        public Expr Type { get; }
         public Expr Val { get; }
         public Expr Body { get; }
 
@@ -109,5 +99,70 @@ namespace QT
 
         public override string ToString()
             => Id;
+    }
+
+    internal class ElimExpr : Expr
+    {
+        private readonly List<CtxExt> _intoExts;
+        private readonly List<ElimCase> _cases;
+
+        public ElimExpr(Expr discriminee, string varName, List<CtxExt> intoExts,
+                        Expr intoTy, List<ElimCase> cases)
+        {
+            Discriminee = discriminee;
+            VarName = varName;
+            _intoExts = intoExts;
+            IntoTy = intoTy;
+            _cases = cases;
+        }
+
+        public Expr Discriminee { get; }
+        public string VarName { get; }
+        public IReadOnlyList<CtxExt> IntoExts => _intoExts;
+        public Expr IntoTy { get; }
+        public IReadOnlyList<ElimCase> Cases => _cases;
+
+        public override string ToString()
+        {
+            string intoStr = SyntaxNode.FormatCtxExtsWithTy(IntoExts, IntoTy);
+            string cases = string.Concat(_cases.Select(c => Environment.NewLine + "| " + c));
+            return $"elim {Discriminee} as {VarName} into {intoStr}{cases}";
+        }
+    }
+
+    internal class ElimCase : SyntaxNode
+    {
+        private readonly List<CtxExt> _caseExts;
+        public ElimCase(List<CtxExt> caseExts, Expr caseTy, Expr body)
+        {
+            _caseExts = caseExts;
+            CaseTy = caseTy;
+            Body = body;
+        }
+
+        public IReadOnlyList<CtxExt> CaseExts => _caseExts;
+        public Expr CaseTy { get; }
+        public Expr Body { get; }
+
+        public override string ToString()
+        {
+            string extsStr = SyntaxNode.FormatCtxExtsWithTy(CaseExts, CaseTy);
+            return $"{extsStr} => {Body}";
+        }
+    }
+
+    internal class AppExpr : Expr
+    {
+        public AppExpr(Expr fun, Expr arg)
+        {
+            Fun = fun;
+            Arg = arg;
+        }
+
+        public Expr Fun { get; }
+        public Expr Arg { get; }
+
+        public override string ToString()
+            => $"({Fun} {Arg})";
     }
 }

@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-// Generated from .\Qt.g4 by ANTLR 4.7.2
+// Generated from Qt.g4 by ANTLR 4.7.2
 
 // Unreachable code detected
 #pragma warning disable 0162
@@ -59,29 +59,17 @@ public partial class QtBaseListener : IQtListener {
 	/// <param name="context">The parse tree.</param>
 	public virtual void ExitDef([NotNull] QtParser.DefContext context) { }
 	/// <summary>
-	/// Enter a parse tree produced by <see cref="QtParser.param"/>.
+	/// Enter a parse tree produced by <see cref="QtParser.ctxExt"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void EnterParam([NotNull] QtParser.ParamContext context) { }
+	public virtual void EnterCtxExt([NotNull] QtParser.CtxExtContext context) { }
 	/// <summary>
-	/// Exit a parse tree produced by <see cref="QtParser.param"/>.
+	/// Exit a parse tree produced by <see cref="QtParser.ctxExt"/>.
 	/// <para>The default implementation does nothing.</para>
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
-	public virtual void ExitParam([NotNull] QtParser.ParamContext context) { }
-	/// <summary>
-	/// Enter a parse tree produced by <see cref="QtParser.ty"/>.
-	/// <para>The default implementation does nothing.</para>
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	public virtual void EnterTy([NotNull] QtParser.TyContext context) { }
-	/// <summary>
-	/// Exit a parse tree produced by <see cref="QtParser.ty"/>.
-	/// <para>The default implementation does nothing.</para>
-	/// </summary>
-	/// <param name="context">The parse tree.</param>
-	public virtual void ExitTy([NotNull] QtParser.TyContext context) { }
+	public virtual void ExitCtxExt([NotNull] QtParser.CtxExtContext context) { }
 	/// <summary>
 	/// Enter a parse tree produced by <see cref="QtParser.expr"/>.
 	/// <para>The default implementation does nothing.</para>
@@ -118,6 +106,30 @@ public partial class QtBaseListener : IQtListener {
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
 	public virtual void ExitIdExpr([NotNull] QtParser.IdExprContext context) { }
+	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.elimExpr"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void EnterElimExpr([NotNull] QtParser.ElimExprContext context) { }
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.elimExpr"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void ExitElimExpr([NotNull] QtParser.ElimExprContext context) { }
+	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.elimCase"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void EnterElimCase([NotNull] QtParser.ElimCaseContext context) { }
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.elimCase"/>.
+	/// <para>The default implementation does nothing.</para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	public virtual void ExitElimCase([NotNull] QtParser.ElimCaseContext context) { }
 
 	/// <inheritdoc/>
 	/// <remarks>The default implementation does nothing.</remarks>
