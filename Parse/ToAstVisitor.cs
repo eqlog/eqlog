@@ -13,6 +13,14 @@ namespace QT.Parse
         public SyntaxNode Visit(IParseTree tree)
             => throw new NotSupportedException();
 
+        public SyntaxNode VisitArgExpr([NotNull] QtParser.ArgExprContext context)
+        {
+            if (context.parenthesized != null)
+                return context.parenthesized.Accept(this);
+
+            return context.id.Accept(this);
+        }
+
         public SyntaxNode VisitChildren(IRuleNode node)
             => throw new NotSupportedException();
 
@@ -45,12 +53,11 @@ namespace QT.Parse
         public SyntaxNode VisitElimExpr([NotNull] QtParser.ElimExprContext context)
         {
             Expr discriminee = (Expr)context.discriminee.Accept(this);
-            string varName = context.varName.Text;
             List<CtxExt> intoExts = ParseCtxExts(context.ctxExt());
             Expr intoTy = (Expr)context.intoTy.Accept(this);
             List<ElimCase> cases = context.elimCase().Select(ec => (ElimCase)ec.Accept(this)).ToList();
 
-            return new ElimExpr(discriminee, varName, intoExts, intoTy, cases);
+            return new ElimExpr(discriminee, intoExts, intoTy, cases);
         }
 
         public SyntaxNode VisitElimCase([NotNull] QtParser.ElimCaseContext context)
@@ -72,8 +79,8 @@ namespace QT.Parse
             if (context.elim != null)
                 return context.elim.Accept(this);
 
-            Debug.Assert(context.fun != null && context.arg != null);
-            return new AppExpr((Expr)context.fun.Accept(this), (Expr)context.arg.Accept(this));
+            Debug.Assert(context.fun != null && context._args.Count > 0);
+            return new AppExpr(context.fun.Text, context._args.Select(a => (Expr)a.Accept(this)).ToList());
         }
 
         public SyntaxNode VisitIdExpr([NotNull] QtParser.IdExprContext context)

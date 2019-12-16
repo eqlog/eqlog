@@ -71,6 +71,16 @@ public interface IQtListener : IParseTreeListener {
 	/// <param name="context">The parse tree.</param>
 	void ExitExpr([NotNull] QtParser.ExprContext context);
 	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.argExpr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void EnterArgExpr([NotNull] QtParser.ArgExprContext context);
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.argExpr"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void ExitArgExpr([NotNull] QtParser.ArgExprContext context);
+	/// <summary>
 	/// Enter a parse tree produced by <see cref="QtParser.letExpr"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
