@@ -15,17 +15,16 @@ namespace QT
 
             const string Example = @"
 def negb (b : bool) : bool :=
-  elim b into (x : bool) : bool
+  elim b into (_ : bool) : bool
   | : bool => false
   | : bool => true.
 
-def plus_0_r (a : nat) : Id (plus a O) a :=
-  elim a into (n : nat) : Id (plus n O) n
-  | : Id (plus O O) O => plus_0_l O
+def plus_0_r (a : nat) : a + 0 = a :=
+  elim a into (n : nat) : n + 0 = n
+  | : 0 + 0 = 0 => plus_0_l 0
   | (pred : nat)
-    (IH : Id (plus pred O) pred) : Id (plus (S pred) O) (S pred) =>
-    let _ : Id (plus (S pred) O) (S (plus pred O)) :=
-      plus_Sn_m pred O in
+    (IH : pred + 0 = pred) : S pred + 0 = S pred =>
+    let _ : S pred + 0 = S (pred + 0) := plus_Sn_m pred 0 in
     refl (S pred).
 ";
 
