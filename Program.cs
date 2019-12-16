@@ -19,50 +19,23 @@ def negb (b : bool) : bool :=
   | : bool => false
   | : bool => true.
 
-def plus_0_r (a : nat) : Id (plus a _0) a :=
-  elim a into (n : nat) : Id (plus n _0) n
-  | : Id (plus _0 _0) _0 => plus_0_l _0
+def plus_0_r (a : nat) : Id (plus a O) a :=
+  elim a into (n : nat) : Id (plus n O) n
+  | : Id (plus O O) O => plus_0_l O
   | (pred : nat)
-    (IH : Id (plus pred _0) pred) : Id (plus (S pred) _0) (S pred) =>
-    let _ : Id (plus (S pred) _0) (S (plus pred _0)) :=
-      plus_Sn_m pred _0 in
+    (IH : Id (plus pred O) pred) : Id (plus (S pred) O) (S pred) =>
+    let _ : Id (plus (S pred) O) (S (plus pred O)) :=
+      plus_Sn_m pred O in
     refl (S pred).
-
-def func_with_many_args (a b c d e f g h i j k l m n o p q r s : nat) : nat := s.
-
-def test (arg_with_long_name : nat) : nat :=
-  func_with_many_args arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name arg_with_long_name.
 ";
-
-//            const string Example = @"
-//def plus_0_r (a : nat) : a + 0 = a :=
-//  match a return (n : nat) -> n + 0 = n with
-//  | 0 => plus_0_l 0
-//  | S n, (prev : n + 0 = n) =>
-//    let _ : S n + 0 = S (n + 0) := plus_Sn_m n 0 in
-//    refl n
-//  end
-
-
-//def plus_comm (a b : nat) : plus a b = plus b a :=
-//  c1 : 0 + b = b := plus_0_l b
-//  c2 : b + 0 = b := add_0_r b
-//  match a return (n : nat) -> n + b = b + n with
-//  | 0 => refl b
-//  | S n, (prev :  => 
-  
-
-//def negb_example (x : bool) (negb false = x) :=
-  
-//";
 
             Unit unit = AstParser.ParseUnit(Example);
             Console.WriteLine(unit);
             Console.ReadLine();
-            //using (var tc = new TypeChecker())
-            //{
-            //    Console.WriteLine();
-            //}
+            using (var tc = new TypeChecker())
+            {
+                Console.WriteLine(tc.Check(unit, out string err) ? "Type checking succeeded" : ("Type checking error: " + err));
+            }
         }
     }
 }

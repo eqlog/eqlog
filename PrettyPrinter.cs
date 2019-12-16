@@ -35,7 +35,7 @@ namespace QT
                 case LetExpr let:
                     int letIndex = LineLength(sb);
                     int letLineStart = sb.Length - letIndex;
-                    sb.AppendFormat("let {0} : ", let.Id);
+                    sb.AppendFormat("let {0} : ", let.Name);
                     Print(let.Type, sb);
                     sb.Append(" := ");
                     int letValStart = sb.Length;

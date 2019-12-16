@@ -1,6 +1,5 @@
 ﻿using Antlr4.Runtime.Misc;
 using Antlr4.Runtime.Tree;
-using QT;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -29,7 +28,7 @@ namespace QT.Parse
             IEnumerable<CtxExt> MakeExts(QtParser.CtxExtContext ctx)
             {
                 Expr ty = (Expr)ctx.ty.Accept(this);
-                return ctx.ID().Select(id => new CtxExt(id.GetText(), ty));
+                return ctx._names.Select(id => new CtxExt(id.Text, ty));
             }
             List<CtxExt> l = ctxs.SelectMany(MakeExts).ToList();
             return l;
@@ -41,7 +40,7 @@ namespace QT.Parse
         public SyntaxNode VisitDef([NotNull] QtParser.DefContext context)
         {
             string name = context.name.Text;
-            List<CtxExt> ctxExts = ParseCtxExts(context.ctxExt());
+            List<CtxExt> ctxExts = ParseCtxExts(context._exts);
             Expr retTy = (Expr)context.retTy.Accept(this);
             Expr retExpr = (Expr)context.body.Accept(this);
             return new Def(name, ctxExts, retTy, retExpr);
@@ -53,16 +52,15 @@ namespace QT.Parse
         public SyntaxNode VisitElimExpr([NotNull] QtParser.ElimExprContext context)
         {
             Expr discriminee = (Expr)context.discriminee.Accept(this);
-            List<CtxExt> intoExts = ParseCtxExts(context.ctxExt());
+            List<CtxExt> intoExts = ParseCtxExts(context._exts);
             Expr intoTy = (Expr)context.intoTy.Accept(this);
-            List<ElimCase> cases = context.elimCase().Select(ec => (ElimCase)ec.Accept(this)).ToList();
-
+            List<ElimCase> cases = context._cases.Select(ec => (ElimCase)ec.Accept(this)).ToList();
             return new ElimExpr(discriminee, intoExts, intoTy, cases);
         }
 
         public SyntaxNode VisitElimCase([NotNull] QtParser.ElimCaseContext context)
         {
-            List<CtxExt> caseExts = ParseCtxExts(context.ctxExt());
+            List<CtxExt> caseExts = ParseCtxExts(context._exts);
             Expr caseTy = (Expr)context.caseTy.Accept(this);
             Expr body = (Expr)context.body.Accept(this);
             return new ElimCase(caseExts, caseTy, body);
@@ -85,16 +83,16 @@ namespace QT.Parse
 
         public SyntaxNode VisitIdExpr([NotNull] QtParser.IdExprContext context)
         {
-            return new IdExpr(context.ID().GetText());
+            return new IdExpr(context.id.Text);
         }
 
         public SyntaxNode VisitLetExpr([NotNull] QtParser.LetExprContext context)
         {
-            string id = context.varName.Text;
+            string name = context.varName.Text;
             Expr type = (Expr)context.ty.Accept(this);
             Expr val = (Expr)context.val.Accept(this);
             Expr body = (Expr)context.body.Accept(this);
-            return new LetExpr(id, type, val, body);
+            return new LetExpr(name, type, val, body);
         }
 
         public SyntaxNode VisitTerminal(ITerminalNode node)
@@ -102,7 +100,7 @@ namespace QT.Parse
 
         public SyntaxNode VisitUnit([NotNull] QtParser.UnitContext context)
         {
-            return new Unit(context.def().Select(d => (Def)d.Accept(this)).ToList());
+            return new Unit(context._defs.Select(d => (Def)d.Accept(this)).ToList());
         }
     }
 }
