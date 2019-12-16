@@ -1,6 +1,5 @@
-﻿using System;
+﻿using Antlr4.Runtime.Misc;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace QT
@@ -63,15 +62,15 @@ namespace QT
 
     internal class LetExpr : Expr
     {
-        public LetExpr(string id, Expr type, Expr val, Expr body)
+        public LetExpr(string name, Expr type, Expr val, Expr body)
         {
-            Id = id;
+            Name = name;
             Type = type;
             Val = val;
             Body = body;
         }
 
-        public string Id { get; }
+        public string Name { get; }
         public Expr Type { get; }
         public Expr Val { get; }
         public Expr Body { get; }
@@ -125,9 +124,9 @@ namespace QT
     internal class AppExpr : Expr
     {
         private readonly List<Expr> _args;
-        public AppExpr(string id, List<Expr> args)
+        public AppExpr(string fun, List<Expr> args)
         {
-            Fun = id;
+            Fun = fun;
             _args = args;
         }
 

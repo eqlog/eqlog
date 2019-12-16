@@ -25,9 +25,11 @@ namespace QT
             BoolExpr[] rels = _fix.ParseString(Z3Setup);
         }
 
-        public string Check(SyntaxNode ast)
+        public bool Check(Unit unit, out string error)
         {
-            return "wtf no";
+            error = "";
+
+            return false;
         }
 
         public void Dispose()

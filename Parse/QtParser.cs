@@ -87,6 +87,8 @@ public partial class QtParser : Parser {
 	}
 
 	public partial class UnitContext : ParserRuleContext {
+		public DefContext _def;
+		public IList<DefContext> _defs = new List<DefContext>();
 		public DefContext[] def() {
 			return GetRuleContexts<DefContext>();
 		}
@@ -127,7 +129,8 @@ public partial class QtParser : Parser {
 			while (_la==T__0) {
 				{
 				{
-				State = 18; def();
+				State = 18; _localctx._def = def();
+				_localctx._defs.Add(_localctx._def);
 				}
 				}
 				State = 23;
@@ -149,6 +152,8 @@ public partial class QtParser : Parser {
 
 	public partial class DefContext : ParserRuleContext {
 		public IToken name;
+		public CtxExtContext _ctxExt;
+		public IList<CtxExtContext> _exts = new List<CtxExtContext>();
 		public ExprContext retTy;
 		public ExprContext body;
 		public ITerminalNode ID() { return GetToken(QtParser.ID, 0); }
@@ -200,7 +205,8 @@ public partial class QtParser : Parser {
 			while (_la==T__4) {
 				{
 				{
-				State = 26; ctxExt();
+				State = 26; _localctx._ctxExt = ctxExt();
+				_localctx._exts.Add(_localctx._ctxExt);
 				}
 				}
 				State = 31;
@@ -226,7 +232,8 @@ public partial class QtParser : Parser {
 	}
 
 	public partial class CtxExtContext : ParserRuleContext {
-		public IToken names;
+		public IToken _ID;
+		public IList<IToken> _names = new List<IToken>();
 		public ExprContext ty;
 		public ExprContext expr() {
 			return GetRuleContext<ExprContext>(0);
@@ -270,7 +277,8 @@ public partial class QtParser : Parser {
 			do {
 				{
 				{
-				State = 39; _localctx.names = Match(ID);
+				State = 39; _localctx._ID = Match(ID);
+				_localctx._names.Add(_localctx._ID);
 				}
 				}
 				State = 42;
@@ -535,6 +543,7 @@ public partial class QtParser : Parser {
 	}
 
 	public partial class IdExprContext : ParserRuleContext {
+		public IToken id;
 		public ITerminalNode ID() { return GetToken(QtParser.ID, 0); }
 		public IdExprContext(ParserRuleContext parent, int invokingState)
 			: base(parent, invokingState)
@@ -563,7 +572,7 @@ public partial class QtParser : Parser {
 		try {
 			EnterOuterAlt(_localctx, 1);
 			{
-			State = 79; Match(ID);
+			State = 79; _localctx.id = Match(ID);
 			}
 		}
 		catch (RecognitionException re) {
@@ -579,7 +588,11 @@ public partial class QtParser : Parser {
 
 	public partial class ElimExprContext : ParserRuleContext {
 		public ExprContext discriminee;
+		public CtxExtContext _ctxExt;
+		public IList<CtxExtContext> _exts = new List<CtxExtContext>();
 		public ExprContext intoTy;
+		public ElimCaseContext _elimCase;
+		public IList<ElimCaseContext> _cases = new List<ElimCaseContext>();
 		public ExprContext[] expr() {
 			return GetRuleContexts<ExprContext>();
 		}
@@ -636,7 +649,8 @@ public partial class QtParser : Parser {
 			while (_la==T__4) {
 				{
 				{
-				State = 84; ctxExt();
+				State = 84; _localctx._ctxExt = ctxExt();
+				_localctx._exts.Add(_localctx._ctxExt);
 				}
 				}
 				State = 89;
@@ -652,7 +666,8 @@ public partial class QtParser : Parser {
 				if ( _alt==1 ) {
 					{
 					{
-					State = 92; elimCase();
+					State = 92; _localctx._elimCase = elimCase();
+					_localctx._cases.Add(_localctx._elimCase);
 					}
 					} 
 				}
@@ -674,6 +689,8 @@ public partial class QtParser : Parser {
 	}
 
 	public partial class ElimCaseContext : ParserRuleContext {
+		public CtxExtContext _ctxExt;
+		public IList<CtxExtContext> _exts = new List<CtxExtContext>();
 		public ExprContext caseTy;
 		public ExprContext body;
 		public ExprContext[] expr() {
@@ -723,7 +740,8 @@ public partial class QtParser : Parser {
 			while (_la==T__4) {
 				{
 				{
-				State = 99; ctxExt();
+				State = 99; _localctx._ctxExt = ctxExt();
+				_localctx._exts.Add(_localctx._ctxExt);
 				}
 				}
 				State = 104;
