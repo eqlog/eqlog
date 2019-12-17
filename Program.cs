@@ -14,6 +14,8 @@ namespace QT
             Console.OutputEncoding = Encoding.UTF8;
 
             const string Example = @"
+def zero (n : nat) (p : n = 0) : 0 = n := p.
+
 def negb (b : bool) : bool :=
   elim b into (_ : bool) : bool
   | : bool => false
@@ -37,7 +39,8 @@ def plus_0_r (a : nat) : a + 0 = a :=
             Console.WriteLine(unit);
             using (var tc = new TypeChecker())
             {
-                Console.WriteLine(tc.Check(unit, out string err) ? "Type checking succeeded" : ("Type checking error: " + err));
+                foreach (Def d in unit.Definitions)
+                    tc.TypeCheck(d);
             }
         }
     }
