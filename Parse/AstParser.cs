@@ -9,10 +9,10 @@ namespace QT.Parse
     {
         private static readonly ToAstVisitor s_toAst = new ToAstVisitor();
         public static Expr ParseExpr(string body)
-            => ParseT(body, parser => (Expr)parser.expr().Accept(s_toAst));
+            => (Expr)ParseT(body, parser => parser.expr()).Accept(s_toAst);
 
         public static Unit ParseUnit(string body)
-            => ParseT(body, parser => (Unit)parser.unit().Accept(s_toAst));
+            => (Unit)ParseT(body, parser => parser.unit()).Accept(s_toAst);
 
         private static T ParseT<T>(string body, Func<QtParser, T> fun)
         {

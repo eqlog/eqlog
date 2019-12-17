@@ -23,10 +23,13 @@ namespace QT
                 case Def def:
                     int defIndex = LineLength(sb);
                     sb.AppendFormat("def {0} ", def.Name);
-                    PrintCtxExtsWithType(def.CtxExts, def.RetTy, sb);
+                    PrintCtxExts(def.CtxExts, def.RetTy, sb);
                     sb.Append(" :=").AppendLine().Append(' ', defIndex + 2);
                     Print(def.Body, sb);
                     sb.Append('.');
+                    break;
+                case DefId defId:
+                    sb.Append(defId.Name);
                     break;
                 case CtxExt ctxExt:
                     sb.AppendFormat("{0} : ", ctxExt.Name);
@@ -59,7 +62,7 @@ namespace QT
                     sb.Append("elim ");
                     Print(elim.Discriminee, sb);
                     sb.Append(" into ");
-                    PrintCtxExtsWithType(elim.IntoExts, elim.IntoTy, sb);
+                    PrintCtxExts(elim.IntoExts, elim.IntoTy, sb);
                     foreach (ElimCase @case in elim.Cases)
                     {
                         sb.AppendLine();
@@ -70,7 +73,7 @@ namespace QT
                 case ElimCase @case:
                     sb.Append("| ");
                     int caseIndex = LineLength(sb);
-                    PrintCtxExtsWithType(@case.CaseExts, @case.CaseTy, sb);
+                    PrintCtxExts(@case.CaseExts, null, sb);
                     sb.Append(" => ");
                     int startOfArrowLine = sb.Length - LineLength(sb);
                     int startOfBody = sb.Length;
@@ -139,26 +142,39 @@ namespace QT
             return sb.Length - (index + Environment.NewLine.Length);
         }
 
-        private static void PrintCtxExtsWithType(
-            IEnumerable<CtxExt> exts, Expr ty, StringBuilder sb)
+        private static void PrintCtxExts(
+            IEnumerable<CtxExt> exts, Expr? tyAnnot, StringBuilder sb)
         {
             int start = sb.Length;
+            bool first = true;
             foreach (CtxExt ext in exts)
             {
+                if (!first)
+                    sb.Append(' ');
+
                 sb.Append("(");
                 Print(ext, sb);
-                sb.Append(") ");
+                sb.Append(")");
+
+                first = false;
             }
 
-            sb.Append(": ");
             int colonLineStart = sb.Length - LineLength(sb);
-            Print(ty, sb);
+            if (tyAnnot != null)
+            {
+                if (!first)
+                    sb.Append(' ');
+
+                sb.Append(": ");
+                Print(tyAnnot, sb);
+            }
+
             if (sb.Length - colonLineStart <= 80)
                 return;
 
             sb.Remove(start, sb.Length - start);
             int startIndex = LineLength(sb);
-            bool first = true;
+            first = true;
             foreach (CtxExt ext in exts)
             {
                 if (!first)
@@ -173,11 +189,14 @@ namespace QT
                 first = false;
             }
 
-            if (!first)
-                sb.Append(' ');
+            if (tyAnnot != null)
+            {
+                if (!first)
+                    sb.Append(' ');
 
-            sb.Append(": ");
-            Print(ty, sb);
+                sb.Append(": ");
+                Print(tyAnnot, sb);
+            }
         }
     }
 }

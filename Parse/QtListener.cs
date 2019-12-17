@@ -101,6 +101,16 @@ public interface IQtListener : IParseTreeListener {
 	/// <param name="context">The parse tree.</param>
 	void ExitIdExpr([NotNull] QtParser.IdExprContext context);
 	/// <summary>
+	/// Enter a parse tree produced by <see cref="QtParser.defId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void EnterDefId([NotNull] QtParser.DefIdContext context);
+	/// <summary>
+	/// Exit a parse tree produced by <see cref="QtParser.defId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	void ExitDefId([NotNull] QtParser.DefIdContext context);
+	/// <summary>
 	/// Enter a parse tree produced by <see cref="QtParser.elimExpr"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>

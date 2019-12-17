@@ -74,6 +74,12 @@ public interface IQtVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitIdExpr([NotNull] QtParser.IdExprContext context);
 	/// <summary>
+	/// Visit a parse tree produced by <see cref="QtParser.defId"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitDefId([NotNull] QtParser.DefIdContext context);
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="QtParser.elimExpr"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
