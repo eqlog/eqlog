@@ -30,7 +30,7 @@ namespace QT
     {
         private readonly List<CtxExt> _ctxExts;
 
-        public Def(string name, List<CtxExt> ctxExts, Expr retTy, Expr body)
+        public Def(DefId name, List<CtxExt> ctxExts, Expr retTy, Expr body)
         {
             Name = name;
             _ctxExts = ctxExts;
@@ -38,21 +38,33 @@ namespace QT
             Body = body;
         }
 
-        public string Name { get; }
+        public DefId Name { get; }
         public IReadOnlyList<CtxExt> CtxExts => _ctxExts;
         public Expr RetTy { get; }
         public Expr Body { get; }
     }
 
+    internal class DefId : SyntaxNode
+    {
+        public DefId(string name, bool isDiscard)
+        {
+            Name = name;
+            IsDiscard = isDiscard;
+        }
+
+        public string Name { get; }
+        public bool IsDiscard { get; }
+    }
+
     internal class CtxExt : SyntaxNode
     {
-        public CtxExt(string name, Expr type)
+        public CtxExt(DefId name, Expr type)
         {
             Name = name;
             Type = type;
         }
 
-        public string Name { get; }
+        public DefId Name { get; }
         public Expr Type { get; }
     }
 
@@ -62,7 +74,7 @@ namespace QT
 
     internal class LetExpr : Expr
     {
-        public LetExpr(string name, Expr type, Expr val, Expr body)
+        public LetExpr(DefId name, Expr type, Expr val, Expr body)
         {
             Name = name;
             Type = type;
@@ -70,7 +82,7 @@ namespace QT
             Body = body;
         }
 
-        public string Name { get; }
+        public DefId Name { get; }
         public Expr Type { get; }
         public Expr Val { get; }
         public Expr Body { get; }
@@ -109,15 +121,13 @@ namespace QT
     internal class ElimCase : SyntaxNode
     {
         private readonly List<CtxExt> _caseExts;
-        public ElimCase(List<CtxExt> caseExts, Expr caseTy, Expr body)
+        public ElimCase(List<CtxExt> caseExts, Expr body)
         {
             _caseExts = caseExts;
-            CaseTy = caseTy;
             Body = body;
         }
 
         public IReadOnlyList<CtxExt> CaseExts => _caseExts;
-        public Expr CaseTy { get; }
         public Expr Body { get; }
     }
 

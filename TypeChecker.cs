@@ -179,20 +179,25 @@ namespace QT
                 uint varId = NextId();
                 _fix.AddFact(_tm, varId);
                 _fix.AddFact(_tmTy, varId, typeId);
-                _context = _context.SetItem(ctxExt.Name, varId);
+                DefId(ctxExt.Name, varId);
             }
 
             uint resultTypeId = TypeCheckType(def.RetTy);
             uint bodyId = TypeCheck(def.Body);
             if (_fix.Query((BoolExpr)_tmTy.Apply(BV(bodyId), BV(resultTypeId))) == Status.SATISFIABLE)
             {
-                _context = old.SetItem(def.Name, bodyId);
+                _context = old;
+                DefId(def.Name, bodyId);
                 return bodyId;
             }
 
-            _fix.Query(_tmEq);
-            Console.WriteLine(_fix.GetAnswer());
             throw new Exception($"{def.Name}: Body does not type check to {def.RetTy}");
+        }
+
+        private void DefId(DefId defId, uint val)
+        {
+            if (!defId.IsDiscard)
+                _context = _context.SetItem(defId.Name, val);
         }
 
         private uint TypeCheckType(Expr expr)
@@ -211,7 +216,7 @@ namespace QT
                 case LetExpr let:
                     ImmutableDictionary<string, uint> old = _context;
                     uint resultTypeId = TypeCheckType(let.Type);
-                    _context = _context.SetItem(let.Name, TypeCheck(let.Val));
+                    DefId(let.Name, TypeCheck(let.Val));
                     uint bodyId = TypeCheck(let.Body);
                     if (_fix.Query((BoolExpr)_tmTy.Apply(BV(bodyId), BV(resultTypeId))) == Status.SATISFIABLE)
                     {

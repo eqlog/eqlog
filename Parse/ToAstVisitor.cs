@@ -33,7 +33,7 @@ namespace QT.Parse
             IEnumerable<CtxExt> MakeExts(QtParser.CtxExtContext ctx)
             {
                 Expr ty = (Expr)ctx.ty.Accept(this);
-                return ctx._names.Select(id => new CtxExt(id.Text, ty));
+                return ctx._names.Select(id => new CtxExt((DefId)id.Accept(this), ty));
             }
             List<CtxExt> l = ctxs.SelectMany(MakeExts).ToList();
             return l;
@@ -44,11 +44,16 @@ namespace QT.Parse
 
         public SyntaxNode VisitDef([NotNull] QtParser.DefContext context)
         {
-            string name = context.name.Text;
+            DefId name = (DefId)context.name.Accept(this);
             List<CtxExt> ctxExts = ParseCtxExts(context._exts);
             Expr retTy = (Expr)context.retTy.Accept(this);
             Expr retExpr = (Expr)context.body.Accept(this);
             return new Def(name, ctxExts, retTy, retExpr);
+        }
+
+        public SyntaxNode VisitDefId([NotNull] QtParser.DefIdContext context)
+        {
+            return new DefId(context.GetText(), context.id == null);
         }
 
         public SyntaxNode VisitErrorNode(IErrorNode node)
@@ -66,9 +71,8 @@ namespace QT.Parse
         public SyntaxNode VisitElimCase([NotNull] QtParser.ElimCaseContext context)
         {
             List<CtxExt> caseExts = ParseCtxExts(context._exts);
-            Expr caseTy = (Expr)context.caseTy.Accept(this);
             Expr body = (Expr)context.body.Accept(this);
-            return new ElimCase(caseExts, caseTy, body);
+            return new ElimCase(caseExts, body);
         }
 
         private SyntaxNode ExpandNum(IToken num)
@@ -118,7 +122,7 @@ namespace QT.Parse
 
         public SyntaxNode VisitLetExpr([NotNull] QtParser.LetExprContext context)
         {
-            string name = context.varName.Text;
+            DefId name = (DefId)context.varName.Accept(this);
             Expr type = (Expr)context.ty.Accept(this);
             Expr val = (Expr)context.val.Accept(this);
             Expr body = (Expr)context.body.Accept(this);

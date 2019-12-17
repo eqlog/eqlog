@@ -104,6 +104,16 @@ public partial class QtBaseVisitor<Result> : AbstractParseTreeVisitor<Result>, I
 	/// <return>The visitor result.</return>
 	public virtual Result VisitIdExpr([NotNull] QtParser.IdExprContext context) { return VisitChildren(context); }
 	/// <summary>
+	/// Visit a parse tree produced by <see cref="QtParser.defId"/>.
+	/// <para>
+	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>
+	/// on <paramref name="context"/>.
+	/// </para>
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	public virtual Result VisitDefId([NotNull] QtParser.DefIdContext context) { return VisitChildren(context); }
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="QtParser.elimExpr"/>.
 	/// <para>
 	/// The default implementation returns the result of calling <see cref="AbstractParseTreeVisitor{Result}.VisitChildren(IRuleNode)"/>

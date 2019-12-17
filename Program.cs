@@ -14,23 +14,22 @@ namespace QT
             Console.OutputEncoding = Encoding.UTF8;
 
             const string Example = @"
-def zero (n m : nat) (p q : n = m) : p = q := refl n.
+def zero (a b c d e : nat) (_ : a = b) (_ : b = c) (lucky : c = d) (_ : d = e) : e = a := lucky.
 
 def negb (b : bool) : bool :=
   elim b into (_ : bool) : bool
-  | : bool => false
-  | : bool => true.
+  | => false
+  | => true.
 
 def plus (a b : nat) : nat :=
   elim a into (_ : nat) : nat
-  | : nat => b
-  | (_ : nat) (prev : nat) : nat => S prev.
+  | => b
+  | (_ : nat) (prev : nat) => S prev.
 
 def plus_0_r (a : nat) : a + 0 = a :=
   elim a into (n : nat) : n + 0 = n
-  | : 0 + 0 = 0 => plus_0_l 0
-  | (pred : nat)
-    (IH : pred + 0 = pred) : S pred + 0 = S pred =>
+  | => plus_0_l 0
+  | (pred : nat) (IH : pred + 0 = pred) =>
     let _ : S pred + 0 = S (pred + 0) := plus_Sn_m pred 0 in
     refl (S pred).
 ";
