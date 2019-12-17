@@ -19,6 +19,11 @@ def negb (b : bool) : bool :=
   | : bool => false
   | : bool => true.
 
+def plus (a b : nat) : nat :=
+  elim a into (_ : nat) : nat
+  | : nat => b
+  | (_ : nat) (prev : nat) : nat => S prev.
+
 def plus_0_r (a : nat) : a + 0 = a :=
   elim a into (n : nat) : n + 0 = n
   | : 0 + 0 = 0 => plus_0_l 0
@@ -30,7 +35,6 @@ def plus_0_r (a : nat) : a + 0 = a :=
 
             Unit unit = AstParser.ParseUnit(Example);
             Console.WriteLine(unit);
-            Console.ReadLine();
             using (var tc = new TypeChecker())
             {
                 Console.WriteLine(tc.Check(unit, out string err) ? "Type checking succeeded" : ("Type checking error: " + err));

@@ -7,7 +7,14 @@ namespace QT.Parse
 {
     internal static class AstParser
     {
+        private static readonly ToAstVisitor s_toAst = new ToAstVisitor();
+        public static Expr ParseExpr(string body)
+            => ParseT(body, parser => (Expr)parser.expr().Accept(s_toAst));
+
         public static Unit ParseUnit(string body)
+            => ParseT(body, parser => (Unit)parser.unit().Accept(s_toAst));
+
+        private static T ParseT<T>(string body, Func<QtParser, T> fun)
         {
             StringBuilder lexerOutput = new StringBuilder();
             StringBuilder lexerErrOutput = new StringBuilder();
@@ -15,12 +22,12 @@ namespace QT.Parse
             StringBuilder parserOutput = new StringBuilder();
             StringBuilder parserErrOutput = new StringBuilder();
             QtParser parser = new QtParser(new CommonTokenStream(lexer), new StringWriter(parserOutput), new StringWriter(parserErrOutput));
-            QtParser.UnitContext unit = parser.unit();
+            T result = fun(parser);
             if (lexerErrOutput.Length > 0)
                 throw new ArgumentException(lexerErrOutput.ToString(), "body");
             if (parserErrOutput.Length > 0)
                 throw new ArgumentException(parserErrOutput.ToString(), "body");
-            return (Unit)unit.Accept(new ToAstVisitor());
+            return result;
         }
     }
 }
