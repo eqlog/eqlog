@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using QT.Parse;
 using Z3Expr = Microsoft.Z3.Expr;
+using System.Collections.Immutable;
 
 namespace QT
 {
@@ -12,13 +13,13 @@ namespace QT
     {
         private readonly Context _ctx;
         private readonly Fixedpoint _fix;
-        private readonly BitVecSort _tySort;
         private readonly BitVecSort _tmSort;
         private readonly FuncDecl _isTy;
-        private readonly FuncDecl _isTm;
-        private readonly FuncDecl _tyEq;
+        private readonly FuncDecl _isId;
         private readonly FuncDecl _tmTy;
         private readonly FuncDecl _tmEq;
+        private uint _tmCounter;
+        private ImmutableDictionary<string, uint> _context = ImmutableDictionary.Create<string, uint>();
 
         public TypeChecker()
         {
@@ -28,28 +29,19 @@ namespace QT
                 _ctx.MkParams()
                 .Add("fp.engine", "datalog")
                 .Add("datalog.generate_explanations", true);
-            _tySort = _ctx.MkBitVecSort(3);
             _tmSort = _ctx.MkBitVecSort(32);
-            _isTy = Relation("IsTy", _tySort);
-            _isTm = Relation("IsTm", _tmSort);
-            _tmTy = Relation("TmTy", _tmSort, _tySort);
-            _tyEq = Relation("TyEq", _tySort, _tySort);
+            _isTy = Relation("IsTy", _tmSort);
+            _isId = Relation("IsId", _tmSort, _tmSort, _tmSort);
+            _tmTy = Relation("TmTy", _tmSort, _tmSort);
             _tmEq = Relation("TmEq", _tmSort, _tmSort);
-            MakeEquivalence(_isTy, _tyEq);
-            MakeEquivalence(_isTm, _tmEq);
+            MakeEquivalence(_isTy, _tmEq);
             AddTmConv();
 
-            _fix.AddFact(_isTy, 0);
-            _fix.AddFact(_isTy, 1);
-            _fix.AddFact(_isTy, 2);
-            Console.WriteLine(_fix.Query(_isTy));
-            Console.WriteLine(_fix.GetAnswer());
-            Console.WriteLine(_fix.Query(_tyEq));
-            Console.WriteLine(_fix.GetAnswer());
-            _fix.AddFact(_tyEq, 0, 1);
-            _fix.AddFact(_tyEq, 1, 2);
-            Console.WriteLine(_fix.Query(_tyEq));
-            Console.WriteLine(_fix.GetAnswer());
+            _fix.AddFact(_isTy, _tmCounter);
+            _context = _context.Add("nat", _tmCounter++);
+
+            _fix.AddFact(_tmTy, _tmCounter, _context["nat"]);
+            _context = _context.Add("O", _tmCounter++);
         }
 
         private FuncDecl Relation(string name, params Sort[] sorts)
@@ -97,37 +89,54 @@ namespace QT
         private void AddTmConv()
         {
             Z3Expr tm = _ctx.MkConst("M", _tmSort);
-            Z3Expr s = _ctx.MkConst("σ", _tySort);
-            Z3Expr t = _ctx.MkConst("τ", _tySort);
+            Z3Expr s = _ctx.MkConst("σ", _tmSort);
+            Z3Expr t = _ctx.MkConst("τ", _tmSort);
 
             _fix.AddRule(
                     _ctx.MkForall(
                         new[]{tm, s, t},
                         _ctx.MkImplies(
                             (BoolExpr)_tmTy.Apply(tm, s) &
-                            (BoolExpr)_tyEq.Apply(s, t),
+                            (BoolExpr)_tmEq.Apply(s, t),
                             (BoolExpr)_tmTy.Apply(tm, t))),
                     _ctx.MkSymbol("Tm-Conv"));
         }
 
-        private uint _tyCounter;
-        private uint FormId(uint tmTy, uint tmLeft, uint tmRight)
+        private uint FormId(uint tmLeft, uint tmRight)
         {
-            uint id = checked(++_tyCounter);
+            Z3Expr s = _ctx.MkConst("σ", _tmSort);
+            Status status =
+                _fix.Query(
+                    _ctx.MkExists(
+                        new[] { s },
+                        (BoolExpr)_tmTy.Apply(TmBV(tmLeft), s) &
+                        (BoolExpr)_tmTy.Apply(TmBV(tmRight), s)));
+
+            if (status != Status.SATISFIABLE)
+            {
+                throw new Exception("Cannot form id type");
+            }
+
+            uint id = checked(_tmCounter++);
             _fix.AddFact(_isTy, id);
 
-            // forall (O : Tm), TmTy O Id(M, N) => TmEq M N
-            Z3Expr tm = _ctx.MkConst("M", _tmSort);
+            Z3Expr m = _ctx.MkConst("M", _tmSort);
+            Z3Expr n = _ctx.MkConst("N", _tmSort);
+            // Equality reflection
             _fix.AddRule(
-                    _ctx.MkForall(
-                        new[]{tm},
-                        _ctx.MkImplies(
-                            (BoolExpr)_tmTy.Apply(tm, _ctx.MkBV(id, _tySort.Size)),
-                            (BoolExpr)_tmEq.Apply(
-                                _ctx.MkBV(tmLeft, _tmSort.Size),
-                                _ctx.MkBV(tmRight, _tmSort.Size)))),
-                    _ctx.MkSymbol($"Id-{tmTy}-Reflection"));
+                _ctx.MkForall(
+                    new[]{m},
+                    _ctx.MkImplies(
+                        (BoolExpr)_tmTy.Apply(m, TmBV(id)),
+                        (BoolExpr)_tmEq.Apply(TmBV(tmLeft), TmBV(tmRight)))),
+                _ctx.MkSymbol($"Id-{id}-Reflection"));
 
+            return id;
+        }
+
+        private uint IntroduceId(uint tm)
+        {
+            uint id = FormId(tm, tm);
             return id;
         }
 
@@ -145,16 +154,68 @@ namespace QT
             return 0;
         }
 
-        private int TypeCheck(SyntaxNode node)
+        public uint TypeCheck(Def def)
         {
-            switch (node)
+            ImmutableDictionary<string, uint> old = _context;
+            foreach (CtxExt ctxExt in def.CtxExts)
             {
-                case Def def:
-                    return 0;
+                uint typeId = TypeCheckType(ctxExt.Type);
+                uint varId = _tmCounter++;
+                _fix.AddFact(_tmTy, varId, typeId);
+                _context = _context.SetItem(ctxExt.Name, varId);
             }
 
-            return 0;
+            uint resultTypeId = TypeCheckType(def.RetTy);
+            uint bodyId = TypeCheck(def.Body);
+            if (_fix.Query((BoolExpr)_tmTy.Apply(TmBV(bodyId), TmBV(resultTypeId))) == Status.SATISFIABLE)
+            {
+                _context = old.SetItem(def.Name, bodyId);
+                return bodyId;
+            }
+
+            throw new Exception($"{def.Name}: Body does not type check to {def.RetTy}");
         }
+
+        private uint TypeCheckType(Expr expr)
+        {
+            uint id = TypeCheck(expr);
+            if (_fix.Query((BoolExpr)_isTy.Apply(TmBV(id))) == Status.SATISFIABLE)
+                return id;
+
+            throw new Exception($"Expected type, got {expr}");
+        }
+
+        private uint TypeCheck(Expr expr)
+        {
+            switch (expr)
+            {
+                case LetExpr let:
+                    ImmutableDictionary<string, uint> old = _context;
+                    uint resultTypeId = TypeCheckType(let.Type);
+                    _context = _context.SetItem(let.Name, TypeCheck(let.Val));
+                    uint bodyId = TypeCheck(let.Body);
+                    if (_fix.Query((BoolExpr)_tmTy.Apply(TmBV(bodyId), TmBV(resultTypeId))) == Status.SATISFIABLE)
+                    {
+                        _context = old;
+                        return bodyId;
+                    }
+
+                    throw new Exception($"let {let.Name}: Body does not type check to {let.Type}");
+                case IdExpr id:
+                    return _context[id.Id];
+                case AppExpr app:
+                    if (app.Fun == "id")
+                        return FormId(TypeCheck(app.Args[0]), TypeCheck(app.Args[1]));
+                    if (app.Fun == "refl")
+                        return IntroduceId(TypeCheck(app.Args.Single()));
+                    throw new Exception("Invalid function to apply " + app.Fun);
+                default:
+                    throw new Exception("Cannot handle yet");
+            }
+        }
+
+        private BitVecNum TmBV(uint id)
+            => _ctx.MkBV(id, _tmSort.Size);
 
         public bool Check(Def def, out string error)
         {
