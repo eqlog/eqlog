@@ -14,7 +14,7 @@ namespace QT
             Console.OutputEncoding = Encoding.UTF8;
 
             const string Example = @"
-def zero (n : nat) (p : n = 0) : 0 = n := p.
+def zero (n m : nat) (p q : n = m) : p = q := refl n.
 
 def negb (b : bool) : bool :=
   elim b into (_ : bool) : bool
