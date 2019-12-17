@@ -1,6 +1,8 @@
 ﻿using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using QT.Parse;
 using Z3Expr = Microsoft.Z3.Expr;
 
@@ -10,39 +12,13 @@ namespace QT
     {
         private readonly Context _ctx;
         private readonly Fixedpoint _fix;
-        private readonly Dictionary<string, int> _context =
-            new Dictionary<string, int>();
+        private readonly BitVecSort _tySort;
+        private readonly BitVecSort _tmSort;
         private readonly FuncDecl _isTy;
         private readonly FuncDecl _isTm;
         private readonly FuncDecl _tyEq;
         private readonly FuncDecl _tmTy;
         private readonly FuncDecl _tmEq;
-
-        const string Z3Setup = @"
-(define-sort Ty () (_ BitVec 32))
-(define-sort Tm () (_ BitVec 32))
-(declare-rel IsTy (Ty))
-(declare-rel IsTm (Tm))
-(declare-rel TyEq (Ty Ty))
-(declare-rel TmTy (Tm Ty))
-(declare-rel TmEq (Tm Tm))
-
-(declare-var s Ty)
-(declare-var t Ty)
-(declare-var r Ty)
-(rule (=> (IsTy s) (TyEq s s)) TyEq-Reflexive)
-(rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
-(rule (=> (and (TyEq s t) (TyEq t r)) (TyEq s r)) TyEq-Transitive)
-
-(declare-var M Tm)
-(declare-var N Tm)
-(declare-var O Tm)
-(rule (=> (IsTm M) (TmEq M M)) TmEq-Reflexive)
-(rule (=> (TmEq M N) (TmEq N M)) TmEq-Symmetric)
-(rule (=> (and (TmEq M N) (TmEq N O)) (TmEq M O)) TmEq-Transitive)
-
-(rule (=> (and (TmTy M s) (TyEq s t)) (TmTy M t)) Tm-Conv)
-";
 
         public TypeChecker()
         {
@@ -52,13 +28,16 @@ namespace QT
                 _ctx.MkParams()
                 .Add("fp.engine", "datalog")
                 .Add("datalog.generate_explanations", true);
-            _fix.ParseString(Z3Setup);
-            Dictionary<string, FuncDecl> decls = CollectRelations(_fix.Rules);
-            _isTy = decls["IsTy"];
-            _isTm = decls["IsTm"];
-            _tyEq = decls["TyEq"];
-            _tmTy = decls["TmTy"];
-            _tmEq = decls["TmEq"];
+            _tySort = _ctx.MkBitVecSort(3);
+            _tmSort = _ctx.MkBitVecSort(32);
+            _isTy = Relation("IsTy", _tySort);
+            _isTm = Relation("IsTm", _tmSort);
+            _tmTy = Relation("TmTy", _tmSort, _tySort);
+            _tyEq = Relation("TyEq", _tySort, _tySort);
+            _tmEq = Relation("TmEq", _tmSort, _tmSort);
+            MakeEquivalence(_isTy, _tyEq);
+            MakeEquivalence(_isTm, _tmEq);
+            AddTmConv();
 
             _fix.AddFact(_isTy, 0);
             _fix.AddFact(_isTy, 1);
@@ -71,47 +50,85 @@ namespace QT
             _fix.AddFact(_tyEq, 1, 2);
             Console.WriteLine(_fix.Query(_tyEq));
             Console.WriteLine(_fix.GetAnswer());
-
-            ////Console.WriteLine(_fix.Query(_ctx.MkExists(new[]{x}, _isTy.Apply(x))));
-
-            ////Console.WriteLine(string.Join(Environment.NewLine, (object[])rels));
-
-            //_context.Add("bool", Type("bool"));
-            //_context.Add("nat", Type("nat"));
-            //_context.Add("O", Axiom("nat"));
         }
 
-        private static Dictionary<string, FuncDecl> CollectRelations(IEnumerable<Z3Expr> exprs)
+        private FuncDecl Relation(string name, params Sort[] sorts)
         {
-            var decls = new Dictionary<string, FuncDecl>();
-            var queue = new Queue<Z3Expr>(exprs);
-            var seen = new HashSet<uint>();
+            FuncDecl decl = _ctx.MkFuncDecl(name, sorts, _ctx.BoolSort);
+            _fix.RegisterRelation(decl);
+            return decl;
+        }
 
-            void Enqueue(Z3Expr expr)
-            {
-                if (seen.Add(expr.Id))
-                    queue.Enqueue(expr);
-            }
+        private void MakeEquivalence(FuncDecl isSortRel, FuncDecl eqRel)
+        {
+            Debug.Assert(isSortRel.Domain.Length == 1 &&
+                         isSortRel.Range == _ctx.BoolSort);
+            Debug.Assert(eqRel.Domain.Length == 2 &&
+                         eqRel.Domain.All(s => s == isSortRel.Domain[0]) &&
+                         eqRel.Range == _ctx.BoolSort);
+            Z3Expr a = _ctx.MkConst("a", eqRel.Domain[0]);
+            Z3Expr b = _ctx.MkConst("b", eqRel.Domain[0]);
+            Z3Expr c = _ctx.MkConst("c", eqRel.Domain[0]);
+            string prefix = eqRel.Name.ToString();
+            _fix.AddRule(
+                    _ctx.MkForall(
+                        new[]{a},
+                        _ctx.MkImplies(
+                            (BoolExpr)isSortRel.Apply(a),
+                            (BoolExpr)eqRel.Apply(a, a))),
+                    _ctx.MkSymbol($"{prefix}-Reflexive"));
+            _fix.AddRule(
+                    _ctx.MkForall(
+                        new[]{a, b},
+                        _ctx.MkImplies(
+                            (BoolExpr)eqRel.Apply(a, b),
+                            (BoolExpr)eqRel.Apply(b, a))),
+                    _ctx.MkSymbol("{prefix}-Symmetric"));
+            _fix.AddRule(
+                    _ctx.MkForall(
+                        new[]{a, b, c},
+                        _ctx.MkImplies(
+                            (BoolExpr)eqRel.Apply(a, b) &
+                            (BoolExpr)eqRel.Apply(b, c),
+                            (BoolExpr)eqRel.Apply(a, c))),
+                    _ctx.MkSymbol("{prefix}-Transitive"));
+        }
 
-            foreach (Z3Expr expr in exprs)
-                Enqueue(expr);
+        private void AddTmConv()
+        {
+            Z3Expr tm = _ctx.MkConst("M", _tmSort);
+            Z3Expr s = _ctx.MkConst("σ", _tySort);
+            Z3Expr t = _ctx.MkConst("τ", _tySort);
 
-            while (queue.Count > 0)
-            {
-                Z3Expr expr = queue.Dequeue();
-                if (expr.IsApp)
-                {
-                    decls[expr.FuncDecl.Name.ToString()] = expr.FuncDecl;
-                    foreach (Z3Expr arg in expr.Args)
-                        Enqueue(arg);
-                }
-                else if (expr.IsQuantifier)
-                {
-                    Enqueue(((Quantifier)expr).Body);
-                }
-            }
+            _fix.AddRule(
+                    _ctx.MkForall(
+                        new[]{tm, s, t},
+                        _ctx.MkImplies(
+                            (BoolExpr)_tmTy.Apply(tm, s) &
+                            (BoolExpr)_tyEq.Apply(s, t),
+                            (BoolExpr)_tmTy.Apply(tm, t))),
+                    _ctx.MkSymbol("Tm-Conv"));
+        }
 
-            return decls;
+        private uint _tyCounter;
+        private uint FormId(uint tmTy, uint tmLeft, uint tmRight)
+        {
+            uint id = checked(++_tyCounter);
+            _fix.AddFact(_isTy, id);
+
+            // forall (O : Tm), TmTy O Id(M, N) => TmEq M N
+            Z3Expr tm = _ctx.MkConst("M", _tmSort);
+            _fix.AddRule(
+                    _ctx.MkForall(
+                        new[]{tm},
+                        _ctx.MkImplies(
+                            (BoolExpr)_tmTy.Apply(tm, _ctx.MkBV(id, _tySort.Size)),
+                            (BoolExpr)_tmEq.Apply(
+                                _ctx.MkBV(tmLeft, _tmSort.Size),
+                                _ctx.MkBV(tmRight, _tmSort.Size)))),
+                    _ctx.MkSymbol($"Id-{tmTy}-Reflection"));
+
+            return id;
         }
 
         // Add a type to the model.
