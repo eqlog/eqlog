@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
+[assembly: CLSCompliant(false)]
+
 namespace QT
 {
     internal static class Program
@@ -38,8 +40,7 @@ def plus_0_r (a : nat) : a + 0 = a :=
             Console.WriteLine(unit);
             using (var tc = new TypeChecker())
             {
-                foreach (Def d in unit.Definitions)
-                    tc.TypeCheck(d);
+                tc.TypeCheck(unit.Definitions[0]);
             }
         }
     }
