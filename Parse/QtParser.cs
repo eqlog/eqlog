@@ -37,8 +37,8 @@ public partial class QtParser : Parser {
 	protected static PredictionContextCache sharedContextCache = new PredictionContextCache();
 	public const int
 		T__0=1, T__1=2, T__2=3, T__3=4, T__4=5, T__5=6, T__6=7, T__7=8, T__8=9, 
-		T__9=10, T__10=11, T__11=12, T__12=13, T__13=14, DISCARD=15, ID=16, NUM=17, 
-		WS=18;
+		T__9=10, T__10=11, T__11=12, T__12=13, T__13=14, DISCARD=15, COMMENT=16, 
+		ID=17, NUM=18, WS=19;
 	public const int
 		RULE_unit = 0, RULE_def = 1, RULE_ctxExt = 2, RULE_expr = 3, RULE_argExpr = 4, 
 		RULE_letExpr = 5, RULE_idExpr = 6, RULE_defId = 7, RULE_elimExpr = 8, 
@@ -54,7 +54,7 @@ public partial class QtParser : Parser {
 	};
 	private static readonly string[] _SymbolicNames = {
 		null, null, null, null, null, null, null, null, null, null, null, null, 
-		null, null, null, "DISCARD", "ID", "NUM", "WS"
+		null, null, null, "DISCARD", "COMMENT", "ID", "NUM", "WS"
 	};
 	public static readonly IVocabulary DefaultVocabulary = new Vocabulary(_LiteralNames, _SymbolicNames);
 
@@ -909,7 +909,7 @@ public partial class QtParser : Parser {
 
 	private static char[] _serializedATN = {
 		'\x3', '\x608B', '\xA72A', '\x8133', '\xB9ED', '\x417C', '\x3BE7', '\x7786', 
-		'\x5964', '\x3', '\x14', '\x80', '\x4', '\x2', '\t', '\x2', '\x4', '\x3', 
+		'\x5964', '\x3', '\x15', '\x80', '\x4', '\x2', '\t', '\x2', '\x4', '\x3', 
 		'\t', '\x3', '\x4', '\x4', '\t', '\x4', '\x4', '\x5', '\t', '\x5', '\x4', 
 		'\x6', '\t', '\x6', '\x4', '\a', '\t', '\a', '\x4', '\b', '\t', '\b', 
 		'\x4', '\t', '\t', '\t', '\x4', '\n', '\t', '\n', '\x4', '\v', '\t', '\v', 
@@ -963,12 +963,12 @@ public partial class QtParser : Parser {
 		'\x34', '\x35', '\b', '\x5', '\x1', '\x2', '\x35', '\x36', '\a', '\a', 
 		'\x2', '\x2', '\x36', '\x37', '\x5', '\b', '\x5', '\x2', '\x37', '\x38', 
 		'\a', '\b', '\x2', '\x2', '\x38', '\x44', '\x3', '\x2', '\x2', '\x2', 
-		'\x39', ';', '\a', '\x12', '\x2', '\x2', ':', '<', '\x5', '\n', '\x6', 
+		'\x39', ';', '\a', '\x13', '\x2', '\x2', ':', '<', '\x5', '\n', '\x6', 
 		'\x2', ';', ':', '\x3', '\x2', '\x2', '\x2', '<', '=', '\x3', '\x2', '\x2', 
 		'\x2', '=', ';', '\x3', '\x2', '\x2', '\x2', '=', '>', '\x3', '\x2', '\x2', 
 		'\x2', '>', '\x44', '\x3', '\x2', '\x2', '\x2', '?', '\x44', '\x5', '\f', 
 		'\a', '\x2', '@', '\x44', '\x5', '\x12', '\n', '\x2', '\x41', '\x44', 
-		'\a', '\x13', '\x2', '\x2', '\x42', '\x44', '\x5', '\xE', '\b', '\x2', 
+		'\a', '\x14', '\x2', '\x2', '\x42', '\x44', '\x5', '\xE', '\b', '\x2', 
 		'\x43', '\x34', '\x3', '\x2', '\x2', '\x2', '\x43', '\x39', '\x3', '\x2', 
 		'\x2', '\x2', '\x43', '?', '\x3', '\x2', '\x2', '\x2', '\x43', '@', '\x3', 
 		'\x2', '\x2', '\x2', '\x43', '\x41', '\x3', '\x2', '\x2', '\x2', '\x43', 
@@ -980,16 +980,16 @@ public partial class QtParser : Parser {
 		'\x3', '\x2', '\x2', '\x2', 'L', 'J', '\x3', '\x2', '\x2', '\x2', 'M', 
 		'N', '\a', '\a', '\x2', '\x2', 'N', 'O', '\x5', '\b', '\x5', '\x2', 'O', 
 		'P', '\a', '\b', '\x2', '\x2', 'P', 'T', '\x3', '\x2', '\x2', '\x2', 'Q', 
-		'T', '\a', '\x13', '\x2', '\x2', 'R', 'T', '\x5', '\xE', '\b', '\x2', 
+		'T', '\a', '\x14', '\x2', '\x2', 'R', 'T', '\x5', '\xE', '\b', '\x2', 
 		'S', 'M', '\x3', '\x2', '\x2', '\x2', 'S', 'Q', '\x3', '\x2', '\x2', '\x2', 
 		'S', 'R', '\x3', '\x2', '\x2', '\x2', 'T', '\v', '\x3', '\x2', '\x2', 
 		'\x2', 'U', 'V', '\a', '\v', '\x2', '\x2', 'V', 'W', '\x5', '\x10', '\t', 
 		'\x2', 'W', 'X', '\a', '\x4', '\x2', '\x2', 'X', 'Y', '\x5', '\b', '\x5', 
 		'\x2', 'Y', 'Z', '\a', '\x5', '\x2', '\x2', 'Z', '[', '\x5', '\b', '\x5', 
 		'\x2', '[', '\\', '\a', '\f', '\x2', '\x2', '\\', ']', '\x5', '\b', '\x5', 
-		'\x2', ']', '\r', '\x3', '\x2', '\x2', '\x2', '^', '_', '\a', '\x12', 
+		'\x2', ']', '\r', '\x3', '\x2', '\x2', '\x2', '^', '_', '\a', '\x13', 
 		'\x2', '\x2', '_', '\xF', '\x3', '\x2', '\x2', '\x2', '`', '\x63', '\a', 
-		'\x12', '\x2', '\x2', '\x61', '\x63', '\a', '\x11', '\x2', '\x2', '\x62', 
+		'\x13', '\x2', '\x2', '\x61', '\x63', '\a', '\x11', '\x2', '\x2', '\x62', 
 		'`', '\x3', '\x2', '\x2', '\x2', '\x62', '\x61', '\x3', '\x2', '\x2', 
 		'\x2', '\x63', '\x11', '\x3', '\x2', '\x2', '\x2', '\x64', '\x65', '\a', 
 		'\r', '\x2', '\x2', '\x65', '\x66', '\x5', '\b', '\x5', '\x2', '\x66', 

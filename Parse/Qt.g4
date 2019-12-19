@@ -21,6 +21,7 @@ elimCase : '|' exts+=ctxExt* '=>' body=expr;
 
 // Lexer rules
 DISCARD : '_';
+COMMENT : '(*' (COMMENT|.)*? '*)' -> skip;
 ID : [a-zA-Z_][a-zA-Z0-9_']*;
 NUM : [0-9]+;
 WS : [ \t\r\n]+ -> skip;

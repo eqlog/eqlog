@@ -16,14 +16,37 @@ namespace QT
             Console.OutputEncoding = Encoding.UTF8;
 
             const string Example = @"
-def zero (a b c d : nat)
-         (_ : a = b)
-         (_ : c = d)
-         (_ : b = c) : a = d :=
-  dump TyEq (refl a).
+(*def plus (a b : nat) : nat :=
+  elim a into (_ : nat) : nat
+  | => b
+  | (_ : nat) (prev : nat) => S prev.
 
-def UIP (a b : nat) (p q : a = b) : p = q :=
-  dump TmEq (refl p).
+def plus_0_l (a : nat) : 0 + a = a :=
+  refl a.
+
+def plus_2_2 : 2 + 2 = 4 :=
+  let _ : 1 + 3 = 2 + 2 := plus_Sn_m 2 2 in
+  let _ : 0 + 4 = 1 + 3 := plus_Sn_m 1 3 in
+  refl 4.
+
+def plus_0_r (a : nat) : a + 0 = a :=
+  elim a into (n : nat) : n + 0 = n
+  | => plus_0_l 0
+  | (pred : nat)
+    (IH : pred + 0 = pred) =>
+    let _ : S pred + 0 = S (pred + 0) := plus_Sn_m pred 0 in
+    refl (S pred).*)
+
+def zero (a b c d e f : nat)
+         (_ : a = b)
+         (_ : b = c)
+         (_ : c = d)
+         (_ : d = e)
+         (_ : e = f) : a = f :=
+  dump TmEq (refl a).
+
+(*def UIP (a b : nat) (p q : a = b) : p = q :=*)
+  
 ";
 
             Unit unit = AstParser.ParseUnit(Example);
