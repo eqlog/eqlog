@@ -16,31 +16,26 @@ namespace QT
             Console.OutputEncoding = Encoding.UTF8;
 
             const string Example = @"
-def zero (a b c d e : nat) (_ : a = b) (_ : b = c) (lucky : c = d) (_ : d = e) : e = a := lucky.
+def zero (a b c d : nat)
+         (_ : a = b)
+         (_ : c = d)
+         (_ : b = c) : a = d :=
+  dump TyEq (refl a).
 
-def negb (b : bool) : bool :=
-  elim b into (_ : bool) : bool
-  | => false
-  | => true.
-
-def plus (a b : nat) : nat :=
-  elim a into (_ : nat) : nat
-  | => b
-  | (_ : nat) (prev : nat) => S prev.
-
-def plus_0_r (a : nat) : a + 0 = a :=
-  elim a into (n : nat) : n + 0 = n
-  | => plus_0_l 0
-  | (pred : nat) (IH : pred + 0 = pred) =>
-    let _ : S pred + 0 = S (pred + 0) := plus_Sn_m pred 0 in
-    refl (S pred).
+def UIP (a b : nat) (p q : a = b) : p = q :=
+  dump TmEq (refl p).
 ";
 
             Unit unit = AstParser.ParseUnit(Example);
-            Console.WriteLine(unit);
             using (var tc = new TypeChecker())
             {
-                tc.TypeCheck(unit.Definitions[0]);
+                foreach (Def def in unit.Definitions)
+                {
+                    Console.WriteLine(def);
+                    tc.TypeCheck(def);
+                    Console.WriteLine("OK");
+                    Console.WriteLine();
+                }
             }
         }
     }
