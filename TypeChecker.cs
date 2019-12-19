@@ -28,6 +28,8 @@ namespace QT
 
         private readonly FuncDecl _id;
 
+        private readonly Dictionary<string, FuncDecl> _rels;
+
         private uint _counter;
         private uint NextId() => checked(++_counter);
 
@@ -49,11 +51,14 @@ namespace QT
 (declare-var s TyS)
 (declare-var t TyS)
 (declare-var r TyS)
+(declare-var p TyS)
+(declare-var q TyS)
 
 (declare-var M TmS)
 (declare-var N TmS)
 (declare-var O TmS)
 (declare-var P TmS)
+(declare-var Q TmS)
 
 (rule (=> (Ty s) (TyEq s s)) TyEq-Reflexive)
 (rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
@@ -75,6 +80,12 @@ namespace QT
 (rule (=> (and (Id M N s) (TmTy O s))
           (TmEq M N))
       Id-Reflection)
+
+(rule (=> (and (Id M N s)
+               (and (TmTy P s)
+                    (TmTy Q s)))
+          (TmEq P Q))
+      Id-Eq)
 ";
 
         public TypeChecker()
@@ -88,13 +99,13 @@ namespace QT
             _fix.ParseString(s_z3Setup);
             _sort = _ctx.MkBitVecSort(SortSize);
 
-            Dictionary<string, FuncDecl> rels = CollectRelations(_fix.Rules);
-            _ty = rels["Ty"];
-            _tyEq = rels["TyEq"];
-            _tm = rels["Tm"];
-            _tmEq = rels["TmEq"];
-            _tmTy = rels["TmTy"];
-            _id = rels["Id"];
+            _rels = CollectRelations(_fix.Rules);
+            _ty = _rels["Ty"];
+            _tyEq = _rels["TyEq"];
+            _tm = _rels["Tm"];
+            _tmEq = _rels["TmEq"];
+            _tmTy = _rels["TmTy"];
+            _id = _rels["Id"];
 
             uint nat = NextId();
             _fix.AddFact(_ty, nat);
@@ -214,17 +225,20 @@ namespace QT
             switch (expr)
             {
                 case LetExpr let:
-                    ImmutableDictionary<string, uint> old = _context;
-                    uint resultTypeId = TypeCheckType(let.Type);
-                    DefId(let.Name, TypeCheck(let.Val));
-                    uint bodyId = TypeCheck(let.Body);
-                    if (_fix.Query((BoolExpr)_tmTy.Apply(BV(bodyId), BV(resultTypeId))) == Status.SATISFIABLE)
+                    uint letValTyId = TypeCheckType(let.Type);
+                    uint letValId = TypeCheck(let.Val);
+                    if (_fix.Query((BoolExpr)_tmTy.Apply(BV(letValId), BV(letValTyId))) != Status.SATISFIABLE)
                     {
-                        _context = old;
-                        return bodyId;
+                        throw new Exception(
+                                $"let {let.Name}: " +
+                                $"Body does not type check to {let.Type}");
                     }
 
-                    throw new Exception($"let {let.Name}: Body does not type check to {let.Type}");
+                    ImmutableDictionary<string, uint> old = _context;
+                    DefId(let.Name, letValId);
+                    uint bodyId = TypeCheck(let.Body);
+                    _context = old;
+                    return bodyId;
                 case IdExpr id:
                     return _context[id.Id];
                 case AppExpr app:
@@ -232,6 +246,19 @@ namespace QT
                         return FormId(TypeCheck(app.Args[0]), TypeCheck(app.Args[1]));
                     if (app.Fun == "refl")
                         return IntroduceId(TypeCheck(app.Args.Single()));
+                    if (app.Fun == "dump")
+                    {
+                        uint result = TypeCheck(app.Args[1]);
+                        string rel = ((IdExpr)app.Args[0]).Id;
+                        _fix.Query(_rels[rel]);
+                        string ans = _fix.GetAnswer().ToString();
+                        ans = _context.Aggregate(
+                                ans,
+                                (acc, kvp) => acc = acc.Replace($"#x{kvp.Value:x8}", kvp.Key));
+                        Console.WriteLine("------- {0} -------", rel);
+                        Console.WriteLine(ans);
+                        return result;
+                    }
                     throw new Exception("Invalid function to apply " + app.Fun);
                 default:
                     throw new Exception("Cannot handle yet");
