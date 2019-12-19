@@ -15,11 +15,29 @@ namespace QT
         {
             Console.OutputEncoding = Encoding.UTF8;
 
-            const string Example = @"
-(*def plus (a b : nat) : nat :=
+            string Example = @"
+def test (a : nat) :
+a = elim a into (_ : nat) : nat
+    | => 0
+    | (pred : nat) (_ : nat) => S pred :=
+  elim a into (n : nat) : (n = elim n into (_ : nat) : nat
+                           | => 0
+                           | (pred : nat) (_ : nat) => S pred)
+  | => refl 0
+  | (pred : nat)
+    (_ : pred = elim pred into (_ : nat) : nat
+                | => 0
+                | (pred : nat) (_ : nat) => S pred) => refl (S pred).
+
+  (*let test : nat :=
   elim a into (_ : nat) : nat
-  | => b
-  | (_ : nat) (prev : nat) => S prev.
+  | => 0
+  | (_ : nat) (prev : nat) => S prev in
+  let _ : test = 1 := dump ElimNat (dump TmEq (refl test)) in
+  0.*)
+  
+(*
+def plus (a b : nat) : nat :=
 
 def plus_0_l (a : nat) : 0 + a = a :=
   refl a.
@@ -35,7 +53,7 @@ def plus_0_r (a : nat) : a + 0 = a :=
   | (pred : nat)
     (IH : pred + 0 = pred) =>
     let _ : S pred + 0 = S (pred + 0) := plus_Sn_m pred 0 in
-    refl (S pred).*)
+    refl (S pred).
 
 def zero (a b c d e f : nat)
          (_ : a = b)
@@ -45,8 +63,9 @@ def zero (a b c d e f : nat)
          (_ : e = f) : a = f :=
   dump TmEq (refl a).
 
-(*def UIP (a b : nat) (p q : a = b) : p = q :=*)
+def UIP (a b : nat) (p q : a = b) : p = q :=
   
+*)
 ";
 
             Unit unit = AstParser.ParseUnit(Example);
