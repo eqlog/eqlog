@@ -128,19 +128,19 @@ namespace QT
           (TmEq M O))
       Succ-Injective)
 
-(rule (=> (and (ElimNat M CO Q CS O)
+(rule (=> (and (ElimNat M CO P CS O)
                (Zero M))
           (TmEq O CO))
       ElimNat-O)
 
-(rule (=> (and (ElimNat M CO Q CS O)
+(rule (=> (and (ElimNat M CO P CS O)
                (Succ N M))
           (TmEq O CS))
       ElimNat-S1)
 
-(rule (=> (and (ElimNat M CO Q CS O)
+(rule (=> (and (ElimNat M CO P CS O)
                (Succ N M))
-          (TmEq Q N))
+          (TmEq P N))
       ElimNat-S2)
 ";
 
