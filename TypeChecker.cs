@@ -21,7 +21,6 @@ namespace QT
         private readonly FuncDecl _ty;
         private readonly FuncDecl _tyEq;
 
-        private readonly FuncDecl _tm;
         private readonly FuncDecl _tmEq;
 
         private readonly FuncDecl _tmTy;
@@ -45,7 +44,6 @@ namespace QT
 (declare-rel Ty (TyS))
 (declare-rel TyEq (TyS TyS))
 
-(declare-rel Tm (TmS))
 (declare-rel TmEq (TmS TmS))
 
 (declare-rel TmTy (TmS TyS))
@@ -56,7 +54,9 @@ namespace QT
 (declare-rel Zero (TmS))
 ; Succ A B -- B is S A
 (declare-rel Succ (TmS TmS))
-; ElimNat N CO M CS X -- X is the elimination of N with zero-case CO and succ-case [M:nat]CS
+; ElimNat N CO P CS X
+; X is the elimination of N with zero-case CO
+; and succ-case [P:nat]CS
 (declare-rel ElimNat (TmS TmS TmS TmS TmS))
 
 (declare-var s TyS)
@@ -77,7 +77,7 @@ namespace QT
 (rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
 (rule (=> (and (TyEq s t) (TyEq t r)) (TyEq s r)) TyEq-Transitive)
 
-(rule (=> (Tm M) (TmEq M M)) TmEq-Reflexive)
+(rule (=> (TmTy M s) (TmEq M M)) TmEq-Reflexive)
 (rule (=> (TmEq M N) (TmEq N M)) TmEq-Symmetric)
 (rule (=> (and (TmEq M N) (TmEq N O)) (TmEq M O)) TmEq-Transitive)
 
@@ -158,7 +158,6 @@ namespace QT
             _rels = CollectRelations(_fix.Rules);
             _ty = _rels["Ty"];
             _tyEq = _rels["TyEq"];
-            _tm = _rels["Tm"];
             _tmEq = _rels["TmEq"];
             _tmTy = _rels["TmTy"];
             _id = _rels["Id"];
@@ -171,7 +170,6 @@ namespace QT
             _context = _context.Add("nat", nat);
 
             uint zero = NextId();
-            _fix.AddFact(_tm, zero);
             _fix.AddFact(_tmTy, zero, nat);
             _fix.AddFact(_zero, zero);
             _context = _context.Add("O", zero);
@@ -236,7 +234,6 @@ namespace QT
         {
             uint idId = FormId(tm, tm);
             uint reflId = NextId();
-            _fix.AddFact(_tm, reflId);
             _fix.AddFact(_tmTy, reflId, idId);
             return reflId;
         }
@@ -247,7 +244,6 @@ namespace QT
                 throw new Exception("Expected arg to constructor S to be of type nat");
 
             uint succId = NextId();
-            _fix.AddFact(_tm, succId);
             _fix.AddFact(_tmTy, succId, _context["nat"]);
             _fix.AddFact(_succ, arg, succId);
             return succId;
@@ -275,7 +271,6 @@ namespace QT
         {
             uint typeId = TypeCheckType(ctxExt.Type);
             uint varId = NextId();
-            _fix.AddFact(_tm, varId);
             _fix.AddFact(_tmTy, varId, typeId);
             DefId(ctxExt.Name, varId);
             return (varId, typeId);
@@ -403,7 +398,6 @@ namespace QT
             uint finalTyId = TypeCheckType(finalTy);
 
             uint elimId = NextId();
-            _fix.AddFact(_tm, elimId);
             _fix.AddFact(_tmTy, elimId, finalTyId);
             _fix.AddFact(_elimNat, discriminee, zeroCaseId, predId, succCaseId, elimId);
             return elimId;
