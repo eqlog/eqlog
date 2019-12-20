@@ -37,6 +37,7 @@ namespace QT
         private uint NextId() => checked(++_counter);
 
         private ImmutableDictionary<string, uint> _context = ImmutableDictionary.Create<string, uint>();
+        private readonly Dictionary<string, Def> _globals = new Dictionary<string, Def>();
 
         private static readonly string s_z3Setup = $@"
 (define-sort TyS () (_ BitVec {SortSize}))
@@ -260,7 +261,7 @@ namespace QT
             if (_fix.Query((BoolExpr)_tmTy.Apply(BV(bodyId), BV(resultTypeId))) == Status.SATISFIABLE)
             {
                 _context = old;
-                DefId(def.Name, bodyId);
+                _globals[def.Name.Name] = def;
                 return bodyId;
             }
 
@@ -339,6 +340,20 @@ namespace QT
                     }
                     if (app.Fun == "S")
                         return IntroduceSucc(TypeCheck(app.Args.Single()));
+                    if (_globals.TryGetValue(app.Fun, out Def? global))
+                    {
+                        if (global.CtxExts.Count != app.Args.Count)
+                        {
+                            string msg =
+                                $"Expected {global.CtxExts.Count} arguments " +
+                                $"to {app.Fun}";
+                            throw new Exception(msg);
+                        }
+
+                        Expr newBody = Subst(global.Body, global.CtxExts, app.Args);
+                        Console.WriteLine("{0}: {1}", app, newBody);
+                        return TypeCheck(newBody);
+                    }
 
                     throw new Exception("Invalid function to apply " + app.Fun);
                 default:
