@@ -40,16 +40,33 @@ namespace QT
         private readonly Dictionary<string, Def> _globals = new Dictionary<string, Def>();
 
         private static readonly string s_z3Setup = $@"
+(define-sort ConS () (_ BitVec {SortSize}))
 (define-sort TyS () (_ BitVec {SortSize}))
 (define-sort TmS () (_ BitVec {SortSize}))
-(declare-rel Ty (TyS))
-(declare-rel TyEq (TyS TyS))
 
-(declare-rel TmEq (TmS TmS))
+; Con G -- G is a context
+(declare-rel Con (ConS))
 
-(declare-rel TmTy (TmS TyS))
+; ConEq G H -- G ≡ H as contexts
+(declare-rel ConEq (ConS ConS))
 
-(declare-rel Id (TmS TmS TyS))
+; ConExt G s H -- G, x : s ≡ H
+(declare-rel ConExt (ConS TyS ConS))
+
+; Ty G s -- G |- s type
+(declare-rel Ty (ConS TyS))
+
+; TyEq G s t -- G |- s = t type
+(declare-rel TyEq (ConS TyS TyS))
+
+; TmEq G M N s -- G |- M = N : s
+(declare-rel TmEq (ConS TmS TmS TyS))
+
+; TmTy G M s -- G |- M : s
+(declare-rel TmTy (ConS TmS TyS))
+
+; Id G M N s -- G |- Id_s M N
+(declare-rel Id (ConS TmS TmS TyS))
 
 ; Zero O -- O is a zero
 (declare-rel Zero (TmS))
@@ -60,11 +77,20 @@ namespace QT
 ; and succ-case [P:nat]CS
 (declare-rel ElimNat (TmS TmS TmS TmS TmS))
 
-(declare-var s TyS)
-(declare-var t TyS)
-(declare-var r TyS)
+(declare-var A ConS)
+(declare-var B ConS)
+(declare-var C ConS)
+(declare-var D ConS)
+(declare-var E ConS)
+(declare-var F ConS)
+(declare-var G ConS)
+
 (declare-var p TyS)
 (declare-var q TyS)
+(declare-var r TyS)
+(declare-var s TyS)
+(declare-var t TyS)
+(declare-var u TyS)
 
 (declare-var M TmS)
 (declare-var N TmS)
@@ -74,75 +100,95 @@ namespace QT
 (declare-var CO TmS)
 (declare-var CS TmS)
 
-(rule (=> (Ty s) (TyEq s s)) TyEq-Reflexive)
-(rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
-(rule (=> (and (TyEq s t) (TyEq t r)) (TyEq s r)) TyEq-Transitive)
+(rule (=> (Con G) (ConEq G G)) ConEq-Reflexive)
+(rule (=> (ConEq G D) (ConEq D G)) ConEq-Symmetric)
+(rule (=> (and (ConEq G D) (ConEq D B)) (ConEq G B)) ConEq-Transitive)
 
-(rule (=> (TmTy M s) (TmEq M M)) TmEq-Reflexive)
-(rule (=> (TmEq M N) (TmEq N M)) TmEq-Symmetric)
-(rule (=> (and (TmEq M N) (TmEq N O)) (TmEq M O)) TmEq-Transitive)
+(rule (=> (Ty G s) (TyEq G s s)) TyEq-Reflexive)
+(rule (=> (TyEq G s t) (TyEq G t s)) TyEq-Symmetric)
+(rule (=> (and (TyEq G s t) (TyEq G t r)) (TyEq G s r)) TyEq-Transitive)
 
-(rule (=> (and (TmTy M s) (TyEq s t)) (TmTy M t)) Tm-Conv)
+(rule (=> (TmTy G M s) (TmEq G M M s)) TmEq-Reflexive)
+(rule (=> (TmEq G M N s) (TmEq G N M s)) TmEq-Symmetric)
+(rule (=> (and (TmEq G M N s) (TmEq G N O s)) (TmEq G M O s)) TmEq-Transitive)
 
-(rule (=> (and (and (TmTy M s)
-                    (TmTy N t))
-               (TmEq M N))
-          (TyEq s t))
-      TmTy-Congr)
+(rule (=> (and (and (TmTy G M s)
+                    (ConEq G D))
+               (TyEq G s t))
+          (TmTy D M t))
+      Tm-Conv)
 
-(rule (=> (and (and (Id M N s)
-                    (Id O P t))
-               (and (TmEq M O)
-                    (TmEq N P)))
-          (TyEq s t))
-      Id-WellDefined)
+(rule (=> (and (ConEq G D)
+               (TyEq G s t))
+          (TyEq D s t))
+      Ty-Conv)
 
-(rule (=> (and (Id M N s) (TmTy O s))
-          (TmEq M N))
-      Id-Reflection)
+;(rule (=> (and (and (TmTy G M s)
+;                    (TmTy G N t))
+;               (TmEq G M N))
+;          (TyEq G s t))
+;      TmTy-TyEq)
 
-(rule (=> (and (Id M N s)
-               (and (TmTy P s)
-                    (TmTy Q s)))
-          (TmEq P Q))
-      Id-Eq)
+(rule (=> (and (and (ConEq G D)
+                    (TyEq G s t))
+               (and (ConExt G s A)
+                    (ConExt D t B)))
+          (ConEq A B))
+      ConExt-Eq)
 
-(rule (=> (and (Zero M)
-               (Zero N))
-          (TmEq M N))
-      Zero-Eq)
-
-(rule (=> (and (and (Succ M N)
-                    (Succ O P))
-               (TmEq M O))
-          (TmEq N P))
-      Succ-WellDefined)
-
-(rule (=> (and (Succ M N)
-               (TmEq O N))
-          (Succ M O))
-      Succ-Eq)
-
-(rule (=> (and (and (Succ M N)
-                    (Succ O P))
-               (TmEq N P))
-          (TmEq M O))
-      Succ-Injective)
-
-(rule (=> (and (ElimNat M CO P CS O)
-               (Zero M))
-          (TmEq O CO))
-      ElimNat-O)
-
-(rule (=> (and (ElimNat M CO P CS O)
-               (Succ N M))
-          (TmEq O CS))
-      ElimNat-S1)
-
-(rule (=> (and (ElimNat M CO P CS O)
-               (Succ N M))
-          (TmEq P N))
-      ElimNat-S2)
+;(rule (=> (and (and (Id M N s)
+;                    (Id O P t))
+;               (and (TmEq M O)
+;                    (TmEq N P)))
+;          (TyEq s t))
+;      Id-WellDefined)
+;
+;(rule (=> (and (Id M N s) (TmTy O s))
+;          (TmEq M N))
+;      Id-Reflection)
+;
+;(rule (=> (and (Id M N s)
+;               (and (TmTy P s)
+;                    (TmTy Q s)))
+;          (TmEq P Q))
+;      Id-Eq)
+;
+;(rule (=> (and (Zero M)
+;               (Zero N))
+;          (TmEq M N))
+;      Zero-Eq)
+;
+;(rule (=> (and (and (Succ M N)
+;                    (Succ O P))
+;               (TmEq M O))
+;          (TmEq N P))
+;      Succ-WellDefined)
+;
+;(rule (=> (and (Succ M N)
+;               (TmEq O N))
+;          (Succ M O))
+;      Succ-Eq)
+;
+;(rule (=> (and (and (Succ M N)
+;                    (Succ O P))
+;               (TmEq N P))
+;          (TmEq M O))
+;      Succ-Injective)
+;
+;(rule (=> (and (ElimNat M CO P CS O)
+;               (Zero M))
+;          (TmEq O CO))
+;      ElimNat-O)
+;
+;(rule (=> (and (ElimNat M CO P CS O)
+;               (Succ N M))
+;          (TmEq O CS))
+;      ElimNat-S1)
+;
+;(rule (=> (and (ElimNat M CO P CS O)
+;               (Succ N M))
+;          (TmEq P N))
+;      ElimNat-S2)
 ";
 
         public TypeChecker()

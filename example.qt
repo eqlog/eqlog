@@ -1,3 +1,4 @@
+(*
 def plus (a b : nat) : nat :=
   elim a into (_ : nat) : nat
   | => b
@@ -23,7 +24,6 @@ def test (a : nat) : a = elim a into (_ : nat) : nat
                 | => 0
                 | (pred : nat) (_ : nat) => S pred) => refl (S pred).
   
-(*
 def plus (a b : nat) : nat :=
 
 def plus_0_l (a : nat) : 0 + a = a :=
@@ -51,3 +51,4 @@ def zero (a b c d e f : nat)
   dump TmEq (refl a).
 
 def UIP (a b : nat) (p q : a = b) : p = q :=
+*)
