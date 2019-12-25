@@ -34,361 +34,6 @@ namespace QT
         private ImmutableDictionary<string, uint> _context = ImmutableDictionary.Create<string, uint>();
         private readonly Dictionary<string, Def> _globals = new Dictionary<string, Def>();
 
-        private static readonly string s_z3Setup = @"
-(define-sort ConS () (_ BitVec {SortSize}))
-(define-sort ConMorphS () (_ BitVec {SortSize}))
-(define-sort TyS () (_ BitVec {SortSize}))
-(define-sort TmS () (_ BitVec {SortSize}))
-
-; ConEq G D -- |- G = D ctx
-(declare-rel ConEq (ConS ConS))
-; ConMorphEq f g -- G |- f = g => D
-(declare-rel ConMorphEq (ConMorphS ConMorphS))
-; TyEq s t -- G |- s = t type
-(declare-rel TyEq (TyS TyS))
-; TmEq M N -- G |- M = N : s
-(declare-rel TmEq (TmS TmS))
-
-; Con G -- |- G ctx
-(declare-rel Con (ConS))
-; ConMorph G f D -- G |- f => D
-(declare-rel ConMorph (ConS ConMorphS ConS))
-; Comp g f h -- h is g . f
-(declare-rel Comp (ConMorphS ConMorphS ConMorphS))
-; Ty G s -- G |- s type
-(declare-rel Ty (ConS TyS))
-; TmTy G M s -- G |- M : s
-(declare-rel TmTy (ConS TmS TyS))
-
-; Functional relations
-; IdMorph G f -- f is the identity context morphism for G
-(declare-rel IdMorph (ConS ConMorphS))
-; TySubst s f t -- t is s{f}
-(declare-rel TySubst (TyS ConMorphS TyS))
-; TmSubst M f N -- N is M{f}
-(declare-rel TmSubst (TmS ConMorphS TmS))
-; ConEmpty G -- G is the empty (terminal) context
-(declare-rel ConEmpty (ConS))
-; Comprehension G s D -- |- G, x : s = D ctx
-(declare-rel Comprehension (ConS TyS ConS))
-; ProjCon G s f -- f is the projection G, x : s |- p(s) => G
-(declare-rel ProjCon (ConS TyS ConMorphS))
-; ProjTm G s M -- M is the projection G, x : s |- x : s
-(declare-rel ProjTm (ConS TyS TmS))
-; Extension f M g -- g = 〈f, M〉
-(declare-rel Extension (ConMorphS TmS ConMorphS))
-
-(declare-var A ConS)
-(declare-var B ConS)
-(declare-var C ConS)
-(declare-var D ConS)
-(declare-var E ConS)
-(declare-var F ConS)
-(declare-var G ConS)
-
-(declare-var e ConMorphS)
-(declare-var f ConMorphS)
-(declare-var g ConMorphS)
-(declare-var h ConMorphS)
-(declare-var i ConMorphS)
-(declare-var j ConMorphS)
-(declare-var k ConMorphS)
-(declare-var p ConMorphS)
-(declare-var q ConMorphS)
-
-(declare-var r TyS)
-(declare-var s TyS)
-(declare-var t TyS)
-(declare-var u TyS)
-(declare-var v TyS)
-
-(declare-var M TmS)
-(declare-var N TmS)
-(declare-var O TmS)
-(declare-var P TmS)
-(declare-var Q TmS)
-(declare-var CO TmS)
-(declare-var CS TmS)
-
-;;;;;;;;;; Equalities ;;;;;;;;;;
-
-; ConEq is an equivalence relation
-(rule (=> (Con G) (ConEq G G)) ConEq-Reflexive)
-(rule (=> (ConEq G D) (ConEq D G)) ConEq-Symmetric)
-(rule (=> (and (ConEq G D) (ConEq D B)) (ConEq G B)) ConEq-Transitive)
-
-; ConMorphEq is an equivalence relation
-(rule (=> (ConMorph G f D) (ConMorphEq f f)) ConMorphEq-Reflexive)
-(rule (=> (ConMorphEq f g) (ConMorphEq g f)) ConMorphEq-Symmetric)
-(rule (=> (and (ConMorphEq f g)
-               (ConMorphEq g h))
-          (ConMorphEq f h))
-      ConMorphEq-Transitive)
-
-; TyEq is an equivalence relation
-(rule (=> (Ty G s) (TyEq s s)) TyEq-Reflexive)
-(rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
-(rule (=> (and (TyEq s t) (TyEq t r)) (TyEq s r)) TyEq-Transitive)
-
-; TmEq is an equivalence relation
-(rule (=> (TmTy G M s) (TmEq M M)) TmEq-Reflexive)
-(rule (=> (TmEq M N) (TmEq N M)) TmEq-Symmetric)
-(rule (=> (and (TmEq M N) (TmEq N O)) (TmEq M O)) TmEq-Transitive)
-
-;;;;;;;;;; Congruence rules ;;;;;;;;;;
-
-; Con
-(rule (=> (and (Con G)
-               (ConEq G D))
-          (Con D))
-      Con-Congr)
-
-; ConMorph
-(rule (=> (and (and (and (ConMorph G f D)
-                         (ConEq G A))
-                    (ConMorphEq f g))
-               (ConEq D B))
-          (ConMorph A g B))
-      ConMorph-Congr)
-
-; Comp
-(rule (=> (and (and (and (Comp f g h)
-                         (ConMorphEq f i))
-                    (ConMorphEq g j))
-               (ConMorphEq h k))
-          (Comp i j k))
-      Comp-Congr)
-
-; Ty
-(rule (=> (and (Ty G s)
-               (ConEq G D))
-          (Ty D s))
-      Ty-Conv)
-
-; TmTy
-(rule (=> (and (and (TmTy G M s)
-                    (ConEq G D))
-               (TyEq s t))
-          (TmTy D M t))
-      Tm-Conv)
-
-; IdMorph
-(rule (=> (and (and (IdMorph G f)
-                    (ConEq G D))
-               (ConMorphEq f g))
-          (IdMorph D g))
-      IdMorph-Congr)
-
-; TySubst
-(rule (=> (and (and (and (TySubst s f t)
-                         (TyEq s u))
-                    (ConMorphEq f g))
-               (ConMorphEq t v))
-          (TySubst u g v))
-      TySubst-Congr)
-
-; TmSubst
-(rule (=> (and (and (and (TmSubst M f N)
-                         (TmEq M O))
-                    (ConMorphEq f g))
-               (TmEq N P))
-          (TmSubst O g P))
-      TmSubst-Congr)
-
-; ConEmpty
-(rule (=> (and (ConEmpty G)
-               (ConEq G D))
-          (ConEmpty D))
-      ConEmpty-Congr)
-
-; Comprehension
-(rule (=> (and (and (and (Comprehension G s A)
-                         (ConEq G D))
-                    (TyEq s t))
-               (ConEq A B))
-          (Comprehension D t B))
-      Comprehension-Congr)
-
-; ProjCon
-(rule (=> (and (and (and (ProjCon G s f)
-                         (ConEq G D))
-                    (TyEq s t))
-               (ConMorphEq f g))
-          (ProjCon D t g))
-      ProjCon-Congr)
-
-; ProjTm
-(rule (=> (and (and (and (ProjTm G s M)
-                         (ConEq G D))
-                    (TyEq s t))
-               (TmEq M N))
-          (ProjTm D t N))
-      ProjTm-Congr)
-
-; Extension
-(rule (=> (and (and (and (Extension f M g)
-                         (ConMorphEq f h))
-                    (TmEq M N))
-               (ConMorphEq g i))
-          (Extension h N i))
-      Extension-Congr)
-
-;;;;;;;;;; Functionality rules ;;;;;;;;;;
-
-(rule (=> (and (IdMorph G f)
-               (IdMorph G g))
-          (ConMorphEq f g))
-      IdMorph-Functional)
-
-(rule (=> (and (TySubst s f t)
-               (TySubst s f u))
-          (TyEq t u))
-      TySubst-Functional)
-
-(rule (=> (and (TmSubst M f N)
-               (TmSubst M f O))
-          (TmEq N O))
-      TmSubst-Functional)
-
-(rule (=> (and (ConEmpty G) (ConEmpty D))
-          (ConEq G D))
-      ConEmpty-Functional)
-
-(rule (=> (and (Comprehension G s D)
-               (Comprehension G s A))
-          (ConEq D A))
-      Comprehension-Functional)
-
-(rule (=> (and (ProjCon G s f)
-               (ProjCon G s g))
-          (ConMorphEq f g))
-      ProjCon-Functional)
-
-(rule (=> (and (ProjTm G s M)
-               (ProjTm G s N))
-          (TmEq M N))
-      ProjTm-Functional)
-
-(rule (=> (and (Extension f M g)
-               (Extension f M h))
-          (ConMorphEq g h))
-      Extension-Functional)
-
-;;;;;;;;;; Categorical rules ;;;;;;;;;;
-
-; s{id} = s
-(rule (=> (and (TySubst s f t)
-               (IdMorph G f))
-          (TyEq s t))
-      Ty-Id)
-
-; s{g . f} = s{g}{f}
-(rule (=> (and (and (Comp g f h)
-                    (TySubst s h t))
-               (and (TySubst s g u)
-                    (TySubst u f v)))
-          (TyEq t v))
-      Ty-Comp)
-
-; M{id} = M
-(rule (=> (and (TmSubst M f N)
-               (IdMorph G f))
-          (TmEq M N))
-      Tm-Id)
-
-; M{g . f} = M{g}{f}
-(rule (=> (and (and (Comp g f h)
-                    (TmSubst M h N))
-               (and (TmSubst M g O)
-                    (TmSubst O f P)))
-          (TmEq N P))
-      Tm-Comp)
-
-; p(s) . 〈f, M〉= f
-(rule (=> (and (and (ProjCon G s p)
-                    (Extension f M e))
-               (Comp p e g))
-          (ConMorphEq g f))
-      Cons-L)
-
-; M = v /\ 〈f, N〉= e /\ M{e} = O => O = N
-(rule (=> (and (and (ProjTm G s M)
-                    (Extension f N e))
-               (TmSubst M e O))
-          (TmEq O N))
-      Cons-R)
-
-; 〈f, M〉. g = 〈f . g, M{g}〉
-; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
-; => h = j
-(rule (=> (and (and (and (and (Extension f M e)
-                              (Comp e g h))
-                         (Comp f g i))
-                    (TmSubst M g N))
-               (Extension i N j))
-          (ConMorphEq h j))
-      Cons-Nat)
-
-; 〈p(s), v〉= id
-; p(s) = p /\ M = v /\ 〈p, M〉= e /\ id = f => e = f
-(rule (=> (and (and (and (and (ProjCon G s p)
-                              (ProjTm G s M))
-                         (Extension p M e))
-                    (Comprehension G s D))
-               (IdMorph D f))
-          (ConMorphEq e f))
-      Cons-Id)
-
-;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
-
-;(rule (=> (and (Id M N s) (TmTy O s))
-;          (TmEq M N))
-;      Id-Reflection)
-;
-;(rule (=> (and (Id M N s)
-;               (and (TmTy P s)
-;                    (TmTy Q s)))
-;          (TmEq P Q))
-;      Id-Eq)
-;
-;(rule (=> (and (Zero M)
-;               (Zero N))
-;          (TmEq M N))
-;      Zero-Eq)
-;
-;(rule (=> (and (and (Succ M N)
-;                    (Succ O P))
-;               (TmEq M O))
-;          (TmEq N P))
-;      Succ-WellDefined)
-;
-;(rule (=> (and (Succ M N)
-;               (TmEq O N))
-;          (Succ M O))
-;      Succ-Eq)
-;
-;(rule (=> (and (and (Succ M N)
-;                    (Succ O P))
-;               (TmEq N P))
-;          (TmEq M O))
-;      Succ-Injective)
-;
-;(rule (=> (and (ElimNat M CO P CS O)
-;               (Zero M))
-;          (TmEq O CO))
-;      ElimNat-O)
-;
-;(rule (=> (and (ElimNat M CO P CS O)
-;               (Succ N M))
-;          (TmEq O CS))
-;      ElimNat-S1)
-;
-;(rule (=> (and (ElimNat M CO P CS O)
-;               (Succ N M))
-;          (TmEq P N))
-;      ElimNat-S2)
-".Replace("{SortSize}", SortSize.ToString());
-
         public TypeChecker()
         {
             _ctx = new Context();
@@ -638,5 +283,381 @@ namespace QT
         {
             _ctx.Dispose();
         }
+
+        private static readonly string s_z3Setup = @"
+(define-sort ConS () (_ BitVec {SortSize}))
+(define-sort ConMorphS () (_ BitVec {SortSize}))
+(define-sort TyS () (_ BitVec {SortSize}))
+(define-sort TmS () (_ BitVec {SortSize}))
+
+; ConEq G D -- |- G = D ctx
+(declare-rel ConEq (ConS ConS))
+; ConMorphEq f g -- G |- f = g => D
+(declare-rel ConMorphEq (ConMorphS ConMorphS))
+; TyEq s t -- G |- s = t type
+(declare-rel TyEq (TyS TyS))
+; TmEq M N -- G |- M = N : s
+(declare-rel TmEq (TmS TmS))
+
+; Con G -- |- G ctx
+(declare-rel Con (ConS))
+; ConMorph G f D -- G |- f => D
+(declare-rel ConMorph (ConS ConMorphS ConS))
+; Comp g f h -- h is g . f
+(declare-rel Comp (ConMorphS ConMorphS ConMorphS))
+; Ty G s -- G |- s type
+(declare-rel Ty (ConS TyS))
+; TmTy G M s -- G |- M : s
+(declare-rel TmTy (ConS TmS TyS))
+
+; Functional relations
+; IdMorph G f -- f is the identity context morphism for G
+(declare-rel IdMorph (ConS ConMorphS))
+; TySubst s f t -- t is s{f}
+(declare-rel TySubst (TyS ConMorphS TyS))
+; TmSubst M f N -- N is M{f}
+(declare-rel TmSubst (TmS ConMorphS TmS))
+; ConEmpty G -- G is the empty (terminal) context
+(declare-rel ConEmpty (ConS))
+; Comprehension G s D -- |- G, x : s = D ctx
+(declare-rel Comprehension (ConS TyS ConS))
+; ProjCon G s f -- f is the projection G, x : s |- p(s) => G
+(declare-rel ProjCon (ConS TyS ConMorphS))
+; ProjTm G s M -- M is the projection G, x : s |- x : s
+(declare-rel ProjTm (ConS TyS TmS))
+; Extension f M g -- g = 〈f, M〉
+(declare-rel Extension (ConMorphS TmS ConMorphS))
+
+; Type forming/introduction/elimination
+(declare-rel Nat (ConS TyS))
+
+(declare-var A ConS)
+(declare-var B ConS)
+(declare-var C ConS)
+(declare-var D ConS)
+(declare-var E ConS)
+(declare-var F ConS)
+(declare-var G ConS)
+
+(declare-var e ConMorphS)
+(declare-var f ConMorphS)
+(declare-var g ConMorphS)
+(declare-var h ConMorphS)
+(declare-var i ConMorphS)
+(declare-var j ConMorphS)
+(declare-var k ConMorphS)
+(declare-var p ConMorphS)
+(declare-var q ConMorphS)
+
+(declare-var r TyS)
+(declare-var s TyS)
+(declare-var t TyS)
+(declare-var u TyS)
+(declare-var v TyS)
+
+(declare-var M TmS)
+(declare-var N TmS)
+(declare-var O TmS)
+(declare-var P TmS)
+(declare-var Q TmS)
+
+;;;;;;;;;; Equalities ;;;;;;;;;;
+
+; ConEq is an equivalence relation
+(rule (=> (Con G) (ConEq G G)) ConEq-Reflexive)
+(rule (=> (ConEq G D) (ConEq D G)) ConEq-Symmetric)
+(rule (=> (and (ConEq G D) (ConEq D B)) (ConEq G B)) ConEq-Transitive)
+
+; ConMorphEq is an equivalence relation
+(rule (=> (ConMorph G f D) (ConMorphEq f f)) ConMorphEq-Reflexive)
+(rule (=> (ConMorphEq f g) (ConMorphEq g f)) ConMorphEq-Symmetric)
+(rule (=> (and (ConMorphEq f g)
+               (ConMorphEq g h))
+          (ConMorphEq f h))
+      ConMorphEq-Transitive)
+
+; TyEq is an equivalence relation
+(rule (=> (Ty G s) (TyEq s s)) TyEq-Reflexive)
+(rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
+(rule (=> (and (TyEq s t) (TyEq t r)) (TyEq s r)) TyEq-Transitive)
+
+; TmEq is an equivalence relation
+(rule (=> (TmTy G M s) (TmEq M M)) TmEq-Reflexive)
+(rule (=> (TmEq M N) (TmEq N M)) TmEq-Symmetric)
+(rule (=> (and (TmEq M N) (TmEq N O)) (TmEq M O)) TmEq-Transitive)
+
+;;;;;;;;;; Congruence rules ;;;;;;;;;;
+
+; Con
+(rule (=> (and (Con G)
+               (ConEq G D))
+          (Con D))
+      Con-Congr)
+
+; ConMorph
+(rule (=> (and (and (and (ConMorph G f D)
+                         (ConEq G A))
+                    (ConMorphEq f g))
+               (ConEq D B))
+          (ConMorph A g B))
+      ConMorph-Congr)
+
+; Comp
+(rule (=> (and (and (and (Comp f g h)
+                         (ConMorphEq f i))
+                    (ConMorphEq g j))
+               (ConMorphEq h k))
+          (Comp i j k))
+      Comp-Congr)
+
+; Ty
+(rule (=> (and (Ty G s)
+               (ConEq G D))
+          (Ty D s))
+      Ty-Conv)
+
+; TmTy
+(rule (=> (and (and (TmTy G M s)
+                    (ConEq G D))
+               (TyEq s t))
+          (TmTy D M t))
+      Tm-Conv)
+
+; IdMorph
+(rule (=> (and (and (IdMorph G f)
+                    (ConEq G D))
+               (ConMorphEq f g))
+          (IdMorph D g))
+      IdMorph-Congr)
+
+; TySubst
+(rule (=> (and (and (and (TySubst s f t)
+                         (TyEq s u))
+                    (ConMorphEq f g))
+               (ConMorphEq t v))
+          (TySubst u g v))
+      TySubst-Congr)
+
+; TmSubst
+(rule (=> (and (and (and (TmSubst M f N)
+                         (TmEq M O))
+                    (ConMorphEq f g))
+               (TmEq N P))
+          (TmSubst O g P))
+      TmSubst-Congr)
+
+; ConEmpty
+(rule (=> (and (ConEmpty G)
+               (ConEq G D))
+          (ConEmpty D))
+      ConEmpty-Congr)
+
+; Comprehension
+(rule (=> (and (and (and (Comprehension G s A)
+                         (ConEq G D))
+                    (TyEq s t))
+               (ConEq A B))
+          (Comprehension D t B))
+      Comprehension-Congr)
+
+; ProjCon
+(rule (=> (and (and (and (ProjCon G s f)
+                         (ConEq G D))
+                    (TyEq s t))
+               (ConMorphEq f g))
+          (ProjCon D t g))
+      ProjCon-Congr)
+
+; ProjTm
+(rule (=> (and (and (and (ProjTm G s M)
+                         (ConEq G D))
+                    (TyEq s t))
+               (TmEq M N))
+          (ProjTm D t N))
+      ProjTm-Congr)
+
+; Extension
+(rule (=> (and (and (and (Extension f M g)
+                         (ConMorphEq f h))
+                    (TmEq M N))
+               (ConMorphEq g i))
+          (Extension h N i))
+      Extension-Congr)
+
+; Nat
+(rule (=> (and (and (Nat G s)
+                    (ConEq G D))
+               (TyEq s t))
+          (Nat D t))
+      Nat-Congr)
+
+;;;;;;;;;; Functionality rules ;;;;;;;;;;
+
+(rule (=> (and (IdMorph G f)
+               (IdMorph G g))
+          (ConMorphEq f g))
+      IdMorph-Functional)
+
+(rule (=> (and (TySubst s f t)
+               (TySubst s f u))
+          (TyEq t u))
+      TySubst-Functional)
+
+(rule (=> (and (TmSubst M f N)
+               (TmSubst M f O))
+          (TmEq N O))
+      TmSubst-Functional)
+
+(rule (=> (and (ConEmpty G) (ConEmpty D))
+          (ConEq G D))
+      ConEmpty-Functional)
+
+(rule (=> (and (Comprehension G s D)
+               (Comprehension G s A))
+          (ConEq D A))
+      Comprehension-Functional)
+
+(rule (=> (and (ProjCon G s f)
+               (ProjCon G s g))
+          (ConMorphEq f g))
+      ProjCon-Functional)
+
+(rule (=> (and (ProjTm G s M)
+               (ProjTm G s N))
+          (TmEq M N))
+      ProjTm-Functional)
+
+(rule (=> (and (Extension f M g)
+               (Extension f M h))
+          (ConMorphEq g h))
+      Extension-Functional)
+
+(rule (=> (and (Nat G s)
+               (Nat G t))
+          (TyEq s t))
+      Nat-Functional)
+
+;;;;;;;;;; Categorical rules ;;;;;;;;;;
+
+; s{id} = s
+(rule (=> (and (TySubst s f t)
+               (IdMorph G f))
+          (TyEq s t))
+      Ty-Id)
+
+; s{g . f} = s{g}{f}
+(rule (=> (and (and (Comp g f h)
+                    (TySubst s h t))
+               (and (TySubst s g u)
+                    (TySubst u f v)))
+          (TyEq t v))
+      Ty-Comp)
+
+; M{id} = M
+(rule (=> (and (TmSubst M f N)
+               (IdMorph G f))
+          (TmEq M N))
+      Tm-Id)
+
+; M{g . f} = M{g}{f}
+(rule (=> (and (and (Comp g f h)
+                    (TmSubst M h N))
+               (and (TmSubst M g O)
+                    (TmSubst O f P)))
+          (TmEq N P))
+      Tm-Comp)
+
+; p(s) . 〈f, M〉= f
+(rule (=> (and (and (ProjCon G s p)
+                    (Extension f M e))
+               (Comp p e g))
+          (ConMorphEq g f))
+      Cons-L)
+
+; M = v /\ 〈f, N〉= e /\ M{e} = O => O = N
+(rule (=> (and (and (ProjTm G s M)
+                    (Extension f N e))
+               (TmSubst M e O))
+          (TmEq O N))
+      Cons-R)
+
+; 〈f, M〉. g = 〈f . g, M{g}〉
+; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
+; => h = j
+(rule (=> (and (and (and (and (Extension f M e)
+                              (Comp e g h))
+                         (Comp f g i))
+                    (TmSubst M g N))
+               (Extension i N j))
+          (ConMorphEq h j))
+      Cons-Nat)
+
+; 〈p(s), v〉= id
+; p(s) = p /\ M = v /\ 〈p, M〉= e /\ id = f => e = f
+(rule (=> (and (and (and (and (ProjCon G s p)
+                              (ProjTm G s M))
+                         (Extension p M e))
+                    (Comprehension G s D))
+               (IdMorph D f))
+          (ConMorphEq e f))
+      Cons-Id)
+
+; Nat^D{f : G -> D} = Nat^G
+(rule (=> (and (and (and (Nat G s)
+                         (Nat D t))
+                    (ConMorph G f D))
+               (TySubst t f u))
+          (TyEq u s))
+      Nat-Natural)
+
+;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
+
+;(rule (=> (and (Id M N s) (TmTy O s))
+;          (TmEq M N))
+;      Id-Reflection)
+;
+;(rule (=> (and (Id M N s)
+;               (and (TmTy P s)
+;                    (TmTy Q s)))
+;          (TmEq P Q))
+;      Id-Eq)
+;
+;(rule (=> (and (Zero M)
+;               (Zero N))
+;          (TmEq M N))
+;      Zero-Eq)
+;
+;(rule (=> (and (and (Succ M N)
+;                    (Succ O P))
+;               (TmEq M O))
+;          (TmEq N P))
+;      Succ-WellDefined)
+;
+;(rule (=> (and (Succ M N)
+;               (TmEq O N))
+;          (Succ M O))
+;      Succ-Eq)
+;
+;(rule (=> (and (and (Succ M N)
+;                    (Succ O P))
+;               (TmEq N P))
+;          (TmEq M O))
+;      Succ-Injective)
+;
+;(rule (=> (and (ElimNat M CO P CS O)
+;               (Zero M))
+;          (TmEq O CO))
+;      ElimNat-O)
+;
+;(rule (=> (and (ElimNat M CO P CS O)
+;               (Succ N M))
+;          (TmEq O CS))
+;      ElimNat-S1)
+;
+;(rule (=> (and (ElimNat M CO P CS O)
+;               (Succ N M))
+;          (TmEq P N))
+;      ElimNat-S2)
+".Replace("{SortSize}", SortSize.ToString());
     }
 }
