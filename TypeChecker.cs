@@ -137,6 +137,12 @@ namespace QT
 
 ;;;;;;;;;; Congruence rules ;;;;;;;;;;
 
+; Con
+(rule (=> (and (Con G)
+               (ConEq G D))
+          (Con D))
+      Con-Congr)
+
 ; ConMorph
 (rule (=> (and (and (and (ConMorph G f D)
                          (ConEq G A))
@@ -335,13 +341,6 @@ namespace QT
 
 ;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
 
-;(rule (=> (and (and (Id M N s)
-;                    (Id O P t))
-;               (and (TmEq M O)
-;                    (TmEq N P)))
-;          (TyEq s t))
-;      Id-WellDefined)
-;
 ;(rule (=> (and (Id M N s) (TmTy O s))
 ;          (TmEq M N))
 ;      Id-Reflection)
