@@ -1,11 +1,12 @@
 ﻿using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.RegularExpressions;
 using QT.Parse;
 using Z3Expr = Microsoft.Z3.Expr;
-using System.Collections.Immutable;
 
 namespace QT
 {
@@ -16,20 +17,14 @@ namespace QT
         private readonly Context _ctx;
         private readonly Fixedpoint _fix;
 
-        private readonly BitVecSort _sort;
-
+        private readonly FuncDecl _con;
         private readonly FuncDecl _ty;
-        private readonly FuncDecl _tyEq;
-
-        private readonly FuncDecl _tmEq;
-
         private readonly FuncDecl _tmTy;
-
-        private readonly FuncDecl _id;
-
-        private readonly FuncDecl _zero;
-        private readonly FuncDecl _succ;
-        private readonly FuncDecl _elimNat;
+        private readonly FuncDecl _conEq;
+        private readonly FuncDecl _tyEq;
+        private readonly FuncDecl _tmEq;
+        private readonly FuncDecl _conEmpty;
+        private readonly FuncDecl _comprehension;
 
         private readonly Dictionary<string, FuncDecl> _rels;
 
@@ -39,43 +34,49 @@ namespace QT
         private ImmutableDictionary<string, uint> _context = ImmutableDictionary.Create<string, uint>();
         private readonly Dictionary<string, Def> _globals = new Dictionary<string, Def>();
 
-        private static readonly string s_z3Setup = $@"
+        private static readonly string s_z3Setup = @"
 (define-sort ConS () (_ BitVec {SortSize}))
+(define-sort ConMorphS () (_ BitVec {SortSize}))
 (define-sort TyS () (_ BitVec {SortSize}))
 (define-sort TmS () (_ BitVec {SortSize}))
 
-; Con G -- G is a context
-(declare-rel Con (ConS))
-
-; ConEq G H -- G ≡ H as contexts
+; ConEq G D -- |- G = D ctx
 (declare-rel ConEq (ConS ConS))
+; ConMorphEq f g -- G |- f = g => D
+(declare-rel ConMorphEq (ConMorphS ConMorphS))
+; TyEq s t -- G |- s = t type
+(declare-rel TyEq (TyS TyS))
+; TmEq M N -- G |- M = N : s
+(declare-rel TmEq (TmS TmS))
 
-; ConExt G s H -- G, x : s ≡ H
-(declare-rel ConExt (ConS TyS ConS))
-
+; Con G -- |- G ctx
+(declare-rel Con (ConS))
+; ConMorph G f D -- G |- f => D
+(declare-rel ConMorph (ConS ConMorphS ConS))
+; Comp g f h -- h is g . f
+(declare-rel Comp (ConMorphS ConMorphS ConMorphS))
 ; Ty G s -- G |- s type
 (declare-rel Ty (ConS TyS))
-
-; TyEq G s t -- G |- s = t type
-(declare-rel TyEq (ConS TyS TyS))
-
-; TmEq G M N s -- G |- M = N : s
-(declare-rel TmEq (ConS TmS TmS TyS))
-
 ; TmTy G M s -- G |- M : s
 (declare-rel TmTy (ConS TmS TyS))
 
-; Id G M N s -- G |- Id_s M N
-(declare-rel Id (ConS TmS TmS TyS))
-
-; Zero O -- O is a zero
-(declare-rel Zero (TmS))
-; Succ A B -- B is S A
-(declare-rel Succ (TmS TmS))
-; ElimNat N CO P CS X
-; X is the elimination of N with zero-case CO
-; and succ-case [P:nat]CS
-(declare-rel ElimNat (TmS TmS TmS TmS TmS))
+; Functional relations
+; IdMorph G f -- f is the identity context morphism for G
+(declare-rel IdMorph (ConS ConMorphS))
+; TySubst s f t -- t is s{f}
+(declare-rel TySubst (TyS ConMorphS TyS))
+; TmSubst M f N -- N is M{f}
+(declare-rel TmSubst (TmS ConMorphS TmS))
+; ConEmpty G -- G is the empty (terminal) context
+(declare-rel ConEmpty (ConS))
+; Comprehension G s D -- |- G, x : s = D ctx
+(declare-rel Comprehension (ConS TyS ConS))
+; ProjCon G s f -- f is the projection G, x : s |- p(s) => G
+(declare-rel ProjCon (ConS TyS ConMorphS))
+; ProjTm G s M -- M is the projection G, x : s |- x : s
+(declare-rel ProjTm (ConS TyS TmS))
+; Extension f M g -- g = 〈f, M〉
+(declare-rel Extension (ConMorphS TmS ConMorphS))
 
 (declare-var A ConS)
 (declare-var B ConS)
@@ -85,12 +86,21 @@ namespace QT
 (declare-var F ConS)
 (declare-var G ConS)
 
-(declare-var p TyS)
-(declare-var q TyS)
+(declare-var e ConMorphS)
+(declare-var f ConMorphS)
+(declare-var g ConMorphS)
+(declare-var h ConMorphS)
+(declare-var i ConMorphS)
+(declare-var j ConMorphS)
+(declare-var k ConMorphS)
+(declare-var p ConMorphS)
+(declare-var q ConMorphS)
+
 (declare-var r TyS)
 (declare-var s TyS)
 (declare-var t TyS)
 (declare-var u TyS)
+(declare-var v TyS)
 
 (declare-var M TmS)
 (declare-var N TmS)
@@ -100,41 +110,230 @@ namespace QT
 (declare-var CO TmS)
 (declare-var CS TmS)
 
+;;;;;;;;;; Equalities ;;;;;;;;;;
+
+; ConEq is an equivalence relation
 (rule (=> (Con G) (ConEq G G)) ConEq-Reflexive)
 (rule (=> (ConEq G D) (ConEq D G)) ConEq-Symmetric)
 (rule (=> (and (ConEq G D) (ConEq D B)) (ConEq G B)) ConEq-Transitive)
 
-(rule (=> (Ty G s) (TyEq G s s)) TyEq-Reflexive)
-(rule (=> (TyEq G s t) (TyEq G t s)) TyEq-Symmetric)
-(rule (=> (and (TyEq G s t) (TyEq G t r)) (TyEq G s r)) TyEq-Transitive)
+; ConMorphEq is an equivalence relation
+(rule (=> (ConMorph G f D) (ConMorphEq f f)) ConMorphEq-Reflexive)
+(rule (=> (ConMorphEq f g) (ConMorphEq g f)) ConMorphEq-Symmetric)
+(rule (=> (and (ConMorphEq f g)
+               (ConMorphEq g h))
+          (ConMorphEq f h))
+      ConMorphEq-Transitive)
 
-(rule (=> (TmTy G M s) (TmEq G M M s)) TmEq-Reflexive)
-(rule (=> (TmEq G M N s) (TmEq G N M s)) TmEq-Symmetric)
-(rule (=> (and (TmEq G M N s) (TmEq G N O s)) (TmEq G M O s)) TmEq-Transitive)
+; TyEq is an equivalence relation
+(rule (=> (Ty G s) (TyEq s s)) TyEq-Reflexive)
+(rule (=> (TyEq s t) (TyEq t s)) TyEq-Symmetric)
+(rule (=> (and (TyEq s t) (TyEq t r)) (TyEq s r)) TyEq-Transitive)
 
+; TmEq is an equivalence relation
+(rule (=> (TmTy G M s) (TmEq M M)) TmEq-Reflexive)
+(rule (=> (TmEq M N) (TmEq N M)) TmEq-Symmetric)
+(rule (=> (and (TmEq M N) (TmEq N O)) (TmEq M O)) TmEq-Transitive)
+
+;;;;;;;;;; Congruence rules ;;;;;;;;;;
+
+; ConMorph
+(rule (=> (and (and (and (ConMorph G f D)
+                         (ConEq G A))
+                    (ConMorphEq f g))
+               (ConEq D B))
+          (ConMorph A g B))
+      ConMorph-Congr)
+
+; Comp
+(rule (=> (and (and (and (Comp f g h)
+                         (ConMorphEq f i))
+                    (ConMorphEq g j))
+               (ConMorphEq h k))
+          (Comp i j k))
+      Comp-Congr)
+
+; Ty
+(rule (=> (and (Ty G s)
+               (ConEq G D))
+          (Ty D s))
+      Ty-Conv)
+
+; TmTy
 (rule (=> (and (and (TmTy G M s)
                     (ConEq G D))
-               (TyEq G s t))
+               (TyEq s t))
           (TmTy D M t))
       Tm-Conv)
 
-(rule (=> (and (ConEq G D)
-               (TyEq G s t))
-          (TyEq D s t))
-      Ty-Conv)
+; IdMorph
+(rule (=> (and (and (IdMorph G f)
+                    (ConEq G D))
+               (ConMorphEq f g))
+          (IdMorph D g))
+      IdMorph-Congr)
 
-;(rule (=> (and (and (TmTy G M s)
-;                    (TmTy G N t))
-;               (TmEq G M N))
-;          (TyEq G s t))
-;      TmTy-TyEq)
+; TySubst
+(rule (=> (and (and (and (TySubst s f t)
+                         (TyEq s u))
+                    (ConMorphEq f g))
+               (ConMorphEq t v))
+          (TySubst u g v))
+      TySubst-Congr)
 
-(rule (=> (and (and (ConEq G D)
-                    (TyEq G s t))
-               (and (ConExt G s A)
-                    (ConExt D t B)))
-          (ConEq A B))
-      ConExt-Eq)
+; TmSubst
+(rule (=> (and (and (and (TmSubst M f N)
+                         (TmEq M O))
+                    (ConMorphEq f g))
+               (TmEq N P))
+          (TmSubst O g P))
+      TmSubst-Congr)
+
+; ConEmpty
+(rule (=> (and (ConEmpty G)
+               (ConEq G D))
+          (ConEmpty D))
+      ConEmpty-Congr)
+
+; Comprehension
+(rule (=> (and (and (and (Comprehension G s A)
+                         (ConEq G D))
+                    (TyEq s t))
+               (ConEq A B))
+          (Comprehension D t B))
+      Comprehension-Congr)
+
+; ProjCon
+(rule (=> (and (and (and (ProjCon G s f)
+                         (ConEq G D))
+                    (TyEq s t))
+               (ConMorphEq f g))
+          (ProjCon D t g))
+      ProjCon-Congr)
+
+; ProjTm
+(rule (=> (and (and (and (ProjTm G s M)
+                         (ConEq G D))
+                    (TyEq s t))
+               (TmEq M N))
+          (ProjTm D t N))
+      ProjTm-Congr)
+
+; Extension
+(rule (=> (and (and (and (Extension f M g)
+                         (ConMorphEq f h))
+                    (TmEq M N))
+               (ConMorphEq g i))
+          (Extension h N i))
+      Extension-Congr)
+
+;;;;;;;;;; Functionality rules ;;;;;;;;;;
+
+(rule (=> (and (IdMorph G f)
+               (IdMorph G g))
+          (ConMorphEq f g))
+      IdMorph-Functional)
+
+(rule (=> (and (TySubst s f t)
+               (TySubst s f u))
+          (TyEq t u))
+      TySubst-Functional)
+
+(rule (=> (and (TmSubst M f N)
+               (TmSubst M f O))
+          (TmEq N O))
+      TmSubst-Functional)
+
+(rule (=> (and (ConEmpty G) (ConEmpty D))
+          (ConEq G D))
+      ConEmpty-Functional)
+
+(rule (=> (and (Comprehension G s D)
+               (Comprehension G s A))
+          (ConEq D A))
+      Comprehension-Functional)
+
+(rule (=> (and (ProjCon G s f)
+               (ProjCon G s g))
+          (ConMorphEq f g))
+      ProjCon-Functional)
+
+(rule (=> (and (ProjTm G s M)
+               (ProjTm G s N))
+          (TmEq M N))
+      ProjTm-Functional)
+
+(rule (=> (and (Extension f M g)
+               (Extension f M h))
+          (ConMorphEq g h))
+      Extension-Functional)
+
+;;;;;;;;;; Categorical rules ;;;;;;;;;;
+
+; s{id} = s
+(rule (=> (and (TySubst s f t)
+               (IdMorph G f))
+          (TyEq s t))
+      Ty-Id)
+
+; s{g . f} = s{g}{f}
+(rule (=> (and (and (Comp g f h)
+                    (TySubst s h t))
+               (and (TySubst s g u)
+                    (TySubst u f v)))
+          (TyEq t v))
+      Ty-Comp)
+
+; M{id} = M
+(rule (=> (and (TmSubst M f N)
+               (IdMorph G f))
+          (TmEq M N))
+      Tm-Id)
+
+; M{g . f} = M{g}{f}
+(rule (=> (and (and (Comp g f h)
+                    (TmSubst M h N))
+               (and (TmSubst M g O)
+                    (TmSubst O f P)))
+          (TmEq N P))
+      Tm-Comp)
+
+; p(s) . 〈f, M〉= f
+(rule (=> (and (and (ProjCon G s p)
+                    (Extension f M e))
+               (Comp p e g))
+          (ConMorphEq g f))
+      Cons-L)
+
+; M = v /\ 〈f, N〉= e /\ M{e} = O => O = N
+(rule (=> (and (and (ProjTm G s M)
+                    (Extension f N e))
+               (TmSubst M e O))
+          (TmEq O N))
+      Cons-R)
+
+; 〈f, M〉. g = 〈f . g, M{g}〉
+; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
+; => h = j
+(rule (=> (and (and (and (and (Extension f M e)
+                              (Comp e g h))
+                         (Comp f g i))
+                    (TmSubst M g N))
+               (Extension i N j))
+          (ConMorphEq h j))
+      Cons-Nat)
+
+; 〈p(s), v〉= id
+; p(s) = p /\ M = v /\ 〈p, M〉= e /\ id = f => e = f
+(rule (=> (and (and (and (and (ProjCon G s p)
+                              (ProjTm G s M))
+                         (Extension p M e))
+                    (Comprehension G s D))
+               (IdMorph D f))
+          (ConMorphEq e f))
+      Cons-Id)
+
+;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
 
 ;(rule (=> (and (and (Id M N s)
 ;                    (Id O P t))
@@ -189,7 +388,7 @@ namespace QT
 ;               (Succ N M))
 ;          (TmEq P N))
 ;      ElimNat-S2)
-";
+".Replace("{SortSize}", SortSize.ToString());
 
         public TypeChecker()
         {
@@ -200,26 +399,16 @@ namespace QT
                 .Add("fp.engine", "datalog")
                 .Add("datalog.generate_explanations", true);
             _fix.ParseString(s_z3Setup);
-            _sort = _ctx.MkBitVecSort(SortSize);
 
             _rels = CollectRelations(_fix.Rules);
+            _con = _rels["Con"];
             _ty = _rels["Ty"];
+            _tmTy = _rels["TmTy"];
+            _conEq = _rels["ConEq"];
             _tyEq = _rels["TyEq"];
             _tmEq = _rels["TmEq"];
-            _tmTy = _rels["TmTy"];
-            _id = _rels["Id"];
-            _zero = _rels["Zero"];
-            _succ = _rels["Succ"];
-            _elimNat = _rels["ElimNat"];
-
-            uint nat = NextId();
-            _fix.AddFact(_ty, nat);
-            _context = _context.Add("nat", nat);
-
-            uint zero = NextId();
-            _fix.AddFact(_tmTy, zero, nat);
-            _fix.AddFact(_zero, zero);
-            _context = _context.Add("O", zero);
+            _conEmpty = _rels["ConEmpty"];
+            _comprehension = _rels["Comprehension"];
         }
 
         private static Dictionary<string, FuncDecl> CollectRelations(IEnumerable<Z3Expr> exprs)
@@ -253,47 +442,6 @@ namespace QT
             }
 
             return decls;
-        }
-
-        private uint FormId(uint tmLeft, uint tmRight)
-        {
-            Z3Expr s = _ctx.MkConst("σ", _sort);
-            Status status =
-                _fix.Query(
-                    _ctx.MkExists(
-                        new[] { s },
-                        (BoolExpr)_tmTy.Apply(BV(tmLeft), s) &
-                        (BoolExpr)_tmTy.Apply(BV(tmRight), s)));
-
-            if (status != Status.SATISFIABLE)
-            {
-                throw new Exception("Cannot form id type");
-            }
-
-            uint id = NextId();
-            _fix.AddFact(_ty, id);
-            _fix.AddFact(_id, tmLeft, tmRight, id);
-
-            return id;
-        }
-
-        private uint IntroduceId(uint tm)
-        {
-            uint idId = FormId(tm, tm);
-            uint reflId = NextId();
-            _fix.AddFact(_tmTy, reflId, idId);
-            return reflId;
-        }
-
-        private uint IntroduceSucc(uint arg)
-        {
-            if (_fix.Query((BoolExpr)_tmTy.Apply(BV(arg), BV(_context["nat"]))) != Status.SATISFIABLE)
-                throw new Exception("Expected arg to constructor S to be of type nat");
-
-            uint succId = NextId();
-            _fix.AddFact(_tmTy, succId, _context["nat"]);
-            _fix.AddFact(_succ, arg, succId);
-            return succId;
         }
 
         public uint TypeCheck(Def def)
@@ -357,20 +505,9 @@ namespace QT
                     uint bodyId = TypeCheck(let.Body);
                     _context = old;
                     return bodyId;
-                case ElimExpr elim:
-                    uint discrimineeId = TypeCheck(elim.Discriminee);
-                    if (_fix.Query((BoolExpr)_tmTy.Apply(BV(discrimineeId), BV(_context["nat"]))) == Status.SATISFIABLE)
-                        return ElimNat(elim, discrimineeId);
-
-                    throw new Exception($"Cannot eliminate {elim.Discriminee} since it is not of type nat");
-
                 case IdExpr id:
                     return _context[id.Id];
                 case AppExpr app:
-                    if (app.Fun == "id")
-                        return FormId(TypeCheck(app.Args[0]), TypeCheck(app.Args[1]));
-                    if (app.Fun == "refl")
-                        return IntroduceId(TypeCheck(app.Args.Single()));
                     if (app.Fun == "dump")
                     {
                         uint result = TypeCheck(app.Args[1]);
@@ -384,8 +521,6 @@ namespace QT
                         Console.WriteLine(ans);
                         return result;
                     }
-                    if (app.Fun == "S")
-                        return IntroduceSucc(TypeCheck(app.Args.Single()));
                     if (_globals.TryGetValue(app.Fun, out Def? global))
                     {
                         if (global.CtxExts.Count != app.Args.Count)
@@ -405,63 +540,6 @@ namespace QT
                 default:
                     throw new Exception("Cannot handle yet");
             }
-        }
-
-        private uint ElimNat(ElimExpr elim, uint discriminee)
-        {
-            if (elim.IntoExts.Count != 1)
-                throw new Exception($"Invalid context extension {string.Join(" ", elim.IntoExts)}");
-
-            if (elim.Cases.Count != 2)
-                throw new Exception($"Expected 2 cases for nat elimination");
-
-            if (elim.Cases[0].CaseExts.Count != 0)
-                throw new Exception($"{elim.Cases[0]}: expected no context extensions");
-
-            if (elim.Cases[1].CaseExts.Count != 2)
-                throw new Exception($"{elim.Cases[1]}: expected 2 context extensions");
-
-            ImmutableDictionary<string, uint> old = _context;
-            (_, uint intoCtxTyId) = ExtendContext(elim.IntoExts[0]);
-            if (_fix.Query((BoolExpr)_tyEq.Apply(BV(intoCtxTyId), BV(_context["nat"]))) != Status.SATISFIABLE)
-                throw new Exception($"Invalid context extension {elim.IntoExts[0]}, expected type nat");
-
-            TypeCheckType(elim.IntoTy);
-            _context = old;
-
-            ElimCase zeroCase = elim.Cases[0];
-            Expr zeroCaseExpectedTy = Subst(elim.IntoTy, elim.IntoExts, new[] { new IdExpr("O") });
-            uint zeroCaseExpectedTyId = TypeCheckType(zeroCaseExpectedTy);
-            uint zeroCaseId = TypeCheck(zeroCase.Body);
-            if (_fix.Query((BoolExpr)_tmTy.Apply(BV(zeroCaseId), BV(zeroCaseExpectedTyId))) != Status.SATISFIABLE)
-                throw new Exception($"{zeroCase.Body}: Invalid type of 0 case, expected {zeroCaseExpectedTy}");
-
-            ElimCase succCase = elim.Cases[1];
-            (uint predId, uint predTyId) = ExtendContext(succCase.CaseExts[0]);
-            if (_fix.Query((BoolExpr)_tyEq.Apply(BV(predTyId), BV(_context["nat"]))) != Status.SATISFIABLE)
-                throw new Exception($"Invalid context extension {succCase.CaseExts[0]}, expected type nat");
-
-            (uint ihId, uint ihTyId) = ExtendContext(succCase.CaseExts[1]);
-            Expr expectedTy = Subst(elim.IntoTy, new[] { elim.IntoExts[0] }, new[] { new IdExpr(succCase.CaseExts[0].Name.Name) });
-            uint expectedTyId = TypeCheckType(expectedTy);
-            if (_fix.Query((BoolExpr)_tyEq.Apply(BV(ihTyId), BV(expectedTyId))) != Status.SATISFIABLE)
-                throw new Exception($"IH has type {succCase.CaseExts[1]} which does not match specified into-type {expectedTy}");
-
-            Expr succCaseExpectedTy = Subst(elim.IntoTy, elim.IntoExts, new[] { new AppExpr("S", new List<Expr> { new IdExpr(succCase.CaseExts[0].Name.Name) }) });
-            uint succCaseExpectedTyId = TypeCheckType(succCaseExpectedTy);
-            uint succCaseId = TypeCheck(succCase.Body);
-            if (_fix.Query((BoolExpr)_tmTy.Apply(BV(succCaseId), BV(succCaseExpectedTyId))) != Status.SATISFIABLE)
-                throw new Exception($"{succCase.Body}: Invalid type of succ case, expected {succCaseExpectedTy}");
-
-            _context = old;
-
-            Expr finalTy = Subst(elim.IntoTy, elim.IntoExts, new[] { elim.Discriminee });
-            uint finalTyId = TypeCheckType(finalTy);
-
-            uint elimId = NextId();
-            _fix.AddFact(_tmTy, elimId, finalTyId);
-            _fix.AddFact(_elimNat, discriminee, zeroCaseId, predId, succCaseId, elimId);
-            return elimId;
         }
 
         private BitVecNum BV(uint id) => _ctx.MkBV(id, SortSize);
