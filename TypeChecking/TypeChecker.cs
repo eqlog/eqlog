@@ -48,7 +48,6 @@ namespace QT
         private readonly Z3Expr _M;
 
         private readonly Dictionary<string, FuncDecl> _rels;
-        private readonly Dictionary<uint, string> _dbgInf = new Dictionary<uint, string>();
 
         private uint _counter;
         private uint NextId() => checked(++_counter);
@@ -95,8 +94,8 @@ namespace QT
             _zero = _rels["Zero"];
             _succ = _rels["Succ"];
 
-            uint emptyCtx = NewCtx("");
-            _fix.AddFact(_ctxEmpty, emptyCtx);
+            ModelCtx emptyCtx = NewCtx("");
+            _fix.AddFact(_ctxEmpty, emptyCtx.Id);
             _ctxInfo = new ContextInfo(this, emptyCtx);
         }
 
@@ -135,139 +134,154 @@ namespace QT
             return decls;
         }
 
-        private uint NewCtx(string? dbg)
+        private ModelCtx NewCtx(string? dbg)
         {
             uint id = NextId();
             _fix.AddFact(_ctx, id);
+            var ctx = new ModelCtx(id);
             if (dbg != null)
-                _dbgInf.Add(id, dbg);
-            return id;
+                ModelObject.DbgInfo.Add(ctx, dbg);
+            return ctx;
         }
 
-        private uint NewCtxMorph(uint from, uint to, string? dbg)
+        private CtxMorphism NewCtxMorph(ModelCtx from, ModelCtx to, string? dbg)
         {
             uint id = NextId();
-            _fix.AddFact(_ctxMorph, from, id, to);
+            _fix.AddFact(_ctxMorph, from.Id, id, to.Id);
+            var ctxMorph = new CtxMorphism(id, from, to);
             if (dbg != null)
-                _dbgInf.Add(id, dbg);
-            return id;
+                ModelObject.DbgInfo.Add(ctxMorph, dbg);
+            return ctxMorph;
         }
 
-        private uint NewTy(uint ctx, string? dbg)
+        private Ty NewTy(ModelCtx ctx, string? dbg)
         {
             uint id = NextId();
-            _fix.AddFact(_ty, ctx, id);
+            _fix.AddFact(_ty, ctx.Id, id);
+            var ty = new Ty(id, ctx);
             if (dbg != null)
-                _dbgInf.Add(id, dbg);
-            return id;
+                ModelObject.DbgInfo.Add(ty, dbg);
+            return ty;
         }
 
-        private uint NewTm(uint ctx, uint ty, string? dbg)
+        private Tm NewTm(Ty ty, string? dbg)
         {
             uint id = NextId();
-            _fix.AddFact(_tmTy, ctx, id, ty);
+            _fix.AddFact(_tmTy, ty.Context.Id, id, ty.Id);
+            var tm = new Tm(id, ty);
             if (dbg != null)
-                _dbgInf.Add(id, dbg);
-            return id;
+                ModelObject.DbgInfo.Add(tm, dbg);
+            return tm;
         }
 
-        private bool IsTy(uint ctx, uint ty)
+        private bool IsTy(ModelCtx ctx, Ty ty)
+            => _fix.Query((BoolExpr)_ty.Apply(BV(ctx), BV(ty))) == Status.SATISFIABLE;
+
+        private bool IsTm(ModelCtx ctx, Tm tm, Ty ty)
+            => _fix.Query((BoolExpr)_tmTy.Apply(BV(ctx), BV(tm), BV(ty))) == Status.SATISFIABLE;
+
+        private bool IsCtxEq(ModelCtx ctx1, ModelCtx ctx2)
+            => _fix.Query((BoolExpr)_ctxEq.Apply(BV(ctx1), BV(ctx2))) == Status.SATISFIABLE;
+
+        private bool IsTyEq(Ty ty1, Ty ty2)
+            => _fix.Query((BoolExpr)_tyEq.Apply(BV(ty1), BV(ty2))) == Status.SATISFIABLE;
+
+        private bool IsComprehension(Ty ty, ModelCtx ctx)
         {
-            return _fix.Query((BoolExpr)_ty.Apply(BV(ctx), BV(ty))) == Status.SATISFIABLE;
+            return _fix.Query((BoolExpr)_comprehension.Apply(BV(ty.Context), BV(ty), BV(ctx))) == Status.SATISFIABLE;
         }
 
-        private bool IsTm(uint ctx, uint tm, uint ty)
+        private BitVecNum BV(ModelObject obj) => _z3Ctx.MkBV(obj.Id, SortSize);
+
+        private bool IsTmTy(ModelCtx ctx, Tm tm, Ty ty)
         {
             return _fix.Query((BoolExpr)_tmTy.Apply(BV(ctx), BV(tm), BV(ty))) == Status.SATISFIABLE;
         }
 
-        private bool IsComprehension(uint prevCtx, uint ty, uint ctx)
-        {
-            return _fix.Query((BoolExpr)_comprehension.Apply(BV(prevCtx), BV(ty), BV(ctx))) == Status.SATISFIABLE;
-        }
-
-        private BitVecNum BV(uint id) => _z3Ctx.MkBV(id, SortSize);
-
-        private bool IsTmTy(uint ctx, uint tm, uint ty)
-        {
-            return _fix.Query((BoolExpr)_tmTy.Apply(BV(ctx), BV(tm), BV(ty))) == Status.SATISFIABLE;
-        }
-
-        public uint TypeCheck(Def def)
+        public ModelObject TypeCheck(Def def)
         {
             using (_ctxInfo.Remember())
             {
                 foreach (CtxExt ctxExt in def.CtxExts)
                     ExtendContext(ctxExt);
 
-                uint retTyId = TypeCheckType(def.RetTy);
-                uint bodyId = TypeCheckTerm(def.Body, retTyId);
+                Ty retTy = TypeCheckType(def.RetTy);
+                Tm body = TypeCheckTerm(def.Body, retTy);
 
-                return bodyId;
+                return body;
             }
         }
 
-        private void ExtendContext(CtxExt ext)
+        private Ty ExtendContext(CtxExt ext)
         {
-            uint id = TypeCheckType(ext.Type);
-            _ctxInfo.Add(ext.Name.IsDiscard ? null : ext.Name.Name, id);
+            Ty ty = TypeCheckType(ext.Type);
+            _ctxInfo.Add(ext.Name.IsDiscard ? null : ext.Name.Name, ty);
+            return ty;
         }
 
-        private uint TypeCheckType(Expr expr)
+        private Ty TypeCheckType(Expr expr)
         {
-            uint id = TypeCheck(expr);
-            if (!IsTy(_ctxInfo.Id, id))
+            if (!(TypeCheck(expr) is Ty ty))
                 throw new Exception($"{expr} is not a type");
 
-            return id;
+            return ty;
         }
 
-        private uint TypeCheckTerm(Expr expr, uint tyId)
+        private Tm TypeCheckAnyTerm(Expr expr)
         {
-            uint id = TypeCheck(expr);
+            if (!(TypeCheck(expr) is Tm tm))
+                throw new Exception($"{expr} is not a term");
 
-            if (!IsTmTy(_ctxInfo.Id, id, tyId))
-                throw new Exception($"{expr} is not of expected type{(_dbgInf.TryGetValue(tyId, out string? dbg) ? " " + dbg : "")}");
-
-            return id;
+            return tm;
         }
 
-        private uint TypeCheck(Expr expr)
+        private Tm TypeCheckTerm(Expr expr, Ty ty)
+        {
+            Tm tm = TypeCheckAnyTerm(expr);
+            if (!IsTyEq(ty, tm.Ty))
+                throw new Exception($"{expr} is not of expected type{ty.GetDebugInfo() ?? ""}");
+
+            return tm;
+        }
+
+        private ModelObject TypeCheck(Expr expr)
         {
             switch (expr)
             {
                 case IdExpr { Id: string id }:
                     if (id == "nat")
-                        return FormNat();
+                        return FormNat(_ctxInfo.Ctx);
                     if (id == "O")
-                        return IntroduceZero();
+                        return IntroduceZero(FormNat(_ctxInfo.Ctx));
 
                     return _ctxInfo.AccessVar(id);
                 case AppExpr { Fun: string fun, Args: var args }:
                     if (fun == "S")
                     {
-                        (uint succCtx, uint succTm, uint succNatTy) = IntroduceSucc();
-                        uint natTy = FormNat();
-                        uint arg = TypeCheckTerm(args.Single(), natTy);
+                        Ty natInCurCtx = FormNat(_ctxInfo.Ctx);
+                        Tm arg = TypeCheckTerm(args.Single(), natInCurCtx);
+
+                        ModelCtx succCtx = Comprehension(_ctxInfo.Ctx, natInCurCtx, "pred");
+                        Ty natInSuccCtx = FormNat(succCtx);
+                        Tm succTm = IntroduceSucc(natInSuccCtx);
 
                         // Now we return succTm{<id, arg>}
-                        uint idMorph = IdMorph(_ctxInfo.Id);
-                        uint ext = Extension(_ctxInfo.Id, succCtx, idMorph, arg);
-                        uint tmSubst = SubstTerm(ext, _ctxInfo.Id, natTy, succTm);
+                        CtxMorphism ext = TermBar(arg, succCtx);
+                        Tm tmSubst = SubstTerm(succTm, ext, natInCurCtx);
                         return tmSubst;
                     }
                     if (fun == "dump")
                     {
-                        uint result = TypeCheck(args[1]);
+                        ModelObject result = TypeCheck(args[1]);
                         string relStr = ((IdExpr)args[0]).Id;
                         string[] rels = relStr == "all" ? _rels.Keys.ToArray() : new[] { relStr };
                         foreach (string rel in rels)
                         {
                             _fix.Query(_rels[rel]);
                             string ans = _fix.GetAnswer().ToString();
-                            ans = _dbgInf.Aggregate(
+                            ans = ModelObject.DbgInfo.Aggregate(
                                     ans,
-                                    (acc, kvp) => acc = acc.Replace($"#x{kvp.Key:x8}", "'" + kvp.Value + "'"));
+                                    (acc, kvp) => acc.Replace($"#x{kvp.Key.Id:x8}", "'" + kvp.Value + "'"));
                             Console.WriteLine("------- {0} -------", rel);
                             Console.WriteLine(ans);
                         }
@@ -275,19 +289,49 @@ namespace QT
                     }
 
                     goto default;
+                case ElimExpr elim:
+                    Tm discTm = TypeCheckAnyTerm(elim.Discriminee);
+                    if (IsTmTy(_ctxInfo.Ctx, discTm, FormNat(_ctxInfo.Ctx)))
+                        return ElimNat(discTm, elim);
+
+                    goto default;
                 default:
                     throw new Exception("Unhandled: " + expr);
             }
         }
 
-        private uint FormNat()
+        private ModelCtx Comprehension(ModelCtx ctx, Ty ty, string? nameForDbg)
         {
-            if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _nat.Apply(BV(_ctxInfo.Id), _s))) == Status.SATISFIABLE)
-                return ExtractAnswer(0);
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _G }, _comprehension.Apply(BV(ctx), BV(ty), _G))) == Status.SATISFIABLE)
+            //    return new ModelCtx(ExtractAnswer(0));
 
-            uint natId = NewTy(_ctxInfo.Id, "nat");
-            _fix.AddFact(_nat, _ctxInfo.Id, natId);
-            return natId;
+            string? ctxDbg = ctx.GetDebugInfo();
+            string? tyDbg = ty.GetDebugInfo();
+            string? dbg = null;
+            if (ctxDbg != null && tyDbg != null)
+            {
+                if (nameForDbg == null)
+                    nameForDbg = "_";
+
+                if (ctxDbg == "")
+                    dbg = $"{ctxDbg}, {nameForDbg} : {tyDbg}";
+                else
+                    dbg = $"{nameForDbg} : {tyDbg}";
+            }
+
+            ModelCtx newCtx = NewCtx(dbg);
+            _fix.AddFact(_comprehension, ctx.Id, ty.Id, newCtx.Id);
+            return newCtx;
+        }
+
+        private Ty FormNat(ModelCtx ctx)
+        {
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _nat.Apply(BV(ctx), _s))) == Status.SATISFIABLE)
+            //    return new Ty(ExtractAnswer(0), ctx);
+
+            Ty nat = NewTy(ctx, "nat");
+            _fix.AddFact(_nat, ctx.Id, nat.Id);
+            return nat;
         }
 
         private uint ExtractAnswer(int varIndex)
@@ -305,91 +349,228 @@ namespace QT
             return ((BitVecNum)expr.Args[1]).UInt;
         }
 
-        private uint IntroduceZero()
+        private Tm IntroduceZero(Ty nat)
         {
-            if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _zero.Apply(BV(_ctxInfo.Id), _M))) == Status.SATISFIABLE)
-                return ExtractAnswer(0);
+            //Quantifier query =
+            //    _z3Ctx.MkExists(
+            //        new[] { _M },
+            //        (BoolExpr)_zero.Apply(BV(nat.Context), _M) &
+            //        (BoolExpr)_tmTy.Apply(BV(nat.Context), _M, BV(nat)));
+            //if (_fix.Query(query) == Status.SATISFIABLE)
+            //    return new Tm(ExtractAnswer(0), nat);
 
-            uint zeroId = NewTm(_ctxInfo.Id, FormNat(), "0");
-            _fix.AddFact(_zero, _ctxInfo.Id, zeroId);
-            return zeroId;
+            Tm zero = NewTm(nat, "0");
+            _fix.AddFact(_zero, nat.Context.Id, zero.Id);
+            return zero;
         }
 
-        private (uint ctx, uint tm, uint natTy) IntroduceSucc()
+        // Introduce successor term of type nat in context of that nat type.
+        // The passed nat type should be a type in a context G, x : nat.
+        private Tm IntroduceSucc(Ty nat)
         {
-            uint natTy = FormNat();
-            Quantifier query =
-                _z3Ctx.MkExists(
-                    new[] { _G, _M },
-                    (BoolExpr)_comprehension.Apply(BV(_ctxInfo.Id), BV(natTy), _G) &
-                    (BoolExpr)_succ.Apply(_G, _M));
+            Debug.Assert(
+                _fix.Query(
+                    _z3Ctx.MkExists(
+                        new[] { _G, _s },
+                        (BoolExpr)_nat.Apply(BV(nat.Context), BV(nat)) &
+                        (BoolExpr)_comprehension.Apply(_G, _s, BV(nat.Context)) &
+                        (BoolExpr)_nat.Apply(_G, _s))) == Status.SATISFIABLE);
 
-            if (_fix.Query(query) == Status.SATISFIABLE)
-                return (ExtractAnswer(0), ExtractAnswer(1), natTy);
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _succ.Apply(BV(nat.Context), _M))) == Status.SATISFIABLE)
+            //    return new Tm(ExtractAnswer(0), nat);
+
+            Tm succ = NewTm(nat, "succ");
+            _fix.AddFact(_succ, nat.Context.Id, succ.Id);
+            return succ;
+        }
+
+        // Given G |- tm : ty, make <id, tm> : G -> G.ty
+        private CtxMorphism TermBar(Tm tm, ModelCtx ctxTo)
+        {
+            Debug.Assert(IsComprehension(tm.Ty, ctxTo));
+            CtxMorphism idMorph = IdMorph(tm.Context);
+            CtxMorphism ext = Extension(idMorph, tm, ctxTo);
+            return ext;
+        }
+
+        //// Given f : D -> G and G |- s type, construct
+        //// wk f : D.s{f} -> G.s as <f . p1(s{f}), p2(s{f})>
+        //private uint Weaken(CtxMorphism ctxMorph, Ty ty)
+        //{
+        //    // Compute ty{ctxMorph} = substTy (ty is in ctxTo)
+        //    uint substTy = SubstType(ctxMorph, ctxFrom, ty);
+
+        //    // Make p1(ty{ctxMorph}) : ctxFrom.ty{ctxMorph} -> ctxFrom
+        //    uint comprFrom = Comprehension(ctxFrom, substTy, null);
+        //    uint projCtx = ProjCtx(comprFrom, ctxFrom, substTy);
+
+        //    // Make ctxFrom, x : ty{ctxMorph} |- x : ty{ctxMorph}
+        //    uint substTyInCompr = SubstType(projCtx, comprFrom, substTy);
+        //    uint projTm = ProjTm(ctxFrom, substTy, substTyInCompr, null);
+
+
+        //}
+
+        private CtxMorphism ProjCtx(ModelCtx fromCtx, Ty removedTy)
+        {
+            Debug.Assert(IsComprehension(removedTy, fromCtx));
+
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _projCtx.Apply(BV(removedTy.Context), BV(removedTy), _f))) == Status.SATISFIABLE)
+            //    return new CtxMorphism(ExtractAnswer(0), fromCtx, removedTy.Context);
+
+            string? removedTyDbg = removedTy.GetDebugInfo();
+            string? dbg = removedTyDbg != null ? $"p1({removedTyDbg})" : null;
+            CtxMorphism ctxMorphism = NewCtxMorph(fromCtx, removedTy.Context, dbg);
+            _fix.AddFact(_projCtx, removedTy.Context.Id, removedTy.Id, ctxMorphism.Id);
+            return ctxMorphism;
+        }
+
+        private Tm ProjTm(Ty addedVarTy, Ty fullTy, string? dbgName)
+        {
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _projTm.Apply(BV(addedVarTy.Context), BV(addedVarTy), _M))) == Status.SATISFIABLE)
+            //    return new Tm(ExtractAnswer(0), fullTy);
+
+            string? dbg = dbgName;
+            if (dbg == null)
+            {
+                string? tyDbg = addedVarTy.GetDebugInfo();
+                dbg = tyDbg != null ? $"p2({tyDbg})" : null;
+            }
+
+            Tm tm = NewTm(fullTy, dbg);
+            _fix.AddFact(_projTm, addedVarTy.Context.Id, addedVarTy.Id, tm.Id);
+            return tm;
+        }
+
+        private Tm ElimNat(Tm tm, ElimExpr elim)
+        {
+            if (elim.IntoExts.Count != 1)
+                throw new Exception($"Invalid context extension {string.Join(" ", elim.IntoExts)}");
+
+            if (elim.Cases.Count != 2)
+                throw new Exception($"Expected 2 cases for nat elimination");
+
+            if (elim.Cases[0].CaseExts.Count != 0)
+                throw new Exception($"{elim.Cases[0]}: expected no context extensions");
+
+            if (elim.Cases[1].CaseExts.Count != 2)
+                throw new Exception($"{elim.Cases[1]}: expected 2 context extensions");
+
+            Ty natInCurCtx = FormNat(_ctxInfo.Ctx);
+            Ty intoTy;
+            using (_ctxInfo.Remember())
+            {
+                Ty extTy = ExtendContext(elim.IntoExts[0]);
+                if (!IsTyEq(extTy, natInCurCtx))
+                {
+                    string? intoExtTyDbg = extTy.GetDebugInfo();
+                    string dbg = intoExtTyDbg != null ? $"Expected extension by nat, got extension by {intoExtTyDbg}" : "Expected extension by nat";
+                    throw new Exception(dbg);
+                }
+
+                intoTy = TypeCheckType(elim.IntoTy);
+            }
+
+            Tm zero = IntroduceZero(natInCurCtx);
+            Ty expectedTy = SubstType(intoTy, TermBar(zero, intoTy.Context));
+            Tm zeroCase = TypeCheckTerm(elim.Cases[0].Body, expectedTy);
 
             using (_ctxInfo.Remember())
             {
-                _ctxInfo.Add("pred", natTy);
-                natTy = FormNat();
-                uint succ = NewTm(_ctxInfo.Id, natTy, "succ pred");
-                _fix.AddFact(_succ, _ctxInfo.Id, succ);
-                return (_ctxInfo.Id, succ, natTy);
+                Ty predTy = ExtendContext(elim.Cases[1].CaseExts[0]);
+                if (!IsTyEq(predTy, natInCurCtx))
+                {
+                    string? predTyDbg = predTy.GetDebugInfo();
+                    string dbg = predTyDbg != null ? $"Expected extension by nat, got extension by {predTyDbg}" : "Expected extension by nat";
+                    throw new Exception(dbg);
+                }
+
+                Ty ihTy = ExtendContext(elim.Cases[1].CaseExts[1]);
+                if (!IsTyEq(ihTy, intoTy))
+                {
+                    string? ihTyDbg = ihTy.GetDebugInfo();
+                    string? intoTyDbg = intoTy.GetDebugInfo();
+                    string dbg =
+                        ihTyDbg != null && intoTyDbg != null
+                        ? $"Expected extension by {intoTyDbg}, got extension by {intoTy}"
+                        : "Invalid extension in successor case";
+                    throw new Exception(dbg);
+                }
+
+                // We need to make intoTy[suc(n)/n] in this context.
+                // Project away the IH first.
+                CtxMorphism removeIhCtxMorph = ProjCtx(_ctxInfo.Ctx, ihTy);
+
+                // Now add the successor to the context
+                Ty natInPredCtx = FormNat(ihTy.Context);
+                Tm succOfPred = IntroduceSucc(natInPredCtx);
+                ModelCtx ctxWithSucc = Comprehension(ihTy.Context, natInPredCtx, "succ");
+                CtxMorphism addSuccOfPred = TermBar(succOfPred, ctxWithSucc);
+
+                // Now we need to construct G, pred succ : nat |- (G, succ) => G, succ : nat
+                // This is done by <p1(G, pred : nat) . p1(G, pred : nat, succ : nat), p1(G, pred : nat) . p2(G, pred succ : nat)>
+
+                throw new Exception("Unhandled");
             }
         }
 
-        private uint IdMorph(uint ctx)
+        private CtxMorphism IdMorph(ModelCtx ctx)
         {
-            if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _idMorph.Apply(BV(ctx), _f))) == Status.SATISFIABLE)
-                return ExtractAnswer(0);
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _idMorph.Apply(BV(ctx), _f))) == Status.SATISFIABLE)
+            //    return new CtxMorphism(ExtractAnswer(0), ctx, ctx);
 
-            _dbgInf.TryGetValue(ctx, out string? ctxDbg);
+            string? ctxDbg = ctx.GetDebugInfo();
             string? dbg = ctxDbg != null ? $"id({ctxDbg})" : null;
 
-            uint id = NewCtxMorph(ctx, ctx, dbg);
-            _fix.AddFact(_idMorph, ctx, id);
-            return id;
+            CtxMorphism ctxMorphism = NewCtxMorph(ctx, ctx, dbg);
+            _fix.AddFact(_idMorph, ctx.Id, ctxMorphism.Id);
+            return ctxMorphism;
         }
 
-        private uint Extension(uint ctxFrom, uint ctxTo, uint ctxMorph, uint tm)
+        private CtxMorphism Extension(CtxMorphism morphism, Tm tm, ModelCtx ctxTo)
         {
-            if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _extension.Apply(BV(ctxMorph), BV(tm), _f))) == Status.SATISFIABLE)
-                return ExtractAnswer(0);
+            Debug.Assert(IsCtxEq(morphism.From, tm.Context));
 
-            _dbgInf.TryGetValue(ctxMorph, out string? ctxMorphDbg);
-            _dbgInf.TryGetValue(tm, out string? tmDbg);
-            string? dbg = ctxMorphDbg != null && tmDbg != null ? $"<{ctxMorphDbg}, {tmDbg}>" : null;
+            string? morphismDbg = morphism.GetDebugInfo();
+            string? tmDbg = tm.GetDebugInfo();
+            string? dbg = morphismDbg != null && tmDbg != null ? $"<{morphismDbg}, {tmDbg}>" : null;
 
-            uint id = NewCtxMorph(ctxFrom, ctxTo, dbg);
-            _fix.AddFact(_extension, ctxMorph, tm, id);
-            return id;
+            CtxMorphism newMorphism = NewCtxMorph(morphism.From, ctxTo, dbg);
+            _fix.AddFact(_extension, morphism.Id, tm.Id, newMorphism.Id);
+            return newMorphism;
         }
 
-        private uint SubstType(uint ctxMorph, uint newCtx, uint oldTy)
+        private Ty SubstType(Ty oldTy, CtxMorphism morphism)
         {
-            if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _tySubst.Apply(BV(oldTy), BV(ctxMorph), _s))) == Status.SATISFIABLE)
-                return ExtractAnswer(0);
+            Debug.Assert(IsCtxEq(oldTy.Context, morphism.To));
 
-            _dbgInf.TryGetValue(ctxMorph, out string? ctxMorphDbg);
-            _dbgInf.TryGetValue(oldTy, out string? tyDbg);
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _tySubst.Apply(BV(oldTy), BV(morphism), _s))) == Status.SATISFIABLE)
+            //    return new Ty(ExtractAnswer(0), morphism.From);
+
+            string? tyDbg = oldTy.GetDebugInfo();
+            string? ctxMorphDbg = morphism.GetDebugInfo();
             string? dbg = ctxMorphDbg != null && tyDbg != null ? $"{tyDbg}{{{ctxMorphDbg}}}" : null;
 
-            uint id = NewTy(newCtx, dbg);
-            _fix.AddFact(_tySubst, oldTy, ctxMorph, id);
-            return id;
+            Ty newTy = NewTy(morphism.From, dbg);
+            _fix.AddFact(_tySubst, oldTy.Id, morphism.Id, newTy.Id);
+            return newTy;
         }
 
-        private uint SubstTerm(uint ctxMorph, uint newCtx, uint newTy, uint oldTm)
+        private Tm SubstTerm(Tm oldTm, CtxMorphism morphism, Ty newTy)
         {
-            if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _tmSubst.Apply(BV(oldTm), BV(ctxMorph), _M))) == Status.SATISFIABLE)
-                return ExtractAnswer(0);
+            Debug.Assert(IsCtxEq(oldTm.Context, morphism.To));
+            Debug.Assert(IsCtxEq(morphism.From, newTy.Context));
 
-            _dbgInf.TryGetValue(ctxMorph, out string? ctxMorphDbg);
-            _dbgInf.TryGetValue(oldTm, out string? tmDbg);
+            //if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _tmSubst.Apply(BV(oldTm), BV(morphism), _M))) == Status.SATISFIABLE)
+            //    return new Tm(ExtractAnswer(0), newTy);
+
+            string? ctxMorphDbg = morphism.GetDebugInfo();
+            string? tmDbg = oldTm.GetDebugInfo();
             string? dbg = ctxMorphDbg != null && tmDbg != null ? $"{tmDbg}{{{ctxMorphDbg}}}" : null;
 
-            uint id = NewTm(newCtx, newTy, dbg);
-            _fix.AddFact(_tmSubst, oldTm, ctxMorph, id);
-            return id;
+            Tm tm = NewTm(newTy, dbg);
+            _fix.AddFact(_tmSubst, oldTm.Id, morphism.Id, tm.Id);
+            return tm;
         }
 
         public void Dispose()
@@ -403,98 +584,68 @@ namespace QT
             private Context Z3 => _tc._z3Ctx;
             private Fixedpoint Fix => _tc._fix;
             private Z3Expr G => _tc._G;
-            private BitVecExpr BV(uint id) => _tc.BV(id);
+            private BitVecExpr BV(ModelObject obj) => _tc.BV(obj);
 
-            private readonly List<(uint prevCtx, string? name, uint ty)> _vars =
-                new List<(uint prevCtx, string? name, uint ty)>();
+            private readonly List<(string? name, Ty ty)> _vars = new List<(string? name, Ty ty)>();
 
-            public ContextInfo(TypeChecker tc, uint initialId)
+            public ContextInfo(TypeChecker tc, ModelCtx initialCtx)
             {
                 _tc = tc;
-                Id = initialId;
+                Ctx = initialCtx;
             }
 
             public int NumVars => _vars.Count;
 
-            public uint Id { get; private set; }
+            public ModelCtx Ctx { get; private set; }
 
-            public void Add(string? name, uint tyId)
+            public void Add(string? name, Ty ty)
             {
-                Debug.Assert(_tc.IsTy(Id, tyId), "Type is not a type in this context");
+                Debug.Assert(_tc.IsCtxEq(ty.Context, Ctx));
 
-                uint ctx;
-                if (Fix.Query(Z3.MkExists(new[] { G }, _tc._comprehension.Apply(BV(Id), BV(tyId), G))) == Status.SATISFIABLE)
-                {
-                    ctx = _tc.ExtractAnswer(0);
-                }
-                else
-                {
-                    string? dbg = ContextDbgString(Id, name, tyId);
-                    ctx = _tc.NewCtx(dbg);
-                    Fix.AddFact(_tc._comprehension, Id, tyId, ctx);
-                }
-
-                _vars.Add((Id, name, tyId));
-                Id = ctx;
-            }
-
-            private string? ContextDbgString(uint ctx, string? name, uint tyId)
-            {
-                return
-                    _tc._dbgInf.TryGetValue(ctx, out string? prevCtxDbg) &&
-                    _tc._dbgInf.TryGetValue(tyId, out string? tyDbg)
-                    ? string.Format("{0}{1} : {2}", prevCtxDbg == "" ? "" : $"{prevCtxDbg}, ", name ?? "_", tyDbg)
-                    : null;
+                ModelCtx newCtx = _tc.Comprehension(Ctx, ty, name);
+                _vars.Add((name, ty));
+                Ctx = newCtx;
             }
 
             // Construct a term that accesses the var by the specified name.
-            public uint AccessVar(string name)
+            public Tm AccessVar(string name)
             {
                 int index = _vars.FindIndex(t => t.name == name);
                 if (index == -1)
                     throw new ArgumentException($"No variable exists by name {name}", nameof(name));
 
-                // Go(G, x : s |- x : s) = p2(s)
-                // Go(G, x : s, D, y : t |- x : s) = Go(G, x : s, D |- x : s){p(t)}
-
-                (uint tmId, uint tyId) Go(int i, uint nextCtx)
+                Tm Go(int i, ModelCtx nextCtx)
                 {
-                    (uint ctx, string? name, uint addedTy) = _vars[i];
-                    _tc._dbgInf.TryGetValue(addedTy, out string? tyDbg);
-                    string? ctxMorphDbg = tyDbg != null ? $"p1({tyDbg})" : null;
-
-                    // Make context morphism that gets us from nextCtx to ctx by projecting out added variable.
-                    uint ctxProj = _tc.NewCtxMorph(nextCtx, ctx, ctxMorphDbg);
-                    Fix.AddFact(_tc._projCtx, ctx, addedTy, ctxProj);
+                    (string? name, Ty ty) = _vars[i];
+                    // Make context morphism that gets us from nextCtx to ty's ctx by projecting out added variable.
+                    CtxMorphism ctxProj = _tc.ProjCtx(nextCtx, ty);
 
                     if (i == index)
                     {
                         // addedTy is in ctx, and we want it in nextCtx, so
                         // make addedTy{ctxProj} = tySubst in nextCtx.
-                        uint tySubst = _tc.SubstType(ctxProj, nextCtx, addedTy);
+                        Ty tySubst = _tc.SubstType(ty, ctxProj);
 
-                        uint tmProj = _tc.NewTm(nextCtx, tySubst, name);
-                        Fix.AddFact(_tc._projTm, ctx, addedTy, tmProj);
-                        return (tmProj, tySubst);
+                        Tm tmProj = _tc.ProjTm(ty, tySubst, name);
+                        return tmProj;
                     }
                     else
                     {
-                        (uint tm, uint ty) = Go(i - 1, ctx);
+                        Tm tm = Go(i - 1, ty.Context);
                         // nextCtx = ctx, x : ty[in ctx]
-                        // tm is term that accesses variable in ctx
+                        // tm is term that accesses variable in ty's ctx
                         // ty is type of variable in ctx
 
-                        Debug.Assert(_tc.IsComprehension(ctx, addedTy, nextCtx));
-                        Debug.Assert(_tc.IsTy(ctx, ty));
-                        Debug.Assert(_tc.IsTm(ctx, tm, ty));
+                        Debug.Assert(_tc.IsComprehension(ty, nextCtx));
+                        Debug.Assert(_tc.IsCtxEq(tm.Context, ty.Context));
 
-                        uint tySubst = _tc.SubstType(ctxProj, nextCtx, ty);
-                        uint tmSubst = _tc.SubstTerm(ctxProj, nextCtx, tySubst, tm);
-                        return (tmSubst, tySubst);
+                        Ty tySubst = _tc.SubstType(tm.Ty, ctxProj);
+                        Tm tmSubst = _tc.SubstTerm(tm, ctxProj, tySubst);
+                        return tmSubst;
                     }
                 }
 
-                return Go(_vars.Count - 1, Id).tmId;
+                return Go(_vars.Count - 1, Ctx);
             }
 
             public ContextSavePoint Remember()
@@ -504,12 +655,12 @@ namespace QT
             {
                 private readonly ContextInfo _ctx;
                 private readonly int _numVars;
-                private readonly uint _id;
+                private readonly ModelCtx _modelCtx;
                 public ContextSavePoint(ContextInfo ctx)
                 {
                     _ctx = ctx;
                     _numVars = ctx._vars.Count;
-                    _id = ctx.Id;
+                    _modelCtx = ctx.Ctx;
                 }
 
                 public void Dispose()
@@ -517,7 +668,7 @@ namespace QT
                     Debug.Assert(_ctx._vars.Count >= _numVars);
 
                     _ctx._vars.RemoveRange(_numVars, _ctx._vars.Count - _numVars);
-                    _ctx.Id = _id;
+                    _ctx.Ctx = _modelCtx;
                 }
             }
         }

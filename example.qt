@@ -1,10 +1,9 @@
-def test (a b : nat) : nat := dump all 10.
-(*
 def plus (a b : nat) : nat :=
   elim a into (_ : nat) : nat
   | => b
-  | (_ : nat) (prev : nat) => S prev.
+  | (_ : nat) (IH : nat) => S IH.
 
+(*
 def plus2 (b a : nat) : nat := b + a.
 
 def plus_0_l (a : nat) : 0 + a = a :=
