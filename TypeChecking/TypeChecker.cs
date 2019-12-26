@@ -26,6 +26,7 @@ namespace QT
 
         private readonly FuncDecl _ctx;
         private readonly FuncDecl _ctxMorph;
+        private readonly FuncDecl _comp;
         private readonly FuncDecl _ty;
         private readonly FuncDecl _tmTy;
         private readonly FuncDecl _idMorph;
@@ -41,6 +42,7 @@ namespace QT
         private readonly FuncDecl _nat;
         private readonly FuncDecl _zero;
         private readonly FuncDecl _succ;
+        private readonly FuncDecl _natElim;
 
         private readonly Z3Expr _G;
         private readonly Z3Expr _f;
@@ -80,6 +82,7 @@ namespace QT
             _tmEq = _rels["TmEq"];
             _ctx = _rels["Ctx"];
             _ctxMorph = _rels["CtxMorph"];
+            _comp = _rels["Comp"];
             _ty = _rels["Ty"];
             _tmTy = _rels["TmTy"];
             _idMorph = _rels["IdMorph"];
@@ -93,6 +96,7 @@ namespace QT
             _nat = _rels["Nat"];
             _zero = _rels["Zero"];
             _succ = _rels["Succ"];
+            _natElim = _rels["NatElim"];
 
             ModelCtx emptyCtx = NewCtx("");
             _fix.AddFact(_ctxEmpty, emptyCtx.Id);
@@ -185,6 +189,9 @@ namespace QT
 
         private bool IsTyEq(Ty ty1, Ty ty2)
             => _fix.Query((BoolExpr)_tyEq.Apply(BV(ty1), BV(ty2))) == Status.SATISFIABLE;
+
+        private bool IsTmEq(Tm tm1, Tm tm2)
+            => _fix.Query((BoolExpr)_tmEq.Apply(BV(tm1), BV(tm2))) == Status.SATISFIABLE;
 
         private bool IsComprehension(Ty ty, ModelCtx ctx)
         {
@@ -393,23 +400,32 @@ namespace QT
             return ext;
         }
 
-        //// Given f : D -> G and G |- s type, construct
-        //// wk f : D.s{f} -> G.s as <f . p1(s{f}), p2(s{f})>
-        //private uint Weaken(CtxMorphism ctxMorph, Ty ty)
-        //{
-        //    // Compute ty{ctxMorph} = substTy (ty is in ctxTo)
-        //    uint substTy = SubstType(ctxMorph, ctxFrom, ty);
+        // Given f : D -> G and G |- s type, construct
+        // wk f : D.s{f} -> G.s as <f . p1(s{f}), p2(s{f})>
+        private CtxMorphism Weaken(CtxMorphism morphism, Ty ty)
+        {
+            Debug.Assert(IsCtxEq(morphism.To, ty.Context));
 
-        //    // Make p1(ty{ctxMorph}) : ctxFrom.ty{ctxMorph} -> ctxFrom
-        //    uint comprFrom = Comprehension(ctxFrom, substTy, null);
-        //    uint projCtx = ProjCtx(comprFrom, ctxFrom, substTy);
+            // s{f}
+            Ty substTy = SubstType(ty, morphism);
 
-        //    // Make ctxFrom, x : ty{ctxMorph} |- x : ty{ctxMorph}
-        //    uint substTyInCompr = SubstType(projCtx, comprFrom, substTy);
-        //    uint projTm = ProjTm(ctxFrom, substTy, substTyInCompr, null);
+            // D.s{f}
+            ModelCtx ctxFrom = Comprehension(morphism.From, substTy, null);
 
+            // G.s
+            ModelCtx ctxTo = Comprehension(morphism.To, ty, null);
 
-        //}
+            // p1(s{f}) : D.s{f} -> D
+            CtxMorphism projCtx = ProjCtx(ctxFrom, substTy);
+
+            // D.s{f} |- s{f} type
+            Ty substTyInCtxFrom = SubstType(substTy, projCtx);
+            // D.s{f} |- p2(s{f}) : s{f}
+            Tm projTm = ProjTm(substTy, substTyInCtxFrom, null);
+
+            CtxMorphism comp = Compose(morphism, projCtx);
+            return Extension(comp, projTm, ctxTo);
+        }
 
         private CtxMorphism ProjCtx(ModelCtx fromCtx, Ty removedTy)
         {
@@ -442,7 +458,7 @@ namespace QT
             return tm;
         }
 
-        private Tm ElimNat(Tm tm, ElimExpr elim)
+        private Tm ElimNat(Tm discriminee, ElimExpr elim)
         {
             if (elim.IntoExts.Count != 1)
                 throw new Exception($"Invalid context extension {string.Join(" ", elim.IntoExts)}");
@@ -456,12 +472,12 @@ namespace QT
             if (elim.Cases[1].CaseExts.Count != 2)
                 throw new Exception($"{elim.Cases[1]}: expected 2 context extensions");
 
-            Ty natInCurCtx = FormNat(_ctxInfo.Ctx);
+            Ty natInElimCtx = FormNat(_ctxInfo.Ctx);
             Ty intoTy;
             using (_ctxInfo.Remember())
             {
                 Ty extTy = ExtendContext(elim.IntoExts[0]);
-                if (!IsTyEq(extTy, natInCurCtx))
+                if (!IsTyEq(extTy, natInElimCtx))
                 {
                     string? intoExtTyDbg = extTy.GetDebugInfo();
                     string dbg = intoExtTyDbg != null ? $"Expected extension by nat, got extension by {intoExtTyDbg}" : "Expected extension by nat";
@@ -471,14 +487,15 @@ namespace QT
                 intoTy = TypeCheckType(elim.IntoTy);
             }
 
-            Tm zero = IntroduceZero(natInCurCtx);
+            Tm zero = IntroduceZero(natInElimCtx);
             Ty expectedTy = SubstType(intoTy, TermBar(zero, intoTy.Context));
             Tm zeroCase = TypeCheckTerm(elim.Cases[0].Body, expectedTy);
+            Tm succCase;
 
             using (_ctxInfo.Remember())
             {
                 Ty predTy = ExtendContext(elim.Cases[1].CaseExts[0]);
-                if (!IsTyEq(predTy, natInCurCtx))
+                if (!IsTyEq(predTy, natInElimCtx))
                 {
                     string? predTyDbg = predTy.GetDebugInfo();
                     string dbg = predTyDbg != null ? $"Expected extension by nat, got extension by {predTyDbg}" : "Expected extension by nat";
@@ -498,20 +515,36 @@ namespace QT
                 }
 
                 // We need to make intoTy[suc(n)/n] in this context.
-                // Project away the IH first.
-                CtxMorphism removeIhCtxMorph = ProjCtx(_ctxInfo.Ctx, ihTy);
+                // First project away the IH
+                CtxMorphism projectIH = ProjCtx(_ctxInfo.Ctx, ihTy);
 
-                // Now add the successor to the context
+                // Now add the successor of the predecessor, giving a context that ends with two nats
                 Ty natInPredCtx = FormNat(ihTy.Context);
                 Tm succOfPred = IntroduceSucc(natInPredCtx);
                 ModelCtx ctxWithSucc = Comprehension(ihTy.Context, natInPredCtx, "succ");
                 CtxMorphism addSuccOfPred = TermBar(succOfPred, ctxWithSucc);
 
-                // Now we need to construct G, pred succ : nat |- (G, succ) => G, succ : nat
-                // This is done by <p1(G, pred : nat) . p1(G, pred : nat, succ : nat), p1(G, pred : nat) . p2(G, pred succ : nat)>
+                // Now make the morphism that removes not the last, but second to last nat, i.e.
+                // f : G, pred : nat, succ : nat -> G, succ : nat
+                CtxMorphism projectPred = ProjCtx(ihTy.Context, predTy);
+                CtxMorphism removePred = Weaken(projectPred, natInElimCtx);
 
-                throw new Exception("Unhandled");
+                // Finally apply these morphisms.
+                Ty intoTy1 = SubstType(intoTy, removePred);
+                Ty intoTy2 = SubstType(intoTy1, addSuccOfPred);
+                Ty intoTy3 = SubstType(intoTy2, projectIH);
+                Debug.Assert(IsCtxEq(intoTy3.Context, _ctxInfo.Ctx));
+
+                succCase = TypeCheckTerm(elim.Cases[1].Body, intoTy3);
             }
+
+            Tm elimTm = NewTm(intoTy, "elim");
+            _fix.AddFact(_natElim, zeroCase.Id, succCase.Id, elimTm.Id);
+
+            CtxMorphism addDisc = TermBar(discriminee, intoTy.Context);
+            Ty substTy = SubstType(intoTy, addDisc);
+            Tm substTm = SubstTerm(elimTm, addDisc, substTy);
+            return substTm;
         }
 
         private CtxMorphism IdMorph(ModelCtx ctx)
@@ -525,6 +558,16 @@ namespace QT
             CtxMorphism ctxMorphism = NewCtxMorph(ctx, ctx, dbg);
             _fix.AddFact(_idMorph, ctx.Id, ctxMorphism.Id);
             return ctxMorphism;
+        }
+
+        private CtxMorphism Compose(CtxMorphism g, CtxMorphism f)
+        {
+            string? gDbg = g.GetDebugInfo();
+            string? fDbg = f.GetDebugInfo();
+            string? dbg = gDbg != null && fDbg != null ? $"{gDbg} . {fDbg}" : null;
+            CtxMorphism gf = NewCtxMorph(f.From, g.To, dbg);
+            _fix.AddFact(_comp, g.Id, f.Id, gf.Id);
+            return gf;
         }
 
         private CtxMorphism Extension(CtxMorphism morphism, Tm tm, ModelCtx ctxTo)
@@ -722,6 +765,8 @@ namespace QT
 (declare-rel Zero (CtxS TmS))
 ; Succ G M -- M is successor term in G (which is of the form D, pred : nat).
 (declare-rel Succ (CtxS TmS))
+; NatElim M N O -- O is nat elimination with zero-case M and successor-case N
+(declare-rel NatElim (TmS TmS TmS))
 
 (declare-var A CtxS)
 (declare-var B CtxS)
@@ -747,12 +792,16 @@ namespace QT
 (declare-var t TyS)
 (declare-var u TyS)
 (declare-var v TyS)
+(declare-var x TyS)
 
 (declare-var M TmS)
 (declare-var N TmS)
 (declare-var O TmS)
 (declare-var P TmS)
 (declare-var Q TmS)
+(declare-var R TmS)
+(declare-var S TmS)
+(declare-var T TmS)
 
 ;;;;;;;;;; Equalities ;;;;;;;;;;
 
@@ -898,6 +947,14 @@ namespace QT
           (Succ D N))
       Succ-Congr)
 
+; NatElim
+(rule (=> (and (NatElim M N O)
+               (TmEq M P)
+               (TmEq N Q)
+               (TmEq O R))
+          (NatElim P Q R))
+      NatElim-Congr)
+
 ;;;;;;;;;; Functionality rules ;;;;;;;;;;
 
 (rule (=> (and (IdMorph G f)
@@ -953,6 +1010,11 @@ namespace QT
                (Succ G N))
           (TmEq M N))
       Succ-Functional)
+
+(rule (=> (and (NatElim M N O)
+               (NatElim M N P))
+          (TmEq O P))
+      NatElim-Functional)
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
@@ -1052,6 +1114,33 @@ namespace QT
                (TmSubst N f O))
           (TmEq O M))
       Succ-Natural)
+
+; Given
+; D, discriminee : nat |- O : s
+; D |- M : s[discriminee := 0]
+; D, pred : nat, IH : s[discriminee := pred] |- N : s[discriminee := S pred]
+; NatElim M N O
+;
+; G, discriminee : nat |- R : t
+; G |- P : t[discriminee := 0]
+; G, pred : nat, IH : t[discriminee := pred] |- Q : t[discriminee := S pred]
+; NatElim P Q R
+;
+; Viewing these as functions giving O and R the naturality conditions states that,
+; for any f : G -> D, d : nat, we have
+; (NatElim M N){f} = NatElim M{p1 . f . } N
+;(rule (=> (and (NatElim M N O) (TmTy A O s) (Comprehension G t A)
+;               (NatElim P Q R) (TmTy B R u) (Comprehension D v B)
+;               (CtxMorph G D f)
+;               (TmSubst  f P)
+
+(rule (=> (and (NatElim M N O P)
+               (Zero G M))
+          (TmEq P N))
+      NatElim-0)
+
+(rule (=> (and (NatElim M N O P)
+               (Succ G M)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }
