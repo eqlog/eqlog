@@ -259,14 +259,18 @@ namespace QT
                     if (fun == "dump")
                     {
                         uint result = TypeCheck(args[1]);
-                        string rel = ((IdExpr)args[0]).Id;
-                        _fix.Query(_rels[rel]);
-                        string ans = _fix.GetAnswer().ToString();
-                        ans = _dbgInf.Aggregate(
-                                ans,
-                                (acc, kvp) => acc = acc.Replace($"#x{kvp.Key:x8}", "'" + kvp.Value + "'"));
-                        Console.WriteLine("------- {0} -------", rel);
-                        Console.WriteLine(ans);
+                        string relStr = ((IdExpr)args[0]).Id;
+                        string[] rels = relStr == "all" ? _rels.Keys.ToArray() : new[] { relStr };
+                        foreach (string rel in rels)
+                        {
+                            _fix.Query(_rels[rel]);
+                            string ans = _fix.GetAnswer().ToString();
+                            ans = _dbgInf.Aggregate(
+                                    ans,
+                                    (acc, kvp) => acc = acc.Replace($"#x{kvp.Key:x8}", "'" + kvp.Value + "'"));
+                            Console.WriteLine("------- {0} -------", rel);
+                            Console.WriteLine(ans);
+                        }
                         return result;
                     }
 

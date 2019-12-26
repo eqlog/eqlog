@@ -1,4 +1,4 @@
-def test (a b : nat) : nat := dump TmTy (S a).
+def test (a b : nat) : nat := dump all 10.
 (*
 def plus (a b : nat) : nat :=
   elim a into (_ : nat) : nat
