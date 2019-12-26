@@ -14,45 +14,82 @@ namespace QT
     {
         private const int SortSize = 32;
 
-        private readonly Context _ctx;
+        private readonly Context _z3Ctx;
         private readonly Fixedpoint _fix;
 
-        private readonly FuncDecl _con;
-        private readonly FuncDecl _ty;
-        private readonly FuncDecl _tmTy;
-        private readonly FuncDecl _conEq;
+        private readonly BitVecSort _sort;
+
+        private readonly FuncDecl _ctxEq;
+        private readonly FuncDecl _ctxMorphEq;
         private readonly FuncDecl _tyEq;
         private readonly FuncDecl _tmEq;
-        private readonly FuncDecl _conEmpty;
+
+        private readonly FuncDecl _ctx;
+        private readonly FuncDecl _ctxMorph;
+        private readonly FuncDecl _ty;
+        private readonly FuncDecl _tmTy;
+        private readonly FuncDecl _tySubst;
+        private readonly FuncDecl _tmSubst;
+
+        private readonly FuncDecl _ctxEmpty;
         private readonly FuncDecl _comprehension;
+        private readonly FuncDecl _projCtx;
+        private readonly FuncDecl _projTm;
+
+        private readonly FuncDecl _nat;
+        private readonly FuncDecl _zero;
+
+        private readonly Z3Expr _G;
+        private readonly Z3Expr _s;
+        private readonly Z3Expr _M;
 
         private readonly Dictionary<string, FuncDecl> _rels;
+        private readonly Dictionary<uint, string> _dbgInf = new Dictionary<uint, string>();
 
         private uint _counter;
         private uint NextId() => checked(++_counter);
 
-        private ImmutableDictionary<string, uint> _context = ImmutableDictionary.Create<string, uint>();
-        private readonly Dictionary<string, Def> _globals = new Dictionary<string, Def>();
+        private readonly ContextInfo _ctxInfo;
 
         public TypeChecker()
         {
-            _ctx = new Context();
-            _fix = _ctx.MkFixedpoint();
+            _z3Ctx = new Context();
+            _fix = _z3Ctx.MkFixedpoint();
             _fix.Parameters =
-                _ctx.MkParams()
-                .Add("fp.engine", "datalog")
-                .Add("datalog.generate_explanations", true);
+                _z3Ctx.MkParams()
+                //.Add("engine", "spacer")
+                //.Add("datalog.generate_explanations", false)
+                //.Add("datalog.all_or_nothing_deltas", true)
+                //.Add("datalog.unbound_compressor", false)
+                ;
             _fix.ParseString(s_z3Setup);
 
+            _sort = _z3Ctx.MkBitVecSort(SortSize);
+            _G = _z3Ctx.MkConst("G", _sort);
+            _s = _z3Ctx.MkConst("s", _sort);
+            _M = _z3Ctx.MkConst("M", _sort);
+
             _rels = CollectRelations(_fix.Rules);
-            _con = _rels["Con"];
-            _ty = _rels["Ty"];
-            _tmTy = _rels["TmTy"];
-            _conEq = _rels["ConEq"];
+            _ctxEq = _rels["CtxEq"];
+            _ctxMorphEq = _rels["CtxMorphEq"];
             _tyEq = _rels["TyEq"];
             _tmEq = _rels["TmEq"];
-            _conEmpty = _rels["ConEmpty"];
+            _ctx = _rels["Ctx"];
+            _ctxMorph = _rels["CtxMorph"];
+            _ty = _rels["Ty"];
+            _tmTy = _rels["TmTy"];
+            _tySubst = _rels["TySubst"];
+            _tmSubst = _rels["TmSubst"];
+            _ctxEmpty = _rels["CtxEmpty"];
             _comprehension = _rels["Comprehension"];
+            _projCtx = _rels["ProjCtx"];
+            _projTm = _rels["ProjTm"];
+            _nat = _rels["Nat"];
+            _zero = _rels["Zero"];
+
+            uint emptyCtx = NewCtx("");
+            _fix.AddFact(_ctxEmpty, emptyCtx);
+            _ctxInfo = new ContextInfo(this, emptyCtx);
         }
 
         private static Dictionary<string, FuncDecl> CollectRelations(IEnumerable<Z3Expr> exprs)
@@ -75,7 +112,9 @@ namespace QT
                 Z3Expr expr = queue.Dequeue();
                 if (expr.IsApp)
                 {
-                    decls[expr.FuncDecl.Name.ToString()] = expr.FuncDecl;
+                    if (!expr.IsAnd && !expr.IsImplies)
+                        decls[expr.FuncDecl.Name.ToString()] = expr.FuncDecl;
+
                     foreach (Z3Expr arg in expr.Args)
                         Enqueue(arg);
                 }
@@ -88,266 +127,371 @@ namespace QT
             return decls;
         }
 
+        private uint NewCtx(string? dbg)
+        {
+            uint id = NextId();
+            _fix.AddFact(_ctx, id);
+            if (dbg != null)
+                _dbgInf.Add(id, dbg);
+            return id;
+        }
+
+        private uint NewCtxMorph(uint from, uint to, string? dbg)
+        {
+            uint id = NextId();
+            _fix.AddFact(_ctxMorph, from, id, to);
+            if (dbg != null)
+                _dbgInf.Add(id, dbg);
+            return id;
+        }
+
+        private uint NewTy(uint ctx, string? dbg)
+        {
+            uint id = NextId();
+            _fix.AddFact(_ty, ctx, id);
+            if (dbg != null)
+                _dbgInf.Add(id, dbg);
+            return id;
+        }
+
+        private uint NewTm(uint ctx, uint ty, string? dbg)
+        {
+            uint id = NextId();
+            _fix.AddFact(_tmTy, ctx, id, ty);
+            if (dbg != null)
+                _dbgInf.Add(id, dbg);
+            return id;
+        }
+
+        private bool IsTy(uint ctx, uint ty)
+        {
+            return _fix.Query((BoolExpr)_ty.Apply(BV(ctx), BV(ty))) == Status.SATISFIABLE;
+        }
+
+        private bool IsTm(uint ctx, uint tm, uint ty)
+        {
+            return _fix.Query((BoolExpr)_tmTy.Apply(BV(ctx), BV(tm), BV(ty))) == Status.SATISFIABLE;
+        }
+
+        private bool IsComprehension(uint prevCtx, uint ty, uint ctx)
+        {
+            return _fix.Query((BoolExpr)_comprehension.Apply(BV(prevCtx), BV(ty), BV(ctx))) == Status.SATISFIABLE;
+        }
+
+        private BitVecNum BV(uint id) => _z3Ctx.MkBV(id, SortSize);
+
+        private bool IsTmTy(uint ctx, uint tm, uint ty)
+        {
+            return _fix.Query((BoolExpr)_tmTy.Apply(BV(ctx), BV(tm), BV(ty))) == Status.SATISFIABLE;
+        }
+
         public uint TypeCheck(Def def)
         {
-            ImmutableDictionary<string, uint> old = _context;
-            foreach (CtxExt ctxExt in def.CtxExts)
-                ExtendContext(ctxExt);
-
-            uint resultTypeId = TypeCheckType(def.RetTy);
-            uint bodyId = TypeCheck(def.Body);
-            if (_fix.Query((BoolExpr)_tmTy.Apply(BV(bodyId), BV(resultTypeId))) == Status.SATISFIABLE)
+            using (_ctxInfo.Remember())
             {
-                _context = old;
-                _globals[def.Name.Name] = def;
+                foreach (CtxExt ctxExt in def.CtxExts)
+                    ExtendContext(ctxExt);
+
+                uint retTyId = TypeCheckType(def.RetTy);
+                uint bodyId = TypeCheck(def.Body);
+                if (!IsTmTy(_ctxInfo.Id, bodyId, retTyId))
+                    throw new Exception($"{def.Name}: Body does not type check to {def.RetTy}");
+
                 return bodyId;
             }
-
-            throw new Exception($"{def.Name}: Body does not type check to {def.RetTy}");
         }
 
-        private (uint typeId, uint varId) ExtendContext(CtxExt ctxExt)
+        private void ExtendContext(CtxExt ext)
         {
-            uint typeId = TypeCheckType(ctxExt.Type);
-            uint varId = NextId();
-            _fix.AddFact(_tmTy, varId, typeId);
-            DefId(ctxExt.Name, varId);
-            return (varId, typeId);
-        }
-
-        private void DefId(DefId defId, uint val)
-        {
-            if (!defId.IsDiscard)
-                _context = _context.SetItem(defId.Name, val);
+            uint id = TypeCheckType(ext.Type);
+            _ctxInfo.Add(ext.Name.IsDiscard ? null : ext.Name.Name, id);
         }
 
         private uint TypeCheckType(Expr expr)
         {
             uint id = TypeCheck(expr);
-            if (_fix.Query((BoolExpr)_ty.Apply(BV(id))) == Status.SATISFIABLE)
-                return id;
+            if (!IsTy(_ctxInfo.Id, id))
+                throw new Exception($"{expr} is not a type");
 
-            throw new Exception($"Expected type, got {expr}");
+            return id;
         }
 
         private uint TypeCheck(Expr expr)
         {
             switch (expr)
             {
-                case LetExpr let:
-                    uint letValTyId = TypeCheckType(let.Type);
-                    uint letValId = TypeCheck(let.Val);
-                    if (_fix.Query((BoolExpr)_tmTy.Apply(BV(letValId), BV(letValTyId))) != Status.SATISFIABLE)
-                    {
-                        throw new Exception(
-                                $"let {let.Name}: " +
-                                $"Body does not type check to {let.Type}");
-                    }
+                case IdExpr { Id: string id }:
+                    if (id == "nat")
+                        return FormNat();
+                    if (id == "O")
+                        return IntroduceZero();
 
-                    ImmutableDictionary<string, uint> old = _context;
-                    DefId(let.Name, letValId);
-                    uint bodyId = TypeCheck(let.Body);
-                    _context = old;
-                    return bodyId;
-                case IdExpr id:
-                    return _context[id.Id];
-                case AppExpr app:
-                    if (app.Fun == "dump")
+                    return _ctxInfo.AccessVar(id);
+                case AppExpr { Fun: string fun, Args: var args }:
+                    if (fun == "dump")
                     {
-                        uint result = TypeCheck(app.Args[1]);
-                        string rel = ((IdExpr)app.Args[0]).Id;
+                        uint result = TypeCheck(args[1]);
+                        string rel = ((IdExpr)args[0]).Id;
                         _fix.Query(_rels[rel]);
                         string ans = _fix.GetAnswer().ToString();
-                        ans = _context.Aggregate(
+                        ans = _dbgInf.Aggregate(
                                 ans,
-                                (acc, kvp) => acc = acc.Replace($"#x{kvp.Value:x8}", kvp.Key));
+                                (acc, kvp) => acc = acc.Replace($"#x{kvp.Key:x8}", "'" + kvp.Value + "'"));
                         Console.WriteLine("------- {0} -------", rel);
                         Console.WriteLine(ans);
                         return result;
                     }
-                    if (_globals.TryGetValue(app.Fun, out Def? global))
-                    {
-                        if (global.CtxExts.Count != app.Args.Count)
-                        {
-                            string msg =
-                                $"Expected {global.CtxExts.Count} arguments " +
-                                $"to {app.Fun}";
-                            throw new Exception(msg);
-                        }
 
-                        Expr newBody = Subst(global.Body, global.CtxExts, app.Args);
-                        Console.WriteLine("{0}: {1}", app, newBody);
-                        return TypeCheck(newBody);
-                    }
-
-                    throw new Exception("Invalid function to apply " + app.Fun);
+                    goto default;
                 default:
-                    throw new Exception("Cannot handle yet");
+                    throw new Exception("Unhandled: " + expr);
             }
         }
 
-        private BitVecNum BV(uint id) => _ctx.MkBV(id, SortSize);
-
-        private Expr Subst(Expr expr, IReadOnlyList<CtxExt> exts, IReadOnlyList<Expr> replacements)
+        private uint FormNat()
         {
-            int numRenamed = 0;
-            Dictionary<string, Expr> repMap = new Dictionary<string, Expr>();
-            foreach ((CtxExt ctxExt, Expr rep) in exts.Zip(replacements))
-            {
-                if (!ctxExt.Name.IsDiscard)
-                    repMap[ctxExt.Name.Name] = rep;
-            }
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _nat.Apply(BV(_ctxInfo.Id), _s))) == Status.SATISFIABLE)
+                return ExtractAnswer(0);
 
-            var repBinds = ImmutableDictionary.Create<string, Expr>();
+            uint natId = NewTy(_ctxInfo.Id, "nat");
+            _fix.AddFact(_nat, _ctxInfo.Id, natId);
+            return natId;
+        }
 
-            return Go(expr);
+        private uint ExtractAnswer(int varIndex)
+        {
+            Z3Expr expr = _fix.GetAnswer();
+            if (expr.IsOr)
+                expr = expr.Args[0];
 
-            DefId GoDef(DefId name)
-            {
-                DefId newName = name;
-                if (!name.IsDiscard)
-                {
-                    newName = new DefId($"${numRenamed++}", false);
-                    repBinds = repBinds.SetItem(name.Name, new IdExpr(newName.Name));
-                }
+            if (expr.IsAnd)
+                expr = expr.Args[varIndex];
+            else
+                Debug.Assert(varIndex == 0);
 
-                return newName;
-            }
+            Debug.Assert(expr.IsEq);
+            return ((BitVecNum)expr.Args[1]).UInt;
+        }
 
-            List<CtxExt> GoCtxExts(IEnumerable<CtxExt> exts)
-            {
-                List<CtxExt> newExts = new List<CtxExt>();
-                foreach (CtxExt ext in exts)
-                {
-                    Expr newType = Go(ext.Type);
-                    DefId newName = GoDef(ext.Name);
-                    newExts.Add(new CtxExt(newName, newType));
-                }
+        private uint IntroduceZero()
+        {
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _zero.Apply(BV(_ctxInfo.Id), _M))) == Status.SATISFIABLE)
+                return ExtractAnswer(0);
 
-                return newExts;
-            }
-
-            Expr Go(Expr e)
-            {
-                ImmutableDictionary<string, Expr> old;
-                DefId newName;
-                Expr newBody;
-                switch (e)
-                {
-                    case LetExpr { Name: var name, Type: var type, Val: var val, Body: var body }:
-                        Expr newTy = Go(type);
-                        Expr newVal = Go(val);
-
-                        old = repBinds;
-                        newName = GoDef(name);
-                        newBody = Go(body);
-                        repBinds = old;
-                        return new LetExpr(newName, newTy, newVal, newBody);
-                    case IdExpr { Id: var id }:
-                        if (repBinds.TryGetValue(id, out Expr repExpr))
-                            return repExpr;
-
-                        if (repMap.TryGetValue(id, out repExpr!))
-                            return repExpr;
-
-                        return e;
-                    case ElimExpr { Discriminee: var disc, IntoExts: var intoExts, IntoTy: var intoTy, Cases: var cases }:
-                        Expr newDisc = Go(disc);
-
-                        old = repBinds;
-
-                        List<CtxExt> newIntoExts = GoCtxExts(intoExts);
-                        Expr newIntoTy = Go(intoTy);
-                        repBinds = old;
-
-                        List<ElimCase> newCases = new List<ElimCase>();
-                        foreach (ElimCase @case in cases)
-                        {
-                            List<CtxExt> newCaseExts = GoCtxExts(@case.CaseExts);
-                            newBody = Go(@case.Body);
-                            repBinds = old;
-
-                            newCases.Add(new ElimCase(newCaseExts, newBody));
-                        }
-
-                        return new ElimExpr(newDisc, newIntoExts, newIntoTy, newCases);
-                    case AppExpr { Fun: var fun, Args: var args }:
-                        return new AppExpr(fun, args.Select(Go).ToList());
-                    default:
-                        throw new Exception("Unhandled");
-                }
-            }
+            uint zeroId = NewTm(_ctxInfo.Id, FormNat(), "0");
+            _fix.AddFact(_zero, _ctxInfo.Id, zeroId);
+            return zeroId;
         }
 
         public void Dispose()
         {
-            _ctx.Dispose();
+            _z3Ctx.Dispose();
+        }
+
+        private class ContextInfo
+        {
+            private readonly TypeChecker _tc;
+            private Context Z3 => _tc._z3Ctx;
+            private Fixedpoint Fix => _tc._fix;
+            private Z3Expr G => _tc._G;
+            private BitVecExpr BV(uint id) => _tc.BV(id);
+
+            private readonly List<(uint prevCtx, string? name, uint ty)> _vars =
+                new List<(uint prevCtx, string? name, uint ty)>();
+
+            public ContextInfo(TypeChecker tc, uint initialId)
+            {
+                _tc = tc;
+                Id = initialId;
+            }
+
+            public int NumVars => _vars.Count;
+
+            public uint Id { get; private set; }
+
+            public void Add(string? name, uint tyId)
+            {
+                Debug.Assert(_tc.IsTy(Id, tyId), "Type is not a type in this context");
+
+                uint ctx;
+                if (Fix.Query(Z3.MkExists(new[] { G }, _tc._comprehension.Apply(BV(Id), BV(tyId), G))) == Status.SATISFIABLE)
+                {
+                    ctx = _tc.ExtractAnswer(0);
+                }
+                else
+                {
+                    string? dbg = ContextDbgString(Id, name, tyId);
+                    ctx = _tc.NewCtx(dbg);
+                    Fix.AddFact(_tc._comprehension, Id, tyId, ctx);
+                }
+
+                _vars.Add((Id, name, tyId));
+                Id = ctx;
+            }
+
+            private string? ContextDbgString(uint ctx, string? name, uint tyId)
+            {
+                return
+                    _tc._dbgInf.TryGetValue(ctx, out string? prevCtxDbg) &&
+                    _tc._dbgInf.TryGetValue(tyId, out string? tyDbg)
+                    ? string.Format("{0}{1} : {2}", prevCtxDbg == "" ? "" : $"{prevCtxDbg}, ", name ?? "_", tyDbg)
+                    : null;
+            }
+
+            // Construct a term that accesses the var by the specified name.
+            public uint AccessVar(string name)
+            {
+                int index = _vars.FindIndex(t => t.name == name);
+                if (index == -1)
+                    throw new ArgumentException($"No variable exists by name {name}", nameof(name));
+
+                // Go(G, x : s |- x : s) = p2(s)
+                // Go(G, x : s, D, y : t |- x : s) = Go(G, x : s, D |- x : s){p(t)}
+
+                (uint tmId, uint tyId) Go(int i, uint nextCtx)
+                {
+                    (uint ctx, string? name, uint addedTy) = _vars[i];
+                    _tc._dbgInf.TryGetValue(addedTy, out string? tyDbg);
+                    string? ctxMorphDbg = tyDbg != null ? $"p1({tyDbg})" : null;
+
+                    // Make context morphism that gets us from nextCtx to ctx by projecting out added variable.
+                    uint ctxProj = _tc.NewCtxMorph(nextCtx, ctx, ctxMorphDbg);
+                    Fix.AddFact(_tc._projCtx, ctx, addedTy, ctxProj);
+
+                    if (i == index)
+                    {
+                        string? tySubstDbg = tyDbg != null && ctxMorphDbg != null ? $"{tyDbg}{{{ctxMorphDbg}}}" : null;
+
+                        // addedTy is in ctx, and we want it in nextCtx, so
+                        // make addedTy{ctxProj} = tySubst in nextCtx.
+                        uint tySubst = _tc.NewTy(nextCtx, tySubstDbg);
+                        Fix.AddFact(_tc._tySubst, addedTy, ctxProj, tySubst);
+
+                        uint tmProj = _tc.NewTm(nextCtx, tySubst, name);
+                        Fix.AddFact(_tc._projTm, ctx, addedTy, tmProj);
+                        return (tmProj, tySubst);
+                    }
+                    else
+                    {
+                        (uint tm, uint ty) = Go(i - 1, ctx);
+                        // nextCtx = ctx, x : ty[in ctx]
+                        // tm is term that accesses variable in ctx
+                        // ty is type of variable in ctx
+
+                        _tc._dbgInf.TryGetValue(ty, out string? prevTyDbg);
+                        string? tySubstDbg = prevTyDbg != null && ctxMorphDbg != null ? $"{prevTyDbg}{{{ctxMorphDbg}}}" : null;
+                        _tc._dbgInf.TryGetValue(tm, out string? prevTmDbg);
+                        string? tmSubstDbg = prevTmDbg != null && ctxMorphDbg != null ? $"{prevTmDbg}{{{ctxMorphDbg}}}" : null;
+
+                        Debug.Assert(_tc.IsComprehension(ctx, addedTy, nextCtx));
+                        Debug.Assert(_tc.IsTy(ctx, ty));
+                        Debug.Assert(_tc.IsTm(ctx, tm, ty));
+
+                        // Make prevTy{ctxProj} = tySubst in next context
+                        uint tySubst = _tc.NewTy(nextCtx, tySubstDbg);
+                        Fix.AddFact(_tc._tySubst, ty, ctxProj, tySubst);
+
+                        // Make prevTm{ctxProj} = tmSubst
+                        uint tmSubst = _tc.NewTm(nextCtx, tySubst, tmSubstDbg);
+                        Fix.AddFact(_tc._tmSubst, tm, ctxProj, tmSubst);
+                        return (tmSubst, tySubst);
+                    }
+                }
+
+                return Go(_vars.Count - 1, Id).tmId;
+            }
+
+            public ContextSavePoint Remember()
+                => new ContextSavePoint(this);
+
+            public struct ContextSavePoint : IDisposable
+            {
+                private readonly ContextInfo _ctx;
+                private readonly int _numVars;
+                private readonly uint _id;
+                public ContextSavePoint(ContextInfo ctx)
+                {
+                    _ctx = ctx;
+                    _numVars = ctx._vars.Count;
+                    _id = ctx.Id;
+                }
+
+                public void Dispose()
+                {
+                    Debug.Assert(_ctx._vars.Count >= _numVars);
+
+                    _ctx._vars.RemoveRange(_numVars, _ctx._vars.Count - _numVars);
+                    _ctx.Id = _id;
+                }
+            }
         }
 
         private static readonly string s_z3Setup = @"
-(define-sort ConS () (_ BitVec {SortSize}))
-(define-sort ConMorphS () (_ BitVec {SortSize}))
+(define-sort CtxS () (_ BitVec {SortSize}))
+(define-sort CtxMorphS () (_ BitVec {SortSize}))
 (define-sort TyS () (_ BitVec {SortSize}))
 (define-sort TmS () (_ BitVec {SortSize}))
 
-; ConEq G D -- |- G = D ctx
-(declare-rel ConEq (ConS ConS))
-; ConMorphEq f g -- G |- f = g => D
-(declare-rel ConMorphEq (ConMorphS ConMorphS))
+; CtxEq G D -- |- G = D ctx
+(declare-rel CtxEq (CtxS CtxS))
+; CtxMorphEq f g -- G |- f = g => D
+(declare-rel CtxMorphEq (CtxMorphS CtxMorphS))
 ; TyEq s t -- G |- s = t type
 (declare-rel TyEq (TyS TyS))
 ; TmEq M N -- G |- M = N : s
 (declare-rel TmEq (TmS TmS))
 
-; Con G -- |- G ctx
-(declare-rel Con (ConS))
-; ConMorph G f D -- G |- f => D
-(declare-rel ConMorph (ConS ConMorphS ConS))
+; Ctx G -- |- G ctx
+(declare-rel Ctx (CtxS))
+; CtxMorph G f D -- G |- f => D
+(declare-rel CtxMorph (CtxS CtxMorphS CtxS))
 ; Comp g f h -- h is g . f
-(declare-rel Comp (ConMorphS ConMorphS ConMorphS))
+(declare-rel Comp (CtxMorphS CtxMorphS CtxMorphS))
 ; Ty G s -- G |- s type
-(declare-rel Ty (ConS TyS))
+(declare-rel Ty (CtxS TyS))
 ; TmTy G M s -- G |- M : s
-(declare-rel TmTy (ConS TmS TyS))
+(declare-rel TmTy (CtxS TmS TyS))
 
 ; Functional relations
 ; IdMorph G f -- f is the identity context morphism for G
-(declare-rel IdMorph (ConS ConMorphS))
+(declare-rel IdMorph (CtxS CtxMorphS))
 ; TySubst s f t -- t is s{f}
-(declare-rel TySubst (TyS ConMorphS TyS))
+(declare-rel TySubst (TyS CtxMorphS TyS))
 ; TmSubst M f N -- N is M{f}
-(declare-rel TmSubst (TmS ConMorphS TmS))
-; ConEmpty G -- G is the empty (terminal) context
-(declare-rel ConEmpty (ConS))
+(declare-rel TmSubst (TmS CtxMorphS TmS))
+; CtxEmpty G -- G is the empty (terminal) context
+(declare-rel CtxEmpty (CtxS))
 ; Comprehension G s D -- |- G, x : s = D ctx
-(declare-rel Comprehension (ConS TyS ConS))
-; ProjCon G s f -- f is the projection G, x : s |- p(s) => G
-(declare-rel ProjCon (ConS TyS ConMorphS))
+(declare-rel Comprehension (CtxS TyS CtxS))
+; ProjCtx G s f -- f is the projection G, x : s |- p(s) => G
+(declare-rel ProjCtx (CtxS TyS CtxMorphS))
 ; ProjTm G s M -- M is the projection G, x : s |- x : s
-(declare-rel ProjTm (ConS TyS TmS))
+(declare-rel ProjTm (CtxS TyS TmS))
 ; Extension f M g -- g = 〈f, M〉
-(declare-rel Extension (ConMorphS TmS ConMorphS))
+(declare-rel Extension (CtxMorphS TmS CtxMorphS))
 
 ; Type forming/introduction/elimination
-(declare-rel Nat (ConS TyS))
+(declare-rel Nat (CtxS TyS))
+(declare-rel Zero (CtxS TmS))
 
-(declare-var A ConS)
-(declare-var B ConS)
-(declare-var C ConS)
-(declare-var D ConS)
-(declare-var E ConS)
-(declare-var F ConS)
-(declare-var G ConS)
+(declare-var A CtxS)
+(declare-var B CtxS)
+(declare-var C CtxS)
+(declare-var D CtxS)
+(declare-var E CtxS)
+(declare-var F CtxS)
+(declare-var G CtxS)
 
-(declare-var e ConMorphS)
-(declare-var f ConMorphS)
-(declare-var g ConMorphS)
-(declare-var h ConMorphS)
-(declare-var i ConMorphS)
-(declare-var j ConMorphS)
-(declare-var k ConMorphS)
-(declare-var p ConMorphS)
-(declare-var q ConMorphS)
+(declare-var e CtxMorphS)
+(declare-var f CtxMorphS)
+(declare-var g CtxMorphS)
+(declare-var h CtxMorphS)
+(declare-var i CtxMorphS)
+(declare-var j CtxMorphS)
+(declare-var k CtxMorphS)
+(declare-var l CtxMorphS)
+(declare-var p CtxMorphS)
+(declare-var q CtxMorphS)
 
 (declare-var r TyS)
 (declare-var s TyS)
@@ -363,18 +507,18 @@ namespace QT
 
 ;;;;;;;;;; Equalities ;;;;;;;;;;
 
-; ConEq is an equivalence relation
-(rule (=> (Con G) (ConEq G G)) ConEq-Reflexive)
-(rule (=> (ConEq G D) (ConEq D G)) ConEq-Symmetric)
-(rule (=> (and (ConEq G D) (ConEq D B)) (ConEq G B)) ConEq-Transitive)
+; CtxEq is an equivalence relation
+(rule (=> (Ctx G) (CtxEq G G)) CtxEq-Reflexive)
+(rule (=> (CtxEq G D) (CtxEq D G)) CtxEq-Symmetric)
+(rule (=> (and (CtxEq G D) (CtxEq D B)) (CtxEq G B)) CtxEq-Transitive)
 
-; ConMorphEq is an equivalence relation
-(rule (=> (ConMorph G f D) (ConMorphEq f f)) ConMorphEq-Reflexive)
-(rule (=> (ConMorphEq f g) (ConMorphEq g f)) ConMorphEq-Symmetric)
-(rule (=> (and (ConMorphEq f g)
-               (ConMorphEq g h))
-          (ConMorphEq f h))
-      ConMorphEq-Transitive)
+; CtxMorphEq is an equivalence relation
+(rule (=> (CtxMorph G f D) (CtxMorphEq f f)) CtxMorphEq-Reflexive)
+(rule (=> (CtxMorphEq f g) (CtxMorphEq g f)) CtxMorphEq-Symmetric)
+(rule (=> (and (CtxMorphEq f g)
+               (CtxMorphEq g h))
+          (CtxMorphEq f h))
+      CtxMorphEq-Transitive)
 
 ; TyEq is an equivalence relation
 (rule (=> (Ty G s) (TyEq s s)) TyEq-Reflexive)
@@ -388,114 +532,121 @@ namespace QT
 
 ;;;;;;;;;; Congruence rules ;;;;;;;;;;
 
-; Con
-(rule (=> (and (Con G)
-               (ConEq G D))
-          (Con D))
-      Con-Congr)
+; Ctx
+(rule (=> (and (Ctx G)
+               (CtxEq G D))
+          (Ctx D))
+      Ctx-Congr)
 
-; ConMorph
-(rule (=> (and (and (and (ConMorph G f D)
-                         (ConEq G A))
-                    (ConMorphEq f g))
-               (ConEq D B))
-          (ConMorph A g B))
-      ConMorph-Congr)
+; CtxMorph
+(rule (=> (and (CtxMorph G f D)
+               (CtxEq G A)
+               (CtxMorphEq f g)
+               (CtxEq D B))
+          (CtxMorph A g B))
+      CtxMorph-Congr)
 
 ; Comp
-(rule (=> (and (and (and (Comp f g h)
-                         (ConMorphEq f i))
-                    (ConMorphEq g j))
-               (ConMorphEq h k))
+(rule (=> (and (Comp f g h)
+               (CtxMorphEq f i)
+               (CtxMorphEq g j)
+               (CtxMorphEq h k))
           (Comp i j k))
       Comp-Congr)
 
 ; Ty
 (rule (=> (and (Ty G s)
-               (ConEq G D))
+               (CtxEq G D))
           (Ty D s))
-      Ty-Conv)
+      Ty-Ctxv)
 
 ; TmTy
-(rule (=> (and (and (TmTy G M s)
-                    (ConEq G D))
+(rule (=> (and (TmTy G M s)
+               (CtxEq G D)
                (TyEq s t))
           (TmTy D M t))
-      Tm-Conv)
+      Tm-Ctxv)
 
 ; IdMorph
-(rule (=> (and (and (IdMorph G f)
-                    (ConEq G D))
-               (ConMorphEq f g))
+(rule (=> (and (IdMorph G f)
+               (CtxEq G D)
+               (CtxMorphEq f g))
           (IdMorph D g))
       IdMorph-Congr)
 
 ; TySubst
-(rule (=> (and (and (and (TySubst s f t)
-                         (TyEq s u))
-                    (ConMorphEq f g))
-               (ConMorphEq t v))
+(rule (=> (and (TySubst s f t)
+               (TyEq s u)
+               (CtxMorphEq f g)
+               (CtxMorphEq t v))
           (TySubst u g v))
       TySubst-Congr)
 
 ; TmSubst
-(rule (=> (and (and (and (TmSubst M f N)
-                         (TmEq M O))
-                    (ConMorphEq f g))
+(rule (=> (and (TmSubst M f N)
+               (TmEq M O)
+               (CtxMorphEq f g)
                (TmEq N P))
           (TmSubst O g P))
       TmSubst-Congr)
 
-; ConEmpty
-(rule (=> (and (ConEmpty G)
-               (ConEq G D))
-          (ConEmpty D))
-      ConEmpty-Congr)
+; CtxEmpty
+(rule (=> (and (CtxEmpty G)
+               (CtxEq G D))
+          (CtxEmpty D))
+      CtxEmpty-Congr)
 
 ; Comprehension
-(rule (=> (and (and (and (Comprehension G s A)
-                         (ConEq G D))
-                    (TyEq s t))
-               (ConEq A B))
+(rule (=> (and (Comprehension G s A)
+               (CtxEq G D)
+               (TyEq s t)
+               (CtxEq A B))
           (Comprehension D t B))
       Comprehension-Congr)
 
-; ProjCon
-(rule (=> (and (and (and (ProjCon G s f)
-                         (ConEq G D))
-                    (TyEq s t))
-               (ConMorphEq f g))
-          (ProjCon D t g))
-      ProjCon-Congr)
+; ProjCtx
+(rule (=> (and (ProjCtx G s f)
+               (CtxEq G D)
+               (TyEq s t)
+               (CtxMorphEq f g))
+          (ProjCtx D t g))
+      ProjCtx-Congr)
 
 ; ProjTm
-(rule (=> (and (and (and (ProjTm G s M)
-                         (ConEq G D))
-                    (TyEq s t))
+(rule (=> (and (ProjTm G s M)
+               (CtxEq G D)
+               (TyEq s t)
                (TmEq M N))
           (ProjTm D t N))
       ProjTm-Congr)
 
 ; Extension
-(rule (=> (and (and (and (Extension f M g)
-                         (ConMorphEq f h))
-                    (TmEq M N))
-               (ConMorphEq g i))
+(rule (=> (and (Extension f M g)
+               (CtxMorphEq f h)
+               (TmEq M N)
+               (CtxMorphEq g i))
           (Extension h N i))
       Extension-Congr)
 
 ; Nat
-(rule (=> (and (and (Nat G s)
-                    (ConEq G D))
+(rule (=> (and (Nat G s)
+               (CtxEq G D)
                (TyEq s t))
           (Nat D t))
       Nat-Congr)
+
+; Zero
+(rule (=> (and (Zero G M)
+               (CtxEq G D)
+               (TmEq M N))
+          (Zero D N))
+      Zero-Congr)
 
 ;;;;;;;;;; Functionality rules ;;;;;;;;;;
 
 (rule (=> (and (IdMorph G f)
                (IdMorph G g))
-          (ConMorphEq f g))
+          (CtxMorphEq f g))
       IdMorph-Functional)
 
 (rule (=> (and (TySubst s f t)
@@ -508,19 +659,19 @@ namespace QT
           (TmEq N O))
       TmSubst-Functional)
 
-(rule (=> (and (ConEmpty G) (ConEmpty D))
-          (ConEq G D))
-      ConEmpty-Functional)
+(rule (=> (and (CtxEmpty G) (CtxEmpty D))
+          (CtxEq G D))
+      CtxEmpty-Functional)
 
 (rule (=> (and (Comprehension G s D)
                (Comprehension G s A))
-          (ConEq D A))
+          (CtxEq D A))
       Comprehension-Functional)
 
-(rule (=> (and (ProjCon G s f)
-               (ProjCon G s g))
-          (ConMorphEq f g))
-      ProjCon-Functional)
+(rule (=> (and (ProjCtx G s f)
+               (ProjCtx G s g))
+          (CtxMorphEq f g))
+      ProjCtx-Functional)
 
 (rule (=> (and (ProjTm G s M)
                (ProjTm G s N))
@@ -529,7 +680,7 @@ namespace QT
 
 (rule (=> (and (Extension f M g)
                (Extension f M h))
-          (ConMorphEq g h))
+          (CtxMorphEq g h))
       Extension-Functional)
 
 (rule (=> (and (Nat G s)
@@ -537,7 +688,20 @@ namespace QT
           (TyEq s t))
       Nat-Functional)
 
+(rule (=> (and (Zero G M)
+               (Zero G N))
+          (TmEq M N))
+      Zero-Functional)
+
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
+
+; (f . g) . h = f . (h . g)
+(rule (=> (and (Comp f g i)
+               (Comp i h j)
+               (Comp h g k)
+               (Comp f k l))
+          (CtxMorphEq j l))
+      Comp-Assoc)
 
 ; s{id} = s
 (rule (=> (and (TySubst s f t)
@@ -546,10 +710,10 @@ namespace QT
       Ty-Id)
 
 ; s{g . f} = s{g}{f}
-(rule (=> (and (and (Comp g f h)
-                    (TySubst s h t))
-               (and (TySubst s g u)
-                    (TySubst u f v)))
+(rule (=> (and (Comp g f h)
+               (TySubst s h t)
+               (TySubst s g u)
+               (TySubst u f v))
           (TyEq t v))
       Ty-Comp)
 
@@ -560,23 +724,23 @@ namespace QT
       Tm-Id)
 
 ; M{g . f} = M{g}{f}
-(rule (=> (and (and (Comp g f h)
-                    (TmSubst M h N))
-               (and (TmSubst M g O)
-                    (TmSubst O f P)))
+(rule (=> (and (Comp g f h)
+               (TmSubst M h N)
+               (TmSubst M g O)
+               (TmSubst O f P))
           (TmEq N P))
       Tm-Comp)
 
 ; p(s) . 〈f, M〉= f
-(rule (=> (and (and (ProjCon G s p)
-                    (Extension f M e))
+(rule (=> (and (ProjCtx G s p)
+               (Extension f M e)
                (Comp p e g))
-          (ConMorphEq g f))
+          (CtxMorphEq g f))
       Cons-L)
 
 ; M = v /\ 〈f, N〉= e /\ M{e} = O => O = N
-(rule (=> (and (and (ProjTm G s M)
-                    (Extension f N e))
+(rule (=> (and (ProjTm G s M)
+               (Extension f N e)
                (TmSubst M e O))
           (TmEq O N))
       Cons-R)
@@ -584,80 +748,42 @@ namespace QT
 ; 〈f, M〉. g = 〈f . g, M{g}〉
 ; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
 ; => h = j
-(rule (=> (and (and (and (and (Extension f M e)
-                              (Comp e g h))
-                         (Comp f g i))
-                    (TmSubst M g N))
+(rule (=> (and (Extension f M e)
+               (Comp e g h)
+               (Comp f g i)
+               (TmSubst M g N)
                (Extension i N j))
-          (ConMorphEq h j))
-      Cons-Nat)
+          (CtxMorphEq h j))
+      Cons-Natural)
 
 ; 〈p(s), v〉= id
 ; p(s) = p /\ M = v /\ 〈p, M〉= e /\ id = f => e = f
-(rule (=> (and (and (and (and (ProjCon G s p)
-                              (ProjTm G s M))
-                         (Extension p M e))
-                    (Comprehension G s D))
+(rule (=> (and (ProjCtx G s p)
+               (ProjTm G s M)
+               (Extension p M e)
+               (Comprehension G s D)
                (IdMorph D f))
-          (ConMorphEq e f))
+          (CtxMorphEq e f))
       Cons-Id)
 
+;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
+
 ; Nat^D{f : G -> D} = Nat^G
-(rule (=> (and (and (and (Nat G s)
-                         (Nat D t))
-                    (ConMorph G f D))
+(rule (=> (and (Nat G s)
+               (Nat D t)
+               (CtxMorph G f D)
                (TySubst t f u))
           (TyEq u s))
       Nat-Natural)
 
-;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
+; Zero^D{f : G -> D} = Zero^G
+(rule (=> (and (Zero G M)
+               (Zero D N)
+               (CtxMorph G f D)
+               (TmSubst N f O))
+          (TmEq O M))
+      Zero-Natural)
 
-;(rule (=> (and (Id M N s) (TmTy O s))
-;          (TmEq M N))
-;      Id-Reflection)
-;
-;(rule (=> (and (Id M N s)
-;               (and (TmTy P s)
-;                    (TmTy Q s)))
-;          (TmEq P Q))
-;      Id-Eq)
-;
-;(rule (=> (and (Zero M)
-;               (Zero N))
-;          (TmEq M N))
-;      Zero-Eq)
-;
-;(rule (=> (and (and (Succ M N)
-;                    (Succ O P))
-;               (TmEq M O))
-;          (TmEq N P))
-;      Succ-WellDefined)
-;
-;(rule (=> (and (Succ M N)
-;               (TmEq O N))
-;          (Succ M O))
-;      Succ-Eq)
-;
-;(rule (=> (and (and (Succ M N)
-;                    (Succ O P))
-;               (TmEq N P))
-;          (TmEq M O))
-;      Succ-Injective)
-;
-;(rule (=> (and (ElimNat M CO P CS O)
-;               (Zero M))
-;          (TmEq O CO))
-;      ElimNat-O)
-;
-;(rule (=> (and (ElimNat M CO P CS O)
-;               (Succ N M))
-;          (TmEq O CS))
-;      ElimNat-S1)
-;
-;(rule (=> (and (ElimNat M CO P CS O)
-;               (Succ N M))
-;          (TmEq P N))
-;      ElimNat-S2)
 ".Replace("{SortSize}", SortSize.ToString());
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Z3;
 using QT.Parse;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 
@@ -23,8 +24,9 @@ namespace QT
                 foreach (Def def in unit.Definitions)
                 {
                     Console.WriteLine(def);
+                    Stopwatch timer = Stopwatch.StartNew();
                     tc.TypeCheck(def);
-                    Console.WriteLine("OK");
+                    Console.WriteLine("OK in {0} ms", timer.ElapsedMilliseconds);
                     Console.WriteLine();
                 }
             }

@@ -72,6 +72,16 @@ namespace QT
     {
     }
 
+    internal class IdExpr : Expr
+    {
+        public IdExpr(string id)
+        {
+            Id = id;
+        }
+
+        public string Id { get; }
+    }
+
     internal class LetExpr : Expr
     {
         public LetExpr(DefId name, Expr type, Expr val, Expr body)
@@ -86,16 +96,6 @@ namespace QT
         public Expr Type { get; }
         public Expr Val { get; }
         public Expr Body { get; }
-    }
-
-    internal class IdExpr : Expr
-    {
-        public IdExpr(string id)
-        {
-            Id = id;
-        }
-
-        public string Id { get; }
     }
 
     internal class ElimExpr : Expr

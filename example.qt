@@ -1,4 +1,4 @@
-def id (a : nat) : nat := a.
+def test (a b c d e f g h i j k l m n : nat) : nat := 0.
 (*
 def plus (a b : nat) : nat :=
   elim a into (_ : nat) : nat
