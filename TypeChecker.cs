@@ -28,6 +28,7 @@ namespace QT
         private readonly FuncDecl _ctxMorph;
         private readonly FuncDecl _ty;
         private readonly FuncDecl _tmTy;
+        private readonly FuncDecl _idMorph;
         private readonly FuncDecl _tySubst;
         private readonly FuncDecl _tmSubst;
 
@@ -35,11 +36,14 @@ namespace QT
         private readonly FuncDecl _comprehension;
         private readonly FuncDecl _projCtx;
         private readonly FuncDecl _projTm;
+        private readonly FuncDecl _extension;
 
         private readonly FuncDecl _nat;
         private readonly FuncDecl _zero;
+        private readonly FuncDecl _succ;
 
         private readonly Z3Expr _G;
+        private readonly Z3Expr _f;
         private readonly Z3Expr _s;
         private readonly Z3Expr _M;
 
@@ -66,6 +70,7 @@ namespace QT
 
             _sort = _z3Ctx.MkBitVecSort(SortSize);
             _G = _z3Ctx.MkConst("G", _sort);
+            _f = _z3Ctx.MkConst("f", _sort);
             _s = _z3Ctx.MkConst("s", _sort);
             _M = _z3Ctx.MkConst("M", _sort);
 
@@ -78,14 +83,17 @@ namespace QT
             _ctxMorph = _rels["CtxMorph"];
             _ty = _rels["Ty"];
             _tmTy = _rels["TmTy"];
+            _idMorph = _rels["IdMorph"];
             _tySubst = _rels["TySubst"];
             _tmSubst = _rels["TmSubst"];
             _ctxEmpty = _rels["CtxEmpty"];
             _comprehension = _rels["Comprehension"];
             _projCtx = _rels["ProjCtx"];
             _projTm = _rels["ProjTm"];
+            _extension = _rels["Extension"];
             _nat = _rels["Nat"];
             _zero = _rels["Zero"];
+            _succ = _rels["Succ"];
 
             uint emptyCtx = NewCtx("");
             _fix.AddFact(_ctxEmpty, emptyCtx);
@@ -193,9 +201,7 @@ namespace QT
                     ExtendContext(ctxExt);
 
                 uint retTyId = TypeCheckType(def.RetTy);
-                uint bodyId = TypeCheck(def.Body);
-                if (!IsTmTy(_ctxInfo.Id, bodyId, retTyId))
-                    throw new Exception($"{def.Name}: Body does not type check to {def.RetTy}");
+                uint bodyId = TypeCheckTerm(def.Body, retTyId);
 
                 return bodyId;
             }
@@ -216,6 +222,16 @@ namespace QT
             return id;
         }
 
+        private uint TypeCheckTerm(Expr expr, uint tyId)
+        {
+            uint id = TypeCheck(expr);
+
+            if (!IsTmTy(_ctxInfo.Id, id, tyId))
+                throw new Exception($"{expr} is not of expected type{(_dbgInf.TryGetValue(tyId, out string? dbg) ? " " + dbg : "")}");
+
+            return id;
+        }
+
         private uint TypeCheck(Expr expr)
         {
             switch (expr)
@@ -228,6 +244,18 @@ namespace QT
 
                     return _ctxInfo.AccessVar(id);
                 case AppExpr { Fun: string fun, Args: var args }:
+                    if (fun == "S")
+                    {
+                        (uint succCtx, uint succTm, uint succNatTy) = IntroduceSucc();
+                        uint natTy = FormNat();
+                        uint arg = TypeCheckTerm(args.Single(), natTy);
+
+                        // Now we return succTm{<id, arg>}
+                        uint idMorph = IdMorph(_ctxInfo.Id);
+                        uint ext = Extension(_ctxInfo.Id, succCtx, idMorph, arg);
+                        uint tmSubst = SubstTerm(ext, _ctxInfo.Id, natTy, succTm);
+                        return tmSubst;
+                    }
                     if (fun == "dump")
                     {
                         uint result = TypeCheck(args[1]);
@@ -281,6 +309,83 @@ namespace QT
             uint zeroId = NewTm(_ctxInfo.Id, FormNat(), "0");
             _fix.AddFact(_zero, _ctxInfo.Id, zeroId);
             return zeroId;
+        }
+
+        private (uint ctx, uint tm, uint natTy) IntroduceSucc()
+        {
+            uint natTy = FormNat();
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _G, _M },
+                    (BoolExpr)_comprehension.Apply(BV(_ctxInfo.Id), BV(natTy), _G) &
+                    (BoolExpr)_succ.Apply(_G, _M));
+
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return (ExtractAnswer(0), ExtractAnswer(1), natTy);
+
+            using (_ctxInfo.Remember())
+            {
+                _ctxInfo.Add("pred", natTy);
+                natTy = FormNat();
+                uint succ = NewTm(_ctxInfo.Id, natTy, "succ pred");
+                _fix.AddFact(_succ, _ctxInfo.Id, succ);
+                return (_ctxInfo.Id, succ, natTy);
+            }
+        }
+
+        private uint IdMorph(uint ctx)
+        {
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _idMorph.Apply(BV(ctx), _f))) == Status.SATISFIABLE)
+                return ExtractAnswer(0);
+
+            _dbgInf.TryGetValue(ctx, out string? ctxDbg);
+            string? dbg = ctxDbg != null ? $"id({ctxDbg})" : null;
+
+            uint id = NewCtxMorph(ctx, ctx, dbg);
+            _fix.AddFact(_idMorph, ctx, id);
+            return id;
+        }
+
+        private uint Extension(uint ctxFrom, uint ctxTo, uint ctxMorph, uint tm)
+        {
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _extension.Apply(BV(ctxMorph), BV(tm), _f))) == Status.SATISFIABLE)
+                return ExtractAnswer(0);
+
+            _dbgInf.TryGetValue(ctxMorph, out string? ctxMorphDbg);
+            _dbgInf.TryGetValue(tm, out string? tmDbg);
+            string? dbg = ctxMorphDbg != null && tmDbg != null ? $"<{ctxMorphDbg}, {tmDbg}>" : null;
+
+            uint id = NewCtxMorph(ctxFrom, ctxTo, dbg);
+            _fix.AddFact(_extension, ctxMorph, tm, id);
+            return id;
+        }
+
+        private uint SubstType(uint ctxMorph, uint newCtx, uint oldTy)
+        {
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _tySubst.Apply(BV(oldTy), BV(ctxMorph), _s))) == Status.SATISFIABLE)
+                return ExtractAnswer(0);
+
+            _dbgInf.TryGetValue(ctxMorph, out string? ctxMorphDbg);
+            _dbgInf.TryGetValue(oldTy, out string? tyDbg);
+            string? dbg = ctxMorphDbg != null && tyDbg != null ? $"{tyDbg}{{{ctxMorphDbg}}}" : null;
+
+            uint id = NewTy(newCtx, dbg);
+            _fix.AddFact(_tySubst, oldTy, ctxMorph, id);
+            return id;
+        }
+
+        private uint SubstTerm(uint ctxMorph, uint newCtx, uint newTy, uint oldTm)
+        {
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _tmSubst.Apply(BV(oldTm), BV(ctxMorph), _M))) == Status.SATISFIABLE)
+                return ExtractAnswer(0);
+
+            _dbgInf.TryGetValue(ctxMorph, out string? ctxMorphDbg);
+            _dbgInf.TryGetValue(oldTm, out string? tmDbg);
+            string? dbg = ctxMorphDbg != null && tmDbg != null ? $"{tmDbg}{{{ctxMorphDbg}}}" : null;
+
+            uint id = NewTm(newCtx, newTy, dbg);
+            _fix.AddFact(_tmSubst, oldTm, ctxMorph, id);
+            return id;
         }
 
         public void Dispose()
@@ -360,12 +465,9 @@ namespace QT
 
                     if (i == index)
                     {
-                        string? tySubstDbg = tyDbg != null && ctxMorphDbg != null ? $"{tyDbg}{{{ctxMorphDbg}}}" : null;
-
                         // addedTy is in ctx, and we want it in nextCtx, so
                         // make addedTy{ctxProj} = tySubst in nextCtx.
-                        uint tySubst = _tc.NewTy(nextCtx, tySubstDbg);
-                        Fix.AddFact(_tc._tySubst, addedTy, ctxProj, tySubst);
+                        uint tySubst = _tc.SubstType(ctxProj, nextCtx, addedTy);
 
                         uint tmProj = _tc.NewTm(nextCtx, tySubst, name);
                         Fix.AddFact(_tc._projTm, ctx, addedTy, tmProj);
@@ -378,22 +480,12 @@ namespace QT
                         // tm is term that accesses variable in ctx
                         // ty is type of variable in ctx
 
-                        _tc._dbgInf.TryGetValue(ty, out string? prevTyDbg);
-                        string? tySubstDbg = prevTyDbg != null && ctxMorphDbg != null ? $"{prevTyDbg}{{{ctxMorphDbg}}}" : null;
-                        _tc._dbgInf.TryGetValue(tm, out string? prevTmDbg);
-                        string? tmSubstDbg = prevTmDbg != null && ctxMorphDbg != null ? $"{prevTmDbg}{{{ctxMorphDbg}}}" : null;
-
                         Debug.Assert(_tc.IsComprehension(ctx, addedTy, nextCtx));
                         Debug.Assert(_tc.IsTy(ctx, ty));
                         Debug.Assert(_tc.IsTm(ctx, tm, ty));
 
-                        // Make prevTy{ctxProj} = tySubst in next context
-                        uint tySubst = _tc.NewTy(nextCtx, tySubstDbg);
-                        Fix.AddFact(_tc._tySubst, ty, ctxProj, tySubst);
-
-                        // Make prevTm{ctxProj} = tmSubst
-                        uint tmSubst = _tc.NewTm(nextCtx, tySubst, tmSubstDbg);
-                        Fix.AddFact(_tc._tmSubst, tm, ctxProj, tmSubst);
+                        uint tySubst = _tc.SubstType(ctxProj, nextCtx, ty);
+                        uint tmSubst = _tc.SubstTerm(ctxProj, nextCtx, tySubst, tm);
                         return (tmSubst, tySubst);
                     }
                 }
@@ -473,6 +565,8 @@ namespace QT
 ; Type forming/introduction/elimination
 (declare-rel Nat (CtxS TyS))
 (declare-rel Zero (CtxS TmS))
+; Succ G M -- M is successor term in G (which is of the form D, pred : nat).
+(declare-rel Succ (CtxS TmS))
 
 (declare-var A CtxS)
 (declare-var B CtxS)
@@ -642,6 +736,13 @@ namespace QT
           (Zero D N))
       Zero-Congr)
 
+; Succ
+(rule (=> (and (Succ G M)
+               (CtxEq G D)
+               (TmEq M N))
+          (Succ D N))
+      Succ-Congr)
+
 ;;;;;;;;;; Functionality rules ;;;;;;;;;;
 
 (rule (=> (and (IdMorph G f)
@@ -692,6 +793,11 @@ namespace QT
                (Zero G N))
           (TmEq M N))
       Zero-Functional)
+
+(rule (=> (and (Succ G M)
+               (Succ G N))
+          (TmEq M N))
+      Succ-Functional)
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
@@ -783,6 +889,14 @@ namespace QT
                (TmSubst N f O))
           (TmEq O M))
       Zero-Natural)
+
+; Succ^D{f : G -> D} = Succ^G
+(rule (=> (and (Succ G M)
+               (Succ D N)
+               (CtxMorph G f D)
+               (TmSubst N f O))
+          (TmEq O M))
+      Succ-Natural)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }
