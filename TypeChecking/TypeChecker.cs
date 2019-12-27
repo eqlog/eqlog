@@ -200,11 +200,6 @@ namespace QT
 
         private BitVecNum BV(ModelObject obj) => _z3Ctx.MkBV(obj.Id, SortSize);
 
-        private bool IsTmTy(ModelCtx ctx, Tm tm, Ty ty)
-        {
-            return _fix.Query((BoolExpr)_tmTy.Apply(BV(ctx), BV(tm), BV(ty))) == Status.SATISFIABLE;
-        }
-
         public ModelObject TypeCheck(Def def)
         {
             using (_ctxInfo.Remember())
@@ -298,7 +293,7 @@ namespace QT
                     goto default;
                 case ElimExpr elim:
                     Tm discTm = TypeCheckAnyTerm(elim.Discriminee);
-                    if (IsTmTy(_ctxInfo.Ctx, discTm, FormNat(_ctxInfo.Ctx)))
+                    if (IsTyEq(discTm.Ty, FormNat(_ctxInfo.Ctx)))
                         return ElimNat(discTm, elim);
 
                     goto default;
@@ -562,6 +557,7 @@ namespace QT
 
         private CtxMorphism Compose(CtxMorphism g, CtxMorphism f)
         {
+            Debug.Assert(IsCtxEq(f.To, g.From));
             string? gDbg = g.GetDebugInfo();
             string? fDbg = f.GetDebugInfo();
             string? dbg = gDbg != null && fDbg != null ? $"{gDbg} . {fDbg}" : null;
