@@ -1018,10 +1018,10 @@ namespace QT
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
-; (f . g) . h = f . (h . g)
+; (f . g) . h = f . (g . h)
 (rule (=> (and (Comp f g i)
                (Comp i h j)
-               (Comp h g k)
+               (Comp g h k)
                (Comp f k l))
           (CtxMorphEq j l))
       Comp-Assoc)
@@ -1133,14 +1133,14 @@ namespace QT
 ;               (NatElim P Q R) (TmTy B R u) (Comprehension D v B)
 ;               (CtxMorph G D f)
 ;               (TmSubst  f P)
-
-(rule (=> (and (NatElim M N O P)
-               (Zero G M))
-          (TmEq P N))
-      NatElim-0)
-
-(rule (=> (and (NatElim M N O P)
-               (Succ G M)
+; 
+; (rule (=> (and (NatElim M N O P)
+;                (Zero G M))
+;           (TmEq P N))
+;       NatElim-0)
+; 
+; (rule (=> (and (NatElim M N O P)
+;                (Succ G M)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }
