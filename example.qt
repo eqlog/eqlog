@@ -1,7 +1,7 @@
 def test (a : nat) : nat :=
-  elim 1 into (_ : nat) : nat
-  | => 0
-  | (pred _ : nat) => pred.
+  dump all (elim 1 into (_ : nat) : nat
+  | => 1
+  | (pred _ : nat) => pred).
 
 (*
 def plus2 (b a : nat) : nat := b + a.
