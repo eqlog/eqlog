@@ -1,7 +1,8 @@
-def test (a : nat) : nat :=
-  dump all (elim 1 into (_ : nat) : nat
-  | => 1
-  | (pred _ : nat) => pred).
+def negb (b : bool) : bool :=
+  let x : bool := false in
+  dump all (elim x into (_ : bool) : bool
+  | => false
+  | => true).
 
 (*
 def plus2 (b a : nat) : nat := b + a.
