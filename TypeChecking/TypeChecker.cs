@@ -300,8 +300,8 @@ namespace QT
                         {
                             _fix.Query(_rels[rel]);
                             Z3Expr answer = _fix.GetAnswer();
-                            Console.WriteLine("------- {0} ({1} rows) -------", rel, answer.IsOr ? answer.Args.Length : 1);
-                            Console.WriteLine(ToDebug(answer));
+                            Console.WriteLine("------- {0} ({1} rows) -------", rel, answer.IsOr ? answer.Args.Length : answer.IsFalse ? 0 : 1);
+                            Console.Write(ToDebug(answer));
                         }
                         return result;
                     }
@@ -320,11 +320,14 @@ namespace QT
 
         private string ToDebug(Z3Expr expr)
         {
+            if (expr.IsFalse)
+                return "";
+
             string ans = expr.ToString();
             ans = _debugInfo.Aggregate(
                     ans,
                     (acc, kvp) => acc.Replace($"#x{kvp.Key:x8}", "'" + kvp.Value + "'"));
-            return ans;
+            return ans + Environment.NewLine;
         }
 
         private ModelCtx Comprehension(ModelCtx ctx, Ty ty, string? nameForDbg)
