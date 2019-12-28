@@ -276,6 +276,24 @@ namespace QT
                         return IntroduceZero(FormNat(_ctxInfo.Ctx));
 
                     return _ctxInfo.AccessVar(id);
+                case LetExpr let:
+                    using (_ctxInfo.Remember())
+                    {
+                        Ty ty = TypeCheckType(let.Type);
+                        Tm tm = TypeCheckTerm(let.Val, ty);
+                        _ctxInfo.Add(let.Name.IsDiscard ? null : let.Name.Name, ty);
+                        Tm added = _ctxInfo.AccessLast();
+                        CtxMorphism projCtx = ProjCtx(added.Context, ty);
+                        AddFact(_tmEq, added.Id, SubstTerm(tm, projCtx, added.Ty).Id);
+
+                        CtxMorphism addTm = TermBar(tm, added.Context);
+                        return TypeCheck(let.Body) switch
+                        {
+                            Ty bodyTy => SubstType(bodyTy, addTm),
+                            Tm bodyTm => SubstTermAndType(bodyTm, addTm),
+                            var x => x
+                        };
+                    }
                 case AppExpr { Fun: string fun, Args: var args }:
                     if (fun == "S")
                     {
@@ -836,6 +854,21 @@ namespace QT
                 if (index == -1)
                     throw new ArgumentException($"No variable exists by name {name}", nameof(name));
 
+                return Access(index);
+            }
+
+            public Tm AccessLast()
+            {
+                if (_vars.Count <= 0)
+                    throw new InvalidOperationException("No variables have been added to the context");
+
+                return Access(_vars.Count - 1);
+            }
+
+            private Tm Access(int index)
+            {
+                return Go(_vars.Count - 1, Ctx);
+
                 Tm Go(int i, ModelCtx nextCtx)
                 {
                     (string? name, Ty ty) = _vars[i];
@@ -865,8 +898,6 @@ namespace QT
                         return tmSubst;
                     }
                 }
-
-                return Go(_vars.Count - 1, Ctx);
             }
 
             public ContextSavePoint Remember()
