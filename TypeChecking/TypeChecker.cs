@@ -1651,7 +1651,14 @@ namespace QT
                (TmSubst M f Q)
                (TmSubst N f R))
           (Id Q R P))
-      Id-Natural)
+      Id-Natural-1)
+
+(rule (=> (and (TmSubst M f O)
+               (TmSubst N f P)
+               (Id O P Q)
+               (Id M N R))
+          (TmSubst R f Q))
+      Id-Natural-2)
 
 ; Refl(D){f : G -> D} = Refl(G)
 (rule (=> (and (Refl M) (TmTy D M s)

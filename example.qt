@@ -1,7 +1,5 @@
-def negb (b : bool) : bool :=
-  let x : bool := false in
-  let _ : x = false := refl false in
-  b.
+def negb (a : bool) (p : a = false) : a = false :=
+  dump all p.
 
 (*
 def plus2 (b a : nat) : nat := b + a.
