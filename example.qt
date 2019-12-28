@@ -1,7 +1,7 @@
-def plus (a b : nat) : nat :=
-  elim a into (_ : nat) : nat
-  | => b
-  | (_ : nat) (IH : nat) => S IH.
+def test (a : nat) : nat :=
+  elim 1 into (_ : nat) : nat
+  | => 0
+  | (pred _ : nat) => pred.
 
 (*
 def plus2 (b a : nat) : nat := b + a.

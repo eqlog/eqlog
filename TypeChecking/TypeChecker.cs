@@ -54,6 +54,8 @@ namespace QT
         private uint _counter;
         private uint NextId() => checked(++_counter);
 
+        private readonly Dictionary<uint, string> _debugInfo = new Dictionary<uint, string>();
+
         private readonly ContextInfo _ctxInfo;
 
         public TypeChecker()
@@ -138,14 +140,22 @@ namespace QT
             return decls;
         }
 
+        private T WithDbg<T>(T obj) where T : ModelObject
+        {
+            if (_debugInfo.TryGetValue(obj.Id, out string? dbg))
+                ModelObject.DbgInfo.Add(obj, dbg);
+
+            return obj;
+        }
+
         private ModelCtx NewCtx(string? dbg)
         {
             uint id = NextId();
             _fix.AddFact(_ctx, id);
             var ctx = new ModelCtx(id);
             if (dbg != null)
-                ModelObject.DbgInfo.Add(ctx, dbg);
-            return ctx;
+                _debugInfo.Add(id, dbg);
+            return WithDbg(ctx);
         }
 
         private CtxMorphism NewCtxMorph(ModelCtx from, ModelCtx to, string? dbg)
@@ -154,8 +164,8 @@ namespace QT
             _fix.AddFact(_ctxMorph, from.Id, id, to.Id);
             var ctxMorph = new CtxMorphism(id, from, to);
             if (dbg != null)
-                ModelObject.DbgInfo.Add(ctxMorph, dbg);
-            return ctxMorph;
+                _debugInfo.Add(id, dbg);
+            return WithDbg(ctxMorph);
         }
 
         private Ty NewTy(ModelCtx ctx, string? dbg)
@@ -164,8 +174,8 @@ namespace QT
             _fix.AddFact(_ty, ctx.Id, id);
             var ty = new Ty(id, ctx);
             if (dbg != null)
-                ModelObject.DbgInfo.Add(ty, dbg);
-            return ty;
+                _debugInfo.Add(id, dbg);
+            return WithDbg(ty);
         }
 
         private Tm NewTm(Ty ty, string? dbg)
@@ -174,8 +184,8 @@ namespace QT
             _fix.AddFact(_tmTy, ty.Context.Id, id, ty.Id);
             var tm = new Tm(id, ty);
             if (dbg != null)
-                ModelObject.DbgInfo.Add(tm, dbg);
-            return tm;
+                _debugInfo.Add(id, dbg);
+            return WithDbg(tm);
         }
 
         private bool IsTy(ModelCtx ctx, Ty ty)
@@ -194,9 +204,7 @@ namespace QT
             => _fix.Query((BoolExpr)_tmEq.Apply(BV(tm1), BV(tm2))) == Status.SATISFIABLE;
 
         private bool IsComprehension(Ty ty, ModelCtx ctx)
-        {
-            return _fix.Query((BoolExpr)_comprehension.Apply(BV(ty.Context), BV(ty), BV(ctx))) == Status.SATISFIABLE;
-        }
+            => _fix.Query((BoolExpr)_comprehension.Apply(BV(ty.Context), BV(ty), BV(ctx))) == Status.SATISFIABLE;
 
         private BitVecNum BV(ModelObject obj) => _z3Ctx.MkBV(obj.Id, SortSize);
 
@@ -241,7 +249,7 @@ namespace QT
         {
             Tm tm = TypeCheckAnyTerm(expr);
             if (!IsTyEq(ty, tm.Ty))
-                throw new Exception($"{expr} is not of expected type{ty.GetDebugInfo() ?? ""}");
+                throw new Exception($"{expr} is not of expected type {ty.GetDebugInfo() ?? ""}");
 
             return tm;
         }
@@ -304,8 +312,8 @@ namespace QT
 
         private ModelCtx Comprehension(ModelCtx ctx, Ty ty, string? nameForDbg)
         {
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _G }, _comprehension.Apply(BV(ctx), BV(ty), _G))) == Status.SATISFIABLE)
-            //    return new ModelCtx(ExtractAnswer(0));
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _G }, _comprehension.Apply(BV(ctx), BV(ty), _G))) == Status.SATISFIABLE)
+                return WithDbg(new ModelCtx(ExtractAnswer(0)));
 
             string? ctxDbg = ctx.GetDebugInfo();
             string? tyDbg = ty.GetDebugInfo();
@@ -315,7 +323,7 @@ namespace QT
                 if (nameForDbg == null)
                     nameForDbg = "_";
 
-                if (ctxDbg == "")
+                if (ctxDbg != "")
                     dbg = $"{ctxDbg}, {nameForDbg} : {tyDbg}";
                 else
                     dbg = $"{nameForDbg} : {tyDbg}";
@@ -328,11 +336,17 @@ namespace QT
 
         private Ty FormNat(ModelCtx ctx)
         {
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _nat.Apply(BV(ctx), _s))) == Status.SATISFIABLE)
-            //    return new Ty(ExtractAnswer(0), ctx);
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _s },
+                    (BoolExpr)_nat.Apply(_s) &
+                    (BoolExpr)_ty.Apply(BV(ctx), _s));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Ty(ExtractAnswer(0), ctx));
 
-            Ty nat = NewTy(ctx, "nat");
-            _fix.AddFact(_nat, ctx.Id, nat.Id);
+            string? ctxDbg = ctx.GetDebugInfo();
+            Ty nat = NewTy(ctx, $"nat({ctxDbg})");
+            _fix.AddFact(_nat, nat.Id);
             return nat;
         }
 
@@ -353,16 +367,18 @@ namespace QT
 
         private Tm IntroduceZero(Ty nat)
         {
-            //Quantifier query =
-            //    _z3Ctx.MkExists(
-            //        new[] { _M },
-            //        (BoolExpr)_zero.Apply(BV(nat.Context), _M) &
-            //        (BoolExpr)_tmTy.Apply(BV(nat.Context), _M, BV(nat)));
-            //if (_fix.Query(query) == Status.SATISFIABLE)
-            //    return new Tm(ExtractAnswer(0), nat);
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _M },
+                    (BoolExpr)_zero.Apply(_M) &
+                    (BoolExpr)_tmTy.Apply(BV(nat.Context), _M, BV(nat)));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), nat));
 
-            Tm zero = NewTm(nat, "0");
-            _fix.AddFact(_zero, nat.Context.Id, zero.Id);
+            string? ctxDbg = nat.Context.GetDebugInfo();
+            string? dbg = ctxDbg != null ? $"0({ctxDbg})" : null;
+            Tm zero = NewTm(nat, dbg);
+            _fix.AddFact(_zero, zero.Id);
             return zero;
         }
 
@@ -374,15 +390,20 @@ namespace QT
                 _fix.Query(
                     _z3Ctx.MkExists(
                         new[] { _G, _s },
-                        (BoolExpr)_nat.Apply(BV(nat.Context), BV(nat)) &
+                        (BoolExpr)_nat.Apply(BV(nat)) &
                         (BoolExpr)_comprehension.Apply(_G, _s, BV(nat.Context)) &
-                        (BoolExpr)_nat.Apply(_G, _s))) == Status.SATISFIABLE);
+                        (BoolExpr)_nat.Apply(_s))) == Status.SATISFIABLE);
 
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _succ.Apply(BV(nat.Context), _M))) == Status.SATISFIABLE)
-            //    return new Tm(ExtractAnswer(0), nat);
+            var query =
+                _z3Ctx.MkExists(
+                    new[] { _M, _G },
+                    (BoolExpr)_succ.Apply(_M) &
+                    (BoolExpr)_tmTy.Apply(_G, _M, BV(nat)));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), nat));
 
             Tm succ = NewTm(nat, "succ");
-            _fix.AddFact(_succ, nat.Context.Id, succ.Id);
+            _fix.AddFact(_succ, succ.Id);
             return succ;
         }
 
@@ -426,11 +447,11 @@ namespace QT
         {
             Debug.Assert(IsComprehension(removedTy, fromCtx));
 
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _projCtx.Apply(BV(removedTy.Context), BV(removedTy), _f))) == Status.SATISFIABLE)
-            //    return new CtxMorphism(ExtractAnswer(0), fromCtx, removedTy.Context);
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _projCtx.Apply(BV(removedTy.Context), BV(removedTy), _f))) == Status.SATISFIABLE)
+                return WithDbg(new CtxMorphism(ExtractAnswer(0), fromCtx, removedTy.Context));
 
-            string? removedTyDbg = removedTy.GetDebugInfo();
-            string? dbg = removedTyDbg != null ? $"p1({removedTyDbg})" : null;
+            string? fromCtxDbg = fromCtx.GetDebugInfo();
+            string? dbg = fromCtxDbg != null ? $"p1({fromCtxDbg})" : null;
             CtxMorphism ctxMorphism = NewCtxMorph(fromCtx, removedTy.Context, dbg);
             _fix.AddFact(_projCtx, removedTy.Context.Id, removedTy.Id, ctxMorphism.Id);
             return ctxMorphism;
@@ -438,8 +459,8 @@ namespace QT
 
         private Tm ProjTm(Ty addedVarTy, Ty fullTy, string? dbgName)
         {
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _projTm.Apply(BV(addedVarTy.Context), BV(addedVarTy), _M))) == Status.SATISFIABLE)
-            //    return new Tm(ExtractAnswer(0), fullTy);
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _projTm.Apply(BV(addedVarTy.Context), BV(addedVarTy), _M))) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), fullTy));
 
             string? dbg = dbgName;
             if (dbg == null)
@@ -537,27 +558,41 @@ namespace QT
             _fix.AddFact(_natElim, zeroCase.Id, succCase.Id, elimTm.Id);
 
             CtxMorphism addDisc = TermBar(discriminee, intoTy.Context);
-            Ty substTy = SubstType(intoTy, addDisc);
-            Tm substTm = SubstTerm(elimTm, addDisc, substTy);
+            Tm substTm = SubstTermAndType(elimTm, addDisc);
             return substTm;
         }
 
         private CtxMorphism IdMorph(ModelCtx ctx)
         {
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _f }, _idMorph.Apply(BV(ctx), _f))) == Status.SATISFIABLE)
-            //    return new CtxMorphism(ExtractAnswer(0), ctx, ctx);
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _f, },
+                    (BoolExpr)_idMorph.Apply(_f) &
+                    (BoolExpr)_ctxMorph.Apply(BV(ctx), _f, BV(ctx)));
+
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new CtxMorphism(ExtractAnswer(0), ctx, ctx));
 
             string? ctxDbg = ctx.GetDebugInfo();
             string? dbg = ctxDbg != null ? $"id({ctxDbg})" : null;
 
             CtxMorphism ctxMorphism = NewCtxMorph(ctx, ctx, dbg);
-            _fix.AddFact(_idMorph, ctx.Id, ctxMorphism.Id);
+            _fix.AddFact(_idMorph, ctxMorphism.Id);
             return ctxMorphism;
         }
 
         private CtxMorphism Compose(CtxMorphism g, CtxMorphism f)
         {
             Debug.Assert(IsCtxEq(f.To, g.From));
+
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _f },
+                    _comp.Apply(BV(g), BV(f), _f));
+
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new CtxMorphism(ExtractAnswer(0), f.From, g.To));
+
             string? gDbg = g.GetDebugInfo();
             string? fDbg = f.GetDebugInfo();
             string? dbg = gDbg != null && fDbg != null ? $"{gDbg} . {fDbg}" : null;
@@ -569,6 +604,17 @@ namespace QT
         private CtxMorphism Extension(CtxMorphism morphism, Tm tm, ModelCtx ctxTo)
         {
             Debug.Assert(IsCtxEq(morphism.From, tm.Context));
+
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _f },
+                    _extension.Apply(
+                        BV(morphism),
+                        BV(tm),
+                        _f));
+
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new CtxMorphism(ExtractAnswer(0), morphism.From, ctxTo));
 
             string? morphismDbg = morphism.GetDebugInfo();
             string? tmDbg = tm.GetDebugInfo();
@@ -583,8 +629,8 @@ namespace QT
         {
             Debug.Assert(IsCtxEq(oldTy.Context, morphism.To));
 
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _tySubst.Apply(BV(oldTy), BV(morphism), _s))) == Status.SATISFIABLE)
-            //    return new Ty(ExtractAnswer(0), morphism.From);
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _s }, _tySubst.Apply(BV(oldTy), BV(morphism), _s))) == Status.SATISFIABLE)
+                return WithDbg(new Ty(ExtractAnswer(0), morphism.From));
 
             string? tyDbg = oldTy.GetDebugInfo();
             string? ctxMorphDbg = morphism.GetDebugInfo();
@@ -600,8 +646,8 @@ namespace QT
             Debug.Assert(IsCtxEq(oldTm.Context, morphism.To));
             Debug.Assert(IsCtxEq(morphism.From, newTy.Context));
 
-            //if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _tmSubst.Apply(BV(oldTm), BV(morphism), _M))) == Status.SATISFIABLE)
-            //    return new Tm(ExtractAnswer(0), newTy);
+            if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _tmSubst.Apply(BV(oldTm), BV(morphism), _M))) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), newTy));
 
             string? ctxMorphDbg = morphism.GetDebugInfo();
             string? tmDbg = oldTm.GetDebugInfo();
@@ -610,6 +656,12 @@ namespace QT
             Tm tm = NewTm(newTy, dbg);
             _fix.AddFact(_tmSubst, oldTm.Id, morphism.Id, tm.Id);
             return tm;
+        }
+
+        private Tm SubstTermAndType(Tm oldTm, CtxMorphism morphism)
+        {
+            Ty newTy = SubstType(oldTm.Ty, morphism);
+            return SubstTerm(oldTm, morphism, newTy);
         }
 
         public void Dispose()
@@ -678,8 +730,7 @@ namespace QT
                         Debug.Assert(_tc.IsComprehension(ty, nextCtx));
                         Debug.Assert(_tc.IsCtxEq(tm.Context, ty.Context));
 
-                        Ty tySubst = _tc.SubstType(tm.Ty, ctxProj);
-                        Tm tmSubst = _tc.SubstTerm(tm, ctxProj, tySubst);
+                        Tm tmSubst = _tc.SubstTermAndType(tm, ctxProj);
                         return tmSubst;
                     }
                 }
@@ -739,8 +790,8 @@ namespace QT
 (declare-rel TmTy (CtxS TmS TyS))
 
 ; Functional relations
-; IdMorph G f -- f is the identity context morphism for G
-(declare-rel IdMorph (CtxS CtxMorphS))
+; IdMorph f -- f is an identity context morphism
+(declare-rel IdMorph (CtxMorphS))
 ; TySubst s f t -- t is s{f}
 (declare-rel TySubst (TyS CtxMorphS TyS))
 ; TmSubst M f N -- N is M{f}
@@ -757,10 +808,10 @@ namespace QT
 (declare-rel Extension (CtxMorphS TmS CtxMorphS))
 
 ; Type forming/introduction/elimination
-(declare-rel Nat (CtxS TyS))
-(declare-rel Zero (CtxS TmS))
-; Succ G M -- M is successor term in G (which is of the form D, pred : nat).
-(declare-rel Succ (CtxS TmS))
+(declare-rel Nat (TyS))
+(declare-rel Zero (TmS))
+; Succ M -- M is successor term (in a context that ends with a nat -- the predecessor)
+(declare-rel Succ (TmS))
 ; NatElim M N O -- O is nat elimination with zero-case M and successor-case N
 (declare-rel NatElim (TmS TmS TmS))
 
@@ -782,6 +833,9 @@ namespace QT
 (declare-var l CtxMorphS)
 (declare-var p CtxMorphS)
 (declare-var q CtxMorphS)
+(declare-var gf CtxMorphS)
+(declare-var hg CtxMorphS)
+(declare-var hgf CtxMorphS)
 
 (declare-var r TyS)
 (declare-var s TyS)
@@ -798,6 +852,7 @@ namespace QT
 (declare-var R TmS)
 (declare-var S TmS)
 (declare-var T TmS)
+(declare-var U TmS)
 
 ;;;;;;;;;; Equalities ;;;;;;;;;;
 
@@ -862,10 +917,9 @@ namespace QT
       Tm-Ctxv)
 
 ; IdMorph
-(rule (=> (and (IdMorph G f)
-               (CtxEq G D)
+(rule (=> (and (IdMorph f)
                (CtxMorphEq f g))
-          (IdMorph D g))
+          (IdMorph g))
       IdMorph-Congr)
 
 ; TySubst
@@ -923,24 +977,21 @@ namespace QT
       Extension-Congr)
 
 ; Nat
-(rule (=> (and (Nat G s)
-               (CtxEq G D)
+(rule (=> (and (Nat s)
                (TyEq s t))
-          (Nat D t))
+          (Nat t))
       Nat-Congr)
 
 ; Zero
-(rule (=> (and (Zero G M)
-               (CtxEq G D)
+(rule (=> (and (Zero M)
                (TmEq M N))
-          (Zero D N))
+          (Zero N))
       Zero-Congr)
 
 ; Succ
-(rule (=> (and (Succ G M)
-               (CtxEq G D)
+(rule (=> (and (Succ M)
                (TmEq M N))
-          (Succ D N))
+          (Succ N))
       Succ-Congr)
 
 ; NatElim
@@ -953,8 +1004,8 @@ namespace QT
 
 ;;;;;;;;;; Functionality rules ;;;;;;;;;;
 
-(rule (=> (and (IdMorph G f)
-               (IdMorph G g))
+(rule (=> (and (IdMorph f) (CtxMorph G f G)
+               (IdMorph g) (CtxMorph G g G))
           (CtxMorphEq f g))
       IdMorph-Functional)
 
@@ -992,18 +1043,18 @@ namespace QT
           (CtxMorphEq g h))
       Extension-Functional)
 
-(rule (=> (and (Nat G s)
-               (Nat G t))
+(rule (=> (and (Nat s) (Ty G s)
+               (Nat t) (Ty G t))
           (TyEq s t))
       Nat-Functional)
 
-(rule (=> (and (Zero G M)
-               (Zero G N))
+(rule (=> (and (Zero M) (TmTy G M s)
+               (Zero N) (TmTy G N s))
           (TmEq M N))
       Zero-Functional)
 
-(rule (=> (and (Succ G M)
-               (Succ G N))
+(rule (=> (and (Succ M) (TmTy G M s)
+               (Succ N) (TmTy G N s))
           (TmEq M N))
       Succ-Functional)
 
@@ -1014,101 +1065,174 @@ namespace QT
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
-; (f . g) . h = f . (g . h)
-(rule (=> (and (Comp f g i)
-               (Comp i h j)
-               (Comp g h k)
-               (Comp f k l))
-          (CtxMorphEq j l))
-      Comp-Assoc)
+;; (f . g) . h = f . (g . h)
+;(rule (=> (and (Comp f g i)
+;               (Comp i h j)
+;               (Comp g h k)
+;               (Comp f k l))
+;          (CtxMorphEq j l))
+;      Comp-Assoc)
+;; s{id} = s
+;(rule (=> (and (TySubst s f t)
+;               (IdMorph f))
+;          (TyEq s t))
+;      Ty-Id)
+;; s{g . f} = s{g}{f}
+;(rule (=> (and (Comp g f h)
+;               (TySubst s h t)
+;               (TySubst s g u)
+;               (TySubst u f v))
+;          (TyEq t v))
+;      Ty-Comp)
+;; M{id} = M
+;(rule (=> (and (TmSubst M f N)
+;               (IdMorph f))
+;          (TmEq M N))
+;      Tm-Id)
+;; M{g . f} = M{g}{f}
+;(rule (=> (and (Comp g f h)
+;               (TmSubst M h N)
+;               (TmSubst M g O)
+;               (TmSubst O f P))
+;          (TmEq N P))
+;      Tm-Comp)
+;; p(s) . 〈f, M〉= f
+;(rule (=> (and (ProjCtx G s p)
+;               (Extension f M e)
+;               (Comp p e g))
+;          (CtxMorphEq g f))
+;      Cons-L)
+;; M = v /\ 〈f, N〉= e /\ M{e} = O => O = N
+;(rule (=> (and (ProjTm G s M)
+;               (Extension f N e)
+;               (TmSubst M e O))
+;          (TmEq O N))
+;      Cons-R)
+;
+;; 〈f, M〉. g = 〈f . g, M{g}〉
+;; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
+;; => h = j
+;(rule (=> (and (Extension f M e)
+;               (Comp e g h)
+;               (Comp f g i)
+;               (TmSubst M g N)
+;               (Extension i N j))
+;          (CtxMorphEq h j))
+;      Cons-Natural)
+
+; h . (g . f) . h = (h . g) . f
+(rule (=> (and (Comp g f gf)
+               (Comp h gf hgf)
+               (Comp h g hg))
+          (Comp hg f hgf))
+      Comp-Assoc-1)
+
+(rule (=> (and (Comp h g hg)
+               (Comp hg f hgf)
+               (Comp g f gf))
+          (Comp h gf hgf))
+      Comp-Assoc-2)
 
 ; s{id} = s
 (rule (=> (and (TySubst s f t)
-               (IdMorph G f))
+               (IdMorph f))
           (TyEq s t))
       Ty-Id)
 
 ; s{g . f} = s{g}{f}
 (rule (=> (and (Comp g f h)
                (TySubst s h t)
-               (TySubst s g u)
-               (TySubst u f v))
-          (TyEq t v))
-      Ty-Comp)
+               (TySubst s g u))
+          (TySubst u f t))
+      Ty-Comp-1)
+
+(rule (=> (and (TySubst s g t)
+               (TySubst t f u)
+               (Comp g f h))
+          (TySubst s h u))
+      Ty-Comp-2)
 
 ; M{id} = M
 (rule (=> (and (TmSubst M f N)
-               (IdMorph G f))
+               (IdMorph f))
           (TmEq M N))
       Tm-Id)
 
 ; M{g . f} = M{g}{f}
 (rule (=> (and (Comp g f h)
                (TmSubst M h N)
-               (TmSubst M g O)
-               (TmSubst O f P))
-          (TmEq N P))
-      Tm-Comp)
+               (TmSubst M g O))
+          (TmSubst O f N))
+      Tm-Comp-1)
 
-; p(s) . 〈f, M〉= f
+(rule (=> (and (TmSubst M g N)
+               (TmSubst N f O)
+               (Comp g f h))
+          (TmSubst M h O))
+      Tm-Comp-2)
+
+; p(s) . 〈f, M〉 = f
 (rule (=> (and (ProjCtx G s p)
-               (Extension f M e)
-               (Comp p e g))
-          (CtxMorphEq g f))
+               (Extension f M e))
+          (Comp p e f))
       Cons-L)
 
-; M = v /\ 〈f, N〉= e /\ M{e} = O => O = N
-(rule (=> (and (ProjTm G s M)
-               (Extension f N e)
-               (TmSubst M e O))
-          (TmEq O N))
+; v{〈f, N〉} = N
+; M = v /\ 〈f, N〉= e => M{e} = N
+(rule (=> (and (ProjTm G s M) (TmTy D M t)
+               (Extension f N e) (CtxMorph A e D))
+          (TmSubst M e N))
       Cons-R)
 
-; 〈f, M〉. g = 〈f . g, M{g}〉
-; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
-; => h = j
+; 〈f, M〉 . g = 〈f . g, M{g}〉
 (rule (=> (and (Extension f M e)
                (Comp e g h)
                (Comp f g i)
-               (TmSubst M g N)
-               (Extension i N j))
-          (CtxMorphEq h j))
-      Cons-Natural)
+               (TmSubst M g N))
+          (Extension i N e))
+      Cons-Natural-1)
 
-; 〈p(s), v〉= id
-; p(s) = p /\ M = v /\ 〈p, M〉= e /\ id = f => e = f
+(rule (=> (and (Comp f g h)
+               (TmSubst M g N)
+               (Extension h N e)
+               (Extension f M i))
+          (Comp i g e))
+      Cons-Natural-2)
+
+; 〈p(s), v〉 = id
 (rule (=> (and (ProjCtx G s p)
                (ProjTm G s M)
-               (Extension p M e)
-               (Comprehension G s D)
-               (IdMorph D f))
-          (CtxMorphEq e f))
-      Cons-Id)
+               (Extension p M e))
+          (IdMorph f))
+      Cons-Id-1)
+
+(rule (=> (and (IdMorph f) (CtxMorph D f D)
+               (ProjCtx G s p) (CtxMorph D p G)
+               (ProjTm G s M))
+          (Extension p M f))
+      Cons-Id-2)
 
 ;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
 
-; Nat^D{f : G -> D} = Nat^G
-(rule (=> (and (Nat G s)
-               (Nat D t)
+; Nat(D){f : G -> D} = Nat(G)
+(rule (=> (and (Nat s) (Ty D s)
                (CtxMorph G f D)
-               (TySubst t f u))
-          (TyEq u s))
+               (TySubst s f t))
+          (Nat t))
       Nat-Natural)
 
-; Zero^D{f : G -> D} = Zero^G
-(rule (=> (and (Zero G M)
-               (Zero D N)
+; Zero(D){f : G -> D} = Zero(G)
+(rule (=> (and (Zero M) (TmTy D M s)
                (CtxMorph G f D)
                (TmSubst N f O))
-          (TmEq O M))
+          (Zero O))
       Zero-Natural)
 
-; Succ^D{f : G -> D} = Succ^G
-(rule (=> (and (Succ G M)
-               (Succ D N)
+; Succ(D){f : G -> D} = Succ(G)
+(rule (=> (and (Succ M) (TmTy D M s)
                (CtxMorph G f D)
                (TmSubst N f O))
-          (TmEq O M))
+          (Succ O))
       Succ-Natural)
 
 ; Given
@@ -1130,13 +1254,24 @@ namespace QT
 ;               (CtxMorph G D f)
 ;               (TmSubst  f P)
 ; 
-; (rule (=> (and (NatElim M N O P)
-;                (Zero G M))
-;           (TmEq P N))
-;       NatElim-0)
-; 
-; (rule (=> (and (NatElim M N O P)
-;                (Succ G M)
+(rule (=> (and (NatElim M N O)   ; if O is nat-elim
+               (TmSubst O f P)   ; and O{f} = P
+               (Extension g Q f) ; and <g, Q> = f
+               (Zero Q))         ; and Q = 0
+          (TmEq P M))            ; then the substitution is the zero case.
+      NatElim-0)
+
+(rule (=> (and (NatElim M N O)   ; if O is nat-elim
+               (TmSubst O f P)   ; and O{f} = P
+               (Extension g Q f) ; and <g, Q> = f (Q is discriminee)
+               (TmSubst R h Q)   ; and R{h} = Q
+               (Succ R)          ; and R is a successor term
+               (Extension i S h) ; and <i, S> = h (discriminee is successor of S)
+               (TmSubst N j T)   ; and N{j} = T (successor case is substitution)
+               (Extension k O j) ; and <k, O> = j (substituting IH by nat-elim itself)
+               (Extension l S k)); and <l, S> = k (substituting pred by S)
+          (TmEq P T))
+      NatElim-S)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }
