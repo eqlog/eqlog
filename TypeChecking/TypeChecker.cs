@@ -39,10 +39,14 @@ namespace QT
         private readonly FuncDecl _projTm;
         private readonly FuncDecl _extension;
 
+        private readonly FuncDecl _id;
+        private readonly FuncDecl _refl;
+
         private readonly FuncDecl _bool;
         private readonly FuncDecl _true;
         private readonly FuncDecl _false;
         private readonly FuncDecl _boolElim;
+
         private readonly FuncDecl _nat;
         private readonly FuncDecl _zero;
         private readonly FuncDecl _succ;
@@ -110,6 +114,8 @@ namespace QT
             _projCtx = _rels["ProjCtx"];
             _projTm = _rels["ProjTm"];
             _extension = _rels["Extension"];
+            _id = _rels["Id"];
+            _refl = _rels["Refl"];
             _bool = _rels["Bool"];
             _true = _rels["True"];
             _false = _rels["False"];
@@ -225,6 +231,9 @@ namespace QT
         private bool IsComprehension(Ty ty, ModelCtx ctx)
             => _fix.Query((BoolExpr)_comprehension.Apply(BV(ty.Context), BV(ty), BV(ctx))) == Status.SATISFIABLE;
 
+        private bool IsId(Tm a, Tm b, Ty ty)
+            => _fix.Query((BoolExpr)_id.Apply(BV(a), BV(b), BV(ty))) == Status.SATISFIABLE;
+
         private BitVecNum BV(ModelObject obj) => _z3Ctx.MkBV(obj.Id, SortSize);
 
         public ModelObject TypeCheck(Def def)
@@ -309,6 +318,17 @@ namespace QT
                         };
                     }
                 case AppExpr { Fun: string fun, Args: var args }:
+                    if (fun == "id" && args.Count == 2)
+                    {
+                        Tm a = TypeCheckAnyTerm(args[0]);
+                        Tm b = TypeCheckTerm(args[1], a.Ty);
+                        return FormId(a, b);
+                    }
+                    if (fun == "refl" && args.Count == 1)
+                    {
+                        Tm a = TypeCheckAnyTerm(args[0]);
+                        return IntroduceRefl(a, FormId(a, a));
+                    }
                     if (fun == "S")
                     {
                         Ty natInCurCtx = FormNat(_ctxInfo.Ctx);
@@ -388,6 +408,44 @@ namespace QT
             ModelCtx newCtx = NewCtx(dbg);
             AddFact(_comprehension, ctx.Id, ty.Id, newCtx.Id);
             return newCtx;
+        }
+
+        private Ty FormId(Tm a, Tm b)
+        {
+            Debug.Assert(IsTyEq(a.Ty, b.Ty));
+
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _s },
+                    (BoolExpr)_id.Apply(BV(a), BV(b), _s));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Ty(ExtractAnswer(0), a.Context));
+
+            string? aDbg = a.GetDebugInfo();
+            string? bDbg = b.GetDebugInfo();
+            string? dbg = aDbg != null && bDbg != null ? $"Id({aDbg}, {bDbg})" : null;
+            Ty id = NewTy(a.Context, dbg);
+            AddFact(_id, a.Id, b.Id, id.Id);
+            return id;
+        }
+
+        private Tm IntroduceRefl(Tm a, Ty idTy)
+        {
+            Debug.Assert(IsId(a, a, idTy));
+
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _M },
+                    (BoolExpr)_refl.Apply(_M) &
+                    (BoolExpr)_tmTy.Apply(BV(a.Context), _M, BV(idTy)));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), idTy));
+
+            string? aDbg = a.GetDebugInfo();
+            string? dbg = aDbg != null ? $"Refl({aDbg})" : null;
+            Tm refl = NewTm(idTy, dbg);
+            AddFact(_refl, refl.Id);
+            return refl;
         }
 
         private Ty FormBool(ModelCtx ctx)
@@ -1084,6 +1142,9 @@ namespace QT
 (declare-rel Weakening (CtxMorphS TyS CtxMorphS))
 
 ; Type forming/introduction/elimination
+(declare-rel Id (TmS TmS TyS))
+(declare-rel Refl (TmS))
+
 (declare-rel Bool (TyS))
 (declare-rel True (TmS))
 (declare-rel False (TmS))
@@ -1259,6 +1320,20 @@ namespace QT
           (Extension h N i))
       Extension-Congr)
 
+; Id
+(rule (=> (and (Id M N s)
+               (TmEq M O)
+               (TmEq N P)
+               (TyEq s t))
+          (Id O P t))
+      Id-Congr)
+
+; Refl
+(rule (=> (and (Refl M)
+               (TmEq M N))
+          (Refl N))
+      Refl-Congr)
+
 ; Bool
 (rule (=> (and (Bool s)
                (TyEq s t))
@@ -1351,6 +1426,16 @@ namespace QT
                (Extension f M h))
           (CtxMorphEq g h))
       Extension-Functional)
+
+(rule (=> (and (Id M N s)
+               (Id M N t))
+          (TyEq s t))
+      Id-Functional)
+
+(rule (=> (and (Refl M) (TmTy G M s)
+               (Refl N) (TmTy G N s))
+          (TmEq M N))
+      Refl-Functional)
 
 (rule (=> (and (Bool s) (Ty G s)
                (Bool t) (Ty G t))
@@ -1559,6 +1644,31 @@ namespace QT
       Weakening-Fill)
 
 ;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
+
+; (Id M N){f} = Id M{f} N{f}
+(rule (=> (and (Id M N O)
+               (TmSubst O f P)
+               (TmSubst M f Q)
+               (TmSubst N f R))
+          (Id Q R P))
+      Id-Natural)
+
+; Refl(D){f : G -> D} = Refl(G)
+(rule (=> (and (Refl M) (TmTy D M s)
+               (CtxMorph G f D)
+               (TmSubst M f O))
+          (Refl O))
+      Refl-Natural)
+
+(rule (=> (and (TmTy G M s)
+               (Id N O s))
+          (TmEq N O))
+      Reflection)
+
+(rule (=> (and (TmTy G M s)
+               (Id N O s))
+          (Refl M))
+      Id-Can)
 
 ; Bool(D){f : G -> D} = Bool(G)
 (rule (=> (and (Bool s) (Ty D s)
