@@ -1,8 +1,7 @@
 def negb (b : bool) : bool :=
   let x : bool := false in
-  dump all (elim x into (_ : bool) : bool
-  | => false
-  | => true).
+  let _ : x = false := refl false in
+  b.
 
 (*
 def plus2 (b a : nat) : nat := b + a.
