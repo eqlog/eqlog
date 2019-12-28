@@ -39,6 +39,10 @@ namespace QT
         private readonly FuncDecl _projTm;
         private readonly FuncDecl _extension;
 
+        private readonly FuncDecl _bool;
+        private readonly FuncDecl _true;
+        private readonly FuncDecl _false;
+        private readonly FuncDecl _boolElim;
         private readonly FuncDecl _nat;
         private readonly FuncDecl _zero;
         private readonly FuncDecl _succ;
@@ -106,6 +110,10 @@ namespace QT
             _projCtx = _rels["ProjCtx"];
             _projTm = _rels["ProjTm"];
             _extension = _rels["Extension"];
+            _bool = _rels["Bool"];
+            _true = _rels["True"];
+            _false = _rels["False"];
+            _boolElim = _rels["BoolElim"];
             _nat = _rels["Nat"];
             _zero = _rels["Zero"];
             _succ = _rels["Succ"];
@@ -270,6 +278,12 @@ namespace QT
             switch (expr)
             {
                 case IdExpr { Id: string id }:
+                    if (id == "bool")
+                        return FormBool(_ctxInfo.Ctx);
+                    if (id == "true")
+                        return IntroduceTrue(FormBool(_ctxInfo.Ctx));
+                    if (id == "false")
+                        return IntroduceFalse(FormBool(_ctxInfo.Ctx));
                     if (id == "nat")
                         return FormNat(_ctxInfo.Ctx);
                     if (id == "O")
@@ -327,6 +341,8 @@ namespace QT
                     goto default;
                 case ElimExpr elim:
                     Tm discTm = TypeCheckAnyTerm(elim.Discriminee);
+                    if (IsTyEq(discTm.Ty, FormBool(_ctxInfo.Ctx)))
+                        return ElimBool(discTm, elim);
                     if (IsTyEq(discTm.Ty, FormNat(_ctxInfo.Ctx)))
                         return ElimNat(discTm, elim);
 
@@ -374,6 +390,22 @@ namespace QT
             return newCtx;
         }
 
+        private Ty FormBool(ModelCtx ctx)
+        {
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _s },
+                    (BoolExpr)_bool.Apply(_s) &
+                    (BoolExpr)_ty.Apply(BV(ctx), _s));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Ty(ExtractAnswer(0), ctx));
+
+            string? ctxDbg = ctx.GetDebugInfo();
+            Ty @bool = NewTy(ctx, $"bool({ctxDbg})");
+            AddFact(_bool, @bool.Id);
+            return @bool;
+        }
+
         private Ty FormNat(ModelCtx ctx)
         {
             Quantifier query =
@@ -388,6 +420,40 @@ namespace QT
             Ty nat = NewTy(ctx, $"nat({ctxDbg})");
             AddFact(_nat, nat.Id);
             return nat;
+        }
+
+        private Tm IntroduceTrue(Ty @bool)
+        {
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _M },
+                    (BoolExpr)_true.Apply(_M) &
+                    (BoolExpr)_tmTy.Apply(BV(@bool.Context), _M, BV(@bool)));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), @bool));
+
+            string? ctxDbg = @bool.Context.GetDebugInfo();
+            string? dbg = ctxDbg != null ? $"true({ctxDbg})" : null;
+            Tm @true = NewTm(@bool, dbg);
+            AddFact(_true, @true.Id);
+            return @true;
+        }
+
+        private Tm IntroduceFalse(Ty @bool)
+        {
+            Quantifier query =
+                _z3Ctx.MkExists(
+                    new[] { _M },
+                    (BoolExpr)_false.Apply(_M) &
+                    (BoolExpr)_tmTy.Apply(BV(@bool.Context), _M, BV(@bool)));
+            if (_fix.Query(query) == Status.SATISFIABLE)
+                return WithDbg(new Tm(ExtractAnswer(0), @bool));
+
+            string? ctxDbg = @bool.Context.GetDebugInfo();
+            string? dbg = ctxDbg != null ? $"false({ctxDbg})" : null;
+            Tm @false = NewTm(@bool, dbg);
+            AddFact(_false, @false.Id);
+            return @false;
         }
 
         private uint ExtractAnswer(int varIndex)
@@ -512,6 +578,51 @@ namespace QT
             Tm tm = NewTm(fullTy, dbg);
             AddFact(_projTm, addedVarTy.Context.Id, addedVarTy.Id, tm.Id);
             return tm;
+        }
+
+        private Tm ElimBool(Tm discriminee, ElimExpr elim)
+        {
+            if (elim.IntoExts.Count != 1)
+                throw new Exception($"Invalid context extension {string.Join(" ", elim.IntoExts)}");
+
+            if (elim.Cases.Count != 2)
+                throw new Exception($"Expected 2 cases for nat elimination");
+
+            if (elim.Cases[0].CaseExts.Count != 0)
+                throw new Exception($"{elim.Cases[0]}: expected no context extensions");
+
+            if (elim.Cases[1].CaseExts.Count != 0)
+                throw new Exception($"{elim.Cases[1]}: expected no context extensions");
+
+            Ty boolInElimCtx = FormBool(_ctxInfo.Ctx);
+            Ty intoTy;
+            using (_ctxInfo.Remember())
+            {
+                Ty extTy = ExtendContext(elim.IntoExts[0]);
+                if (!IsTyEq(extTy, boolInElimCtx))
+                {
+                    string? intoExtTyDbg = extTy.GetDebugInfo();
+                    string dbg = intoExtTyDbg != null ? $"Expected extension by bool, got extension by {intoExtTyDbg}" : "Expected extension by bool";
+                    throw new Exception(dbg);
+                }
+
+                intoTy = TypeCheckType(elim.IntoTy);
+            }
+
+            Tm @true = IntroduceTrue(boolInElimCtx);
+            Ty expectedTyTrueCase = SubstType(intoTy, TermBar(@true, intoTy.Context));
+            Tm trueCase = TypeCheckTerm(elim.Cases[0].Body, expectedTyTrueCase);
+
+            Tm @false = IntroduceFalse(boolInElimCtx);
+            Ty expectedTyFalseCase = SubstType(intoTy, TermBar(@false, intoTy.Context));
+            Tm falseCase = TypeCheckTerm(elim.Cases[1].Body, expectedTyFalseCase);
+
+            Tm elimTm = NewTm(intoTy, "elimb");
+            AddFact(_boolElim, trueCase.Id, falseCase.Id, elimTm.Id);
+
+            CtxMorphism addDisc = TermBar(discriminee, intoTy.Context);
+            Tm substTm = SubstTermAndType(elimTm, addDisc);
+            return substTm;
         }
 
         private Tm ElimNat(Tm discriminee, ElimExpr elim)
@@ -969,7 +1080,15 @@ namespace QT
 ; Extension f M g -- g = 〈f, M〉
 (declare-rel Extension (CtxMorphS TmS CtxMorphS))
 
+; Intermediate relations
+(declare-rel Weakening (CtxMorphS TyS CtxMorphS))
+
 ; Type forming/introduction/elimination
+(declare-rel Bool (TyS))
+(declare-rel True (TmS))
+(declare-rel False (TmS))
+(declare-rel BoolElim (TmS TmS TmS))
+
 (declare-rel Nat (TyS))
 (declare-rel Zero (TmS))
 ; Succ M -- M is successor term (in a context that ends with a nat -- the predecessor)
@@ -1140,6 +1259,32 @@ namespace QT
           (Extension h N i))
       Extension-Congr)
 
+; Bool
+(rule (=> (and (Bool s)
+               (TyEq s t))
+          (Bool t))
+      Bool-Congr)
+
+; True
+(rule (=> (and (True M)
+               (TmEq M N))
+          (True N))
+      True-Congr)
+
+; False
+(rule (=> (and (False M)
+               (TmEq M N))
+          (False N))
+      False-Congr)
+
+; BoolElim
+(rule (=> (and (BoolElim M N O)
+               (TmEq M P)
+               (TmEq N Q)
+               (TmEq O R))
+          (BoolElim P Q R))
+      BoolElim-Congr)
+
 ; Nat
 (rule (=> (and (Nat s)
                (TyEq s t))
@@ -1206,6 +1351,26 @@ namespace QT
                (Extension f M h))
           (CtxMorphEq g h))
       Extension-Functional)
+
+(rule (=> (and (Bool s) (Ty G s)
+               (Bool t) (Ty G t))
+          (TyEq s t))
+      Bool-Functional)
+
+(rule (=> (and (True M) (TmTy G M s)
+               (True N) (TmTy G N s))
+          (TmEq M N))
+      True-Functional)
+
+(rule (=> (and (False M) (TmTy G M s)
+               (False N) (TmTy G N s))
+          (TmEq M N))
+      False-Functional)
+
+(rule (=> (and (BoolElim M N O)
+               (BoolElim M N P))
+          (TmEq O P))
+      BoolElim-Functional)
 
 (rule (=> (and (Nat s) (Ty G s)
                (Nat t) (Ty G t))
@@ -1381,7 +1546,50 @@ namespace QT
           (Extension p M f))
       Cons-Id-2)
 
+;;;;;;;;;; Intermediate rules ;;;;;;;;;;
+
+; <f . p1(D.s{f}), p2(D.s{f})> is q(f, s)
+(rule (=> (and (CtxMorph G f D)
+               (TySubst s f t)
+               (ProjCtx D t p)
+               (ProjTm D t M)
+               (Comp f p g)
+               (Extension f M e))
+          (Weakening f s e))
+      Weakening-Fill)
+
 ;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
+
+; Bool(D){f : G -> D} = Bool(G)
+(rule (=> (and (Bool s) (Ty D s)
+               (CtxMorph G f D)
+               (TySubst s f t))
+          (Bool t))
+      Bool-Natural)
+
+; True(D){f : G -> D} = True(G)
+(rule (=> (and (True M) (TmTy D M s)
+               (CtxMorph G f D)
+               (TmSubst M f O))
+          (True O))
+      True-Natural)
+
+; False(D){f : G -> D} = False(G)
+(rule (=> (and (False M) (TmTy D M s)
+               (CtxMorph G f D)
+               (TmSubst M f O))
+          (False O))
+      False-Natural)
+
+; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
+(rule (=> (and (BoolElim M N O)
+               (CtxMorph G f D)
+               (Weakening f s q) (Bool s) (Ty D s)
+               (TmSubst O q P)
+               (TmSubst M f Q)
+               (TmSubst N f R))
+          (BoolElim Q R P))
+      BoolElim-Natural)
 
 ; Nat(D){f : G -> D} = Nat(G)
 (rule (=> (and (Nat s) (Ty D s)
@@ -1403,6 +1611,20 @@ namespace QT
                (TmSubst M f O))
           (Succ O))
       Succ-Natural)
+
+(rule (=> (and (BoolElim M N O)   ; if O is bool-elim
+               (TmSubst O f P)    ; and O{f} = P
+               (Extension g Q f)  ; and <g, Q> = f
+               (True Q))          ; and Q = True
+          (TmEq P M))             ; then the substitution is the true case.
+      BoolElim-True)
+
+(rule (=> (and (BoolElim M N O)
+               (TmSubst O f P)
+               (Extension g Q f)
+               (False Q))
+          (TmEq P N))
+      BoolElim-False)
 
 ; (NatElim M N){f} = NatElim M{p1 . f . } N
 ;(rule (=> (and (NatElim M N O) (TmTy A O s) (Comprehension G t A)
