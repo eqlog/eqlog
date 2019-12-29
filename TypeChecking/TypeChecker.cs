@@ -1615,11 +1615,11 @@ namespace QT
 ;;;;;;;;;; Type forming/introduction/elimination ;;;;;;;;;;
 
 ; (Id M N){f} = Id M{f} N{f}
-(rule (=> (and (Id M N O)
-               (TmSubst O f P)
+(rule (=> (and (Id M N s)
+               (TySubst s f t)
                (TmSubst M f Q)
                (TmSubst N f R))
-          (Id Q R P))
+          (Id Q R t))
       Id-Natural-1)
 
 (rule (=> (and (TmSubst M f O)
