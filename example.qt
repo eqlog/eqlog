@@ -1,52 +1,8 @@
-def negb (a : bool) (p : a = false) : a = false :=
-  dump all p.
-
-(*
-def plus2 (b a : nat) : nat := b + a.
-
-def plus_0_l (a : nat) : 0 + a = a :=
-  refl a.
-
-def plus_Sn_m (n m : nat) : S n + m = S (n + m) :=
-  dump TmEq (dump ElimNat (refl (S n + m))).
-
-def test (a : nat) : a = elim a into (_ : nat) : nat
-                         | => 0
-                         | (pred : nat) (_ : nat) => S pred :=
-  elim a into (n : nat) : (n = elim n into (_ : nat) : nat
-                               | => 0
-                               | (pred : nat) (_ : nat) => S pred)
-  | => refl 0
-  | (pred : nat)
-    (_ : pred = elim pred into (_ : nat) : nat
-                | => 0
-                | (pred : nat) (_ : nat) => S pred) => refl (S pred).
-  
-def plus (a b : nat) : nat :=
-
-def plus_0_l (a : nat) : 0 + a = a :=
-  refl a.
-
-def plus_2_2 : 2 + 2 = 4 :=
-  let _ : 1 + 3 = 2 + 2 := plus_Sn_m 2 2 in
-  let _ : 0 + 4 = 1 + 3 := plus_Sn_m 1 3 in
-  refl 4.
-
-def plus_0_r (a : nat) : a + 0 = a :=
-  elim a into (n : nat) : n + 0 = n
-  | => plus_0_l 0
-  | (pred : nat)
-    (IH : pred + 0 = pred) =>
-    let _ : S pred + 0 = S (pred + 0) := plus_Sn_m pred 0 in
-    refl (S pred).
-
-def zero (a b c d e f : nat)
-         (_ : a = b)
-         (_ : b = c)
-         (_ : c = d)
-         (_ : d = e)
-         (_ : e = f) : a = f :=
-  dump TmEq (refl a).
-
-def UIP (a b : nat) (p q : a = b) : p = q :=
-*)
+def eta (a : bool) : (a = elim a into (_ : bool) : bool
+                         | => true
+                         | => false) :=
+  elim a into (a : bool) : (a = elim a into (_ : bool) : bool
+                                | => true
+                                | => false)
+  | => dump all (refl true)
+  | => refl false.
