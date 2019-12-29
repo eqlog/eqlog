@@ -253,7 +253,7 @@ namespace QT
         private Ty ExtendContext(CtxExt ext)
         {
             Ty ty = TypeCheckType(ext.Type);
-            _ctxInfo.Add(ext.Name.IsDiscard ? null : ext.Name.Name, ty);
+            _ctxInfo.Extend(ext.Name.IsDiscard ? null : ext.Name.Name, ty);
             return ty;
         }
 
@@ -304,18 +304,9 @@ namespace QT
                     {
                         Ty ty = TypeCheckType(let.Type);
                         Tm tm = TypeCheckTerm(let.Val, ty);
-                        _ctxInfo.Add(let.Name.IsDiscard ? null : let.Name.Name, ty);
-                        Tm added = _ctxInfo.AccessLast();
-                        CtxMorphism projCtx = ProjCtx(added.Context, ty);
-                        AddFact(_tmEq, added.Id, SubstTerm(tm, projCtx, added.Ty).Id);
-
-                        CtxMorphism addTm = TermBar(tm, added.Context);
-                        return TypeCheck(let.Body) switch
-                        {
-                            Ty bodyTy => SubstType(bodyTy, addTm),
-                            Tm bodyTm => SubstTermAndType(bodyTm, addTm),
-                            var x => x
-                        };
+                        if (!let.Name.IsDiscard)
+                            _ctxInfo.Define(let.Name.Name, tm);
+                        return TypeCheck(let.Body);
                     }
                 case AppExpr { Fun: string fun, Args: var args }:
                     if (fun == "id" && args.Count == 2)
@@ -995,7 +986,7 @@ namespace QT
         {
             private readonly TypeChecker _tc;
 
-            private readonly List<(string? name, Ty ty)> _vars = new List<(string? name, Ty ty)>();
+            private readonly List<(string? name, ModelObject obj)> _vars = new List<(string? name, ModelObject obj)>();
 
             public ContextInfo(TypeChecker tc, ModelCtx initialCtx)
             {
@@ -1007,7 +998,8 @@ namespace QT
 
             public ModelCtx Ctx { get; private set; }
 
-            public void Add(string? name, Ty ty)
+            // Extend the context with a term of the specified type.
+            public void Extend(string? name, Ty ty)
             {
                 Debug.Assert(_tc.IsCtxEq(ty.Context, Ctx));
 
@@ -1016,10 +1008,17 @@ namespace QT
                 Ctx = newCtx;
             }
 
+            // Define a term in the current context.
+            public void Define(string name, Tm tm)
+            {
+                Debug.Assert(_tc.IsCtxEq(tm.Context, Ctx));
+                _vars.Add((name, tm));
+            }
+
             // Construct a term that accesses the var by the specified name.
             public Tm AccessVar(string name)
             {
-                int index = _vars.FindIndex(t => t.name == name);
+                int index = _vars.FindLastIndex(t => t.name == name);
                 if (index == -1)
                     throw new ArgumentException($"No variable exists by name {name}", nameof(name));
 
@@ -1040,21 +1039,32 @@ namespace QT
 
                 Tm Go(int i, ModelCtx nextCtx)
                 {
-                    (string? name, Ty ty) = _vars[i];
+                    (string? name, ModelObject obj) = _vars[i];
                     // Make context morphism that gets us from nextCtx to ty's ctx by projecting out added variable.
-                    CtxMorphism ctxProj = _tc.ProjCtx(nextCtx, ty);
 
                     if (i == index)
                     {
+                        if (obj is Tm tm)
+                            return tm;
+
+                        Ty ty = (Ty)obj;
+                        CtxMorphism ctxProj = _tc.ProjCtx(nextCtx, ty);
                         // addedTy is in ctx, and we want it in nextCtx, so
                         // make addedTy{ctxProj} = tySubst in nextCtx.
                         Ty tySubst = _tc.SubstType(ty, ctxProj);
 
-                        Tm tmProj = _tc.ProjTm(ty, tySubst, name);
+                        Tm tmProj = _tc.ProjTm(ty, tySubst);
                         return tmProj;
                     }
                     else
                     {
+                        if (obj is Tm)
+                        {
+                            // Skip definition that does not extend context
+                            return Go(i - 1, nextCtx);
+                        }
+
+                        Ty ty = (Ty)obj;
                         Tm tm = Go(i - 1, ty.Context);
                         // nextCtx = ctx, x : ty[in ctx]
                         // tm is term that accesses variable in ty's ctx
@@ -1063,6 +1073,7 @@ namespace QT
                         Debug.Assert(_tc.IsComprehension(ty, nextCtx));
                         Debug.Assert(_tc.IsCtxEq(tm.Context, ty.Context));
 
+                        CtxMorphism ctxProj = _tc.ProjCtx(nextCtx, ty);
                         Tm tmSubst = _tc.SubstTermAndType(tm, ctxProj);
                         return tmSubst;
                     }
