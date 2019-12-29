@@ -1490,6 +1490,17 @@ namespace QT
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
+; g . id = g
+(rule (=> (and (CtxMorph G g D)
+               (IdMorph f) (CtxMorph G f G))
+          (Comp g f g))
+      Comp-Id-1)
+
+; id . f = f
+(rule (=> (and (CtxMorph G f D)
+               (IdMorph g) (CtxMorph D g D))
+          (Comp g f f))
+      Comp-Id-2)
 
 ; h . (g . f) . h = (h . g) . f
 (rule (=> (and (Comp g f gf)
