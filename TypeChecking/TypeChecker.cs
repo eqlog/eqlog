@@ -1150,6 +1150,7 @@ namespace QT
 (declare-rel Extension (CtxMorphS TmS CtxMorphS))
 
 ; Intermediate relations
+(declare-rel TmBar (TmS CtxMorphS))
 (declare-rel Weakening (CtxMorphS TyS CtxMorphS))
 
 ; Type forming/introduction/elimination
@@ -1516,9 +1517,9 @@ namespace QT
       Comp-Assoc-2)
 
 ; s{id} = s
-(rule (=> (and (TySubst s f t)
-               (IdMorph f))
-          (TyEq s t))
+(rule (=> (and (Ty G s)
+               (IdMorph f) (CtxMorph G f G))
+          (TySubst s f s))
       Ty-Id)
 
 ; s{g . f} = s{g}{f}
@@ -1535,9 +1536,9 @@ namespace QT
       Ty-Comp-2)
 
 ; M{id} = M
-(rule (=> (and (TmSubst M f N)
-               (IdMorph f))
-          (TmEq M N))
+(rule (=> (and (TmTy G M s)
+               (IdMorph f) (CtxMorph G f G))
+          (TmSubst M f M))
       Tm-Id)
 
 ; M{g . f} = M{g}{f}
@@ -1562,8 +1563,8 @@ namespace QT
 ; v{〈f, N〉} = N
 (rule (=> (and (ProjTm G s M) (TmTy D M t)
                (Extension f N e) (CtxMorph A e D))
-         (TmSubst M e N))
-     Cons-R)
+          (TmSubst M e N))
+      Cons-R)
 
 ; 〈f, M〉 . g = 〈f . g, M{g}〉
 (rule (=> (and (Extension f M e)
@@ -1594,6 +1595,12 @@ namespace QT
       Cons-Id-2)
 
 ;;;;;;;;;; Intermediate rules ;;;;;;;;;;
+
+; <id, M> is M bar
+(rule (=> (and (Extension f M e)
+               (IdMorph f))
+          (TmBar M e))
+      TmBar-Fill)
 
 ; <f . p1(D.s{f}), p2(D.s{f})> is q(f, s)
 (rule (=> (and (CtxMorph G f D)
@@ -1627,7 +1634,13 @@ namespace QT
                (CtxMorph G f D)
                (TmSubst M f O))
           (Refl O))
-      Refl-Natural)
+      Refl-Natural-1)
+
+(rule (=> (and (Refl M) (TmTy G M s)
+               (Refl N) (TmTy D N t)
+               (CtxMorph G f D))
+          (TmSubst N f M))
+      Refl-Natural-2)
 
 (rule (=> (and (TmTy G M s)
                (Id N O s))
@@ -1644,21 +1657,39 @@ namespace QT
                (CtxMorph G f D)
                (TySubst s f t))
           (Bool t))
-      Bool-Natural)
+      Bool-Natural-1)
+
+(rule (=> (and (Bool s) (Ty G s)
+               (Bool t) (Ty D t)
+               (CtxMorph G f D))
+          (TySubst t f s))
+      Bool-Natural-2)
 
 ; True(D){f : G -> D} = True(G)
 (rule (=> (and (True M) (TmTy D M s)
                (CtxMorph G f D)
                (TmSubst M f O))
           (True O))
-      True-Natural)
+      True-Natural-1)
+
+(rule (=> (and (True M) (TmTy G M s)
+               (True N) (TmTy D N t)
+               (CtxMorph G f D))
+          (TmSubst N f M))
+      True-Natural-2)
 
 ; False(D){f : G -> D} = False(G)
 (rule (=> (and (False M) (TmTy D M s)
                (CtxMorph G f D)
                (TmSubst M f O))
           (False O))
-      False-Natural)
+      False-Natural-1)
+
+(rule (=> (and (False M) (TmTy G M s)
+               (False N) (TmTy D N t)
+               (CtxMorph G f D))
+          (TmSubst N f M))
+      False-Natural-2)
 
 ; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
 (rule (=> (and (BoolElim M N O)
