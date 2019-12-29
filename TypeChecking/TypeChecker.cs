@@ -1490,66 +1490,6 @@ namespace QT
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
-;; (h . g) . f = h . (g . f)
-;(rule (=> (and (Comp h g hg)
-;               (Comp hg f i)
-;               (Comp g f gf)
-;               (Comp h gf j))
-;          (CtxMorphEq i j))
-;      Comp-Assoc)
-;; s{id} = s
-;(rule (=> (and (TySubst s f t)
-;               (IdMorph f))
-;          (TyEq s t))
-;      Ty-Id)
-;; s{g . f} = s{g}{f}
-;(rule (=> (and (Comp g f h)
-;               (TySubst s h t)
-;               (TySubst s g u)
-;               (TySubst u f v))
-;          (TyEq t v))
-;      Ty-Comp)
-;; M{id} = M
-;(rule (=> (and (TmSubst M f N)
-;               (IdMorph f))
-;          (TmEq M N))
-;      Tm-Id)
-;; M{g . f} = M{g}{f}
-;(rule (=> (and (Comp g f h)
-;               (TmSubst M h N)
-;               (TmSubst M g O)
-;               (TmSubst O f P))
-;          (TmEq N P))
-;      Tm-Comp)
-;; p(s) . 〈f, M〉= f
-;(rule (=> (and (ProjCtx G s p)
-;               (Extension f M e)
-;               (Comp p e g))
-;          (CtxMorphEq g f))
-;      Cons-L)
-;; v〈f, N〉 = N
-;(rule (=> (and (ProjTm G s M)
-;               (Extension f N e)
-;               (TmSubst M e O))
-;          (TmEq O N))
-;      Cons-R)
-;
-;; 〈f, M〉 . g = 〈f . g, M{g}〉
-;; 〈f, M〉 = e /\ e . g = h /\ f . g = i /\ M{g} = N /\ 〈i, N〉= j
-;; => h = j
-;(rule (=> (and (Extension f M e)
-;               (Comp e g h)
-;               (Comp f g i)
-;               (TmSubst M g N)
-;               (Extension i N j))
-;          (CtxMorphEq h j))
-;      Cons-Natural)
-;; 〈p(s), v〉 = id
-;(rule (=> (and (ProjCtx G s p)
-;               (ProjTm G s M)
-;               (Extension p M e))
-;          (IdMorph e))
-;      Cons-Id)
 
 ; h . (g . f) . h = (h . g) . f
 (rule (=> (and (Comp g f gf)
