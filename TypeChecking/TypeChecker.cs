@@ -337,15 +337,7 @@ namespace QT
                     if (fun == "dump")
                     {
                         ModelObject result = TypeCheck(args[1]);
-                        string relStr = ((IdExpr)args[0]).Id;
-                        string[] rels = relStr == "all" ? _rels.Keys.ToArray() : new[] { relStr };
-                        foreach (string rel in rels)
-                        {
-                            _fix.Query(_rels[rel]);
-                            Z3Expr answer = _fix.GetAnswer();
-                            Console.WriteLine("------- {0} ({1} rows) -------", rel, answer.IsOr ? answer.Args.Length : answer.IsFalse ? 0 : 1);
-                            Console.Write(ToDebug(answer));
-                        }
+                        DumpRels(((IdExpr)args[0]).Id);
                         return result;
                     }
 
@@ -360,6 +352,18 @@ namespace QT
                     goto default;
                 default:
                     throw new Exception("Unhandled: " + expr);
+            }
+        }
+
+        private void DumpRels(string rels)
+        {
+            string[] relArr = rels == "all" ? _rels.Keys.ToArray() : new[] { rels };
+            foreach (string rel in relArr)
+            {
+                _fix.Query(_rels[rel]);
+                Z3Expr answer = _fix.GetAnswer();
+                Console.WriteLine("------- {0} ({1} rows) -------", rel, answer.IsOr ? answer.Args.Length : answer.IsFalse ? 0 : 1);
+                Console.Write(ToDebug(answer));
             }
         }
 
@@ -592,7 +596,7 @@ namespace QT
             // D.s{f} |- s{f} type
             Ty substTyInCtxFrom = SubstType(substTy, projCtx);
             // D.s{f} |- p2(s{f}) : s{f}
-            Tm projTm = ProjTm(substTy, substTyInCtxFrom, null);
+            Tm projTm = ProjTm(substTy, substTyInCtxFrom);
 
             CtxMorphism comp = Compose(morphism, projCtx);
             return Extension(comp, projTm, ctxTo);
@@ -612,17 +616,13 @@ namespace QT
             return ctxMorphism;
         }
 
-        private Tm ProjTm(Ty addedVarTy, Ty fullTy, string? dbgName)
+        private Tm ProjTm(Ty addedVarTy, Ty fullTy)
         {
             if (_fix.Query(_z3Ctx.MkExists(new[] { _M }, _projTm.Apply(BV(addedVarTy.Context), BV(addedVarTy), _M))) == Status.SATISFIABLE)
                 return WithDbg(new Tm(ExtractAnswer(0), fullTy));
 
-            string? dbg = dbgName;
-            if (dbg == null)
-            {
-                string? tyDbg = addedVarTy.GetDebugInfo();
-                dbg = tyDbg != null ? $"p2({tyDbg})" : null;
-            }
+            string? ctxDbg = fullTy.Context.GetDebugInfo();
+            string? dbg = ctxDbg != null ? $"p2({ctxDbg})" : null;
 
             Tm tm = NewTm(fullTy, dbg);
             AddFact(_projTm, addedVarTy.Context.Id, addedVarTy.Id, tm.Id);
