@@ -1699,67 +1699,94 @@ namespace QT
                (TmSubst M f Q)
                (TmSubst N f R))
           (BoolElim Q R P))
-      BoolElim-Natural)
+      BoolElim-Natural-1)
 
-; Nat(D){f : G -> D} = Nat(G)
-(rule (=> (and (Nat s) (Ty D s)
+(rule (=> (and (BoolElim Q R P)
+               (TmSubst M f Q)
+               (TmSubst N f R)
                (CtxMorph G f D)
-               (TySubst s f t))
-          (Nat t))
-      Nat-Natural)
+               (BoolElim M N O) 
+               (Weakening f s q) (Bool s) (Ty D s))
+          (TmSubst O q P))
+      BoolElim-Natural-2)
 
-; Zero(D){f : G -> D} = Zero(G)
-(rule (=> (and (Zero M) (TmTy D M s)
-               (CtxMorph G f D)
-               (TmSubst M f O))
-          (Zero O))
-      Zero-Natural)
-
-; Succ(D){f : G -> D} = Succ(G)
-(rule (=> (and (Succ M) (TmTy D M s)
-               (CtxMorph G f D)
-               (TmSubst M f O))
-          (Succ O))
-      Succ-Natural)
-
-(rule (=> (and (BoolElim M N O)   ; if O is bool-elim
-               (TmSubst O f P)    ; and O{f} = P
-               (Extension g Q f)  ; and <g, Q> = f
-               (True Q))          ; and Q = True
-          (TmEq P M))             ; then the substitution is the true case.
+; (BoolElim M N){<id, True>} = M
+(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
+               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
+               (True P))                     ; and P is True
+          (TmSubst O f M))                   ; then the substitution is the true case.
       BoolElim-True)
 
-(rule (=> (and (BoolElim M N O)
-               (TmSubst O f P)
-               (Extension g Q f)
-               (False Q))
-          (TmEq P N))
+; (BoolElim M N){<id, False>} = N
+(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
+               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
+               (False P))                    ; and P is False
+          (TmSubst O f N))                   ; then the substitution is the false case.
       BoolElim-False)
 
+;; Nat(D){f : G -> D} = Nat(G)
+;(rule (=> (and (Nat s) (Ty D s)
+;               (CtxMorph G f D)
+;               (TySubst s f t))
+;          (Nat t))
+;      Nat-Natural-1)
+;
+;(rule (=> (and (Nat s) (Ty D s)
+;               (CtxMorph G f D)
+;               (Nat t) (Ty G t))
+;          (TySubst s f t))
+;      Nat-Natural-2)
+;
+;; Zero(D){f : G -> D} = Zero(G)
+;(rule (=> (and (Zero M) (TmTy D M s)
+;               (CtxMorph G f D)
+;               (TmSubst M f O))
+;          (Zero O))
+;      Zero-Natural-1)
+;
+;(rule (=> (and (Zero M) (TmTy G M s)
+;               (Zero N) (TmTy D N t)
+;               (CtxMorph G f D))
+;          (TmSubst N f M))
+;      Zero-Natural-2)
+;
+;; Succ(D){f : G -> D} = Succ(G)
+;(rule (=> (and (Succ M) (TmTy D M s)
+;               (CtxMorph G f D)
+;               (TmSubst M f O))
+;          (Succ O))
+;      Succ-Natural-1)
+;
+;(rule (=> (and (Succ O) (TmTy G O t)
+;               (Succ M) (TmTy D M s)
+;               (CtxMorph G f D))
+;          (TmSubst M f O))
+;      Succ-Natural-2)
 ; (NatElim M N){f} = NatElim M{p1 . f . } N
+;
 ;(rule (=> (and (NatElim M N O) (TmTy A O s) (Comprehension G t A)
 ;               (NatElim P Q R) (TmTy B R u) (Comprehension D v B)
 ;               (CtxMorph G D f)
-;               (TmSubst  f P)
+;               (TmSubst f P)
 ; 
-(rule (=> (and (NatElim M N O)   ; if O is nat-elim
-               (TmSubst O f P)   ; and O{f} = P
-               (Extension g Q f) ; and <g, Q> = f
-               (Zero Q))         ; and Q = 0
-          (TmEq P M))            ; then the substitution is the zero case.
-      NatElim-0)
-
-(rule (=> (and (NatElim M N O)    ; if O is nat-elim
-               (TmSubst O f P)    ; and O{f} = P
-               (Extension g Q f)  ; and <g, Q> = f (Q is discriminee)
-               (TmSubst R h Q)    ; and R{h} = Q
-               (Succ R)           ; and R is a successor term
-               (Extension i S h)  ; and <i, S> = h (discriminee is successor of S)
-               (TmSubst N j T)    ; and N{j} = T (successor case is substitution)
-               (Extension k O j)  ; and <k, O> = j (substituting IH by nat-elim itself)
-               (Extension l S k)) ; and <l, S> = k (substituting pred by S)
-          (TmEq P T))
-      NatElim-S)
+;(rule (=> (and (NatElim M N O)   ; if O is nat-elim
+;               (TmSubst O f P)   ; and O{f} = P
+;               (Extension g Q f) ; and <g, Q> = f
+;               (Zero Q))         ; and Q = 0
+;          (TmEq P M))            ; then the substitution is the zero case.
+;      NatElim-0)
+;
+;(rule (=> (and (NatElim M N O)    ; if O is nat-elim
+;               (TmSubst O f P)    ; and O{f} = P
+;               (Extension g Q f)  ; and <g, Q> = f (Q is discriminee)
+;               (TmSubst R h Q)    ; and R{h} = Q
+;               (Succ R)           ; and R is a successor term
+;               (Extension i S h)  ; and <i, S> = h (discriminee is successor of S)
+;               (TmSubst N j T)    ; and N{j} = T (successor case is substitution)
+;               (Extension k O j)  ; and <k, O> = j (substituting IH by nat-elim itself)
+;               (Extension l S k)) ; and <l, S> = k (substituting pred by S)
+;          (TmEq P T))
+;      NatElim-S)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }
