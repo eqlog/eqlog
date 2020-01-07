@@ -173,6 +173,32 @@ namespace QT
             return obj;
         }
 
+        private string ShortestDbgString(ModelCtx ctx) => ShortestDbgString(ctx, _ctxEq);
+        private string ShortestDbgString(CtxMorphism morph) => ShortestDbgString(morph, _ctxMorphEq);
+        private string ShortestDbgString(Ty ty) => ShortestDbgString(ty, _tyEq);
+        private string ShortestDbgString(Tm tm) => ShortestDbgString(tm, _tmEq);
+
+        private string ShortestDbgString(ModelObject obj, FuncDecl eq)
+        {
+            Z3Expr x = _z3Ctx.MkConst("x", eq.Domain[0]);
+            Quantifier query = _z3Ctx.MkExists(new[] { x }, eq.Apply(x, BV(obj)));
+            Trace.Assert(_fix.Query(query) == Status.SATISFIABLE);
+            Z3Expr assignments = _fix.GetAnswer();
+            if (!assignments.IsOr)
+                return obj.ToString();
+
+            string best = obj.ToString();
+            foreach (Z3Expr fullAsg in assignments.Args)
+            {
+                Z3Expr asg = fullAsg.IsAnd ? fullAsg.Args[0] : fullAsg;
+                uint val = ((BitVecNum)asg.Args[1]).UInt;
+                if (_debugInfo.TryGetValue(val, out string? candidate) && candidate.Length < best.Length)
+                    best = candidate;
+            }
+
+            return best;
+        }
+
         private ModelCtx NewCtx(string? dbg)
         {
             uint id = NextId();
@@ -279,7 +305,13 @@ namespace QT
         {
             Tm tm = TypeCheckAnyTerm(expr);
             if (!IsTyEq(ty, tm.Ty))
-                throw new Exception($"{expr} is not of expected type {ty.GetDebugInfo() ?? ""}");
+            {
+                string msg =
+                    $"Unexpected type of term.{Environment.NewLine}" +
+                    $"Expected: {ShortestDbgString(ty)}{Environment.NewLine}" +
+                    $"Actual: {ShortestDbgString(tm.Ty)}";
+                throw new Exception(msg);
+            }
 
             return tm;
         }
