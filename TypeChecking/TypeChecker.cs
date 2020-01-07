@@ -1158,8 +1158,6 @@ namespace QT
 (declare-rel Ctx (CtxS))
 ; CtxMorph G f D -- G |- f => D
 (declare-rel CtxMorph (CtxS CtxMorphS CtxS))
-; Comp g f h -- h is g . f
-(declare-rel Comp (CtxMorphS CtxMorphS CtxMorphS))
 ; Ty G s -- G |- s type
 (declare-rel Ty (CtxS TyS))
 ; TmTy G M s -- G |- M : s
@@ -1168,6 +1166,8 @@ namespace QT
 ; Functional relations
 ; IdMorph f -- f is an identity context morphism
 (declare-rel IdMorph (CtxMorphS))
+; Comp g f h -- h is g . f
+(declare-rel Comp (CtxMorphS CtxMorphS CtxMorphS))
 ; TySubst s f t -- t is s{f}
 (declare-rel TySubst (TyS CtxMorphS TyS))
 ; TmSubst M f N -- N is M{f}
