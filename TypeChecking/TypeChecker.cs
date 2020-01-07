@@ -254,6 +254,8 @@ namespace QT
         {
             Ty ty = TypeCheckType(ext.Type);
             _ctxInfo.Extend(ext.Name.IsDiscard ? null : ext.Name.Name, ty);
+            // Put this term into the context because it might have equalities that we need.
+            _ctxInfo.AccessLast();
             return ty;
         }
 
