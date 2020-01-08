@@ -1672,7 +1672,8 @@ namespace QT
 
 (rule (=> (and (Refl M) (TmTy G M s)
                (Refl N) (TmTy D N t)
-               (CtxMorph G f D))
+               (CtxMorph G f D)
+               (TySubst t f s))
           (TmSubst N f M))
       Refl-Natural-2)
 
