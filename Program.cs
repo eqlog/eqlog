@@ -19,8 +19,9 @@ namespace QT
 
             string example = File.ReadAllText("example.qt");
             Unit unit = AstParser.ParseUnit(example);
-            using (var tc = new TypeChecker())
+            using (var model = new Z3Model())
             {
+                var tc = new TypeChecker(model);
                 foreach (Def def in unit.Definitions)
                 {
                     Console.WriteLine(def);
