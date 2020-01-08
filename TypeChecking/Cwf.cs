@@ -204,7 +204,7 @@ namespace QT
         { }
 
         public override string ToString()
-            => $"bool";
+            => $"bool({Ctx})";
     }
 
     internal class TrueTm : Tm
