@@ -988,8 +988,8 @@ namespace QT
           (TmEq M N))
       False-Functional)
 
-(rule (=> (and (BoolElim M N O)
-               (BoolElim M N P))
+(rule (=> (and (BoolElim M N O) (TmTy G O s)
+               (BoolElim M N P) (TmTy G P s))
           (TmEq O P))
       BoolElim-Functional)
 
@@ -1118,6 +1118,33 @@ namespace QT
           (Extension p M f))
       Cons-Id-2)
 
+;;;;;;;;;; Uniqueness rules ;;;;;;;;;;
+
+; Unique morphisms to terminal object
+(rule (=> (and (CtxEmpty G)
+               (CtxMorph D f G)
+               (CtxMorph D g G))
+          (CtxMorphEq f g))
+      Bang-Unique)
+
+; Unique extension
+(rule (=> (and (ProjCtx G s p) (ProjTm G s M)
+               (Comp p e f)
+               (TmSubst M e N))
+          (Extension f N e))
+      Extension-Unique)
+
+; O{<f, True>} = M{f} and O{<f, False>} = N{f} implies
+; BoolElim M N O
+(rule (=> (and (Extension f P g) (True P)
+               (TmSubst O g S)
+               (TmSubst M f S)
+               (Extension f Q h) (False Q)
+               (TmSubst O h T)
+               (TmSubst N f T))
+          (BoolElim M N O))
+      BoolElim-Unique)
+
 ;;;;;;;;;; Intermediate rules ;;;;;;;;;;
 
 ; <id, M> is M bar
@@ -1235,19 +1262,21 @@ namespace QT
           (TmSubst O q P))
       BoolElim-Natural-2)
 
-; (BoolElim M N){<id, True>} = M
-(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
-               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
-               (True P))                     ; and P is True
-          (TmSubst O f M))                   ; then the substitution is the true case.
+; (BoolElim M N){<f, True>} = M{f}
+(rule (=> (and (BoolElim M N O) (TmTy D O s)      ; if O is bool-elim in D
+               (Extension f P e) (CtxMorph G e D) ; and e = <f, P> : G -> D
+               (TmSubst O e Q)                    ; and Q is O{e}
+               (True P))                          ; and P is true
+          (TmSubst M f Q))                        ; then the substitution is M{f}
       BoolElim-True)
 
-; (BoolElim M N){<id, False>} = N
-(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
-               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
-               (False P))                    ; and P is False
-          (TmSubst O f N))                   ; then the substitution is the false case.
-      BoolElim-False)
+; (BoolElim M N){<f, False>} = N{f}
+(rule (=> (and (BoolElim M N O) (TmTy D O s)      ; if O is bool-elim in D
+               (Extension f P e) (CtxMorph G e D) ; and e = <f, P> : G -> D
+               (TmSubst O e Q)                    ; and Q is O{e}
+               (False P))                         ; and P is false
+          (TmSubst N f Q))                        ; then the substitution is M{f}
+      BoolElim-True)
 
 ;; Nat(D){f : G -> D} = Nat(G)
 ;(rule (=> (and (Nat s) (Ty D s)

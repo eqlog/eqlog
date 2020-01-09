@@ -235,10 +235,12 @@ namespace QT
     {
         public ElimBoolTm(uint id, Ty intoTy, Tm trueCase, Tm falseCase) : base(id, intoTy)
         {
+            Debug.Assert(intoTy.Ctx is ComprehensionCtx);
             TrueCase = trueCase;
             FalseCase = falseCase;
         }
 
+        public new ComprehensionCtx Ctx => (ComprehensionCtx)base.Ctx;
         public Tm TrueCase { get; }
         public Tm FalseCase { get; }
 
