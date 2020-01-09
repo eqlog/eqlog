@@ -205,85 +205,80 @@ namespace QT
 
         private void SubstDefine(CwfNode node, CtxMorph f)
         {
-            {
-                if (node is Tm tm)
-                    SubstDefine(tm.Ty, f);
-            }
+            //{
+            //    if (node is Tm tm)
+            //        SubstDefine(tm.Ty, f);
+            //}
 
             switch (node)
             {
-                case EmptyCtx ctx: break;
-                case ComprehensionCtx ctx: break;
-                case ProjMorph morph: break;
-                case ProjTm tm: break;
-                case IdMorph morph: break;
                 case CompMorph morph:
-                {
-                    CompMorph comp = _model.Compose(morph.F, f);
-                    SubstDefine(morph.G, comp);
-                    break;
-                }
+                    {
+                        //CompMorph comp = _model.Compose(morph.F, f);
+                        //SubstDefine(morph.G, comp);
+                        break;
+                    }
                 case ExtensionMorph morph:
-                {
-                    CompMorph gf = _model.Compose(morph.Morph, f);
-                    SubstDefine(morph.Tm, f);
-                    SubstDefine(morph.Morph, f);
-                    _model.SubstTerm(morph.Tm, f);
-                    break;
-                }
+                    {
+                        _model.Compose(morph.Morph, f);
+                        SubstDefine(morph.Morph, f);
+                        _model.SubstTerm(morph.Tm, f);
+                        SubstDefine(morph.Tm, f);
+                        break;
+                    }
                 case SubstTy ty:
-                {
-                    CompMorph gf = _model.Compose(ty.Morph, f);
-                    SubstDefine(ty.Morph, f);
-                    SubstDefine(ty.BaseTy, gf);
-                    break;
-                }
+                    {
+                        //CompMorph gf = _model.Compose(ty.Morph, f);
+                        //SubstDefine(ty.Morph, f);
+                        //SubstDefine(ty.BaseTy, gf);
+                        break;
+                    }
                 case SubstTm tm:
-                {
-                    CompMorph gf = _model.Compose(tm.Morph, f);
-                    SubstDefine(tm.Morph, f);
-                    SubstDefine(tm.BaseTm, gf);
-                    break;
-                }
+                    {
+                        CompMorph gf = _model.Compose(tm.Morph, f);
+                        SubstDefine(tm.Morph, f);
+                        SubstDefine(tm.BaseTm, gf);
+                        break;
+                    }
                 case IdTy ty:
-                {
-                    _model.SubstTerm(ty.Left, f);
-                    SubstDefine(ty.Left, f);
-                    _model.SubstTerm(ty.Right, f);
-                    SubstDefine(ty.Right, f);
-                    break;
-                }
+                    {
+                        _model.SubstTerm(ty.Left, f);
+                        SubstDefine(ty.Left, f);
+                        _model.SubstTerm(ty.Right, f);
+                        SubstDefine(ty.Right, f);
+                        break;
+                    }
                 case ReflTm tm:
-                {
-                    _model.SubstTerm(tm.EqTm, f);
-                    SubstDefine(tm.EqTm, f);
-                    break;
-                }
+                    {
+                        //_model.SubstTerm(tm.EqTm, f);
+                        //SubstDefine(tm.EqTm, f);
+                        break;
+                    }
                 case BoolTy ty:
-                {
-                    _model.Bool(f.Domain);
-                    break;
-                }
+                    {
+                        //_model.Bool(f.Domain);
+                        break;
+                    }
                 case TrueTm tm:
-                {
-                    _model.True(f.Domain);
-                    break;
-                }
+                    {
+                        //_model.True(f.Domain);
+                        break;
+                    }
                 case FalseTm tm:
-                {
-                    _model.False(f.Domain);
-                    break;
-                }
+                    {
+                        //_model.False(f.Domain);
+                        break;
+                    }
                 case ElimBoolTm tm:
-                {
-                    ProjMorph p = _model.ProjCtx(tm.Ctx);
-                    CompMorph pf = _model.Compose(p, f);
-                    _model.SubstTerm(tm.TrueCase, pf);
-                    SubstDefine(tm.TrueCase, pf);
-                    _model.SubstTerm(tm.FalseCase, pf);
-                    SubstDefine(tm.FalseCase, pf);
-                    break;
-                }
+                    {
+                        //ProjMorph p = _model.ProjCtx(tm.Ctx);
+                        //CompMorph pf = _model.Compose(p, f);
+                        //_model.SubstTerm(tm.TrueCase, pf);
+                        //SubstDefine(tm.TrueCase, pf);
+                        //_model.SubstTerm(tm.FalseCase, pf);
+                        //SubstDefine(tm.FalseCase, pf);
+                        break;
+                    }
             }
         }
 
@@ -353,7 +348,6 @@ namespace QT
                         if (definedTm != null)
                             return definedTm;
 
-                        ProjMorph ctxProj = _tc._model.ProjCtx(nextCtx);
                         Tm tmProj = _tc._model.ProjTm(nextCtx);
                         return tmProj;
                     }
@@ -374,7 +368,7 @@ namespace QT
                         Tm tm = Go(i - 1, prevCtx);
 
                         ProjMorph ctxProj = _tc._model.ProjCtx(nextCtx);
-                        Tm tmSubst = _tc.SubstTerm(tm, ctxProj);
+                        Tm tmSubst = _tc._model.SubstTerm(tm, ctxProj);
                         return tmSubst;
                     }
                 }

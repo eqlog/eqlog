@@ -1,8 +1,30 @@
+def negb_involutive : true = false :=
+    elim false into (_ : bool) : true = (elim (elim true into (_ : bool) : bool
+                                            | => false
+                                            | => false) into (_ : bool) : bool
+                                            | => false
+                                            | => true)
+    | => refl true
+    | => refl false.
+
+(*def negb_involutive (a : bool) : (a = elim (elim a into (_ : bool) : bool
+                                            | => false
+                                            | => true) into (_ : bool) : bool
+                                      | => false
+                                      | => true) :=
+  elim a into (b : bool) : b = 
+
+def negb (a : bool) : bool :=
+  (elim a into (_ : bool) : bool
+   | => false
+   | => true).
+
 def eta (a : bool) : (a = elim a into (_ : bool) : bool
                          | => true
                          | => false) :=
-  elim a into (b : bool) : (b = elim b into (_ : bool) : bool
+  dump all (elim a into (b : bool) : (b = elim b into (_ : bool) : bool
                                 | => true
                                 | => false)
   | => refl true
-  | => refl false.
+  | => refl false).
+  *)

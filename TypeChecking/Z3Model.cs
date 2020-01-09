@@ -65,6 +65,7 @@ namespace QT
             _fix = _z3Ctx.MkFixedpoint();
             _fix.Parameters =
                 _z3Ctx.MkParams()
+                .Add("ctrl_c", false)
                 //.Add("engine", "spacer")
                 //.Add("datalog.generate_explanations", true)
                 //.Add("datalog.explanations_on_relation_level", true)
@@ -295,6 +296,12 @@ namespace QT
                         _f));
 
             ExtensionMorph ext = new ExtensionMorph(GetOrMakeId(query), morph, tm, Comprehension(morph.Codomain, compTy));
+            if (ext.ToString() == "<1(T), false(T)>")
+            {
+                _fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true);
+                AddMorph(ext);
+                AddAndVerify(_extension, morph.Id, tm.Id, ext.Id);
+            }
             AddMorph(ext);
             AddAndVerify(_extension, morph.Id, tm.Id, ext.Id);
             return _extensionCache[(morph.Id, tm.Id, compTy.Id)] = ext;
@@ -328,6 +335,12 @@ namespace QT
 
             SubstTy newTy = SubstType(baseTm.Ty, morph);
             SubstTm tm = new SubstTm(GetOrMakeId(query), baseTm, morph, newTy);
+            if (tm.ToString() == "elimb(false(bool(T).bool(bool(T))), true(bool(T).bool(bool(T)))){<1(bool(T).bool(bool(T))), p2(bool(T).bool(bool(T)))>}{<1(bool(T)), true(bool(T))>}")
+            {
+                //_fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true).Add("print_answer", true);
+                AddTm(tm);
+                AddAndVerify(_tmSubst, baseTm.Id, morph.Id, tm.Id);
+            }
             AddTm(tm);
             AddAndVerify(_tmSubst, baseTm.Id, morph.Id, tm.Id);
             return _substTermCache[(baseTm.Id, morph.Id)] = tm;
@@ -529,104 +542,113 @@ namespace QT
         [Conditional("DEBUG")]
         private void Verify()
         {
-            Quantifier typesOfEqTerms = _z3Ctx.MkExists(
-                new[] { _M, _N, _G, _D, _s, _t },
+            var blah = _z3Ctx.MkExists(
+                new[] { _M, _N },
                 (BoolExpr)_tmEq.Apply(_M, _N) &
-                (BoolExpr)_tmTy.Apply(_G, _M, _s) &
-                (BoolExpr)_tmTy.Apply(_D, _N, _t) &
-                (!(BoolExpr)_tyEq.Apply(_s, _t) |
-                 !(BoolExpr)_ctxEq.Apply(_G, _D)));
+                (BoolExpr)_true.Apply(_M) &
+                (BoolExpr)_false.Apply(_N));
 
-            if (_fix.Query(typesOfEqTerms) != Status.UNSATISFIABLE)
+            if (_fix.Query(blah) != Status.UNSATISFIABLE)
                 throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier typesOfEqTypes = _z3Ctx.MkExists(
-                new[] { _G, _D, _s, _t },
-                (BoolExpr)_tyEq.Apply(_s, _t) &
-                (BoolExpr)_ty.Apply(_G, _s) &
-                (BoolExpr)_ty.Apply(_D, _t) &
-                 !(BoolExpr)_ctxEq.Apply(_G, _D));
+            //Quantifier typesOfEqTerms = _z3Ctx.MkExists(
+            //    new[] { _M, _N, _G, _D, _s, _t },
+            //    (BoolExpr)_tmEq.Apply(_M, _N) &
+            //    (BoolExpr)_tmTy.Apply(_G, _M, _s) &
+            //    (BoolExpr)_tmTy.Apply(_D, _N, _t) &
+            //    (!(BoolExpr)_tyEq.Apply(_s, _t) |
+            //     !(BoolExpr)_ctxEq.Apply(_G, _D)));
 
-            if (_fix.Query(typesOfEqTypes) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(typesOfEqTerms) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier compositions = _z3Ctx.MkExists(
-                new[] { _g, _f, _gf, _A, _B, _C, _D, _E, _F, },
-                (BoolExpr)_comp.Apply(_g, _f, _gf) &
-                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-                (BoolExpr)_ctxMorph.Apply(_C, _g, _D) &
-                (BoolExpr)_ctxMorph.Apply(_E, _gf, _F) &
-                (!(BoolExpr)_ctxEq.Apply(_B, _C) |
-                 !(BoolExpr)_ctxEq.Apply(_E, _A) |
-                 !(BoolExpr)_ctxEq.Apply(_F, _D)));
+            //Quantifier typesOfEqTypes = _z3Ctx.MkExists(
+            //    new[] { _G, _D, _s, _t },
+            //    (BoolExpr)_tyEq.Apply(_s, _t) &
+            //    (BoolExpr)_ty.Apply(_G, _s) &
+            //    (BoolExpr)_ty.Apply(_D, _t) &
+            //     !(BoolExpr)_ctxEq.Apply(_G, _D));
 
-            if (_fix.Query(compositions) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(typesOfEqTypes) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier idMorphs = _z3Ctx.MkExists(
-                new[] { _f, _G, _D },
-                (BoolExpr)_idMorph.Apply(_f) &
-                (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
-                 !(BoolExpr)_ctxEq.Apply(_G, _D));
+            //Quantifier compositions = _z3Ctx.MkExists(
+            //    new[] { _g, _f, _gf, _A, _B, _C, _D, _E, _F, },
+            //    (BoolExpr)_comp.Apply(_g, _f, _gf) &
+            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+            //    (BoolExpr)_ctxMorph.Apply(_C, _g, _D) &
+            //    (BoolExpr)_ctxMorph.Apply(_E, _gf, _F) &
+            //    (!(BoolExpr)_ctxEq.Apply(_B, _C) |
+            //     !(BoolExpr)_ctxEq.Apply(_E, _A) |
+            //     !(BoolExpr)_ctxEq.Apply(_F, _D)));
 
-            if (_fix.Query(idMorphs) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(compositions) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier tySubsts = _z3Ctx.MkExists(
-                new[] { _s, _t, _G, _D, _f, _A, _B },
-                (BoolExpr)_tySubst.Apply(_s, _f, _t) &
-                (BoolExpr)_ty.Apply(_G, _s) &
-                (BoolExpr)_ty.Apply(_D, _t) &
-                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-                (!(BoolExpr)_ctxEq.Apply(_B, _G) |
-                 !(BoolExpr)_ctxEq.Apply(_A, _D)));
+            //Quantifier idMorphs = _z3Ctx.MkExists(
+            //    new[] { _f, _G, _D },
+            //    (BoolExpr)_idMorph.Apply(_f) &
+            //    (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
+            //     !(BoolExpr)_ctxEq.Apply(_G, _D));
 
-            if (_fix.Query(tySubsts) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(idMorphs) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier tmSubsts = _z3Ctx.MkExists(
-                new[] { _M, _N, _G, _D, _s, _t, _f, _A, _B },
-                (BoolExpr)_tmSubst.Apply(_M, _f, _N) &
-                (BoolExpr)_tmTy.Apply(_G, _M, _s) &
-                (BoolExpr)_tmTy.Apply(_D, _N, _t) &
-                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-                (!(BoolExpr)_ctxEq.Apply(_B, _G) |
-                 !(BoolExpr)_ctxEq.Apply(_A, _D)));
+            //Quantifier tySubsts = _z3Ctx.MkExists(
+            //    new[] { _s, _t, _G, _D, _f, _A, _B },
+            //    (BoolExpr)_tySubst.Apply(_s, _f, _t) &
+            //    (BoolExpr)_ty.Apply(_G, _s) &
+            //    (BoolExpr)_ty.Apply(_D, _t) &
+            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+            //    (!(BoolExpr)_ctxEq.Apply(_B, _G) |
+            //     !(BoolExpr)_ctxEq.Apply(_A, _D)));
 
-            if (_fix.Query(tmSubsts) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(tySubsts) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier projCtxs = _z3Ctx.MkExists(
-                new[] { _G, _s, _f, _A, _B },
-                (BoolExpr)_projCtx.Apply(_G, _s, _f) &
-                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-                (!(BoolExpr)_ctxEq.Apply(_B, _G) |
-                 !(BoolExpr)_comprehension.Apply(_G, _s, _A)));
+            //Quantifier tmSubsts = _z3Ctx.MkExists(
+            //    new[] { _M, _N, _G, _D, _s, _t, _f, _A, _B },
+            //    (BoolExpr)_tmSubst.Apply(_M, _f, _N) &
+            //    (BoolExpr)_tmTy.Apply(_G, _M, _s) &
+            //    (BoolExpr)_tmTy.Apply(_D, _N, _t) &
+            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+            //    (!(BoolExpr)_ctxEq.Apply(_B, _G) |
+            //     !(BoolExpr)_ctxEq.Apply(_A, _D)));
 
-            if (_fix.Query(projCtxs) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(tmSubsts) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier projTms = _z3Ctx.MkExists(
-                new[] { _G, _s, _M, _D, _t },
-                (BoolExpr)_projTm.Apply(_G, _s, _M) &
-                (BoolExpr)_tmTy.Apply(_D, _M, _t) &
-                (!(BoolExpr)_comprehension.Apply(_G, _s, _D)));
+            //Quantifier projCtxs = _z3Ctx.MkExists(
+            //    new[] { _G, _s, _f, _A, _B },
+            //    (BoolExpr)_projCtx.Apply(_G, _s, _f) &
+            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+            //    (!(BoolExpr)_ctxEq.Apply(_B, _G) |
+            //     !(BoolExpr)_comprehension.Apply(_G, _s, _A)));
 
-            if (_fix.Query(projTms) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(projCtxs) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
 
-            Quantifier extensions = _z3Ctx.MkExists(
-                new[] { _f, _M, _g, _G, _D, _A, _B, _C, _s, _t },
-                (BoolExpr)_extension.Apply(_f, _M, _g) &
-                (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
-                (BoolExpr)_tmTy.Apply(_G, _M, _s) &
-                (BoolExpr)_tySubst.Apply(_s, _f, _t) &
-                (BoolExpr)_ctxMorph.Apply(_A, _g, _B) &
-                (!(BoolExpr)_ctxEq.Apply(_A, _G) |
-                 !(BoolExpr)_comprehension.Apply(_D, _t, _B)));
+            //Quantifier projTms = _z3Ctx.MkExists(
+            //    new[] { _G, _s, _M, _D, _t },
+            //    (BoolExpr)_projTm.Apply(_G, _s, _M) &
+            //    (BoolExpr)_tmTy.Apply(_D, _M, _t) &
+            //    (!(BoolExpr)_comprehension.Apply(_G, _s, _D)));
 
-            if (_fix.Query(extensions) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            //if (_fix.Query(projTms) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+
+            //Quantifier extensions = _z3Ctx.MkExists(
+            //    new[] { _f, _M, _g, _G, _D, _A, _B, _C, _s, _t },
+            //    (BoolExpr)_extension.Apply(_f, _M, _g) &
+            //    (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
+            //    (BoolExpr)_tmTy.Apply(_G, _M, _s) &
+            //    (BoolExpr)_tySubst.Apply(_s, _f, _t) &
+            //    (BoolExpr)_ctxMorph.Apply(_A, _g, _B) &
+            //    (!(BoolExpr)_ctxEq.Apply(_A, _G) |
+            //     !(BoolExpr)_comprehension.Apply(_D, _t, _B)));
+
+            //if (_fix.Query(extensions) != Status.UNSATISFIABLE)
+            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
         }
 
         private static readonly string s_z3Setup = @"
@@ -1066,16 +1088,16 @@ namespace QT
       Tm-Id)
 
 ; M{g . f} = M{g}{f}
-(rule (=> (and (Comp g f h)
-               (TmSubst M h N)
+(rule (=> (and (Comp g f gf)
+               (TmSubst M gf N)
                (TmSubst M g O))
           (TmSubst O f N))
       Tm-Comp-1)
 
 (rule (=> (and (TmSubst M g N)
                (TmSubst N f O)
-               (Comp g f h))
-          (TmSubst M h O))
+               (Comp g f gf))
+          (TmSubst M gf O))
       Tm-Comp-2)
 
 ; p(s) . 〈f, M〉 = f
@@ -1090,19 +1112,19 @@ namespace QT
           (TmSubst M e N))
       Cons-R)
 
-; 〈f, M〉 . g = 〈f . g, M{g}〉
-(rule (=> (and (Extension f M e)
-               (Comp e g h)
-               (Comp f g i)
-               (TmSubst M g N))
-          (Extension i N h))
+; 〈g, M〉 . f = 〈g . f, M{f}〉
+(rule (=> (and (Extension g M e)
+               (Comp e f h)
+               (Comp g f gf)
+               (TmSubst M f N))
+          (Extension gf N h))
       Cons-Natural-1)
 
-(rule (=> (and (Comp f g h)
-               (TmSubst M g N)
-               (Extension h N e)
-               (Extension f M i))
-          (Comp i g e))
+(rule (=> (and (Comp g f gf)
+               (TmSubst M f N)
+               (Extension gf N e)
+               (Extension g M i))
+          (Comp i f e))
       Cons-Natural-2)
 
 ; 〈p(s), v〉 = id
@@ -1134,7 +1156,7 @@ namespace QT
           (Extension f N e))
       Extension-Unique)
 
-; O{<f, True>} = M{f} and O{<f, False>} = N{f} implies
+; O{<f, True>} = S = M{f} and O{<f, False>} = T = N{f} implies
 ; BoolElim M N O
 (rule (=> (and (Extension f P g) (True P)
                (TmSubst O g S)
@@ -1217,7 +1239,7 @@ namespace QT
           (TySubst t f s))
       Bool-Natural-2)
 
-; True(D){f : G -> D} = True(G)
+;; True(D){f : G -> D} = True(G)
 (rule (=> (and (True M) (TmTy D M s)
                (CtxMorph G f D)
                (TmSubst M f O))
@@ -1243,24 +1265,38 @@ namespace QT
           (TmSubst N f M))
       False-Natural-2)
 
-; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
-(rule (=> (and (BoolElim M N O)
-               (CtxMorph G f D)
-               (Weakening f s q) (Bool s) (Ty D s)
-               (TmSubst O q P)
-               (TmSubst M f Q)
-               (TmSubst N f R))
-          (BoolElim Q R P))
-      BoolElim-Natural-1)
+;; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
+;(rule (=> (and (BoolElim M N O)
+;               (CtxMorph G f D)
+;               (Weakening f s q) (Bool s) (Ty D s)
+;               (TmSubst O q P)
+;               (TmSubst M f Q)
+;               (TmSubst N f R))
+;          (BoolElim Q R P))
+;      BoolElim-Natural-1)
+;
+;(rule (=> (and (BoolElim Q R P)
+;               (TmSubst M f Q)
+;               (TmSubst N f R)
+;               (CtxMorph G f D)
+;               (BoolElim M N O) 
+;               (Weakening f s q) (Bool s) (Ty D s))
+;          (TmSubst O q P))
+;      BoolElim-Natural-2)
 
-(rule (=> (and (BoolElim Q R P)
-               (TmSubst M f Q)
-               (TmSubst N f R)
-               (CtxMorph G f D)
-               (BoolElim M N O) 
-               (Weakening f s q) (Bool s) (Ty D s))
-          (TmSubst O q P))
-      BoolElim-Natural-2)
+;; (BoolElim M N){<id, True>} = M
+;(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
+;               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
+;               (True P))                     ; and P is True
+;          (TmSubst O f M))                   ; then the substitution is the true case.
+;      BoolElim-True)
+;
+;; (BoolElim M N){<id, False>} = N
+;(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
+;               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
+;               (False P))                    ; and P is False
+;          (TmSubst O f N))                   ; then the substitution is the false case.
+;      BoolElim-False)
 
 ; (BoolElim M N){<f, True>} = M{f}
 (rule (=> (and (BoolElim M N O) (TmTy D O s)      ; if O is bool-elim in D
@@ -1276,7 +1312,7 @@ namespace QT
                (TmSubst O e Q)                    ; and Q is O{e}
                (False P))                         ; and P is false
           (TmSubst N f Q))                        ; then the substitution is M{f}
-      BoolElim-True)
+      BoolElim-False)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }
