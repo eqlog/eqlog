@@ -44,10 +44,6 @@ namespace QT
         private readonly FuncDecl _false;
         private readonly FuncDecl _boolElim;
 
-        private readonly FuncDecl _nat;
-        private readonly FuncDecl _zero;
-        private readonly FuncDecl _succ;
-        private readonly FuncDecl _natElim;
 
         private readonly Z3Expr _A, _B, _C, _D, _E, _F, _G;
         private readonly Z3Expr _f, _g, _gf;
@@ -114,10 +110,6 @@ namespace QT
             _true = _rels["True"];
             _false = _rels["False"];
             _boolElim = _rels["BoolElim"];
-            _nat = _rels["Nat"];
-            _zero = _rels["Zero"];
-            _succ = _rels["Succ"];
-            _natElim = _rels["NatElim"];
         }
 
         public void Dispose()
@@ -708,12 +700,6 @@ namespace QT
 (declare-rel False (TmS))
 (declare-rel BoolElim (TmS TmS TmS))
 
-(declare-rel Nat (TyS))
-(declare-rel Zero (TmS))
-; Succ M -- M is successor term (in a context that ends with a nat -- the predecessor)
-(declare-rel Succ (TmS))
-; NatElim M N O -- O is nat elimination with zero-case M and successor-case N
-(declare-rel NatElim (TmS TmS TmS))
 
 (declare-var A CtxS)
 (declare-var B CtxS)
@@ -918,32 +904,6 @@ namespace QT
           (BoolElim P Q R))
       BoolElim-Congr)
 
-; Nat
-(rule (=> (and (Nat s)
-               (TyEq s t))
-          (Nat t))
-      Nat-Congr)
-
-; Zero
-(rule (=> (and (Zero M)
-               (TmEq M N))
-          (Zero N))
-      Zero-Congr)
-
-; Succ
-(rule (=> (and (Succ M)
-               (TmEq M N))
-          (Succ N))
-      Succ-Congr)
-
-; NatElim
-(rule (=> (and (NatElim M N O)
-               (TmEq M P)
-               (TmEq N Q)
-               (TmEq O R))
-          (NatElim P Q R))
-      NatElim-Congr)
-
 ;;;;;;;;;; Functionality rules ;;;;;;;;;;
 
 (rule (=> (and (IdMorph f) (CtxMorph G f G)
@@ -1014,26 +974,6 @@ namespace QT
                (BoolElim M N P) (TmTy G P s))
           (TmEq O P))
       BoolElim-Functional)
-
-(rule (=> (and (Nat s) (Ty G s)
-               (Nat t) (Ty G t))
-          (TyEq s t))
-      Nat-Functional)
-
-(rule (=> (and (Zero M) (TmTy G M s)
-               (Zero N) (TmTy G N s))
-          (TmEq M N))
-      Zero-Functional)
-
-(rule (=> (and (Succ M) (TmTy G M s)
-               (Succ N) (TmTy G N s))
-          (TmEq M N))
-      Succ-Functional)
-
-(rule (=> (and (NatElim M N O)
-               (NatElim M N P))
-          (TmEq O P))
-      NatElim-Functional)
 
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
