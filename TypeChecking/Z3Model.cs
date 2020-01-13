@@ -44,25 +44,6 @@ namespace QT
         private readonly FuncDecl _false;
         private readonly FuncDecl _boolElim;
 
-        private readonly FuncDecl _inputCtx;
-        private readonly FuncDecl _inputCtxMorph;
-        private readonly FuncDecl _inputComp;
-        private readonly FuncDecl _inputTy;
-        private readonly FuncDecl _inputTmTy;
-        private readonly FuncDecl _inputIdMorph;
-        private readonly FuncDecl _inputTySubst;
-        private readonly FuncDecl _inputTmSubst;
-        private readonly FuncDecl _inputCtxEmpty;
-        private readonly FuncDecl _inputComprehension;
-        private readonly FuncDecl _inputProjCtx;
-        private readonly FuncDecl _inputProjTm;
-        private readonly FuncDecl _inputExtension;
-        private readonly FuncDecl _inputId;
-        private readonly FuncDecl _inputRefl;
-        private readonly FuncDecl _inputBool;
-        private readonly FuncDecl _inputTrue;
-        private readonly FuncDecl _inputFalse;
-        private readonly FuncDecl _inputBoolElim;
 
         private readonly Z3Expr _A, _B, _C, _D, _E, _F, _G;
         private readonly Z3Expr _f, _g, _gf;
@@ -129,26 +110,6 @@ namespace QT
             _true = _rels["True"];
             _false = _rels["False"];
             _boolElim = _rels["BoolElim"];
-
-            _inputCtx = _rels["InputCtx"];
-            _inputCtxMorph = _rels["InputCtxMorph"];
-            _inputComp = _rels["InputComp"];
-            _inputTy = _rels["InputTy"];
-            _inputTmTy = _rels["InputTmTy"];
-            _inputIdMorph = _rels["InputIdMorph"];
-            _inputTySubst = _rels["InputTySubst"];
-            _inputTmSubst = _rels["InputTmSubst"];
-            _inputCtxEmpty = _rels["InputCtxEmpty"];
-            _inputComprehension = _rels["InputComprehension"];
-            _inputProjCtx = _rels["InputProjCtx"];
-            _inputProjTm = _rels["InputProjTm"];
-            _inputExtension = _rels["InputExtension"];
-            _inputId = _rels["InputId"];
-            _inputRefl = _rels["InputRefl"];
-            _inputBool = _rels["InputBool"];
-            _inputTrue = _rels["InputTrue"];
-            _inputFalse = _rels["InputFalse"];
-            _inputBoolElim = _rels["InputBoolElim"];
         }
 
         public void Dispose()
@@ -217,7 +178,7 @@ namespace QT
         {
             EmptyCtx ctx = new EmptyCtx(NextId());
             AddCtx(ctx);
-            AddAndVerify(_inputCtxEmpty, ctx.Id);
+            AddAndVerify(_ctxEmpty, ctx.Id);
             return ctx;
         }
 
@@ -233,7 +194,7 @@ namespace QT
 
             ComprehensionCtx ctx = new ComprehensionCtx(GetOrMakeId(query), baseCtx, ty);
             AddCtx(ctx);
-            AddAndVerify(_inputComprehension, baseCtx.Id, ty.Id, ctx.Id);
+            AddAndVerify(_comprehension, baseCtx.Id, ty.Id, ctx.Id);
             return _compCache[(baseCtx.Id, ty.Id)] = ctx;
         }
 
@@ -250,7 +211,7 @@ namespace QT
 
             ProjMorph morph = new ProjMorph(GetOrMakeId(query), ctx);
             AddMorph(morph);
-            AddAndVerify(_inputProjCtx, ctx.BaseCtx.Id, ctx.CompTy.Id, morph.Id);
+            AddAndVerify(_projCtx, ctx.BaseCtx.Id, ctx.CompTy.Id, morph.Id);
             return _projCtxCache[ctx.Id] = morph;
         }
 
@@ -269,7 +230,7 @@ namespace QT
             Ty ty = SubstType(ctx.CompTy, projCtx);
             ProjTm tm = new ProjTm(GetOrMakeId(query), ty);
             AddTm(tm);
-            AddAndVerify(_inputProjTm, ctx.BaseCtx.Id, ctx.CompTy.Id, tm.Id);
+            AddAndVerify(_projTm, ctx.BaseCtx.Id, ctx.CompTy.Id, tm.Id);
             return _projTmCache[ctx.Id] = tm;
         }
 
@@ -287,7 +248,7 @@ namespace QT
 
             IdMorph morph = new IdMorph(GetOrMakeId(query), ctx);
             AddMorph(morph);
-            AddAndVerify(_inputIdMorph, morph.Id);
+            AddAndVerify(_idMorph, morph.Id);
             return _idMorphCache[ctx.Id] = morph;
         }
 
@@ -306,7 +267,7 @@ namespace QT
 
             CompMorph gf = new CompMorph(GetOrMakeId(query), g, f);
             AddMorph(gf);
-            AddAndVerify(_inputComp, g.Id, f.Id, gf.Id);
+            AddAndVerify(_comp, g.Id, f.Id, gf.Id);
             return _compMorphCache[(g.Id, f.Id)] = gf;
         }
 
@@ -329,13 +290,12 @@ namespace QT
             ExtensionMorph ext = new ExtensionMorph(GetOrMakeId(query), morph, tm, Comprehension(morph.Codomain, compTy));
             if (ext.ToString() == "<1(T), false(T)>")
             {
-                string help = _fix.Help;
                 _fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true);
                 AddMorph(ext);
-                AddAndVerify(_inputExtension, morph.Id, tm.Id, ext.Id);
+                AddAndVerify(_extension, morph.Id, tm.Id, ext.Id);
             }
             AddMorph(ext);
-            AddAndVerify(_inputExtension, morph.Id, tm.Id, ext.Id);
+            AddAndVerify(_extension, morph.Id, tm.Id, ext.Id);
             return _extensionCache[(morph.Id, tm.Id, compTy.Id)] = ext;
         }
 
@@ -351,7 +311,7 @@ namespace QT
 
             SubstTy ty = new SubstTy(GetOrMakeId(query), baseTy, morph);
             AddTy(ty);
-            AddAndVerify(_inputTySubst, baseTy.Id, morph.Id, ty.Id);
+            AddAndVerify(_tySubst, baseTy.Id, morph.Id, ty.Id);
             return _substTypeCache[(baseTy.Id, morph.Id)] = ty;
         }
 
@@ -371,10 +331,10 @@ namespace QT
             {
                 //_fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true).Add("print_answer", true);
                 AddTm(tm);
-                AddAndVerify(_inputTmSubst, baseTm.Id, morph.Id, tm.Id);
+                AddAndVerify(_tmSubst, baseTm.Id, morph.Id, tm.Id);
             }
             AddTm(tm);
-            AddAndVerify(_inputTmSubst, baseTm.Id, morph.Id, tm.Id);
+            AddAndVerify(_tmSubst, baseTm.Id, morph.Id, tm.Id);
             return _substTermCache[(baseTm.Id, morph.Id)] = tm;
         }
 
@@ -393,7 +353,7 @@ namespace QT
 
             IdTy ty = new IdTy(GetOrMakeId(query), left, right);
             AddTy(ty);
-            AddAndVerify(_inputId, left.Id, right.Id, ty.Id);
+            AddAndVerify(_id, left.Id, right.Id, ty.Id);
             return _idCache[(left.Id, right.Id)] = ty;
         }
 
@@ -413,7 +373,7 @@ namespace QT
 
             ReflTm reflTm = new ReflTm(GetOrMakeId(query), tm, idTy);
             AddTm(reflTm);
-            AddAndVerify(_inputRefl, reflTm.Id);
+            AddAndVerify(_refl, reflTm.Id);
             return _reflCache[tm.Id] = reflTm;
         }
 
@@ -431,7 +391,7 @@ namespace QT
 
             BoolTy ty = new BoolTy(GetOrMakeId(query), ctx);
             AddTy(ty);
-            AddAndVerify(_inputBool, ty.Id);
+            AddAndVerify(_bool, ty.Id);
             return _boolCache[ctx.Id] = ty;
         }
 
@@ -451,7 +411,7 @@ namespace QT
 
             TrueTm tm = new TrueTm(GetOrMakeId(query), boolTy);
             AddTm(tm);
-            AddAndVerify(_inputTrue, tm.Id);
+            AddAndVerify(_true, tm.Id);
             return _trueCache[ctx.Id] = tm;
         }
 
@@ -471,7 +431,7 @@ namespace QT
 
             FalseTm tm = new FalseTm(GetOrMakeId(query), boolTy);
             AddTm(tm);
-            AddAndVerify(_inputFalse, tm.Id);
+            AddAndVerify(_false, tm.Id);
             return _falseCache[ctx.Id] = tm;
         }
 
@@ -484,32 +444,32 @@ namespace QT
 
             ElimBoolTm tm = new ElimBoolTm(NextId(), intoTy, trueCase, falseCase);
             AddTm(tm);
-            AddAndVerify(_inputBoolElim, trueCase.Id, falseCase.Id, tm.Id);
+            AddAndVerify(_boolElim, trueCase.Id, falseCase.Id, tm.Id);
             return tm;
         }
 
         private void AddCtx(Ctx ctx)
         {
             Register(ctx);
-            _fix.AddFact(_inputCtx, ctx.Id);
+            _fix.AddFact(_ctx, ctx.Id);
         }
 
         private void AddMorph(CtxMorph morph)
         {
             Register(morph);
-            _fix.AddFact(_inputCtxMorph, morph.Domain.Id, morph.Id, morph.Codomain.Id);
+            _fix.AddFact(_ctxMorph, morph.Domain.Id, morph.Id, morph.Codomain.Id);
         }
 
         private void AddTy(Ty ty)
         {
             Register(ty);
-            _fix.AddFact(_inputTy, ty.Ctx.Id, ty.Id);
+            _fix.AddFact(_ty, ty.Ctx.Id, ty.Id);
         }
 
         private void AddTm(Tm tm)
         {
             Register(tm);
-            _fix.AddFact(_inputTmTy, tm.Ctx.Id, tm.Id, tm.Ty.Id);
+            _fix.AddFact(_tmTy, tm.Ctx.Id, tm.Id, tm.Ty.Id);
         }
 
         private readonly Dictionary<uint, CwfNode> _nodeMap =
@@ -741,28 +701,6 @@ namespace QT
 (declare-rel BoolElim (TmS TmS TmS))
 
 
-(declare-rel InputCtx (CtxS))
-(declare-rel InputCtxMorph (CtxS CtxMorphS CtxS))
-(declare-rel InputTy (CtxS TyS))
-(declare-rel InputTmTy (CtxS TmS TyS))
-(declare-rel InputIdMorph (CtxMorphS))
-(declare-rel InputComp (CtxMorphS CtxMorphS CtxMorphS))
-(declare-rel InputTySubst (TyS CtxMorphS TyS))
-(declare-rel InputTmSubst (TmS CtxMorphS TmS))
-(declare-rel InputCtxEmpty (CtxS))
-(declare-rel InputComprehension (CtxS TyS CtxS))
-(declare-rel InputProjCtx (CtxS TyS CtxMorphS))
-(declare-rel InputProjTm (CtxS TyS TmS))
-(declare-rel InputExtension (CtxMorphS TmS CtxMorphS))
-(declare-rel InputTmBar (TmS CtxMorphS))
-(declare-rel InputWeakening (CtxMorphS TyS CtxMorphS))
-(declare-rel InputId (TmS TmS TyS))
-(declare-rel InputRefl (TmS))
-(declare-rel InputBool (TyS))
-(declare-rel InputTrue (TmS))
-(declare-rel InputFalse (TmS))
-(declare-rel InputBoolElim (TmS TmS TmS))
-
 (declare-var A CtxS)
 (declare-var B CtxS)
 (declare-var C CtxS)
@@ -801,26 +739,6 @@ namespace QT
 (declare-var S TmS)
 (declare-var T TmS)
 (declare-var U TmS)
-
-(rule (=> (InputCtx G) (Ctx G)))
-(rule (=> (InputCtxMorph D f G) (CtxMorph D f G)))
-(rule (=> (InputTy G s) (Ty G s)))
-(rule (=> (InputTmTy G M s) (TmTy G M s)))
-(rule (=> (InputIdMorph f) (IdMorph f)))
-(rule (=> (InputComp g f gf) (Comp g f gf)))
-(rule (=> (InputTySubst s f t) (TySubst s f t)))
-(rule (=> (InputTmSubst M f N) (TmSubst M f N)))
-(rule (=> (InputCtxEmpty G) (CtxEmpty G)))
-(rule (=> (InputComprehension G s D) (Comprehension G s D)))
-(rule (=> (InputProjCtx G s p) (ProjCtx G s p)))
-(rule (=> (InputProjTm G s M) (ProjTm G s M)))
-(rule (=> (InputExtension f M e) (Extension f M e)))
-(rule (=> (InputId M N s) (Id M N s)))
-(rule (=> (InputRefl M) (Refl M)))
-(rule (=> (InputBool s) (Bool s)))
-(rule (=> (InputTrue M) (True M)))
-(rule (=> (InputFalse M) (False M)))
-(rule (=> (InputBoolElim M N O) (BoolElim M N O)))
 
 ;;;;;;;;;; Equalities ;;;;;;;;;;
 
