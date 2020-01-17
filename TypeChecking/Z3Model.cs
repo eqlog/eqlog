@@ -535,13 +535,21 @@ namespace QT
         private void Verify()
         {
             var blah = _z3Ctx.MkExists(
-                new[] { _M, _N },
-                (BoolExpr)_tmEq.Apply(_M, _N) &
-                (BoolExpr)_true.Apply(_M) &
-                (BoolExpr)_false.Apply(_N));
+                new[] { _M, _G, _s },
+                (BoolExpr)_false.Apply(_M) &
+                (BoolExpr)_projTm.Apply(_G, _s, _M));
+
+            //var blah = _z3Ctx.MkExists(
+            //    new[] { _M, _N },
+            //    (BoolExpr)_tmEq.Apply(_M, _N) &
+            //    (BoolExpr)_true.Apply(_M) &
+            //    (BoolExpr)_false.Apply(_N));
 
             if (_fix.Query(blah) != Status.UNSATISFIABLE)
+            {
+                var answer = _fix.GetAnswer();
                 throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            }
 
             //Quantifier typesOfEqTerms = _z3Ctx.MkExists(
             //    new[] { _M, _N, _G, _D, _s, _t },
@@ -989,7 +997,7 @@ namespace QT
           (Comp g f f))
       Comp-Id-2)
 
-; h . (g . f) . h = (h . g) . f
+; h . (g . f) = (h . g) . f
 (rule (=> (and (Comp g f gf)
                (Comp h gf hgf)
                (Comp h g hg))
@@ -1009,16 +1017,16 @@ namespace QT
       Ty-Id)
 
 ; s{g . f} = s{g}{f}
-(rule (=> (and (Comp g f h)
-               (TySubst s h t)
+(rule (=> (and (Comp g f gf)
+               (TySubst s gf t)
                (TySubst s g u))
           (TySubst u f t))
       Ty-Comp-1)
 
 (rule (=> (and (TySubst s g t)
                (TySubst t f u)
-               (Comp g f h))
-          (TySubst s h u))
+               (Comp g f gf))
+          (TySubst s gf u))
       Ty-Comp-2)
 
 ; M{id} = M

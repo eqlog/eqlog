@@ -334,10 +334,9 @@ namespace QT
 
             private Tm Access(int index)
             {
-                Debug.Assert(Ctx is ComprehensionCtx);
-                return Go(_vars.Count - 1, (ComprehensionCtx)Ctx);
+                return Go(_vars.Count - 1, Ctx);
 
-                Tm Go(int i, ComprehensionCtx nextCtx)
+                Tm Go(int i, Ctx nextCtx)
                 {
                     (string? name, Tm? definedTm) = _vars[i];
                     // Make context morphism that gets us from nextCtx to ty's
@@ -348,7 +347,11 @@ namespace QT
                         if (definedTm != null)
                             return definedTm;
 
-                        Tm tmProj = _tc._model.ProjTm(nextCtx);
+                        // If the defined term is null then we comprehended
+                        // with a variable, so this cast cannot fail.
+                        Debug.Assert(nextCtx is ComprehensionCtx);
+
+                        Tm tmProj = _tc._model.ProjTm((ComprehensionCtx)nextCtx);
                         return tmProj;
                     }
                     else
@@ -359,15 +362,19 @@ namespace QT
                             return Go(i - 1, nextCtx);
                         }
 
+                        Debug.Assert(nextCtx is ComprehensionCtx);
+
+                        var compCtx = (ComprehensionCtx)nextCtx;
+
                         // BaseCtx should always be a comprehension as
                         // otherwise either we got all the way back to index 0
                         // (taking above branch) or to terms defined in the
                         // empty context (also taking above branch).
-                        Debug.Assert(nextCtx.BaseCtx is ComprehensionCtx);
-                        ComprehensionCtx prevCtx = (ComprehensionCtx)nextCtx.BaseCtx;
+                        Debug.Assert(compCtx.BaseCtx is ComprehensionCtx);
+                        ComprehensionCtx prevCtx = (ComprehensionCtx)compCtx.BaseCtx;
                         Tm tm = Go(i - 1, prevCtx);
 
-                        ProjMorph ctxProj = _tc._model.ProjCtx(nextCtx);
+                        ProjMorph ctxProj = _tc._model.ProjCtx(compCtx);
                         Tm tmSubst = _tc._model.SubstTerm(tm, ctxProj);
                         return tmSubst;
                     }
