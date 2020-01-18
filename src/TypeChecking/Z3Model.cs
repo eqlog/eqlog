@@ -1,8 +1,10 @@
 ﻿using Microsoft.Z3;
+using QT.TypeChecking;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using Z3Expr = Microsoft.Z3.Expr;
 
 namespace QT
@@ -288,12 +290,6 @@ namespace QT
                         _f));
 
             ExtensionMorph ext = new ExtensionMorph(GetOrMakeId(query), morph, tm, Comprehension(morph.Codomain, compTy));
-            if (ext.ToString() == "<1(T), false(T)>")
-            {
-                _fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true);
-                AddMorph(ext);
-                AddAndVerify(_extension, morph.Id, tm.Id, ext.Id);
-            }
             AddMorph(ext);
             AddAndVerify(_extension, morph.Id, tm.Id, ext.Id);
             return _extensionCache[(morph.Id, tm.Id, compTy.Id)] = ext;
@@ -327,12 +323,6 @@ namespace QT
 
             SubstTy newTy = SubstType(baseTm.Ty, morph);
             SubstTm tm = new SubstTm(GetOrMakeId(query), baseTm, morph, newTy);
-            if (tm.ToString() == "elimb(false(bool(T).bool(bool(T))), true(bool(T).bool(bool(T)))){<1(bool(T).bool(bool(T))), p2(bool(T).bool(bool(T)))>}{<1(bool(T)), true(bool(T))>}")
-            {
-                //_fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true).Add("print_answer", true);
-                AddTm(tm);
-                AddAndVerify(_tmSubst, baseTm.Id, morph.Id, tm.Id);
-            }
             AddTm(tm);
             AddAndVerify(_tmSubst, baseTm.Id, morph.Id, tm.Id);
             return _substTermCache[(baseTm.Id, morph.Id)] = tm;
@@ -488,7 +478,7 @@ namespace QT
         private void AddAndVerify(FuncDecl pred, params uint[] args)
         {
             _fix.AddFact(pred, args);
-            Verify();
+            VerifyDebug();
         }
 
         private uint ExtractAnswer(int varIndex)
@@ -532,123 +522,123 @@ namespace QT
         }
 
         [Conditional("DEBUG")]
-        private void Verify()
+        private void VerifyDebug() => Verify();
+
+        internal void Verify()
         {
-            var blah = _z3Ctx.MkExists(
+            void Check(BoolExpr query)
+            {
+                if (_fix.Query(query) == Status.UNSATISFIABLE)
+                    return;
+
+                Debug.WriteLine("Answer:");
+                Debug.WriteLine(ToDebug(_fix.GetAnswer()));
+                Debug.WriteLine("");
+                Debug.WriteLine("Test:");
+                Debug.WriteLine(DebugDump.CreateTest(_nodeMap.Values));
+
+                _fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true);
+                _fix.Query(query);
+                _fix.Parameters = _z3Ctx.MkParams();
+                throw new Exception($"Verification has failed:{Environment.NewLine}{ToDebug(_fix.GetAnswer())}");
+            }
+
+            Quantifier typesOfEqTerms = _z3Ctx.MkExists(
+                new[] { _M, _N, _G, _D, _s, _t },
+                (BoolExpr)_tmEq.Apply(_M, _N) &
+                (BoolExpr)_tmTy.Apply(_G, _M, _s) &
+                (BoolExpr)_tmTy.Apply(_D, _N, _t) &
+                (!(BoolExpr)_tyEq.Apply(_s, _t) |
+                 !(BoolExpr)_ctxEq.Apply(_G, _D)));
+
+            Check(typesOfEqTerms);
+
+            Quantifier typesOfEqTypes = _z3Ctx.MkExists(
+                new[] { _G, _D, _s, _t },
+                (BoolExpr)_tyEq.Apply(_s, _t) &
+                (BoolExpr)_ty.Apply(_G, _s) &
+                (BoolExpr)_ty.Apply(_D, _t) &
+                 !(BoolExpr)_ctxEq.Apply(_G, _D));
+
+            Check(typesOfEqTypes);
+
+            Quantifier compositions = _z3Ctx.MkExists(
+                new[] { _g, _f, _gf, _A, _B, _C, _D, _E, _F, },
+                (BoolExpr)_comp.Apply(_g, _f, _gf) &
+                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+                (BoolExpr)_ctxMorph.Apply(_C, _g, _D) &
+                (BoolExpr)_ctxMorph.Apply(_E, _gf, _F) &
+                (!(BoolExpr)_ctxEq.Apply(_B, _C) |
+                 !(BoolExpr)_ctxEq.Apply(_E, _A) |
+                 !(BoolExpr)_ctxEq.Apply(_F, _D)));
+
+            Check(compositions);
+
+            Quantifier idMorphs = _z3Ctx.MkExists(
+                new[] { _f, _G, _D },
+                (BoolExpr)_idMorph.Apply(_f) &
+                (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
+                 !(BoolExpr)_ctxEq.Apply(_G, _D));
+
+            Check(idMorphs);
+
+            Quantifier tySubsts = _z3Ctx.MkExists(
+                new[] { _s, _t, _G, _D, _f, _A, _B },
+                (BoolExpr)_tySubst.Apply(_s, _f, _t) &
+                (BoolExpr)_ty.Apply(_G, _s) &
+                (BoolExpr)_ty.Apply(_D, _t) &
+                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+                (!(BoolExpr)_ctxEq.Apply(_B, _G) |
+                 !(BoolExpr)_ctxEq.Apply(_A, _D)));
+
+            Check(tySubsts);
+
+            Quantifier tmSubsts = _z3Ctx.MkExists(
+                new[] { _M, _N, _G, _D, _s, _t, _f, _A, _B },
+                (BoolExpr)_tmSubst.Apply(_M, _f, _N) &
+                (BoolExpr)_tmTy.Apply(_G, _M, _s) &
+                (BoolExpr)_tmTy.Apply(_D, _N, _t) &
+                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+                (!(BoolExpr)_ctxEq.Apply(_B, _G) |
+                 !(BoolExpr)_ctxEq.Apply(_A, _D)));
+
+            Check(tmSubsts);
+
+            Quantifier projCtxs = _z3Ctx.MkExists(
+                new[] { _G, _s, _f, _A, _B },
+                (BoolExpr)_projCtx.Apply(_G, _s, _f) &
+                (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
+                (!(BoolExpr)_ctxEq.Apply(_B, _G) |
+                 !(BoolExpr)_comprehension.Apply(_G, _s, _A)));
+
+            Check(projCtxs);
+
+            Quantifier projTms = _z3Ctx.MkExists(
+                new[] { _G, _s, _M, _D, _t },
+                (BoolExpr)_projTm.Apply(_G, _s, _M) &
+                (BoolExpr)_tmTy.Apply(_D, _M, _t) &
+                (!(BoolExpr)_comprehension.Apply(_G, _s, _D)));
+
+            Check(projTms);
+
+            Quantifier extensions = _z3Ctx.MkExists(
+                new[] { _f, _M, _g, _G, _D, _A, _B, _C, _s, _t },
+                (BoolExpr)_extension.Apply(_f, _M, _g) &
+                (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
+                (BoolExpr)_tmTy.Apply(_G, _M, _s) &
+                (BoolExpr)_tySubst.Apply(_s, _f, _t) &
+                (BoolExpr)_ctxMorph.Apply(_A, _g, _B) &
+                (!(BoolExpr)_ctxEq.Apply(_A, _G) |
+                 !(BoolExpr)_comprehension.Apply(_D, _t, _B)));
+
+            Check(extensions);
+
+            var projFalse = _z3Ctx.MkExists(
                 new[] { _M, _G, _s },
                 (BoolExpr)_false.Apply(_M) &
                 (BoolExpr)_projTm.Apply(_G, _s, _M));
 
-            //var blah = _z3Ctx.MkExists(
-            //    new[] { _M, _N },
-            //    (BoolExpr)_tmEq.Apply(_M, _N) &
-            //    (BoolExpr)_true.Apply(_M) &
-            //    (BoolExpr)_false.Apply(_N));
-
-            if (_fix.Query(blah) != Status.UNSATISFIABLE)
-            {
-                var answer = _fix.GetAnswer();
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-            }
-
-            //Quantifier typesOfEqTerms = _z3Ctx.MkExists(
-            //    new[] { _M, _N, _G, _D, _s, _t },
-            //    (BoolExpr)_tmEq.Apply(_M, _N) &
-            //    (BoolExpr)_tmTy.Apply(_G, _M, _s) &
-            //    (BoolExpr)_tmTy.Apply(_D, _N, _t) &
-            //    (!(BoolExpr)_tyEq.Apply(_s, _t) |
-            //     !(BoolExpr)_ctxEq.Apply(_G, _D)));
-
-            //if (_fix.Query(typesOfEqTerms) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier typesOfEqTypes = _z3Ctx.MkExists(
-            //    new[] { _G, _D, _s, _t },
-            //    (BoolExpr)_tyEq.Apply(_s, _t) &
-            //    (BoolExpr)_ty.Apply(_G, _s) &
-            //    (BoolExpr)_ty.Apply(_D, _t) &
-            //     !(BoolExpr)_ctxEq.Apply(_G, _D));
-
-            //if (_fix.Query(typesOfEqTypes) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier compositions = _z3Ctx.MkExists(
-            //    new[] { _g, _f, _gf, _A, _B, _C, _D, _E, _F, },
-            //    (BoolExpr)_comp.Apply(_g, _f, _gf) &
-            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-            //    (BoolExpr)_ctxMorph.Apply(_C, _g, _D) &
-            //    (BoolExpr)_ctxMorph.Apply(_E, _gf, _F) &
-            //    (!(BoolExpr)_ctxEq.Apply(_B, _C) |
-            //     !(BoolExpr)_ctxEq.Apply(_E, _A) |
-            //     !(BoolExpr)_ctxEq.Apply(_F, _D)));
-
-            //if (_fix.Query(compositions) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier idMorphs = _z3Ctx.MkExists(
-            //    new[] { _f, _G, _D },
-            //    (BoolExpr)_idMorph.Apply(_f) &
-            //    (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
-            //     !(BoolExpr)_ctxEq.Apply(_G, _D));
-
-            //if (_fix.Query(idMorphs) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier tySubsts = _z3Ctx.MkExists(
-            //    new[] { _s, _t, _G, _D, _f, _A, _B },
-            //    (BoolExpr)_tySubst.Apply(_s, _f, _t) &
-            //    (BoolExpr)_ty.Apply(_G, _s) &
-            //    (BoolExpr)_ty.Apply(_D, _t) &
-            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-            //    (!(BoolExpr)_ctxEq.Apply(_B, _G) |
-            //     !(BoolExpr)_ctxEq.Apply(_A, _D)));
-
-            //if (_fix.Query(tySubsts) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier tmSubsts = _z3Ctx.MkExists(
-            //    new[] { _M, _N, _G, _D, _s, _t, _f, _A, _B },
-            //    (BoolExpr)_tmSubst.Apply(_M, _f, _N) &
-            //    (BoolExpr)_tmTy.Apply(_G, _M, _s) &
-            //    (BoolExpr)_tmTy.Apply(_D, _N, _t) &
-            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-            //    (!(BoolExpr)_ctxEq.Apply(_B, _G) |
-            //     !(BoolExpr)_ctxEq.Apply(_A, _D)));
-
-            //if (_fix.Query(tmSubsts) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier projCtxs = _z3Ctx.MkExists(
-            //    new[] { _G, _s, _f, _A, _B },
-            //    (BoolExpr)_projCtx.Apply(_G, _s, _f) &
-            //    (BoolExpr)_ctxMorph.Apply(_A, _f, _B) &
-            //    (!(BoolExpr)_ctxEq.Apply(_B, _G) |
-            //     !(BoolExpr)_comprehension.Apply(_G, _s, _A)));
-
-            //if (_fix.Query(projCtxs) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier projTms = _z3Ctx.MkExists(
-            //    new[] { _G, _s, _M, _D, _t },
-            //    (BoolExpr)_projTm.Apply(_G, _s, _M) &
-            //    (BoolExpr)_tmTy.Apply(_D, _M, _t) &
-            //    (!(BoolExpr)_comprehension.Apply(_G, _s, _D)));
-
-            //if (_fix.Query(projTms) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
-
-            //Quantifier extensions = _z3Ctx.MkExists(
-            //    new[] { _f, _M, _g, _G, _D, _A, _B, _C, _s, _t },
-            //    (BoolExpr)_extension.Apply(_f, _M, _g) &
-            //    (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
-            //    (BoolExpr)_tmTy.Apply(_G, _M, _s) &
-            //    (BoolExpr)_tySubst.Apply(_s, _f, _t) &
-            //    (BoolExpr)_ctxMorph.Apply(_A, _g, _B) &
-            //    (!(BoolExpr)_ctxEq.Apply(_A, _G) |
-            //     !(BoolExpr)_comprehension.Apply(_D, _t, _B)));
-
-            //if (_fix.Query(extensions) != Status.UNSATISFIABLE)
-            //    throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(projFalse);
         }
 
         private static readonly string s_z3Setup = @"

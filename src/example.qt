@@ -1,0 +1,8 @@
+def negb_involutive : true = false :=
+    elim false into (_ : bool) : true = (elim (elim true into (_ : bool) : bool
+                                            | => false
+                                            | => false) into (_ : bool) : bool
+                                            | => false
+                                            | => true)
+    | => refl true
+    | => refl false.

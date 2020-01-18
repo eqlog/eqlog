@@ -128,12 +128,13 @@ namespace QT
 
     internal class ExtensionMorph : CtxMorph
     {
-        public ExtensionMorph(uint id, CtxMorph morph, Tm tm, Ctx codomain) : base(id, morph.Domain, codomain)
+        public ExtensionMorph(uint id, CtxMorph morph, Tm tm, ComprehensionCtx codomain) : base(id, morph.Domain, codomain)
         {
             Morph = morph;
             Tm = tm;
         }
 
+        public new ComprehensionCtx Codomain => (ComprehensionCtx)base.Codomain;
         public CtxMorph Morph { get; }
         public Tm Tm { get; }
 
