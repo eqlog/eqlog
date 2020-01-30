@@ -1094,14 +1094,12 @@ namespace QT
           (Extension f N e))
       Extension-Unique)
 
-; O{<f, True>} = S = M{f} and O{<f, False>} = T = N{f} implies
-; BoolElim M N O
-(rule (=> (and (Extension f P g) (True P)
-               (TmSubst O g S)
-               (TmSubst M f S)
-               (Extension f Q h) (False Q)
-               (TmSubst O h T)
-               (TmSubst N f T))
+; O{<1, True>} = M and O{<1, False>} = N implies
+; BoolElim M N = O
+(rule (=> (and (TmBar P g) (True P)
+               (TmBar Q h) (False Q)
+               (TmSubst O g M)
+               (TmSubst O h N))
           (BoolElim M N O))
       BoolElim-Unique)
 
@@ -1202,6 +1200,27 @@ namespace QT
                (CtxMorph G f D))
           (TmSubst N f M))
       False-Natural-2)
+
+; (BoolElim M N){<f, O>} = (BoolElim M{f} N{f}){<1, O>}
+(rule (=> (and (BoolElim M N P)
+               (Extension f O e)
+               (TmSubst P e Q)
+               (TmSubst M f R)
+               (TmSubst N f S)
+               (BoolElim R S T)
+               (TmBar O g))
+          (TmSubst T g Q))
+      (BoolElim-Stable-1))
+
+(rule (=> (and (BoolElim M N P)
+               (Extension f O e)
+               (TmSubst P e Q)
+               (TmSubst M f R)
+               (TmSubst N f S)
+               (BoolElim R S T)
+               (TmBar O g))
+          (TmSubst T g Q))
+      (BoolElim-Stable-2))
 
 ;; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
 ;(rule (=> (and (BoolElim M N O)

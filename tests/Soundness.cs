@@ -6,28 +6,6 @@ namespace Tests
     public class Soundness
     {
         [Fact]
-        public void TestProjIsNotTrue()
-        {
-            using Z3Model m = new Z3Model();
-            EmptyCtx n1 = m.EmptyCtx();
-            TrueTm n3 = m.True(n1);
-            FalseTm n4 = m.False(n1);
-            IdTy n5 = m.Id(n3, n4);
-            ComprehensionCtx n6 = m.Comprehension(n1, n5);
-            ProjTm n9 = m.ProjTm(n6);
-            BoolTy n10 = m.Bool(n6);
-            TrueTm n11 = m.True(n6);
-            FalseTm n12 = m.False(n6);
-            ComprehensionCtx n13 = m.Comprehension(n6, n10);
-            ProjTm n16 = m.ProjTm(n13);
-            TrueTm n17 = m.True(n13);
-            IdMorph n27 = m.IdMorph(n6);
-            ExtensionMorph n28 = m.Extension(n27, n11, n10);
-            Assert.False(m.TmEq(n16, n17));
-            m.Verify();
-        }
-
-        [Fact]
         public void TestTrueIsNotFalse()
         {
             using Z3Model m = new Z3Model();

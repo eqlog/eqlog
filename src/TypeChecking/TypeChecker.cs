@@ -63,6 +63,9 @@ namespace QT
                     $"Unexpected type of term.{Environment.NewLine}" +
                     $"Expected: {ty}{Environment.NewLine}" +
                     $"Actual: {tm.Ty}";
+
+                //Console.WriteLine(((Z3Model)_model).CreateTest());
+                //Debug.WriteLine(DebugDump.CreateTest(_nodeMap.Values));
                 throw new Exception(msg);
             }
 
@@ -205,17 +208,17 @@ namespace QT
 
         private void SubstDefine(CwfNode node, CtxMorph f)
         {
-            //{
-            //    if (node is Tm tm)
-            //        SubstDefine(tm.Ty, f);
-            //}
+            {
+                if (node is Tm tm)
+                    SubstDefine(tm.Ty, f);
+            }
 
             switch (node)
             {
                 case CompMorph morph:
                     {
-                        //CompMorph comp = _model.Compose(morph.F, f);
-                        //SubstDefine(morph.G, comp);
+                        CompMorph comp = _model.Compose(morph.F, f);
+                        SubstDefine(morph.G, comp);
                         break;
                     }
                 case ExtensionMorph morph:
@@ -228,9 +231,9 @@ namespace QT
                     }
                 case SubstTy ty:
                     {
-                        //CompMorph gf = _model.Compose(ty.Morph, f);
-                        //SubstDefine(ty.Morph, f);
-                        //SubstDefine(ty.BaseTy, gf);
+                        CompMorph gf = _model.Compose(ty.Morph, f);
+                        SubstDefine(ty.Morph, f);
+                        SubstDefine(ty.BaseTy, gf);
                         break;
                     }
                 case SubstTm tm:
@@ -250,33 +253,33 @@ namespace QT
                     }
                 case ReflTm tm:
                     {
-                        //_model.SubstTerm(tm.EqTm, f);
-                        //SubstDefine(tm.EqTm, f);
+                        _model.SubstTerm(tm.EqTm, f);
+                        SubstDefine(tm.EqTm, f);
                         break;
                     }
                 case BoolTy ty:
                     {
-                        //_model.Bool(f.Domain);
+                        _model.Bool(f.Domain);
                         break;
                     }
                 case TrueTm tm:
                     {
-                        //_model.True(f.Domain);
+                        _model.True(f.Domain);
                         break;
                     }
                 case FalseTm tm:
                     {
-                        //_model.False(f.Domain);
+                        _model.False(f.Domain);
                         break;
                     }
                 case ElimBoolTm tm:
                     {
-                        //ProjMorph p = _model.ProjCtx(tm.Ctx);
-                        //CompMorph pf = _model.Compose(p, f);
-                        //_model.SubstTerm(tm.TrueCase, pf);
-                        //SubstDefine(tm.TrueCase, pf);
-                        //_model.SubstTerm(tm.FalseCase, pf);
-                        //SubstDefine(tm.FalseCase, pf);
+                        ProjMorph p = _model.ProjCtx(tm.Ctx);
+                        CompMorph pf = _model.Compose(p, f);
+                        _model.SubstTerm(tm.TrueCase, pf);
+                        SubstDefine(tm.TrueCase, pf);
+                        _model.SubstTerm(tm.FalseCase, pf);
+                        SubstDefine(tm.FalseCase, pf);
                         break;
                     }
             }
