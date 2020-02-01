@@ -1210,7 +1210,7 @@ namespace QT
                (BoolElim R S T)
                (TmBar O g))
           (TmSubst T g Q))
-      (BoolElim-Stable-1))
+      BoolElim-Stable-1)
 
 (rule (=> (and (BoolElim M N P)
                (Extension f O e)
@@ -1220,7 +1220,7 @@ namespace QT
                (BoolElim R S T)
                (TmBar O g))
           (TmSubst T g Q))
-      (BoolElim-Stable-2))
+      BoolElim-Stable-2)
 
 ; (BoolElim M N){<f, True>} = M{f}
 (rule (=> (and (BoolElim M N O) (TmTy D O s)      ; if O is bool-elim in D

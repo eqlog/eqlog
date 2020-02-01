@@ -64,8 +64,6 @@ namespace QT
                     $"Expected: {ty}{Environment.NewLine}" +
                     $"Actual: {tm.Ty}";
 
-                //Console.WriteLine(((Z3Model)_model).CreateTest());
-                //Debug.WriteLine(DebugDump.CreateTest(_nodeMap.Values));
                 throw new Exception(msg);
             }
 
@@ -350,8 +348,8 @@ namespace QT
                         if (definedTm != null)
                             return definedTm;
 
-                        // If the defined term is null then we comprehended
-                        // with a variable, so this cast cannot fail.
+                        // If the defined term is null then we took a
+                        // comprehension so this cast cannot fail.
                         Debug.Assert(nextCtx is ComprehensionCtx);
 
                         Tm tmProj = _tc._model.ProjTm((ComprehensionCtx)nextCtx);
