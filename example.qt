@@ -1,8 +1,0 @@
-def eta (a : bool) : (a = elim a into (_ : bool) : bool
-                         | => true
-                         | => false) :=
-  elim a into (b : bool) : (b = elim b into (_ : bool) : bool
-                                | => true
-                                | => false)
-  | => refl true
-  | => refl false.

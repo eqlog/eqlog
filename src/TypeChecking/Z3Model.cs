@@ -1,8 +1,10 @@
 ﻿using Microsoft.Z3;
+using QT.TypeChecking;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using Z3Expr = Microsoft.Z3.Expr;
 
 namespace QT
@@ -44,10 +46,6 @@ namespace QT
         private readonly FuncDecl _false;
         private readonly FuncDecl _boolElim;
 
-        private readonly FuncDecl _nat;
-        private readonly FuncDecl _zero;
-        private readonly FuncDecl _succ;
-        private readonly FuncDecl _natElim;
 
         private readonly Z3Expr _A, _B, _C, _D, _E, _F, _G;
         private readonly Z3Expr _f, _g, _gf;
@@ -65,6 +63,7 @@ namespace QT
             _fix = _z3Ctx.MkFixedpoint();
             _fix.Parameters =
                 _z3Ctx.MkParams()
+                .Add("ctrl_c", false)
                 //.Add("engine", "spacer")
                 //.Add("datalog.generate_explanations", true)
                 //.Add("datalog.explanations_on_relation_level", true)
@@ -113,10 +112,6 @@ namespace QT
             _true = _rels["True"];
             _false = _rels["False"];
             _boolElim = _rels["BoolElim"];
-            _nat = _rels["Nat"];
-            _zero = _rels["Zero"];
-            _succ = _rels["Succ"];
-            _natElim = _rels["NatElim"];
         }
 
         public void Dispose()
@@ -483,7 +478,7 @@ namespace QT
         private void AddAndVerify(FuncDecl pred, params uint[] args)
         {
             _fix.AddFact(pred, args);
-            Verify();
+            VerifyDebug();
         }
 
         private uint ExtractAnswer(int varIndex)
@@ -527,8 +522,27 @@ namespace QT
         }
 
         [Conditional("DEBUG")]
-        private void Verify()
+        private void VerifyDebug() => Verify();
+
+        internal void Verify()
         {
+            void Check(BoolExpr query)
+            {
+                if (_fix.Query(query) == Status.UNSATISFIABLE)
+                    return;
+
+                Debug.WriteLine("Answer:");
+                Debug.WriteLine(ToDebug(_fix.GetAnswer()));
+                Debug.WriteLine("");
+                Debug.WriteLine("Test:");
+                Debug.WriteLine(DebugDump.CreateTest(_nodeMap.Values));
+
+                _fix.Parameters = _z3Ctx.MkParams().Add("datalog.generate_explanations", true);
+                _fix.Query(query);
+                _fix.Parameters = _z3Ctx.MkParams();
+                throw new Exception($"Verification has failed:{Environment.NewLine}{ToDebug(_fix.GetAnswer())}");
+            }
+
             Quantifier typesOfEqTerms = _z3Ctx.MkExists(
                 new[] { _M, _N, _G, _D, _s, _t },
                 (BoolExpr)_tmEq.Apply(_M, _N) &
@@ -537,8 +551,7 @@ namespace QT
                 (!(BoolExpr)_tyEq.Apply(_s, _t) |
                  !(BoolExpr)_ctxEq.Apply(_G, _D)));
 
-            if (_fix.Query(typesOfEqTerms) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(typesOfEqTerms);
 
             Quantifier typesOfEqTypes = _z3Ctx.MkExists(
                 new[] { _G, _D, _s, _t },
@@ -547,8 +560,7 @@ namespace QT
                 (BoolExpr)_ty.Apply(_D, _t) &
                  !(BoolExpr)_ctxEq.Apply(_G, _D));
 
-            if (_fix.Query(typesOfEqTypes) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(typesOfEqTypes);
 
             Quantifier compositions = _z3Ctx.MkExists(
                 new[] { _g, _f, _gf, _A, _B, _C, _D, _E, _F, },
@@ -560,8 +572,7 @@ namespace QT
                  !(BoolExpr)_ctxEq.Apply(_E, _A) |
                  !(BoolExpr)_ctxEq.Apply(_F, _D)));
 
-            if (_fix.Query(compositions) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(compositions);
 
             Quantifier idMorphs = _z3Ctx.MkExists(
                 new[] { _f, _G, _D },
@@ -569,8 +580,7 @@ namespace QT
                 (BoolExpr)_ctxMorph.Apply(_G, _f, _D) &
                  !(BoolExpr)_ctxEq.Apply(_G, _D));
 
-            if (_fix.Query(idMorphs) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(idMorphs);
 
             Quantifier tySubsts = _z3Ctx.MkExists(
                 new[] { _s, _t, _G, _D, _f, _A, _B },
@@ -581,8 +591,7 @@ namespace QT
                 (!(BoolExpr)_ctxEq.Apply(_B, _G) |
                  !(BoolExpr)_ctxEq.Apply(_A, _D)));
 
-            if (_fix.Query(tySubsts) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(tySubsts);
 
             Quantifier tmSubsts = _z3Ctx.MkExists(
                 new[] { _M, _N, _G, _D, _s, _t, _f, _A, _B },
@@ -593,8 +602,7 @@ namespace QT
                 (!(BoolExpr)_ctxEq.Apply(_B, _G) |
                  !(BoolExpr)_ctxEq.Apply(_A, _D)));
 
-            if (_fix.Query(tmSubsts) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(tmSubsts);
 
             Quantifier projCtxs = _z3Ctx.MkExists(
                 new[] { _G, _s, _f, _A, _B },
@@ -603,8 +611,7 @@ namespace QT
                 (!(BoolExpr)_ctxEq.Apply(_B, _G) |
                  !(BoolExpr)_comprehension.Apply(_G, _s, _A)));
 
-            if (_fix.Query(projCtxs) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(projCtxs);
 
             Quantifier projTms = _z3Ctx.MkExists(
                 new[] { _G, _s, _M, _D, _t },
@@ -612,8 +619,7 @@ namespace QT
                 (BoolExpr)_tmTy.Apply(_D, _M, _t) &
                 (!(BoolExpr)_comprehension.Apply(_G, _s, _D)));
 
-            if (_fix.Query(projTms) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(projTms);
 
             Quantifier extensions = _z3Ctx.MkExists(
                 new[] { _f, _M, _g, _G, _D, _A, _B, _C, _s, _t },
@@ -625,8 +631,14 @@ namespace QT
                 (!(BoolExpr)_ctxEq.Apply(_A, _G) |
                  !(BoolExpr)_comprehension.Apply(_D, _t, _B)));
 
-            if (_fix.Query(extensions) != Status.UNSATISFIABLE)
-                throw new Exception("Verification has failed:" + Environment.NewLine + ToDebug(_fix.GetAnswer()));
+            Check(extensions);
+
+            var projFalse = _z3Ctx.MkExists(
+                new[] { _M, _G, _s },
+                (BoolExpr)_false.Apply(_M) &
+                (BoolExpr)_projTm.Apply(_G, _s, _M));
+
+            Check(projFalse);
         }
 
         private static readonly string s_z3Setup = @"
@@ -686,12 +698,6 @@ namespace QT
 (declare-rel False (TmS))
 (declare-rel BoolElim (TmS TmS TmS))
 
-(declare-rel Nat (TyS))
-(declare-rel Zero (TmS))
-; Succ M -- M is successor term (in a context that ends with a nat -- the predecessor)
-(declare-rel Succ (TmS))
-; NatElim M N O -- O is nat elimination with zero-case M and successor-case N
-(declare-rel NatElim (TmS TmS TmS))
 
 (declare-var A CtxS)
 (declare-var B CtxS)
@@ -896,32 +902,6 @@ namespace QT
           (BoolElim P Q R))
       BoolElim-Congr)
 
-; Nat
-(rule (=> (and (Nat s)
-               (TyEq s t))
-          (Nat t))
-      Nat-Congr)
-
-; Zero
-(rule (=> (and (Zero M)
-               (TmEq M N))
-          (Zero N))
-      Zero-Congr)
-
-; Succ
-(rule (=> (and (Succ M)
-               (TmEq M N))
-          (Succ N))
-      Succ-Congr)
-
-; NatElim
-(rule (=> (and (NatElim M N O)
-               (TmEq M P)
-               (TmEq N Q)
-               (TmEq O R))
-          (NatElim P Q R))
-      NatElim-Congr)
-
 ;;;;;;;;;; Functionality rules ;;;;;;;;;;
 
 (rule (=> (and (IdMorph f) (CtxMorph G f G)
@@ -993,26 +973,6 @@ namespace QT
           (TmEq O P))
       BoolElim-Functional)
 
-(rule (=> (and (Nat s) (Ty G s)
-               (Nat t) (Ty G t))
-          (TyEq s t))
-      Nat-Functional)
-
-(rule (=> (and (Zero M) (TmTy G M s)
-               (Zero N) (TmTy G N s))
-          (TmEq M N))
-      Zero-Functional)
-
-(rule (=> (and (Succ M) (TmTy G M s)
-               (Succ N) (TmTy G N s))
-          (TmEq M N))
-      Succ-Functional)
-
-(rule (=> (and (NatElim M N O)
-               (NatElim M N P))
-          (TmEq O P))
-      NatElim-Functional)
-
 ;;;;;;;;;; Categorical rules ;;;;;;;;;;
 
 ; g . id = g
@@ -1027,7 +987,7 @@ namespace QT
           (Comp g f f))
       Comp-Id-2)
 
-; h . (g . f) . h = (h . g) . f
+; h . (g . f) = (h . g) . f
 (rule (=> (and (Comp g f gf)
                (Comp h gf hgf)
                (Comp h g hg))
@@ -1047,16 +1007,16 @@ namespace QT
       Ty-Id)
 
 ; s{g . f} = s{g}{f}
-(rule (=> (and (Comp g f h)
-               (TySubst s h t)
+(rule (=> (and (Comp g f gf)
+               (TySubst s gf t)
                (TySubst s g u))
           (TySubst u f t))
       Ty-Comp-1)
 
 (rule (=> (and (TySubst s g t)
                (TySubst t f u)
-               (Comp g f h))
-          (TySubst s h u))
+               (Comp g f gf))
+          (TySubst s gf u))
       Ty-Comp-2)
 
 ; M{id} = M
@@ -1066,16 +1026,16 @@ namespace QT
       Tm-Id)
 
 ; M{g . f} = M{g}{f}
-(rule (=> (and (Comp g f h)
-               (TmSubst M h N)
+(rule (=> (and (Comp g f gf)
+               (TmSubst M gf N)
                (TmSubst M g O))
           (TmSubst O f N))
       Tm-Comp-1)
 
 (rule (=> (and (TmSubst M g N)
                (TmSubst N f O)
-               (Comp g f h))
-          (TmSubst M h O))
+               (Comp g f gf))
+          (TmSubst M gf O))
       Tm-Comp-2)
 
 ; p(s) . 〈f, M〉 = f
@@ -1090,19 +1050,19 @@ namespace QT
           (TmSubst M e N))
       Cons-R)
 
-; 〈f, M〉 . g = 〈f . g, M{g}〉
-(rule (=> (and (Extension f M e)
-               (Comp e g h)
-               (Comp f g i)
-               (TmSubst M g N))
-          (Extension i N h))
+; 〈g, M〉 . f = 〈g . f, M{f}〉
+(rule (=> (and (Extension g M e)
+               (Comp e f h)
+               (Comp g f gf)
+               (TmSubst M f N))
+          (Extension gf N h))
       Cons-Natural-1)
 
-(rule (=> (and (Comp f g h)
-               (TmSubst M g N)
-               (Extension h N e)
-               (Extension f M i))
-          (Comp i g e))
+(rule (=> (and (Comp g f gf)
+               (TmSubst M f N)
+               (Extension gf N e)
+               (Extension g M i))
+          (Comp i f e))
       Cons-Natural-2)
 
 ; 〈p(s), v〉 = id
@@ -1134,14 +1094,12 @@ namespace QT
           (Extension f N e))
       Extension-Unique)
 
-; O{<f, True>} = M{f} and O{<f, False>} = N{f} implies
-; BoolElim M N O
-(rule (=> (and (Extension f P g) (True P)
-               (TmSubst O g S)
-               (TmSubst M f S)
-               (Extension f Q h) (False Q)
-               (TmSubst O h T)
-               (TmSubst N f T))
+; O{<1, True>} = M and O{<1, False>} = N implies
+; BoolElim M N = O
+(rule (=> (and (TmBar P g) (True P)
+               (TmBar Q h) (False Q)
+               (TmSubst O g M)
+               (TmSubst O h N))
           (BoolElim M N O))
       BoolElim-Unique)
 
@@ -1243,24 +1201,26 @@ namespace QT
           (TmSubst N f M))
       False-Natural-2)
 
-; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
-(rule (=> (and (BoolElim M N O)
-               (CtxMorph G f D)
-               (Weakening f s q) (Bool s) (Ty D s)
-               (TmSubst O q P)
-               (TmSubst M f Q)
-               (TmSubst N f R))
-          (BoolElim Q R P))
-      BoolElim-Natural-1)
+; (BoolElim M N){<f, O>} = (BoolElim M{f} N{f}){<1, O>}
+(rule (=> (and (BoolElim M N P)
+               (Extension f O e)
+               (TmSubst P e Q)
+               (TmSubst M f R)
+               (TmSubst N f S)
+               (BoolElim R S T)
+               (TmBar O g))
+          (TmSubst T g Q))
+      BoolElim-Stable-1)
 
-(rule (=> (and (BoolElim Q R P)
-               (TmSubst M f Q)
-               (TmSubst N f R)
-               (CtxMorph G f D)
-               (BoolElim M N O) 
-               (Weakening f s q) (Bool s) (Ty D s))
-          (TmSubst O q P))
-      BoolElim-Natural-2)
+(rule (=> (and (BoolElim M N P)
+               (Extension f O e)
+               (TmSubst P e Q)
+               (TmSubst M f R)
+               (TmSubst N f S)
+               (BoolElim R S T)
+               (TmBar O g))
+          (TmSubst T g Q))
+      BoolElim-Stable-2)
 
 ; (BoolElim M N){<f, True>} = M{f}
 (rule (=> (and (BoolElim M N O) (TmTy D O s)      ; if O is bool-elim in D
@@ -1276,7 +1236,7 @@ namespace QT
                (TmSubst O e Q)                    ; and Q is O{e}
                (False P))                         ; and P is false
           (TmSubst N f Q))                        ; then the substitution is M{f}
-      BoolElim-True)
+      BoolElim-False)
 
 ".Replace("{SortSize}", SortSize.ToString());
     }

@@ -1,0 +1,24 @@
+(*def negb (a : bool) : bool :=
+  elim a into (_ : bool) : bool
+  | => false
+  | => true.*)
+
+(*def negb_involutive (a : bool) : negb (negb a) = a :=
+  elim a into (b : bool) : negb (negb b) = b
+  | => let _ : bool := negb false in
+       refl true
+  | => let _ : bool := negb true in
+       refl false.*)
+
+def negb_involutive (a : bool) : (a = elim (elim a into (_ : bool) : bool
+                                            | => false
+                                            | => true) into (_ : bool) : bool
+                                      | => false
+                                      | => true) :=
+  elim a into (b : bool) : b = (elim (elim b into (_ : bool) : bool
+                                      | => false
+                                      | => true) into (_ : bool) : bool
+                                | => false
+                                | => true)
+  | => refl true
+  | => refl false.

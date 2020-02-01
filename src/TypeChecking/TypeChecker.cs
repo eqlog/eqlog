@@ -63,6 +63,7 @@ namespace QT
                     $"Unexpected type of term.{Environment.NewLine}" +
                     $"Expected: {ty}{Environment.NewLine}" +
                     $"Actual: {tm.Ty}";
+
                 throw new Exception(msg);
             }
 
@@ -212,78 +213,73 @@ namespace QT
 
             switch (node)
             {
-                case EmptyCtx ctx: break;
-                case ComprehensionCtx ctx: break;
-                case ProjMorph morph: break;
-                case ProjTm tm: break;
-                case IdMorph morph: break;
                 case CompMorph morph:
-                {
-                    CompMorph comp = _model.Compose(morph.F, f);
-                    SubstDefine(morph.G, comp);
-                    break;
-                }
+                    {
+                        CompMorph comp = _model.Compose(morph.F, f);
+                        SubstDefine(morph.G, comp);
+                        break;
+                    }
                 case ExtensionMorph morph:
-                {
-                    CompMorph gf = _model.Compose(morph.Morph, f);
-                    SubstDefine(morph.Tm, f);
-                    SubstDefine(morph.Morph, f);
-                    _model.SubstTerm(morph.Tm, f);
-                    break;
-                }
+                    {
+                        _model.Compose(morph.Morph, f);
+                        SubstDefine(morph.Morph, f);
+                        _model.SubstTerm(morph.Tm, f);
+                        SubstDefine(morph.Tm, f);
+                        break;
+                    }
                 case SubstTy ty:
-                {
-                    CompMorph gf = _model.Compose(ty.Morph, f);
-                    SubstDefine(ty.Morph, f);
-                    SubstDefine(ty.BaseTy, gf);
-                    break;
-                }
+                    {
+                        CompMorph gf = _model.Compose(ty.Morph, f);
+                        SubstDefine(ty.Morph, f);
+                        SubstDefine(ty.BaseTy, gf);
+                        break;
+                    }
                 case SubstTm tm:
-                {
-                    CompMorph gf = _model.Compose(tm.Morph, f);
-                    SubstDefine(tm.Morph, f);
-                    SubstDefine(tm.BaseTm, gf);
-                    break;
-                }
+                    {
+                        CompMorph gf = _model.Compose(tm.Morph, f);
+                        SubstDefine(tm.Morph, f);
+                        SubstDefine(tm.BaseTm, gf);
+                        break;
+                    }
                 case IdTy ty:
-                {
-                    _model.SubstTerm(ty.Left, f);
-                    SubstDefine(ty.Left, f);
-                    _model.SubstTerm(ty.Right, f);
-                    SubstDefine(ty.Right, f);
-                    break;
-                }
+                    {
+                        _model.SubstTerm(ty.Left, f);
+                        SubstDefine(ty.Left, f);
+                        _model.SubstTerm(ty.Right, f);
+                        SubstDefine(ty.Right, f);
+                        break;
+                    }
                 case ReflTm tm:
-                {
-                    _model.SubstTerm(tm.EqTm, f);
-                    SubstDefine(tm.EqTm, f);
-                    break;
-                }
+                    {
+                        _model.SubstTerm(tm.EqTm, f);
+                        SubstDefine(tm.EqTm, f);
+                        break;
+                    }
                 case BoolTy ty:
-                {
-                    _model.Bool(f.Domain);
-                    break;
-                }
+                    {
+                        _model.Bool(f.Domain);
+                        break;
+                    }
                 case TrueTm tm:
-                {
-                    _model.True(f.Domain);
-                    break;
-                }
+                    {
+                        _model.True(f.Domain);
+                        break;
+                    }
                 case FalseTm tm:
-                {
-                    _model.False(f.Domain);
-                    break;
-                }
+                    {
+                        _model.False(f.Domain);
+                        break;
+                    }
                 case ElimBoolTm tm:
-                {
-                    ProjMorph p = _model.ProjCtx(tm.Ctx);
-                    CompMorph pf = _model.Compose(p, f);
-                    _model.SubstTerm(tm.TrueCase, pf);
-                    SubstDefine(tm.TrueCase, pf);
-                    _model.SubstTerm(tm.FalseCase, pf);
-                    SubstDefine(tm.FalseCase, pf);
-                    break;
-                }
+                    {
+                        ProjMorph p = _model.ProjCtx(tm.Ctx);
+                        CompMorph pf = _model.Compose(p, f);
+                        _model.SubstTerm(tm.TrueCase, pf);
+                        SubstDefine(tm.TrueCase, pf);
+                        _model.SubstTerm(tm.FalseCase, pf);
+                        SubstDefine(tm.FalseCase, pf);
+                        break;
+                    }
             }
         }
 
@@ -339,10 +335,9 @@ namespace QT
 
             private Tm Access(int index)
             {
-                Debug.Assert(Ctx is ComprehensionCtx);
-                return Go(_vars.Count - 1, (ComprehensionCtx)Ctx);
+                return Go(_vars.Count - 1, Ctx);
 
-                Tm Go(int i, ComprehensionCtx nextCtx)
+                Tm Go(int i, Ctx nextCtx)
                 {
                     (string? name, Tm? definedTm) = _vars[i];
                     // Make context morphism that gets us from nextCtx to ty's
@@ -353,8 +348,11 @@ namespace QT
                         if (definedTm != null)
                             return definedTm;
 
-                        ProjMorph ctxProj = _tc._model.ProjCtx(nextCtx);
-                        Tm tmProj = _tc._model.ProjTm(nextCtx);
+                        // If the defined term is null then we took a
+                        // comprehension so this cast cannot fail.
+                        Debug.Assert(nextCtx is ComprehensionCtx);
+
+                        Tm tmProj = _tc._model.ProjTm((ComprehensionCtx)nextCtx);
                         return tmProj;
                     }
                     else
@@ -365,16 +363,20 @@ namespace QT
                             return Go(i - 1, nextCtx);
                         }
 
+                        Debug.Assert(nextCtx is ComprehensionCtx);
+
+                        var compCtx = (ComprehensionCtx)nextCtx;
+
                         // BaseCtx should always be a comprehension as
                         // otherwise either we got all the way back to index 0
                         // (taking above branch) or to terms defined in the
                         // empty context (also taking above branch).
-                        Debug.Assert(nextCtx.BaseCtx is ComprehensionCtx);
-                        ComprehensionCtx prevCtx = (ComprehensionCtx)nextCtx.BaseCtx;
+                        Debug.Assert(compCtx.BaseCtx is ComprehensionCtx);
+                        ComprehensionCtx prevCtx = (ComprehensionCtx)compCtx.BaseCtx;
                         Tm tm = Go(i - 1, prevCtx);
 
-                        ProjMorph ctxProj = _tc._model.ProjCtx(nextCtx);
-                        Tm tmSubst = _tc.SubstTerm(tm, ctxProj);
+                        ProjMorph ctxProj = _tc._model.ProjCtx(compCtx);
+                        Tm tmSubst = _tc._model.SubstTerm(tm, ctxProj);
                         return tmSubst;
                     }
                 }
