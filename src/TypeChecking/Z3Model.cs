@@ -1175,7 +1175,7 @@ namespace QT
           (TySubst t f s))
       Bool-Natural-2)
 
-;; True(D){f : G -> D} = True(G)
+; True(D){f : G -> D} = True(G)
 (rule (=> (and (True M) (TmTy D M s)
                (CtxMorph G f D)
                (TmSubst M f O))
@@ -1221,39 +1221,6 @@ namespace QT
                (TmBar O g))
           (TmSubst T g Q))
       (BoolElim-Stable-2))
-
-;; (BoolElim M N){q(f : G -> D, Bool)} = BoolElim M{f} N{f}
-;(rule (=> (and (BoolElim M N O)
-;               (CtxMorph G f D)
-;               (Weakening f s q) (Bool s) (Ty D s)
-;               (TmSubst O q P)
-;               (TmSubst M f Q)
-;               (TmSubst N f R))
-;          (BoolElim Q R P))
-;      BoolElim-Natural-1)
-;
-;(rule (=> (and (BoolElim Q R P)
-;               (TmSubst M f Q)
-;               (TmSubst N f R)
-;               (CtxMorph G f D)
-;               (BoolElim M N O) 
-;               (Weakening f s q) (Bool s) (Ty D s))
-;          (TmSubst O q P))
-;      BoolElim-Natural-2)
-
-;; (BoolElim M N){<id, True>} = M
-;(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
-;               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
-;               (True P))                     ; and P is True
-;          (TmSubst O f M))                   ; then the substitution is the true case.
-;      BoolElim-True)
-;
-;; (BoolElim M N){<id, False>} = N
-;(rule (=> (and (BoolElim M N O) (TmTy D O s) ; if O is bool-elim
-;               (TmBar P f) (CtxMorph G f D)  ; and f is P bar
-;               (False P))                    ; and P is False
-;          (TmSubst O f N))                   ; then the substitution is the false case.
-;      BoolElim-False)
 
 ; (BoolElim M N){<f, True>} = M{f}
 (rule (=> (and (BoolElim M N O) (TmTy D O s)      ; if O is bool-elim in D
