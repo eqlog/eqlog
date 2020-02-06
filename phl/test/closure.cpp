@@ -444,7 +444,7 @@ TEST_CASE("surjective_closure should work for antisymmetry and two elements") {
     });
 }
 
-TEST_CASE("surjective_closure should work for antisymmetry and two elements") {
+TEST_CASE("surjective_closure should work for antisymmetry requiring most likely 2 iterrations") {
     sort s{"s"};
     predicate p{"p", {s, s}};
     term x = "x", y = "y";
@@ -476,5 +476,39 @@ TEST_CASE("surjective_closure should work for antisymmetry and two elements") {
     REQUIRE(pstruct.relations[p] == rows{
         {repr(0), repr(0)},
         {repr(3), repr(3)}
+    });
+}
+
+TEST_CASE("surjective_closure should work for free poset of a long cycle") {
+    sort s{"s"};
+    predicate p{"p", {s, s}};
+    term x = "x", y = "y", z = "z";
+    // I guess reflexivity is missing here
+    sequent antisymmetry = p(x, y) && p(y, x) |= x % y;
+    sequent transitivity = p(x, y) && p(y, z) |= p(x, z);
+
+    partial_structure pstruct;
+    size_t n = 10;
+    for (size_t i = 0; i != n; ++i) {
+        pstruct.equality.push_back(i);
+    }
+    for (size_t i = 0; i != n; ++i) {
+        pstruct.carrier.insert({i, s});
+    }
+    for (size_t i = 0; i != n - 1; ++i) {
+        pstruct.relations[p].insert({i, i + 1});
+    }
+    pstruct.relations[p].insert({n - 1, 0});
+
+    surjective_closure({antisymmetry, transitivity}, pstruct);
+    auto repr = [&](size_t i) {
+        return get_representative(pstruct.equality, i);
+    };
+
+    for (size_t i = 0; i != n; ++i) {
+        REQUIRE(repr(i) == repr(0));
+    }
+    REQUIRE(pstruct.relations[p] == rows{
+        {repr(0), repr(0)}
     });
 }
