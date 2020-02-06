@@ -166,8 +166,6 @@ size_t relation_arity(const variant<predicate, operation>& rel) {
     }, rel);
 }
 
-#include <iostream>
-
 template<class F>
 void visit_join_impl(
     F&& f,
@@ -250,4 +248,120 @@ unordered_set<vector<size_t>> compute_join(
         join.insert(row);
     }, plan, pstruct);
     return join;
+}
+
+surjective_conclusion_plan plan_surjective_conclusion(
+    const join_plan& premise_plan,
+    const formula& conclusion
+) {
+    surjective_conclusion_plan concl_plan{{}, {}};
+
+    for (const atomic_formula af : conclusion) {
+        visit(overloaded{
+            [&](const equality& eq) -> void {
+                const auto& [lhs, rhs] = eq;
+                optional<size_t> lhs_index = lookup(premise_plan.term_indices, lhs);
+                optional<size_t> rhs_index = lookup(premise_plan.term_indices, rhs);
+                assert(lhs_index && rhs_index); // otherwise it's not a surjective sequent
+                concl_plan.concluded_equalities.push_back({*lhs_index, *rhs_index});
+            },
+            [&](const applied_predicate& app_pred) -> void {
+                vector<size_t> arg_indices;
+                for (const term& arg : app_pred.args) {
+                    optional<size_t> arg_index = lookup(premise_plan.term_indices, arg);
+                    assert(arg_index); // otherwise it's not a surjective sequent
+                    arg_indices.push_back(*arg_index);
+                }
+                concl_plan.concluded_predicates.push_back({app_pred.pred, move(arg_indices)});
+            }
+        }, af);
+    }
+
+    return concl_plan;
+}
+
+void surjective_closure_step(
+    const join_plan& premise_plan,
+    const surjective_conclusion_plan& conclusion_plan,
+    const partial_structure& pstruct,
+    surjective_delta& delta
+) {
+    vector<unordered_set<vector<size_t>>*> delta_rels;
+    for (const auto& [pred, _] : conclusion_plan.concluded_predicates) {
+        delta_rels.push_back(&delta.relations[pred]);
+    }
+
+    visit_join([&](const vector<size_t>& row) {
+        // take care of new equalities
+        for (pair<size_t, size_t> eq : conclusion_plan.concluded_equalities) {
+            delta.equalities.push_back({row[eq.first], row[eq.second]});
+        }
+        auto it = delta_rels.begin();
+        for (const auto& [_, args] : conclusion_plan.concluded_predicates) {
+            vector<size_t> substituted_args;
+            substituted_args.reserve(args.size());
+            for (size_t arg : args) {
+                substituted_args.push_back(row[arg]);
+            }
+            (**it).insert(move(substituted_args));
+            ++it;
+        }
+    }, premise_plan, pstruct);
+}
+
+bool merge_into(const surjective_delta& delta, partial_structure& pstruct) {
+    bool change = false;
+    bool equality_change = false;
+
+    for (auto [lhs, rhs] : delta.equalities) {
+        size_t lhs_repr = get_representative(pstruct.equality, lhs);
+        size_t rhs_repr = get_representative(pstruct.equality, rhs);
+        if (lhs_repr != rhs_repr) {
+            merge_into(pstruct.equality, lhs_repr, rhs_repr);
+            change = true;
+            equality_change = true;
+        }
+    }
+
+    for (const auto& [pred, delta_rows] : delta.relations) {
+        unordered_set<vector<size_t>>& pstruct_rows = pstruct.relations[pred];
+        size_t before_size = pstruct_rows.size();
+        pstruct_rows.insert(delta_rows.begin(), delta_rows.end());
+        if (before_size != pstruct_rows.size()) {
+            change = true;
+        }
+    }
+
+    if (equality_change) {
+        // can't do this earlier because delta.relations might contain rows
+        // with non-canonical representatives
+        compact_relations(pstruct);
+    }
+
+    return change;
+}
+
+
+void surjective_closure(
+    const std::vector<sequent>& surjections,
+    partial_structure& pstruct
+) {
+    vector<pair<join_plan, surjective_conclusion_plan>> plans;
+    for (const sequent& seq : surjections) {
+        join_plan premise_plan = formula_join_plan(seq.premise);
+        surjective_conclusion_plan conclusion_plan =
+            plan_surjective_conclusion(premise_plan, seq.conclusion);
+        plans.push_back({premise_plan, conclusion_plan});
+    }
+
+    surjective_delta delta;
+    do {
+        for (auto& [_, rows] : delta.relations) {
+            rows.clear();
+        }
+        delta.equalities.clear();
+        for (const auto& [premise_plan, conclusion_plan] : plans) {
+            surjective_closure_step(premise_plan, conclusion_plan, pstruct, delta);
+        }
+    } while (merge_into(delta, pstruct));
 }

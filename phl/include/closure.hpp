@@ -3,4 +3,7 @@
 #include <phl.hpp>
 #include <partial_structure.hpp>
 
-partial_structure eqlog_closure(partial_structure structure, const phl_theory& t);
+void surjective_closure(
+    const std::vector<sequent>& surjective_sequents,
+    partial_structure& pstruct
+);

@@ -273,3 +273,208 @@ TEST_CASE("compute_join over two p1(x, y) && p2(z, x)") {
         {3, 3, 1, 3}
     });
 }
+
+TEST_CASE("plan_surjective_conclusion of p1(x, y) && p2(x, z) |= x % y && p1(x, z)") {
+    sort s{"s"};
+    predicate p1{"p1", {s, s}};
+    predicate p2{"p2", {s, s}};
+    term x = "x", y = "y", z = "z";
+
+    join_plan premise_plan = formula_join_plan(p1(x, y) && p2(x, z));
+    surjective_conclusion_plan conclusion_plan = plan_surjective_conclusion(premise_plan, x % y && p1(x, z));
+
+    REQUIRE(premise_plan.joined_row_size == 4);
+    REQUIRE(premise_plan.relations == rels{p1, p2});
+    REQUIRE(premise_plan.equalities == eqs{{0, 2}});
+    REQUIRE(premise_plan.term_indices == indices{
+        {x, 0},
+        {y, 1},
+        {z, 3}
+    });
+
+    REQUIRE(conclusion_plan.concluded_equalities == eqs{
+        {0, 1}
+    });
+    REQUIRE(conclusion_plan.concluded_predicates == vector<pair<predicate, vector<size_t>>>{
+        {p1, {0, 3}}
+    });
+}
+
+TEST_CASE("surjective_closure_step should work for transitivity") {
+    sort s{"s"};
+    predicate p{"p", {s, s}};
+    term x = "x", y = "y", z = "z";
+    join_plan premise_plan = formula_join_plan(p(x, y) && p(y, z));
+    surjective_conclusion_plan conclusion_plan = plan_surjective_conclusion(premise_plan, p(x, z));
+    
+    partial_structure pstruct;
+    pstruct.equality = {0, 1, 2, 3, 4};
+    pstruct.carrier = {
+        {0, s},
+        {1, s},
+        {2, s},
+        {3, s},
+        {4, s}
+    };
+    pstruct.relations[p] = {
+        {0, 1},
+        {1, 2},
+        {2, 3},
+        {3, 4}
+    };
+
+    surjective_delta delta;
+    surjective_closure_step(premise_plan, conclusion_plan, pstruct, delta);
+    REQUIRE(delta.equalities.size() == 0);
+    REQUIRE(delta.relations[p] == rows{
+        {0, 2},
+        {1, 3},
+        {2, 4},
+    });
+}
+
+TEST_CASE("merge_into should work for predicates") {
+    sort s{"s"};
+    predicate p{"p", {s, s}};
+    
+    partial_structure pstruct;
+    pstruct.equality = {0, 1, 2, 3, 4};
+    pstruct.carrier = {
+        {0, s},
+        {1, s},
+        {2, s},
+        {3, s},
+        {4, s}
+    };
+    pstruct.relations[p] = {
+        {0, 1},
+        {1, 2},
+        {2, 3},
+        {3, 4}
+    };
+
+    surjective_delta delta;
+    delta.relations[p] = rows{
+        {0, 2},
+        {1, 3},
+        {2, 4}
+    };
+
+    REQUIRE(merge_into(delta, pstruct) == true);
+    REQUIRE(pstruct.relations[p] == rows{
+        {0, 1},
+        {1, 2},
+        {2, 3},
+        {3, 4},
+        {0, 2},
+        {1, 3},
+        {2, 4}
+    });
+    partial_structure pstruct_ = pstruct;
+    REQUIRE(merge_into(delta, pstruct_) == false);
+    REQUIRE(pstruct_.relations == pstruct.relations);
+    REQUIRE(pstruct_.equality == pstruct.equality);
+}
+
+TEST_CASE("surjective_closure should work for transitivity") {
+    sort s{"s"};
+    predicate p{"p", {s, s}};
+    term x = "x", y = "y", z = "z";
+    sequent transitivity = p(x, y) && p(y, z) |= p(x, z);
+    
+    partial_structure pstruct;
+    pstruct.equality = {0, 1, 2, 3, 4};
+    pstruct.carrier = {
+        {0, s},
+        {1, s},
+        {2, s},
+        {3, s},
+        {4, s}
+    };
+    pstruct.relations[p] = {
+        {0, 1},
+        {1, 2},
+        {2, 3},
+        {3, 4}
+    };
+
+    partial_structure pstruct_ = pstruct;
+    surjective_closure({transitivity}, pstruct);
+    REQUIRE(pstruct.equality == pstruct_.equality);
+    REQUIRE(pstruct.relations[p] == rows{
+        {0, 1},
+        {0, 2},
+        {0, 3},
+        {0, 4},
+        {1, 2},
+        {1, 3},
+        {1, 4},
+        {2, 3},
+        {2, 4},
+        {3, 4},
+        {2, 4}
+    });
+}
+
+TEST_CASE("surjective_closure should work for antisymmetry and two elements") {
+    sort s{"s"};
+    predicate p{"p", {s, s}};
+    term x = "x", y = "y";
+    sequent antisymmetry = p(x, y) && p(y, x) |= x % y;
+
+    partial_structure pstruct;
+    pstruct.equality = {0, 1};
+    pstruct.carrier = {
+        {0, s},
+        {1, s},
+    };
+    pstruct.relations[p] = {
+        {0, 1},
+        {1, 0},
+    };
+
+    surjective_closure({antisymmetry}, pstruct);
+    auto repr = [&](size_t i) {
+        return get_representative(pstruct.equality, i);
+    };
+
+    REQUIRE(repr(0) == repr(1));
+    REQUIRE(pstruct.relations[p] == rows{
+        {repr(0), repr(0)}
+    });
+}
+
+TEST_CASE("surjective_closure should work for antisymmetry and two elements") {
+    sort s{"s"};
+    predicate p{"p", {s, s}};
+    term x = "x", y = "y";
+    sequent antisymmetry = p(x, y) && p(y, x) |= x % y;
+
+    partial_structure pstruct;
+    pstruct.equality = {0, 1, 2, 3};
+    pstruct.carrier = {
+        {0, s},
+        {1, s},
+        {2, s},
+        {3, s},
+    };
+    pstruct.relations[p] = {
+        {0, 1},
+        {1, 0},
+        {1, 2},
+        {2, 0},
+        {3, 3}
+    };
+
+    surjective_closure({antisymmetry}, pstruct);
+    auto repr = [&](size_t i) {
+        return get_representative(pstruct.equality, i);
+    };
+
+    REQUIRE(repr(0) == repr(1));
+    REQUIRE(repr(0) == repr(2));
+    REQUIRE(pstruct.relations[p] == rows{
+        {repr(0), repr(0)},
+        {repr(3), repr(3)}
+    });
+}
