@@ -1,0 +1,71 @@
+use std::str::FromStr;
+use crate::lang::ast::{Id, DefId, CtxExt, Unit, Def, Expr, ElimCase};
+
+grammar;
+
+pub Unit: Unit =
+    Def* => <>;
+
+pub Def: Def =
+    "def" <name: DefId> <ctx: CtxExts> ":" <ret_ty: Expr> ":=" <body: Expr> "."
+    => Def { <> };
+
+pub DefId: DefId = {
+    "_" => None,
+    <Id> => Some(<>)
+};
+
+pub CtxExts: Vec<CtxExt> =
+    ("(" <DefId+> ":" <Expr> ")")*
+    => <>.into_iter()
+         .flat_map(
+             |(names, ty)|
+             names.into_iter()
+                  .map(move |name| CtxExt(name, ty.clone())))
+         .collect();
+
+pub Expr: Expr =  {
+    "let" <name: DefId> ":" <ty: Expr> ":=" <val: Expr> "in" <body: Expr> =>
+        Expr::Let { name: name,
+                    ty: Box::new(ty),
+                    val: Box::new(val),
+                    body: Box::new(body) },
+    "elim" <val: Expr> "into" <into_ctx: CtxExts> ":" <into_ty: Expr> <cases: ElimCase*> "end" =>
+        Expr::Elim { val: Box::new(val),
+                     into_ctx: into_ctx,
+                     into_ty: Box::new(into_ty),
+                     cases: cases },
+    Expr2
+};
+Expr2: Expr = {
+    <left: Expr2> "=" <right: Expr3> =>
+        Expr::App("eq".to_string(), vec![left, right]),
+    Expr3
+};
+Expr3: Expr = {
+    <left: Expr3> "+" <right: Expr4> =>
+        Expr::App("plus".to_string(), vec![left, right]),
+    Expr4
+};
+Expr4: Expr = {
+    <Id> <ArgExpr*> => Expr::App(<>),
+    <NumExpr>,
+    "(" <Expr> ")",
+};
+ArgExpr: Expr = {
+    <Id> => Expr::App(<>, vec![]),
+    <NumExpr>,
+    "(" <Expr> ")"
+};
+NumExpr: Expr = {
+    <Nat> =>
+        (0..<>).into_iter()
+              .fold(
+                  Expr::id("O"),
+                  |cur, _| Expr::App("S".to_string(), vec![cur]))
+};
+pub ElimCase: ElimCase =
+    "|" <CtxExts> "=>" <Expr> => ElimCase(<>);
+
+pub Id: Id = r"[A-Za-z_][A-Za-z0-9'_]*" => <>.to_string();
+pub Nat: u32 = r"[0-9]+" => u32::from_str(<>).unwrap();

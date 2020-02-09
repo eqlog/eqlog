@@ -1,31 +1,45 @@
-#![allow(dead_code)]
+pub type Id = String;
+pub type DefId = Option<Id>;
 
-pub struct Unit {
-    pub defs: Vec<Def>
-}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CtxExt(pub DefId, pub Expr);
 
+pub type Unit = Vec<Def>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Def {
-    pub name: Box<DefId>,
-    pub params: Vec<CtxExt>,
-    pub ret_ty: Box<Expr>,
-    pub body: Box<Expr>,
+    pub name: DefId,
+    pub ctx: Vec<CtxExt>,
+    pub ret_ty: Expr,
+    pub body: Expr,
 }
 
-pub struct DefId(pub Option<String>);
-
-pub struct CtxExt {
-    pub name: Box<DefId>,
-    pub ty: Box<Expr>,
-}
-
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
-    Id(String),
-    App {fun: String, args: Vec<Expr>},
-    Let {name: DefId, ty: Box<Expr>, val: Box<Expr>, body: Box<Expr>},
-    Elim {expr: Box<Expr>, into_ext: Box<CtxExt>, cases: Vec<ElimCase>},
+    App(Id, Vec<Expr>),
+    Let { name: DefId,
+          ty: Box<Expr>,
+          val: Box<Expr>,
+          body: Box<Expr> },
+    Elim { val: Box<Expr>,
+           into_ctx : Vec<CtxExt>,
+           into_ty: Box<Expr>,
+           cases: Vec<ElimCase> }
 }
 
-pub struct ElimCase {
-    pub case_exts: Vec<CtxExt>,
-    pub body: Box<Expr>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ElimCase(pub Vec<CtxExt>, pub Expr);
+
+impl Expr {
+    pub fn id(name: &str) -> Self {
+        Expr::App(name.to_string(), vec![])
+    }
+}
+
+pub fn discard() -> DefId {
+    None
+}
+
+pub fn name(name: &str) -> DefId {
+    Some(name.to_string())
 }
