@@ -5,16 +5,28 @@ macro_rules! assert_parse {
     ($parse:expr, $expected:expr) => {
         match $parse {
             Ok(result) => assert_eq!(result, $expected),
-            Err(err) => panic!(format!("{}", err)),
+            Err(err) => panic!("{}", err),
         }
     }
+}
+
+fn id(name: &str) -> Expr {
+    Expr::App(name.to_string(), vec![])
+}
+
+fn discard() -> DefId {
+    None
+}
+
+fn name(name: &str) -> DefId {
+    Some(name.to_string())
 }
 
 #[test]
 fn bool() {
     assert_parse!(
         ExprParser::new().parse("bool"),
-        Expr::id("bool")
+        id("bool")
     );
 }
 
@@ -37,7 +49,7 @@ fn x() {
 fn ctx_ext() {
     assert_parse!(
         CtxExtsParser::new().parse("(x : bool)"),
-        vec![CtxExt(name("x"), Expr::id("bool"))]);
+        vec![CtxExt(name("x"), id("bool"))]);
 }
 
 #[test]
@@ -52,16 +64,16 @@ def negb (x : bool) : bool :=
       DefParser::new().parse(negb),
       Def {
           name: name("negb"),
-          ctx: vec![CtxExt(Some("x".to_string()), Expr::id("bool"))],
-          ret_ty: Expr::id("bool"),
+          ctx: vec![CtxExt(Some("x".to_string()), id("bool"))],
+          ret_ty: id("bool"),
           body:
             Expr::Elim {
-                val: Box::new(Expr::id("x")),
-                into_ctx: vec![CtxExt(discard(), Expr::id("bool"))],
-                into_ty: Box::new(Expr::id("bool")),
+                val: Box::new(id("x")),
+                into_ctx: vec![CtxExt(discard(), id("bool"))],
+                into_ty: Box::new(id("bool")),
                 cases: vec![
-                    ElimCase(vec![], Expr::id("false")),
-                    ElimCase(vec![], Expr::id("true")),
+                    ElimCase(vec![], id("false")),
+                    ElimCase(vec![], id("true")),
                 ]
             }
       });
@@ -77,16 +89,16 @@ fn eq_plus() {
             vec![
                 Expr::App(
                     "plus".to_string(),
-                    vec![Expr::id("a"), Expr::id("b")]
+                    vec![id("a"), id("b")]
                 ),
                 Expr::App(
                     "plus".to_string(),
                     vec![
                         Expr::App(
                             "plus".to_string(),
-                            vec![Expr::id("c"), Expr::id("e")]
+                            vec![id("c"), id("e")]
                         ),
-                        Expr::id("f"),
+                        id("f"),
                     ],
                 ),
             ]
@@ -104,17 +116,17 @@ x = y";
         ExprParser::new().parse(multi_let),
         Expr::Let {
             name: Some("x".to_string()),
-            ty: Box::new(Expr::id("bool")),
-            val: Box::new(Expr::id("true")),
+            ty: Box::new(id("bool")),
+            val: Box::new(id("true")),
             body: Box::new(
                 Expr::Let {
                     name: Some("y".to_string()),
-                    ty: Box::new(Expr::id("bool")),
-                    val: Box::new(Expr::id("false")),
+                    ty: Box::new(id("bool")),
+                    val: Box::new(id("false")),
                     body: Box::new(
                         Expr::App(
                             "eq".to_string(),
-                            vec![Expr::id("x"), Expr::id("y")]
+                            vec![id("x"), id("y")]
                         )
                     )
                 }
@@ -127,7 +139,7 @@ x = y";
 fn app() {
     assert_parse!(
         ExprParser::new().parse("plus a b"),
-        Expr::App("plus".to_string(), vec![Expr::id("a"), Expr::id("b")])
+        Expr::App("plus".to_string(), vec![id("a"), id("b")])
     );
 }
 
@@ -138,10 +150,10 @@ fn app2() {
         Expr::App(
             "plus".to_string(),
             vec![
-                Expr::id("a"),
+                id("a"),
                 Expr::App(
                     "plus".to_string(),
-                    vec![Expr::id("b"), Expr::id("c")]
+                    vec![id("b"), id("c")]
                 )
             ]
         )
@@ -152,7 +164,7 @@ fn app2() {
 fn zero() {
     assert_parse!(
         ExprParser::new().parse("0"),
-        Expr::id("O")
+        id("O")
     );
 }
 
@@ -168,7 +180,7 @@ fn three() {
                     vec![
                         Expr::App(
                             "S".to_string(),
-                            vec![Expr::id("O")]
+                            vec![id("O")]
                         )
                     ]
                 )

@@ -29,17 +29,3 @@ pub enum Expr {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ElimCase(pub Vec<CtxExt>, pub Expr);
-
-impl Expr {
-    pub fn id(name: &str) -> Self {
-        Expr::App(name.to_string(), vec![])
-    }
-}
-
-pub fn discard() -> DefId {
-    None
-}
-
-pub fn name(name: &str) -> DefId {
-    Some(name.to_string())
-}

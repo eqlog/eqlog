@@ -61,7 +61,7 @@ NumExpr: Expr = {
     <Nat> =>
         (0..<>).into_iter()
               .fold(
-                  Expr::id("O"),
+                  Expr::App("O".to_string(), vec![]),
                   |cur, _| Expr::App("S".to_string(), vec![cur]))
 };
 pub ElimCase: ElimCase =
