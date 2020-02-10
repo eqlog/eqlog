@@ -13,3 +13,4 @@ regex = "0.2.0"
 
 [build-dependencies]
 lalrpop = "0.17.2"
+cmake = "0.1.42"
