@@ -353,6 +353,28 @@ void surjective_closure(
             plan_surjective_conclusion(premise_plan, seq.conclusion);
         plans.push_back({premise_plan, conclusion_plan});
     }
+    for (const auto& [rel, _] : pstruct.relations) {
+        if (const operation* op = get_if<operation>(&rel)) {
+            size_t arg_num = op->dom.size();
+            vector<pair<size_t, size_t>> equalities;
+            for (size_t i = 0; i < arg_num; ++i) {
+                equalities.push_back({i, i + arg_num + 1});
+            }
+            // equalities are not sorted according to max, but it's ok because
+            // they're still sorted in order in which they can be checked
+            join_plan premise_plan {
+                2 * arg_num + 2,
+                {rel, rel},
+                {}, // careful, doesn't mention the two terms
+                move(equalities) 
+            };
+            surjective_conclusion_plan conclusion_plan{
+                {{arg_num, arg_num + 1 + arg_num}},
+                {}
+            };
+            plans.push_back({premise_plan, conclusion_plan});
+        }
+    }
 
     surjective_delta delta;
     do {

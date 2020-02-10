@@ -512,3 +512,41 @@ TEST_CASE("surjective_closure should work for free poset of a long cycle") {
         {repr(0), repr(0)}
     });
 }
+
+TEST_CASE("surjective_closure should make operations functional") {
+    sort s{"s"};
+    operation op{"op", {s, s}, s};
+    term x = "x", y = "y", z = "z";
+
+    partial_structure pstruct;
+    pstruct.equality = {0, 1, 2, 3, 4, 5};
+    pstruct.carrier = {
+        {0, s},
+        {1, s},
+        {2, s},
+        {3, s},
+        {4, s},
+        {5, s},
+    };
+    pstruct.relations[op] = rows{
+        {0, 1, 2},
+        {0, 1, 3},
+        {2, 1, 4},
+        {3, 1, 5},
+    };
+
+    surjective_closure({}, pstruct);
+
+    auto repr = [&](size_t i) {
+        return get_representative(pstruct.equality, i);
+    };
+    REQUIRE(repr(0) == 0);
+    REQUIRE(repr(1) == 1);
+    REQUIRE(repr(2) == repr(3));
+    REQUIRE(repr(4) == repr(5));
+
+    REQUIRE(pstruct.relations[op] == rows{
+        {0, 1, repr(2)},
+        {repr(2), 1, repr(4)}
+    });
+}
