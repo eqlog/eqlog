@@ -174,8 +174,7 @@ const phl_theory cwf = {
         fb == mor_ext(f, A, b) &&
             afb == subst_tm(fb, bool_elim(G, A, at, af)) &&
             idfb == mor_ext(id(D), subst_tm(f, b)) &&
-            afb0 == subst_tm(idfb, bool_elim(D, subst_ty(fb, A), subst_tm(f, at), subst_tm(f, af)))
-            |=
+            afb0 == subst_tm(idfb, bool_elim(D, subst_ty(fb, A), subst_tm(f, at), subst_tm(f, af))) |=
             afb  == afb0
     }
 };
