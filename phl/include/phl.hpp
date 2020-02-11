@@ -106,7 +106,18 @@ inline term operator "" _v(const char* cs, std::size_t size) {
 inline formula operator%(term lhs, term rhs) {
     return {equality{std::move(lhs), std::move(rhs)}};
 }
+namespace symbolic_term_equality {
+    inline formula operator==(term lhs, term rhs) {
+        return lhs % rhs;
+    }
+}
+inline formula operator!(term t) {
+    // t is defined
+    // TODO: make more efficient than encoding as t == t
+    return t % t;
+}
 
+#define truth (formula{}) // TODO: make this proper constant
 inline formula operator&&(formula lhs, const formula& rhs) {
     lhs.insert(lhs.end(), rhs.begin(), rhs.end());
     return lhs;
