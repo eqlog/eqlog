@@ -126,56 +126,42 @@ const phl_theory cwf = {
     },
     // surjective axioms:
     {
-        truth |= G == dom(id(G)),
-        G0 == dom(id(G)) |= G == G0,
-        G0 == cod(id(G)) |= G == G0,
-        f0 == comp(id(G), f) |= f == f0,
-        f0 == comp(f, id(G)) |= f == f0,
-        i0 == comp(comp(f, g), h) && i1 == comp(f, comp(g, h)) |= i0 == i1,
-        G == dom(f) && D == cod(f) && subst_ty(f, A) == B && D0 == ty_ctx(B) |= D == D0,
-        A == tm_ty(a) && b == subst_tm(f, a) && B == subst_ty(f, A) && B0 == tm_ty(b) |= B == B0,
-        w == wkn(A) && G0 == dom(w) |= G == G0,
-        w == wkn(A) && D == ctx_ext(A) && D0 == cod(w) |= D == D0,
-        w == wkn(A) && B == subst_ty(w, A) && B0 == tm_ty(var(A)) |= B == B0,
-        g == mor_ext(f, A, b) && w == wkn(A) && f0 == comp(g, w) |= f == f0,
-        g == mor_ext(f, A, b) && b0 == subst_tm(g, var(A)) |= b == b0,
+        dom(id(G)) -= G
+        cod(id(G)) -= G,
+        comp(id(G), f) -= f,
+        comp(f, id(G)) -= f,
+        ty_ctx(subst_ty(f, A)) -= cod(f),
+        tm_ty(subst_tm(f, a)) -= subst_ty(f, tm_ty(a)),
+        dom(wkn(A)) -= ty_ctx(A),
+        cod(wkn(A)) -= ctx_ext(A),
+        tm_ty(var(A)) -= subst_ty(w, A),
+        dom(mor_ext(f, A, b)) -= ext(A),
+        cod(mor_ext(f, A, b)) -= cod(f),
+        comp(mor_ext(f, A, b), w) -= f,
+        subst_tm(mor_ext(f, A, b), var(A)) -= b,
         w == wkn(A) && g == mor_ext(f, A, b) && f == comp(g0, w) && b == subst_tm(g0, var(A)) |= g == g0,
-        G == ty_ctx(tm_ty(a)) && G0 == ty_ctx(Eq(a, b)) |= G == G0,
+        Eq(a, b) && A == tm_ty(a) && A0 == tm_ty(b) |= A == A0,
+        ty_ctx(Eq(a, b)) -= ty_ctx(tm_ty(a)),
         tm_ty(c) == Eq(a, b) |= a == b,
-        B0 == tm_ty(refl(a)) && B == Eq(a, a) |= B0 == B,
-        tm_ty(c) == tm_ty(refl(a)) |= c == refl(a),
-        B == Eq(subst_tm(f, a), subst_tm(f, b)) && B0 == subst_ty(f, Eq(a, b)) |= B == B0,
-        r == refl(subst_tm(f, a)) && r0 == subst_tm(f, refl(a)) |= r == r0,
-        B == bool_(G) && G0 == ty_ctx(B) |= G == G0,
-        b == true_(G) && B == bool_(G) && B0 == tm_ty(b) |= B == B0,
-        b == false_(G) && B == bool_(G) && B0 == tm_ty(b) |= B == B0,
-        b == true_(G) && G0 == ty_ctx(tm_ty(b)) |= G == G0,
-        b == false_(G) && G0 == ty_ctx(tm_ty(b)) |= G == G0,
-        a == bool_elim(G, A, at, af) && A0 == tm_ty(a) |= A == A0,
+        tm_ty(c) == Eq(a, b) && r == refl(a) |= c == r,
+        tm_ty(refl(a)) -= Eq(a, a),
+        subst_ty(f, Eq(a, b)) -= Eq(subst_tm(f, a), subst_tm(f, b)),
+        subst_tm(f, refl(a)) -= refl(subst_tm(f, a)),
+        ty_ctx(bool_(G)) -= G,
+        tm_ty(true_(G)) -= bool_(G),
+        tm_ty(false_(G)) -= bool_(G),
+        tm_ty(bool_elim(G, A, at, af)) -= A,
+        subst_tm(mor_ext(f, bool_(G), true_(D)), bool_elim(G, A, at, af)) -= subst_tm(f, at),
+        subst_tm(mor_ext(f, bool_(G), false_(D)), bool_elim(G, A, at, af)) -= subst_tm(f, af),
         a == bool_elim(G, A, at, af) &&
-            ft == mor_ext(f, A, true_(D)) &&
-            atf == subst_tm(f, at) &&
-            atf0 == subst_tm(ft, a) |=
-            atf == atf0,
-        a == bool_elim(G, A, at, af) &&
-            ff == mor_ext(f, A, false_(D)) &&
-            aff == subst_tm(f, af) &&
-            aff0 == subst_tm(ff, a) |=
-            aff == aff0,
-        a == bool_elim(G, A, at, af) &&
-            ft == mor_ext(id(G), A, true_(G)) &&
-            ff == mor_ext(id(G), A, false_(G)) &&
-            subst_tm(ft, a0) == at &&
-            subst_tm(ff, a0) == af |=
+            subst_tm(mor_ext(id(G), A, true_(G)), a0) == at &&
+            subst_tm(mor_ext(id(G), A, false_(G)), a0) == af |=
             a == a0,
-        cod(f) == D && B == bool_(D) && B0 == subst_ty(f, bool_(G)) |= B == B0,
-        cod(f) == D && b == true_(D) && b0 == subst_tm(f, true_(G)) |= b == b0,
-        cod(f) == D && b == false_(D) && b0 == subst_tm(f, false_(G)) |= b == b0,
-        fb == mor_ext(f, A, b) &&
-            afb == subst_tm(fb, bool_elim(G, A, at, af)) &&
-            idfb == mor_ext(id(D), subst_tm(f, b)) &&
-            afb0 == subst_tm(idfb, bool_elim(D, subst_ty(fb, A), subst_tm(f, at), subst_tm(f, af))) |=
-            afb  == afb0
+        subst_ty(f, bool_(G)) -= bool_(cod(f)),
+        subst_tm(f, true_(G)) -= true_(cod(f)),
+        subst_tm(f, false_(G)) -= false_(cod(f)),
+        subst_tm(mor_ext(f, A, b), bool_elim(G, A, at, af)) -=
+            subst_tm(mor_ext(id(cod(f)), b), bool_elim(cod(f), subst_ty(f, A), subst_tm(at), subst_tm(af)))
     }
 };
 
