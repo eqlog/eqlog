@@ -13,6 +13,9 @@
 using relation = std::variant<predicate, operation>;
 
 struct partial_structure {
+    partial_structure() {}
+    explicit partial_structure(const struct phl_signature& sig);
+
     std::unordered_map<std::size_t, sort> carrier;
     union_find equality;
     // one relation for each predicate and operation, stored in the order as

@@ -4,7 +4,7 @@ project(phl)
 set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -pedantic -Werror -Wno-unused-variable)
 
-add_library(phl src/closure.cpp src/union_find.cpp src/partial_structure.cpp)
+add_library(phl src/closure.cpp src/cwf.cpp src/partial_structure.cpp src/union_find.cpp)
 target_include_directories(phl PUBLIC include)
 
 install(TARGETS phl DESTINATION .) 

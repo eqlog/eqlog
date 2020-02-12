@@ -350,7 +350,6 @@ bool merge_into(const surjective_delta& delta, partial_structure& pstruct) {
     return change;
 }
 
-
 void surjective_closure(
     const std::vector<sequent>& surjections,
     partial_structure& pstruct

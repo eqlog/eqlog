@@ -1,9 +1,20 @@
 #include <partial_structure.hpp>
+#include <phl.hpp>
 
 using std::vector;
 using std::size_t;
 using std::find;
 using std::move;
+
+partial_structure::partial_structure(const phl_signature& sig) {
+    for (const predicate& pred : sig.predicates) {
+        relations[pred] = {};
+    }
+
+    for (const operation& op : sig.operations) {
+        relations[op] = {};
+    }
+}
 
 void compact_relations(partial_structure& pstruct) {
     vector<vector<size_t>> changed_rows;
