@@ -133,6 +133,10 @@ join_plan formula_join_plan(const formula& f) {
         if (const applied_predicate* app_pred = get_if<applied_predicate>(&atom)) {
             add_applied_predicate_to_plan(plan, *app_pred);
         }
+        if (const defined_term* t = get_if<defined_term>(&atom)) {
+            add_subterm_to_plan(plan, t->value);
+            assert(lookup(plan.term_indices, t->value));
+        }
     }
     // ...and add equalities now. This way, all variables will have already been added
     for (const atomic_formula& atom : f) {
@@ -273,6 +277,11 @@ surjective_conclusion_plan plan_surjective_conclusion(
                     arg_indices.push_back(*arg_index);
                 }
                 concl_plan.concluded_predicates.push_back({app_pred.pred, move(arg_indices)});
+            },
+            [&](const defined_term& term) -> void {
+                // it is somewhat nonsensical to have a defined_term in the
+                // conclusion of a surjective sequent
+                assert(lookup(premise_plan.term_indices, term.value));
             }
         }, af);
     }

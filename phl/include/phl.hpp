@@ -15,7 +15,8 @@ typedef std::variant<variable, applied_operation> term;
 
 typedef std::pair<term, term> equality;
 struct applied_predicate;
-typedef std::variant<equality, applied_predicate> atomic_formula;
+struct defined_term;
+typedef std::variant<equality, applied_predicate, defined_term> atomic_formula;
 typedef std::vector<atomic_formula> formula;
 
 struct sequent;
@@ -53,6 +54,10 @@ struct applied_operation {
 struct applied_predicate {
     predicate pred;
     std::vector<term> args;
+};
+
+struct defined_term {
+    term value;
 };
 
 struct sequent {
@@ -114,7 +119,7 @@ namespace symbolic_term_equality {
 inline formula operator!(term t) {
     // t is defined
     // TODO: make more efficient than encoding as t == t
-    return t % t;
+    return {defined_term{std::move(t)}};
 }
 
 #define truth (formula{}) // TODO: make this proper constant
@@ -127,6 +132,9 @@ inline sequent operator|=(formula premise, formula conclusion) {
     return {std::move(premise), std::move(conclusion)};
 }
 
+inline sequent operator-=(const term& t1, const term& t2) {
+    return !t1 && !t2 |= t1 % t2;
+}
 
 struct phl_signature {
     std::vector<sort> sorts;
@@ -160,6 +168,9 @@ inline bool operator==(const applied_predicate& app_pred1, const applied_predica
     return
         app_pred1.pred == app_pred2.pred &&
         app_pred1.args == app_pred2.args;
+}
+inline bool operator==(const defined_term& t1, const defined_term& t2) {
+    return t1.value == t2.value;
 }
 inline bool operator==(const sequent& seq1, const sequent& seq2) {
     return
@@ -197,6 +208,12 @@ namespace std {
     struct hash<applied_predicate> {
         size_t operator()(const applied_predicate& app_pred) const {
             return combined_hash(app_pred.pred, app_pred.args);
+        }
+    };
+    template<>
+    struct hash<defined_term> {
+        size_t operator()(const defined_term& t) const {
+            return std::hash<term>{}(t.value);
         }
     };
     template<>
