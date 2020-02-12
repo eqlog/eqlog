@@ -54,7 +54,8 @@ pub struct Cwf {
     ctxs: HashMap<Ctx, size_t>,
     morphs: HashMap<Morph, size_t>,
     tys: HashMap<Ty, size_t>,
-    tms: HashMap<Tm, size_t>
+    tms: HashMap<Tm, size_t>,
+    dirty: bool
 }
 
 impl Cwf {
@@ -65,6 +66,7 @@ impl Cwf {
             morphs: HashMap::new(),
             tys: HashMap::new(),
             tms: HashMap::new(),
+            dirty: false
         }
     }
 }
@@ -76,31 +78,41 @@ impl Drop for Cwf {
 }
 
 impl Cwf {
-    fn check_eq<T: Eq + Hash>(&self, map: &HashMap<T, size_t>, l: &T, r: &T) -> bool {
+    fn check_eq<T: Eq + Hash, F>(&mut self, map: F, l: &T, r: &T) -> bool
+        where F: FnOnce(&Self) -> &HashMap<T, size_t>
+    {
+        if self.dirty {
+            unsafe { phl::compute_fixpoint(self.pstruct) };
+            self.dirty = false
+        }
+        let map = map(self);
         let lid = map.get(l).unwrap();
         let rid = map.get(r).unwrap();
         unsafe { phl::are_equal(self.pstruct, *lid, *rid) }
     }
 
-    fn def_op<T: Eq + Hash + Clone>(pstruct: size_t, map: &mut HashMap<T, size_t>, node: &T, op: size_t, args: &[size_t]) -> T {
+    fn def_op<T: Eq + Hash + Clone, F>(&mut self, map: F, node: &T, op: size_t, args: &[size_t]) -> T
+        where F: FnOnce(&mut Self) -> &mut HashMap<T, size_t>
+    {
         let id = unsafe {
             assert_eq!(args.len(), phl::get_operation_arity(op));
-            phl::define_operation(pstruct, op, args.as_ptr())
+            phl::define_operation(self.pstruct, op, args.as_ptr())
         };
+        let map = map(self);
         map.insert((*node).clone(), id);
         (*node).clone()
     }
     fn def_ctx(&mut self, node: &Ctx, op: size_t, args: &[size_t]) -> Ctx {
-        Cwf::def_op(self.pstruct, &mut self.ctxs, node, op, args)
+        self.def_op(|s| &mut s.ctxs, node, op, args)
     }
     fn def_morph(&mut self, node: &Morph, op: size_t, args: &[size_t]) -> Morph {
-        Cwf::def_op(self.pstruct, &mut self.morphs, node, op, args)
+        self.def_op(|s| &mut s.morphs, node, op, args)
     }
     fn def_ty(&mut self, node: &Ty, op: size_t, args: &[size_t]) -> Ty {
-        Cwf::def_op(self.pstruct, &mut self.tys, node, op, args)
+        self.def_op(|s| &mut s.tys, node, op, args)
     }
     fn def_tm(&mut self, node: &Tm, op: size_t, args: &[size_t]) -> Tm {
-        Cwf::def_op(self.pstruct, &mut self.tms, node, op, args)
+        self.def_op(|s| &mut s.tms, node, op, args)
     }
 
     fn get_ctx(&self, ctx: &Ctx) -> size_t {
@@ -118,17 +130,17 @@ impl Cwf {
 }
 
 impl Model for Cwf {
-    fn ctx_eq(&self, l: &Ctx, r: &Ctx) -> bool {
-        self.check_eq(&self.ctxs, l, r)
+    fn ctx_eq(&mut self, l: &Ctx, r: &Ctx) -> bool {
+        self.check_eq(|s| &s.ctxs, l, r)
     }
-    fn morph_eq(&self, l: &Morph, r: &Morph) -> bool {
-        self.check_eq(&self.morphs, l, r)
+    fn morph_eq(&mut self, l: &Morph, r: &Morph) -> bool {
+        self.check_eq(|s| &s.morphs, l, r)
     }
-    fn ty_eq(&self, l: &Ty, r: &Ty) -> bool {
-        self.check_eq(&self.tys, l, r)
+    fn ty_eq(&mut self, l: &Ty, r: &Ty) -> bool {
+        self.check_eq(|s| &s.tys, l, r)
     }
-    fn tm_eq(&self, l: &Tm, r: &Tm) -> bool {
-        self.check_eq(&self.tms, l, r)
+    fn tm_eq(&mut self, l: &Tm, r: &Tm) -> bool {
+        self.check_eq(|s| &s.tms, l, r)
     }
 
     fn empty_ctx(&mut self) -> Ctx {

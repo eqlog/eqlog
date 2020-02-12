@@ -1,10 +1,10 @@
 use super::cwf::*;
 
 pub trait Model {
-    fn ctx_eq(&self, l: &Ctx, r: &Ctx) -> bool;
-    fn morph_eq(&self, l: &Morph, r: &Morph) -> bool;
-    fn ty_eq(&self, l: &Ty, r: &Ty) -> bool;
-    fn tm_eq(&self, l: &Tm, r: &Tm) -> bool;
+    fn ctx_eq(&mut self, l: &Ctx, r: &Ctx) -> bool;
+    fn morph_eq(&mut self, l: &Morph, r: &Morph) -> bool;
+    fn ty_eq(&mut self, l: &Ty, r: &Ty) -> bool;
+    fn tm_eq(&mut self, l: &Tm, r: &Tm) -> bool;
 
     fn empty_ctx(&mut self) -> Ctx;
     fn comprehension(&mut self, base: &Ctx, ty: &Ty) -> Ctx;
