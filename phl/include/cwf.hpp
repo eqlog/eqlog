@@ -126,7 +126,7 @@ const phl_theory cwf = {
     },
     // surjective axioms:
     {
-        dom(id(G)) -= G
+        dom(id(G)) -= G,
         cod(id(G)) -= G,
         comp(id(G), f) -= f,
         comp(f, id(G)) -= f,
@@ -135,12 +135,12 @@ const phl_theory cwf = {
         dom(wkn(A)) -= ty_ctx(A),
         cod(wkn(A)) -= ctx_ext(A),
         tm_ty(var(A)) -= subst_ty(w, A),
-        dom(mor_ext(f, A, b)) -= ext(A),
+        dom(mor_ext(f, A, b)) -= ctx_ext(A),
         cod(mor_ext(f, A, b)) -= cod(f),
         comp(mor_ext(f, A, b), w) -= f,
         subst_tm(mor_ext(f, A, b), var(A)) -= b,
         w == wkn(A) && g == mor_ext(f, A, b) && f == comp(g0, w) && b == subst_tm(g0, var(A)) |= g == g0,
-        Eq(a, b) && A == tm_ty(a) && A0 == tm_ty(b) |= A == A0,
+        !Eq(a, b) && A == tm_ty(a) && A0 == tm_ty(b) |= A == A0,
         ty_ctx(Eq(a, b)) -= ty_ctx(tm_ty(a)),
         tm_ty(c) == Eq(a, b) |= a == b,
         tm_ty(c) == Eq(a, b) && r == refl(a) |= c == r,
