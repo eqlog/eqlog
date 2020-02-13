@@ -108,8 +108,9 @@ impl<T: Model> TypeChecker<T> {
     }
 
     fn access_var(&mut self, name: &str) -> Result<(Tm, Ty), String> {
-        let mut ctx_index = self.ctxs.len() - 1;
+        let mut ctx_index = self.ctxs.len();
         for ctx in self.ctxs.iter().rev() {
+            ctx_index -= 1;
             for (ref ctx_var_name, ref tm, ref ty) in ctx.defs.iter().rev() {
                 if ctx_var_name != name {
                     continue
@@ -129,8 +130,6 @@ impl<T: Model> TypeChecker<T> {
 
                 return Ok((tm, ty))
             }
-
-            ctx_index -= 1
         }
 
         Err(format!("unknown definition {}", name))
