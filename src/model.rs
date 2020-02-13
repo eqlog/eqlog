@@ -18,7 +18,7 @@ pub trait Model {
     fn subst_ty(&mut self, f: &Morph, ty: &Ty) -> Ty;
     fn subst_tm(&mut self, f: &Morph, tm: &Tm) -> Tm;
 
-    fn eq(&mut self, l: &Tm, r: &Tm) -> Ty;
+    fn eq_ty(&mut self, l: &Tm, r: &Tm) -> Ty;
     fn refl(&mut self, tm: &Tm) -> Tm;
 
     fn bool_ty(&mut self, ctx: &Ctx) -> Ty;

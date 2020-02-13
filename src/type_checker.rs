@@ -51,7 +51,7 @@ impl<T: Model> TypeChecker<T> {
         let mut defs = vec![];
 
         if let Some(ref name) = ext.0 {
-            let var_ty = self.model.subst_ty(&weakening, &ty);
+            let var_ty = Self::subst_ty(&mut self.model, &weakening, &ty);
             defs.push(((*name).clone(), self.model.var(&ty), var_ty))
         }
         
@@ -80,6 +80,7 @@ impl<T: Model> TypeChecker<T> {
             Expr::App(id, v) =>
                 match (id.as_str(), &v[..]) {
                     ("bool", &[]) => Ok(self.model.bool_ty(ctx_syn)),
+                    ("eq", &[ref a, ref b]) => self.check_eq(a, b),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
             _ => Err(format!("Expected type, got {:?}", expr))
@@ -124,8 +125,8 @@ impl<T: Model> TypeChecker<T> {
                         Some(ref w) => w,
                         None => panic!("expected weakening to be available")
                     };
-                    tm = self.model.subst_tm(&weakening, &tm);
-                    ty = self.model.subst_ty(&weakening, &ty);
+                    tm = Self::subst_tm(&mut self.model, &weakening, &tm);
+                    ty = Self::subst_ty(&mut self.model, &weakening, &ty);
                 }
 
                 return Ok((tm, ty))
@@ -133,5 +134,72 @@ impl<T: Model> TypeChecker<T> {
         }
 
         Err(format!("unknown definition {}", name))
+    }
+
+    fn check_eq(&mut self, a: &Expr, b: &Expr) -> Result<Ty, String> {
+        let (tma, tya) = self.check_tm(a)?;
+        let tmb = self.check_tm_ty(b, &tya)?;
+        Ok(self.model.eq_ty(&tma, &tmb))
+    }
+
+    fn subst_ty(model: &mut T, f: &Morph, ty: &Ty) -> Ty {
+        Self::def_ty_rec(model, f, ty);
+        model.subst_ty(f, ty)
+    }
+
+    fn subst_tm(model: &mut T, f: &Morph, tm: &Tm) -> Tm {
+        Self::def_tm_rec(model, f, tm);
+        model.subst_tm(f, tm)
+    }
+
+    fn def_morph_rec(model: &mut T, g: &Morph, f: &Morph) {
+        match f {
+            Morph::Composition(ref f, ref e) => {
+                // g . (f . e)
+                let comp = model.compose(g, &*f);
+                Self::def_morph_rec(model, &comp, e);
+            },
+            //Morph::Extension(ref f, ref s, ref tm) {
+            //    // g . <f, s, tm>
+            //    let _comp = self.model.compose(g, f);
+            //    self.def_morph_rec(g, &*f);
+            //    let _tm = self.model.subst_tm(g, s)
+            //}
+            _ => ()
+        }
+    }
+
+    fn def_ty_rec(model: &mut T, g: &Morph, ty: &Ty) {
+        match ty {
+            Ty::Subst(ref f, ref s) => {
+                // g (f s) = (g . f) s
+                let comp = model.compose(g, &*f);
+                Self::def_ty_rec(model, &comp, &*s);
+                Self::def_morph_rec(model, g, &*f);
+            },
+            Ty::Eq(ref a, ref b) => {
+                model.subst_tm(g, &*a);
+                model.subst_tm(g, &*b);
+                Self::def_tm_rec(model, g, &*a);
+                Self::def_tm_rec(model, g, &*b);
+            },
+            _ => ()
+        }
+    }
+
+    fn def_tm_rec(model: &mut T, g: &Morph, tm: &Tm) {
+        match tm {
+            Tm::Subst(ref f, ref tm) => {
+                // g (f tm) = (g . f) tm
+                let comp = model.compose(g, &*f);
+                Self::def_tm_rec(model, &comp, &*tm);
+                Self::def_morph_rec(model, g, &*f);
+            },
+            Tm::Refl(ref a) => {
+                model.subst_tm(g, &*a);
+                Self::def_tm_rec(model, g, &*a);
+            },
+            _ => ()
+        }
     }
 }

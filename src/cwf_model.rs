@@ -217,7 +217,7 @@ impl Model for Cwf {
         )
     }
 
-    fn eq(&mut self, l: &Tm, r: &Tm) -> Ty {
+    fn eq_ty(&mut self, l: &Tm, r: &Tm) -> Ty {
         self.def_ty(
             Ty::Eq(Box::new((*l).clone()), Box::new((*r).clone())),
             *EQ_TY,
