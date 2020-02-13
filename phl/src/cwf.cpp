@@ -60,8 +60,6 @@ extern "C" size_t define_operation(partial_structure* pstruct, const operation* 
 #ifndef NDEBUG
     printf("%s(", std::string(op->name).c_str());
     for (size_t i = 0; i < op->dom.size(); i++) {
-        assert(args[i] < pstruct->carrier.size() &&
-               pstruct->carrier[args[i]] == op->dom[i]);
         if (i > 0)
             printf(", ");
 
@@ -69,6 +67,11 @@ extern "C" size_t define_operation(partial_structure* pstruct, const operation* 
     }
 
     printf(") = %zu\n", new_id);
+
+    for (size_t i = 0; i < op->dom.size(); i++) {
+        assert(args[i] < pstruct->carrier.size());
+        assert(pstruct->carrier[args[i]] == op->dom[i]);
+    }
 #endif
 
     std::vector<size_t> vec;
