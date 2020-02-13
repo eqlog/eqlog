@@ -355,7 +355,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qtrust"
+name = "qt"
 version = "0.1.0"
 dependencies = [
  "cmake 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",

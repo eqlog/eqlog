@@ -1,5 +1,5 @@
 [package]
-name = "qtrust"
+name = "qt"
 version = "0.1.0"
 authors = ["Jakob Botsch Nielsen <Jakob.botsch.nielsen@gmail.com>"]
 edition = "2018"

@@ -7,7 +7,7 @@ pub trait Model {
     fn tm_eq(&mut self, l: &Tm, r: &Tm) -> bool;
 
     fn empty_ctx(&mut self) -> Ctx;
-    fn comprehension(&mut self, base: &Ctx, ty: &Ty) -> Ctx;
+    fn comprehension(&mut self, ty: &Ty) -> Ctx;
     fn weakening(&mut self, ty: &Ty) -> Morph;
     fn var(&mut self, ty: &Ty) -> Tm;
 

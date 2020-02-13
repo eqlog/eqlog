@@ -15,16 +15,10 @@ use cwf_model::Cwf;
 use type_checker::TypeChecker;
 
 fn main() {
-    let negb = "
-def negb (b : bool) : bool :=
-    elim b into (_ : bool) : bool
-    | => false
-    | => true
-    end.";
-
-    let negb = lang::parser::DefParser::new().parse(negb).unwrap();
+    let p = "def id (b : bool) : bool := b.";
+    let p = lang::parser::DefParser::new().parse(p).unwrap();
     let mut model = Cwf::new();
     let mut tc = TypeChecker::new(model);
-    let result = tc.check_def(&negb);
+    let result = tc.check_def(&p);
     println!("{:?}", result)
 }

@@ -91,28 +91,40 @@ impl Cwf {
         unsafe { phl::are_equal(self.pstruct, *lid, *rid) }
     }
 
-    fn def_op<T: Eq + Hash + Clone, F>(&mut self, map: F, node: &T, op: size_t, args: &[size_t]) -> T
-        where F: FnOnce(&mut Self) -> &mut HashMap<T, size_t>
-    {
-        let id = unsafe {
+    fn def_op(&mut self, op: size_t, args: &[size_t]) -> size_t {
+        self.dirty = true;
+        unsafe {
             assert_eq!(args.len(), phl::get_operation_arity(op));
             phl::define_operation(self.pstruct, op, args.as_ptr())
-        };
-        let map = map(self);
-        map.insert((*node).clone(), id);
-        (*node).clone()
+        }
     }
-    fn def_ctx(&mut self, node: &Ctx, op: size_t, args: &[size_t]) -> Ctx {
-        self.def_op(|s| &mut s.ctxs, node, op, args)
+
+    fn def_op_syn<T: Eq + Hash + Clone, F>(&mut self, map: F, node: &T, op: size_t, args: &[size_t]) -> size_t
+        where F: FnOnce(&mut Self) -> &mut HashMap<T, size_t>
+    {
+        let id = self.def_op(op, args);
+        map(self).insert((*node).clone(), id);
+        id
     }
-    fn def_morph(&mut self, node: &Morph, op: size_t, args: &[size_t]) -> Morph {
-        self.def_op(|s| &mut s.morphs, node, op, args)
+    fn def_ctx(&mut self, node: Ctx, op: size_t, args: &[size_t]) -> Ctx {
+        self.def_op_syn(|s| &mut s.ctxs, &node, op, args);
+        node
     }
-    fn def_ty(&mut self, node: &Ty, op: size_t, args: &[size_t]) -> Ty {
-        self.def_op(|s| &mut s.tys, node, op, args)
+    fn def_morph(&mut self, node: Morph, op: size_t, args: &[size_t]) -> Morph {
+        let id = self.def_op_syn(|s| &mut s.morphs, &node, op, args);
+        self.def_op(*DOM, &[id]);
+        self.def_op(*COD, &[id]);
+        node
     }
-    fn def_tm(&mut self, node: &Tm, op: size_t, args: &[size_t]) -> Tm {
-        self.def_op(|s| &mut s.tms, node, op, args)
+    fn def_ty(&mut self, node: Ty, op: size_t, args: &[size_t]) -> Ty {
+        let id = self.def_op_syn(|s| &mut s.tys, &node, op, args);
+        self.def_op(*TY_CTX, &[id]);
+        node
+    }
+    fn def_tm(&mut self, node: Tm, op: size_t, args: &[size_t]) -> Tm {
+        let id = self.def_op_syn(|s| &mut s.tms, &node, op, args);
+        self.def_op(*TM_TY, &[id]);
+        node
     }
 
     fn get_ctx(&self, ctx: &Ctx) -> size_t {
@@ -144,25 +156,25 @@ impl Model for Cwf {
     }
 
     fn empty_ctx(&mut self) -> Ctx {
-        self.def_ctx(&Ctx::Empty, *EMPTY_CTX, &[])
+        self.def_ctx(Ctx::Empty, *EMPTY_CTX, &[])
     }
-    fn comprehension(&mut self, base: &Ctx, ty: &Ty) -> Ctx {
+    fn comprehension(&mut self, ty: &Ty) -> Ctx {
         self.def_ctx(
-            &Ctx::Comprehension(Box::new((*base).clone()), Box::new((*ty).clone())),
+            Ctx::Comprehension(Box::new((*ty).clone())),
             *CTX_EXT,
-            &[self.get_ctx(base), self.get_ty(ty)]
+            &[self.get_ty(ty)]
         )
     }
     fn weakening(&mut self, ty: &Ty) -> Morph {
         self.def_morph(
-            &Morph::Weakening(Box::new((*ty).clone())),
+            Morph::Weakening(Box::new((*ty).clone())),
             *WKN,
             &[self.get_ty(ty)]
         )
     }
     fn var(&mut self, ty: &Ty) -> Tm {
         self.def_tm(
-            &Tm::Var(Box::new((*ty).clone())),
+            Tm::Var(Box::new((*ty).clone())),
             *VAR,
             &[self.get_ty(ty)]
         )
@@ -170,21 +182,21 @@ impl Model for Cwf {
 
     fn id_morph(&mut self, ctx: &Ctx) -> Morph {
         self.def_morph(
-            &Morph::Identity(Box::new((*ctx).clone())),
+            Morph::Identity(Box::new((*ctx).clone())),
             *ID_MORPH,
             &[self.get_ctx(ctx)]
         )
     }
     fn compose(&mut self, g: &Morph, f: &Morph) -> Morph {
         self.def_morph(
-            &Morph::Composition(Box::new((*g).clone()), Box::new((*f).clone())),
+            Morph::Composition(Box::new((*g).clone()), Box::new((*f).clone())),
             *COMP,
             &[self.get_morph(g), self.get_morph(f)]
         )
     }
     fn extension(&mut self, f: &Morph, ty: &Ty, tm: &Tm) -> Morph {
         self.def_morph(
-            &Morph::Extension(Box::new((*f).clone()), Box::new((*ty).clone()), Box::new((*tm).clone())),
+            Morph::Extension(Box::new((*f).clone()), Box::new((*ty).clone()), Box::new((*tm).clone())),
             *MOR_EXT,
             &[self.get_morph(f), self.get_ty(ty), self.get_tm(tm)]
         )
@@ -192,14 +204,14 @@ impl Model for Cwf {
 
     fn subst_ty(&mut self, f: &Morph, ty: &Ty) -> Ty {
         self.def_ty(
-            &Ty::Subst(Box::new((*f).clone()), Box::new((*ty).clone())),
+            Ty::Subst(Box::new((*f).clone()), Box::new((*ty).clone())),
             *SUBST_TY,
             &[self.get_morph(f), self.get_ty(ty)]
         )
     }
     fn subst_tm(&mut self, f: &Morph, tm: &Tm) -> Tm {
         self.def_tm(
-            &Tm::Subst(Box::new((*f).clone()), Box::new((*tm).clone())),
+            Tm::Subst(Box::new((*f).clone()), Box::new((*tm).clone())),
             *SUBST_TM,
             &[self.get_morph(f), self.get_tm(tm)]
         )
@@ -207,14 +219,14 @@ impl Model for Cwf {
 
     fn eq(&mut self, l: &Tm, r: &Tm) -> Ty {
         self.def_ty(
-            &Ty::Eq(Box::new((*l).clone()), Box::new((*r).clone())),
+            Ty::Eq(Box::new((*l).clone()), Box::new((*r).clone())),
             *EQ_TY,
             &[self.get_tm(l), self.get_tm(r)]
         )
     }
     fn refl(&mut self, tm: &Tm) -> Tm {
         self.def_tm(
-            &Tm::Refl(Box::new((*tm).clone())),
+            Tm::Refl(Box::new((*tm).clone())),
             *REFL,
             &[self.get_tm(tm)]
         )
@@ -222,28 +234,28 @@ impl Model for Cwf {
 
     fn bool_ty(&mut self, ctx: &Ctx) -> Ty {
         self.def_ty(
-            &Ty::Bool(Box::new((*ctx).clone())),
+            Ty::Bool(Box::new((*ctx).clone())),
             *BOOL,
             &[self.get_ctx(ctx)]
         )
     }
     fn true_tm(&mut self, ctx: &Ctx) -> Tm {
         self.def_tm(
-            &Tm::True(Box::new((*ctx).clone())),
+            Tm::True(Box::new((*ctx).clone())),
             *TRUE,
             &[self.get_ctx(ctx)]
         )
     }
     fn false_tm(&mut self, ctx: &Ctx) -> Tm {
         self.def_tm(
-            &Tm::True(Box::new((*ctx).clone())),
+            Tm::True(Box::new((*ctx).clone())),
             *TRUE,
             &[self.get_ctx(ctx)]
         )
     }
     fn elim_bool(&mut self, into: &Ty, true_case: &Tm, false_case: &Tm) -> Tm {
         self.def_tm(
-            &Tm::ElimBool(Box::new((*into).clone()), Box::new((*true_case).clone()), Box::new((*false_case).clone())),
+            Tm::ElimBool(Box::new((*into).clone()), Box::new((*true_case).clone()), Box::new((*false_case).clone())),
             *BOOL_ELIM,
             &[self.get_ty(into), self.get_tm(true_case), self.get_tm(false_case)]
         )

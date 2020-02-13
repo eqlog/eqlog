@@ -1,7 +1,7 @@
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Ctx {
   Empty,
-  Comprehension(Box<Ctx>, Box<Ty>),
+  Comprehension(Box<Ty>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]

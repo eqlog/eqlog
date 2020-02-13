@@ -40,10 +40,14 @@ const phl_signature cwf_signature = {
     {
         dom, cod,
         id, comp,
+        ty_ctx, tm_ty,
         subst_ty, subst_tm,
         empty_ctx, ctx_ext,
-        ctx_ext, wkn, var, mor_ext,
-        bool_, true_, false_, bool_elim
+        wkn, var,
+        mor_ext, Eq,
+        refl, bool_,
+        true_, false_,
+        bool_elim
     }
 };
 

@@ -43,8 +43,12 @@ extern "C" const predicate* get_predicate(const char* name) {
 }
 
 extern "C" bool are_equal(partial_structure* pstruct, size_t l, size_t r) {
-    return get_representative(pstruct->equality, l) ==
-           get_representative(pstruct->equality, r);
+    size_t lr = get_representative(pstruct->equality, l);
+    size_t rr = get_representative(pstruct->equality, r);
+#ifndef NDEBUG
+    printf("[%zu] == [%zu] => %s\n", l, r, lr == rr ? "true" : "false");
+#endif
+    return lr == rr;
 }
 
 extern "C" size_t define_operation(partial_structure* pstruct, const operation* op, const size_t* args) {
@@ -52,6 +56,20 @@ extern "C" size_t define_operation(partial_structure* pstruct, const operation* 
     pstruct->carrier[new_id] = op->cod;
     size_t uf_id = add_element(pstruct->equality);
     assert(uf_id == new_id);
+
+#ifndef NDEBUG
+    printf("%s(", std::string(op->name).c_str());
+    for (size_t i = 0; i < op->dom.size(); i++) {
+        assert(args[i] < pstruct->carrier.size() &&
+               pstruct->carrier[args[i]] == op->dom[i]);
+        if (i > 0)
+            printf(", ");
+
+        printf("%zu", args[i]);
+    }
+
+    printf(") = %zu\n", new_id);
+#endif
 
     std::vector<size_t> vec;
     vec.reserve(op->dom.size() + 1);

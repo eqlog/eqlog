@@ -170,6 +170,17 @@ size_t relation_arity(const variant<predicate, operation>& rel) {
     }, rel);
 }
 
+std::string relation_name(const variant<predicate, operation>& rel) {
+    return visit(overloaded{
+        [](const predicate& p) -> std::string {
+            return std::string(p.name);
+        },
+        [](const operation& o) -> std::string {
+            return std::string(o.name);
+        }
+    }, rel);
+}
+
 template<class F>
 void visit_join_impl(
     F&& f,
@@ -213,7 +224,9 @@ void visit_join(F&& f, const join_plan& plan, const partial_structure& pstruct) 
     vector<pair<size_t, size_t>>::const_iterator eq_it = plan.equalities.begin();
     size_t current_join_size = 0;
     for (const relation& rel_sym : plan.relations) {
-        const unordered_set<vector<size_t>>& rel = pstruct.relations.find(rel_sym)->second;
+        auto it = pstruct.relations.find(rel_sym);
+        assert(it != pstruct.relations.end());
+        const unordered_set<vector<size_t>>& rel = it->second;
         rels.push_back(&rel);
         current_join_size += relation_arity(rel_sym);
         vector<pair<size_t, size_t>> new_eqs;
@@ -279,6 +292,7 @@ surjective_conclusion_plan plan_surjective_conclusion(
                 concl_plan.concluded_predicates.push_back({app_pred.pred, move(arg_indices)});
             },
             [&](const defined_term& term) -> void {
+                (void)term;
                 // it is somewhat nonsensical to have a defined_term in the
                 // conclusion of a surjective sequent
                 assert(lookup(premise_plan.term_indices, term.value));
