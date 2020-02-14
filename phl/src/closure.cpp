@@ -365,6 +365,7 @@ bool merge_into(const surjective_delta& delta, partial_structure& pstruct) {
 }
 
 void verify_canonicity(partial_structure& pstruct) {
+    (void)pstruct;
 #ifndef NDEBUG
     for (const auto& [rel, rows] : pstruct.relations) {
         for (const auto& row : rows) {

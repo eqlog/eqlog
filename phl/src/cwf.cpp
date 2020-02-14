@@ -55,15 +55,15 @@ extern "C" size_t define_operation(partial_structure* pstruct, const operation* 
     size_t new_id = pstruct->carrier.size();
 
 #ifndef NDEBUG
-    printf("%s(", std::string(op->name).c_str());
-    for (size_t i = 0; i < op->dom.size(); i++) {
-        if (i > 0)
-            printf(", ");
+    //printf("%s(", std::string(op->name).c_str());
+    //for (size_t i = 0; i < op->dom.size(); i++) {
+    //    if (i > 0)
+    //        printf(", ");
 
-        printf("%zu", args[i]);
-    }
+    //    printf("%zu", args[i]);
+    //}
 
-    printf(") = %zu\n", new_id);
+    //printf(") = %zu\n", new_id);
 #endif
 
     pstruct->carrier[new_id] = op->cod;

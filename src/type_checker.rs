@@ -15,8 +15,8 @@ struct CtxInfo {
     defs: Vec<(String, Tm, Ty)>,
 }
 
-impl<T: Model> TypeChecker<T> {
-    pub fn new(mut model: T) -> TypeChecker<T> {
+impl<TModel: Model> TypeChecker<TModel> {
+    pub fn new(mut model: TModel) -> TypeChecker<TModel> {
         let empty = model.empty_ctx();
         TypeChecker {
             model: model,
@@ -33,7 +33,7 @@ impl<T: Model> TypeChecker<T> {
     // to this state when it is dropped. The scope guard takes ownership
     // of the TC.
     fn save_ctx<'a>(&'a mut self) ->
-            ScopeGuard<&mut TypeChecker<T>, impl FnOnce(&'a mut TypeChecker<T>)>
+            ScopeGuard<&mut TypeChecker<TModel>, impl FnOnce(&'a mut TypeChecker<TModel>)>
     {
         let depth = self.ctxs.len();
         assert!(depth > 0); // always have empty context
@@ -52,7 +52,7 @@ impl<T: Model> TypeChecker<T> {
 
         if let Some(ref name) = ext.0 {
             let var_ty = Self::subst_ty(&mut self.model, &weakening, &ty);
-            defs.push(((*name).clone(), self.model.var(&ty), var_ty))
+            defs.push((name.clone(), self.model.var(&ty), var_ty))
         }
         
         let new_ctx_info = CtxInfo {
@@ -74,6 +74,20 @@ impl<T: Model> TypeChecker<T> {
         s.check_tm_ty(&def.body, &ret_ty)
     }
 
+    fn check_let<T, F>(
+        &mut self, check_body: F,
+        name: &DefId, ty: &Expr, val: &Expr, body: &Expr) -> Result<T, String>
+            where F : FnOnce(&mut Self, &Expr) -> Result<T, String>
+    {
+        let mut s = self.save_ctx();
+        let ty = s.check_ty(ty)?;
+        let val = s.check_tm_ty(val, &ty)?;
+        if let Some(name) = name {
+            s.ctxs.last_mut().unwrap().defs.push((name.clone(), val, ty));
+        };
+        check_body(&mut s, body)
+    }
+
     pub fn check_ty(&mut self, expr: &Expr) -> Result<Ty, String> {
         let ctx_syn = &self.ctxs.last().unwrap().syntax;
         match expr {
@@ -83,6 +97,8 @@ impl<T: Model> TypeChecker<T> {
                     ("eq", &[ref a, ref b]) => self.check_eq(a, b),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
+            Expr::Let { name, ty, val, body } =>
+                self.check_let(|s, body| s.check_ty(body), name, &*ty, &*val, &*body),
             _ => Err(format!("Expected type, got {:?}", expr))
         }
     }
@@ -95,6 +111,8 @@ impl<T: Model> TypeChecker<T> {
                     (v, []) => self.access_var(v),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
+            Expr::Let { name, ty, val, body } =>
+                self.check_let(|s, body| s.check_tm(body), name, &*ty, &*val, &*body),
             _ => Err(format!("Unhandled term {:?}", expr))
         }
     }
@@ -117,8 +135,8 @@ impl<T: Model> TypeChecker<T> {
                     continue
                 }
 
-                let mut tm = (*tm).clone();
-                let mut ty = (*ty).clone();
+                let mut tm = tm.clone();
+                let mut ty = ty.clone();
                 // Found term, inject it into current context.
                 for ctx in &self.ctxs[ctx_index+1..] {
                     let weakening = match ctx.weakening {
@@ -142,17 +160,17 @@ impl<T: Model> TypeChecker<T> {
         Ok(self.model.eq_ty(&tma, &tmb))
     }
 
-    fn subst_ty(model: &mut T, f: &Morph, ty: &Ty) -> Ty {
+    fn subst_ty(model: &mut TModel, f: &Morph, ty: &Ty) -> Ty {
         Self::def_ty_rec(model, f, ty);
         model.subst_ty(f, ty)
     }
 
-    fn subst_tm(model: &mut T, f: &Morph, tm: &Tm) -> Tm {
+    fn subst_tm(model: &mut TModel, f: &Morph, tm: &Tm) -> Tm {
         Self::def_tm_rec(model, f, tm);
         model.subst_tm(f, tm)
     }
 
-    fn def_morph_rec(model: &mut T, g: &Morph, f: &Morph) {
+    fn def_morph_rec(model: &mut TModel, g: &Morph, f: &Morph) {
         match f {
             Morph::Composition(ref f, ref e) => {
                 // g . (f . e)
@@ -169,7 +187,7 @@ impl<T: Model> TypeChecker<T> {
         }
     }
 
-    fn def_ty_rec(model: &mut T, g: &Morph, ty: &Ty) {
+    fn def_ty_rec(model: &mut TModel, g: &Morph, ty: &Ty) {
         match ty {
             Ty::Subst(ref f, ref s) => {
                 // g (f s) = (g . f) s
@@ -190,7 +208,7 @@ impl<T: Model> TypeChecker<T> {
         }
     }
 
-    fn def_tm_rec(model: &mut T, g: &Morph, tm: &Tm) {
+    fn def_tm_rec(model: &mut TModel, g: &Morph, tm: &Tm) {
         match tm {
             Tm::Subst(ref f, ref tm) => {
                 // g (f tm) = (g . f) tm

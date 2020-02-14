@@ -1,0 +1,3 @@
+def test (a b c d e : bool) (p1 : a = b) (p2 : b = c) (p3 : c = d) (p4 : d = e) : e = a :=
+    let x : a = e := p1 in
+    x.
