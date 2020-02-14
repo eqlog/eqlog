@@ -1,4 +1,4 @@
-use libc::{size_t, c_char};
+use libc::{size_t};
 use std::clone::Clone;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -8,6 +8,7 @@ use super::cwf::*;
 
 mod phl {
     use libc::{size_t, c_char};
+    #[allow(dead_code)]
     extern {
         pub fn create_cwf() -> size_t;
         pub fn destroy_cwf(cwf: size_t);
