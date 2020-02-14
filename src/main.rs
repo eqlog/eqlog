@@ -20,5 +20,8 @@ fn main() {
     let mut model = Cwf::new();
     let mut tc = TypeChecker::new(model);
     let result = tc.check_def(&p);
-    println!("{:?}", result)
+    match result {
+        Ok(_) => println!("OK"),
+        Err(s) => println!("{}", s)
+    };
 }

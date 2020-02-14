@@ -104,7 +104,7 @@ impl<T: Model> TypeChecker<T> {
         if self.model.ty_eq(&ty, expected_ty) {
             Ok(tm)
         } else {
-            Err(format!("expected: {:?}\ngot: {:?}", expected_ty, ty))
+            Err(format!("expected:\n{:#?}\ngot:\n{:#?}", expected_ty, ty))
         }
     }
 
