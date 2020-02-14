@@ -173,15 +173,18 @@ impl<T: Model> TypeChecker<T> {
         match ty {
             Ty::Subst(ref f, ref s) => {
                 // g (f s) = (g . f) s
-                let comp = model.compose(g, &*f);
-                Self::def_ty_rec(model, &comp, &*s);
+                let gf = model.compose(g, &*f);
                 Self::def_morph_rec(model, g, &*f);
+                model.subst_ty(&gf, &*s);
+                Self::def_ty_rec(model, &gf, &*s);
             },
             Ty::Eq(ref a, ref b) => {
-                model.subst_tm(g, &*a);
-                model.subst_tm(g, &*b);
+                let ga = model.subst_tm(g, &*a);
                 Self::def_tm_rec(model, g, &*a);
+                let gb = model.subst_tm(g, &*b);
                 Self::def_tm_rec(model, g, &*b);
+
+                model.eq_ty(&ga, &gb);
             },
             _ => ()
         }
@@ -191,13 +194,15 @@ impl<T: Model> TypeChecker<T> {
         match tm {
             Tm::Subst(ref f, ref tm) => {
                 // g (f tm) = (g . f) tm
-                let comp = model.compose(g, &*f);
-                Self::def_tm_rec(model, &comp, &*tm);
+                let gf = model.compose(g, &*f);
                 Self::def_morph_rec(model, g, &*f);
+                model.subst_tm(&gf, &*tm);
+                Self::def_tm_rec(model, &gf, &*tm);
             },
             Tm::Refl(ref a) => {
-                model.subst_tm(g, &*a);
+                let ga = model.subst_tm(g, &*a);
                 Self::def_tm_rec(model, g, &*a);
+                model.refl(&ga);
             },
             _ => ()
         }
