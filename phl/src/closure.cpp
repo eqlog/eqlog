@@ -364,10 +364,30 @@ bool merge_into(const surjective_delta& delta, partial_structure& pstruct) {
     return change;
 }
 
+void verify_canonicity(partial_structure& pstruct) {
+#ifndef NDEBUG
+    for (const auto& [rel, rows] : pstruct.relations) {
+        for (const auto& row : rows) {
+            for (size_t arg : row) {
+                if (arg == get_representative(pstruct.equality, arg))
+                    continue;
+
+                printf("table %s contains uncanonical data\n", relation_name(rel).c_str());
+                assert(!"table contains uncanonical data");
+            }
+        }
+    }
+#endif
+}
+
 void surjective_closure(
     const std::vector<sequent>& surjections,
     partial_structure& pstruct
 ) {
+    // We maintain the invariant that data in the partial structure
+    // is always canonical except for during joins.
+    verify_canonicity(pstruct);
+
     vector<pair<join_plan, surjective_conclusion_plan>> plans;
     for (const sequent& seq : surjections) {
         join_plan premise_plan = formula_join_plan(seq.premise);
@@ -408,4 +428,6 @@ void surjective_closure(
             surjective_closure_step(premise_plan, conclusion_plan, pstruct, delta);
         }
     } while (merge_into(delta, pstruct));
+
+    verify_canonicity(pstruct);
 }

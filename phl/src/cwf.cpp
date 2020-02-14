@@ -53,9 +53,6 @@ extern "C" bool are_equal(partial_structure* pstruct, size_t l, size_t r) {
 
 extern "C" size_t define_operation(partial_structure* pstruct, const operation* op, const size_t* args) {
     size_t new_id = pstruct->carrier.size();
-    pstruct->carrier[new_id] = op->cod;
-    size_t uf_id = add_element(pstruct->equality);
-    assert(uf_id == new_id);
 
 #ifndef NDEBUG
     printf("%s(", std::string(op->name).c_str());
@@ -67,16 +64,23 @@ extern "C" size_t define_operation(partial_structure* pstruct, const operation* 
     }
 
     printf(") = %zu\n", new_id);
-
-    for (size_t i = 0; i < op->dom.size(); i++) {
-        assert(args[i] < pstruct->carrier.size());
-        assert(pstruct->carrier[args[i]] == op->dom[i]);
-    }
 #endif
+
+    pstruct->carrier[new_id] = op->cod;
+    size_t uf_id = add_element(pstruct->equality);
+    assert(uf_id == new_id);
 
     std::vector<size_t> vec;
     vec.reserve(op->dom.size() + 1);
-    vec.insert(vec.begin(), args, args + op->dom.size());
+    for (size_t i = 0; i < op->dom.size(); i++) {
+        assert(args[i] < new_id);
+        assert(pstruct->carrier[args[i]] == op->dom[i]);
+        // Ensure that we keep up the invariant that the tables always
+        // contain canonical representatives except during joins.
+        size_t rep = get_representative(pstruct->equality, args[i]);
+        vec.push_back(rep);
+    }
+
     vec.push_back(new_id);
     pstruct->relations[*op].insert(std::move(vec));
     return new_id;

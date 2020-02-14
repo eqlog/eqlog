@@ -79,20 +79,24 @@ impl Drop for Cwf {
 }
 
 impl Cwf {
-    fn check_eq<T: Eq + Hash, F>(&mut self, map: F, l: &T, r: &T) -> bool
-        where F: FnOnce(&Self) -> &HashMap<T, size_t>
-    {
+    pub fn check_id_eq(&mut self, lid: size_t, rid: size_t) -> bool {
         if self.dirty {
             unsafe { phl::compute_fixpoint(self.pstruct) };
             self.dirty = false
         }
-        let map = map(self);
-        let lid = map.get(l).unwrap();
-        let rid = map.get(r).unwrap();
-        unsafe { phl::are_equal(self.pstruct, *lid, *rid) }
+        unsafe { phl::are_equal(self.pstruct, lid, rid) }
     }
 
-    fn def_op(&mut self, op: size_t, args: &[size_t]) -> size_t {
+    fn check_eq<T: Eq + Hash, F>(&mut self, map: F, l: &T, r: &T) -> bool
+        where F: FnOnce(&Self) -> &HashMap<T, size_t>
+    {
+        let map = map(self);
+        let lid = *map.get(l).unwrap();
+        let rid = *map.get(r).unwrap();
+        self.check_id_eq(lid, rid)
+    }
+
+    pub fn def_op(&mut self, op: size_t, args: &[size_t]) -> size_t {
         self.dirty = true;
         unsafe {
             assert_eq!(args.len(), phl::get_operation_arity(op));
@@ -261,6 +265,19 @@ impl Model for Cwf {
             &[self.get_ty(into), self.get_tm(true_case), self.get_tm(false_case)]
         )
     }
+}
+
+#[test]
+fn functionality1() {
+    let mut cwf = Cwf::new();
+    let empty = cwf.def_op(*EMPTY_CTX, &[]);
+    let bool1 = cwf.def_op(*BOOL, &[empty]);
+    let bool2 = cwf.def_op(*BOOL, &[empty]);
+    let id_morph = cwf.def_op(*ID_MORPH, &[empty]);
+    let subst_bool1 = cwf.def_op(*SUBST_TY, &[id_morph, bool1]);
+    unsafe { phl::compute_fixpoint(cwf.pstruct) }
+    let subst_bool2 = cwf.def_op(*SUBST_TY, &[id_morph, bool2]);
+    assert!(cwf.check_id_eq(subst_bool1, subst_bool2));
 }
 
 #[test]
