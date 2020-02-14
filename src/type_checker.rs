@@ -93,8 +93,8 @@ impl<TModel: Model> TypeChecker<TModel> {
         match expr {
             Expr::App(id, v) =>
                 match (id.as_str(), &v[..]) {
-                    ("bool", &[]) => Ok(self.model.bool_ty(ctx_syn)),
-                    ("eq", &[ref a, ref b]) => self.check_eq(a, b),
+                    ("bool", []) => Ok(self.model.bool_ty(ctx_syn)),
+                    ("eq", [a, b]) => self.check_eq(a, b),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
             Expr::Let { name, ty, val, body } =>
@@ -107,7 +107,7 @@ impl<TModel: Model> TypeChecker<TModel> {
         match expr {
             Expr::App(id, v) =>
                 match (id.as_str(), &v[..]) {
-                    // Variable
+                    ("refl", [a]) => self.refl(&*a),
                     (v, []) => self.access_var(v),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
@@ -115,6 +115,13 @@ impl<TModel: Model> TypeChecker<TModel> {
                 self.check_let(|s, body| s.check_tm(body), name, &*ty, &*val, &*body),
             _ => Err(format!("Unhandled term {:?}", expr))
         }
+    }
+
+    fn refl(&mut self, expr: &Expr) -> Result<(Tm, Ty), String> {
+        let (tm, _) = self.check_tm(expr)?;
+        let eq_ty = self.model.eq_ty(&tm, &tm);
+        let refl_tm = self.model.refl(&tm);
+        Ok((refl_tm, eq_ty))
     }
 
     fn check_tm_ty(&mut self, expr: &Expr, expected_ty: &Ty) -> Result<Tm, String> {
