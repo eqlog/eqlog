@@ -262,3 +262,21 @@ impl Model for Cwf {
         )
     }
 }
+
+#[test]
+fn eq_subst() {
+    // f(a == a) = fa == fa
+    let mut cwf = Cwf::new();
+    let empty = cwf.empty_ctx();
+    let empty_bool = cwf.bool_ty(&empty);
+    let bool_ctx = cwf.comprehension(&empty_bool);
+    let a = cwf.var(&empty_bool);
+    let aeq = cwf.eq_ty(&a, &a);
+    let bool_ctx_bool = cwf.bool_ty(&bool_ctx);
+    // f injects to context with another variable
+    let f = cwf.weakening(&bool_ctx_bool);
+    let faa = cwf.subst_ty(&f, &aeq);
+    let fa = cwf.subst_tm(&f, &a);
+    let fafa = cwf.eq_ty(&fa, &fa);
+    assert!(cwf.ty_eq(&fafa, &faa));
+}
