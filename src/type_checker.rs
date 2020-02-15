@@ -355,4 +355,11 @@ def trans (a b c d e : bool)
           (p4 : d = e) : a = e :=
     refl a.")
     }
+
+    #[test]
+    fn uip() {
+        verify_def("
+def uip (a b : bool) (p : a = b) (q : b = a) : p = q :=
+    refl p.")
+    }
 }
