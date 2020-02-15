@@ -183,7 +183,8 @@ impl<TModel: Model> TypeChecker<TModel> {
             return Err("Invalid bool elimination".to_owned())
         }
 
-        let bool_ty = self.model.bool_ty(&self.ctxs.last().unwrap().syntax);
+        let cur_ctx_syn = self.ctxs.last().unwrap().syntax.clone();
+        let bool_ty = self.model.bool_ty(&cur_ctx_syn);
         let into_ty = {
             let mut s = self.save_ctx();
             let ext_ty = s.extend(&into_ctx[0])?;
@@ -194,20 +195,18 @@ impl<TModel: Model> TypeChecker<TModel> {
             s.check_ty(into_ty)?
         };
 
-        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
-        let true_tm = self.model.true_tm(cur_ctx_syn);
-        let true_bar = Self::bar_tm(&mut self.model, cur_ctx_syn, &bool_ty, &true_tm);
+        let true_tm = self.model.true_tm(&cur_ctx_syn);
+        let true_bar = Self::bar_tm(&mut self.model, &cur_ctx_syn, &bool_ty, &true_tm);
         let expected_ty_true_case = Self::subst_ty(&mut self.model, &true_bar, &into_ty);
 
-        let false_tm = self.model.false_tm(cur_ctx_syn);
-        let false_bar = Self::bar_tm(&mut self.model, cur_ctx_syn, &bool_ty, &false_tm);
+        let false_tm = self.model.false_tm(&cur_ctx_syn);
+        let false_bar = Self::bar_tm(&mut self.model, &cur_ctx_syn, &bool_ty, &false_tm);
         let expected_ty_false_case = Self::subst_ty(&mut self.model, &false_bar, &into_ty);
 
         let true_case_tm = self.check_tm_ty(&cases[0].1, &expected_ty_true_case)?;
         let false_case_tm = self.check_tm_ty(&cases[1].1, &expected_ty_false_case)?;
 
-        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
-        let tm = self.model.elim_bool(cur_ctx_syn, &into_ty, &true_case_tm, &false_case_tm);
+        let tm = self.model.elim_bool(&cur_ctx_syn, &into_ty, &true_case_tm, &false_case_tm);
         Ok((tm, into_ty))
     }
 
