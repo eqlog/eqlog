@@ -319,3 +319,40 @@ impl<TModel: Model> TypeChecker<TModel> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::cwf_model;
+    use crate::lang::parser::DefParser;
+    fn verify_def(code: &str) {
+        let p = DefParser::new().parse(code).unwrap();
+        let model = cwf_model::Cwf::new();
+        super::TypeChecker::new(model).check_def(&p).unwrap();
+    }
+
+    #[test]
+    fn test_id() {
+        verify_def("def id (b : bool) : bool := b.");
+    }
+
+    #[test]
+    fn test_negb() {
+        verify_def("
+def negb (b : bool) : bool :=
+    elim b into (_ : bool) : bool
+    | => false
+    | => true
+    end.");
+    }
+
+    #[test]
+    fn test_transitive() {
+        verify_def("
+def trans (a b c d e : bool)
+          (p1 : a = b)
+          (p2 : b = c)
+          (p3 : c = d)
+          (p4 : d = e) : a = e :=
+    refl a.")
+    }
+}
