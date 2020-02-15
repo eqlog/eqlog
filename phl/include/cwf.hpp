@@ -32,6 +32,10 @@ const operation
     bool_ = {"bool", {ctx}, ty},
     true_ = {"true", {ctx}, tm},
     false_ = {"false", {ctx}, tm},
+    // for bool_elim(G, A, at, af) we have
+    // G.bool |- A type
+    // G |- at : bar(true(G))(A)
+    // G |- af : bar(false(G))(A)
     bool_elim = {"bool_elim", {ctx, ty, tm, tm}, tm};
 
 const phl_signature cwf_signature = {

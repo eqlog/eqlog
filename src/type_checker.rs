@@ -40,11 +40,11 @@ impl<TModel: Model> TypeChecker<TModel> {
         let num_defs = self.ctxs.last().unwrap().defs.len();
         guard(self, move |s| {
             s.ctxs.truncate(depth);
-            s.ctxs.last_mut().unwrap().defs.truncate(num_defs);
+            s.ctxs.last_mut().unwrap().defs.truncate(num_defs)
         })
     }
 
-    fn extend(&mut self, ext: &CtxExt) -> Result<(), String> {
+    fn extend(&mut self, ext: &CtxExt) -> Result<Ty, String> {
         let ty = self.check_ty(&ext.1)?;
         let new_ctx = self.model.comprehension(&ty);
         let weakening = self.model.weakening(&ty);
@@ -62,13 +62,13 @@ impl<TModel: Model> TypeChecker<TModel> {
         };
 
         self.ctxs.push(new_ctx_info);
-        Ok(())
+        Ok(ty)
     }
 
     pub fn check_def(&mut self, def: &Def) -> Result<Tm, String> {
         let mut s = self.save_ctx();
         for ext in def.ctx.iter() {
-            s.extend(ext)?
+            s.extend(ext)?;
         }
         let ret_ty = s.check_ty(&def.ret_ty)?;
         s.check_tm_ty(&def.body, &ret_ty)
@@ -89,17 +89,17 @@ impl<TModel: Model> TypeChecker<TModel> {
     }
 
     pub fn check_ty(&mut self, expr: &Expr) -> Result<Ty, String> {
-        let ctx_syn = &self.ctxs.last().unwrap().syntax;
+        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
         match expr {
             Expr::App(id, v) =>
                 match (id.as_str(), &v[..]) {
-                    ("bool", []) => Ok(self.model.bool_ty(ctx_syn)),
+                    ("bool", []) => Ok(self.model.bool_ty(cur_ctx_syn)),
                     ("eq", [a, b]) => self.check_eq(a, b),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
             Expr::Let { name, ty, val, body } =>
                 self.check_let(|s, body| s.check_ty(body), name, &*ty, &*val, &*body),
-            _ => Err(format!("Expected type, got {:?}", expr))
+            _ => Err(format!("Unhandled type {:?}", expr))
         }
     }
 
@@ -108,12 +108,15 @@ impl<TModel: Model> TypeChecker<TModel> {
             Expr::App(id, v) =>
                 match (id.as_str(), &v[..]) {
                     ("refl", [a]) => self.refl(&*a),
+                    ("true", []) => Ok(self.true_tm()),
+                    ("false", []) => Ok(self.false_tm()),
                     (v, []) => self.access_var(v),
                     (s, v) => Err(format!("Unexpected {} with {} args", s, v.len()))
                 },
             Expr::Let { name, ty, val, body } =>
                 self.check_let(|s, body| s.check_tm(body), name, &*ty, &*val, &*body),
-            _ => Err(format!("Unhandled term {:?}", expr))
+            Expr::Elim { val, into_ctx, into_ty, cases } =>
+                self.check_elim(&*val, into_ctx, &*into_ty, cases),
         }
     }
 
@@ -122,6 +125,90 @@ impl<TModel: Model> TypeChecker<TModel> {
         let eq_ty = self.model.eq_ty(&tm, &tm);
         let refl_tm = self.model.refl(&tm);
         Ok((refl_tm, eq_ty))
+    }
+
+    fn true_tm(&mut self) -> (Tm, Ty) {
+        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
+        let bool_ty = self.model.bool_ty(cur_ctx_syn);
+        let tm = self.model.true_tm(cur_ctx_syn);
+        (tm, bool_ty)
+    }
+
+    fn false_tm(&mut self) -> (Tm, Ty) {
+        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
+        let bool_ty = self.model.bool_ty(cur_ctx_syn);
+        let tm = self.model.false_tm(cur_ctx_syn);
+        (tm, bool_ty)
+    }
+
+    // Given G |- a : A, construct the morphism <1(G), A, a> : G.A -> G
+    // substituting the last A for a in any term in G.A.
+    fn bar_tm(model: &mut TModel, ctx: &Ctx, ty: &Ty, tm: &Tm) -> Morph {
+        let id = model.id_morph(ctx);
+        model.extension(&id, ty, tm)
+    }
+
+    fn check_elim(
+        &mut self,
+        val: &Expr, into_ctx: &Vec<CtxExt>, into_ty: &Expr,
+        cases: &Vec<ElimCase>) -> Result<(Tm, Ty), String>
+    {
+        let (val_tm, val_ty) = self.check_tm(val)?;
+        let bool_ty = self.model.bool_ty(&self.ctxs.last().unwrap().syntax);
+
+        let (elim_tm, elim_ty) =
+            if self.model.ty_eq(&val_ty, &bool_ty) {
+                self.elim_bool(into_ctx, into_ty, cases)?
+            } else {
+                return Err(format!("Cannot eliminate {:?} of type {:?}", val, val_ty))
+            };
+        
+        // Substitute bar(val_tm) into elimination term and type, which live
+        // live in an extended context.
+        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
+        let bar = Self::bar_tm(&mut self.model, cur_ctx_syn, &val_ty, &val_tm);
+        let tm = self.model.subst_tm(&bar, &elim_tm);
+        let ty = self.model.subst_ty(&bar, &elim_ty);
+        Ok((tm, ty))
+    }
+
+    fn elim_bool(
+        &mut self,
+        into_ctx: &Vec<CtxExt>, into_ty: &Expr,
+        cases: &Vec<ElimCase>) -> Result<(Tm, Ty), String>
+    {
+        if into_ctx.len() != 1 || cases.len() != 2 ||
+           cases[0].0.len() != 0 || cases[1].0.len() != 0
+        {
+            return Err("Invalid bool elimination".to_owned())
+        }
+
+        let bool_ty = self.model.bool_ty(&self.ctxs.last().unwrap().syntax);
+        let into_ty = {
+            let mut s = self.save_ctx();
+            let ext_ty = s.extend(&into_ctx[0])?;
+            if !s.model.ty_eq(&ext_ty, &bool_ty) {
+                return Err("Invalid extension for into-type: expected bool".to_owned());
+            }
+            
+            s.check_ty(into_ty)?
+        };
+
+        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
+        let true_tm = self.model.true_tm(cur_ctx_syn);
+        let true_bar = Self::bar_tm(&mut self.model, cur_ctx_syn, &bool_ty, &true_tm);
+        let expected_ty_true_case = Self::subst_ty(&mut self.model, &true_bar, &into_ty);
+
+        let false_tm = self.model.false_tm(cur_ctx_syn);
+        let false_bar = Self::bar_tm(&mut self.model, cur_ctx_syn, &bool_ty, &false_tm);
+        let expected_ty_false_case = Self::subst_ty(&mut self.model, &false_bar, &into_ty);
+
+        let true_case_tm = self.check_tm_ty(&cases[0].1, &expected_ty_true_case)?;
+        let false_case_tm = self.check_tm_ty(&cases[1].1, &expected_ty_false_case)?;
+
+        let cur_ctx_syn = &self.ctxs.last().unwrap().syntax;
+        let tm = self.model.elim_bool(cur_ctx_syn, &into_ty, &true_case_tm, &false_case_tm);
+        Ok((tm, into_ty))
     }
 
     fn check_tm_ty(&mut self, expr: &Expr, expected_ty: &Ty) -> Result<Tm, String> {

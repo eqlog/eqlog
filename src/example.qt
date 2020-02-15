@@ -1,2 +1,5 @@
-def test (a b c d e : bool) (p1 : a = b) (p2 : b = c) (p4 : d = e) : c = a :=
-    refl c.
+def negb (a : bool) : bool :=
+    elim a into (_ : bool) : bool
+    | => false
+    | => true
+    end.

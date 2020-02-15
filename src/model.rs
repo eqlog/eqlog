@@ -24,5 +24,5 @@ pub trait Model {
     fn bool_ty(&mut self, ctx: &Ctx) -> Ty;
     fn true_tm(&mut self, ctx: &Ctx) -> Tm;
     fn false_tm(&mut self, ctx: &Ctx) -> Tm;
-    fn elim_bool(&mut self, into: &Ty, true_case: &Tm, false_case: &Tm) -> Tm;
+    fn elim_bool(&mut self, base_ctx : &Ctx, into: &Ty, true_case: &Tm, false_case: &Tm) -> Tm;
 }

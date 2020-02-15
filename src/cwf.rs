@@ -33,5 +33,5 @@ pub enum Tm {
     Refl(Box<Tm>),
     True(Box<Ctx>),
     False(Box<Ctx>),
-    ElimBool(Box<Ty>, Box<Tm>, Box<Tm>),
+    ElimBool(Box<Ctx>, Box<Ty>, Box<Tm>, Box<Tm>),
 }

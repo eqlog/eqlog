@@ -165,21 +165,21 @@ impl Model for Cwf {
     }
     fn comprehension(&mut self, ty: &Ty) -> Ctx {
         self.def_ctx(
-            Ctx::Comprehension(Box::new((*ty).clone())),
+            Ctx::Comprehension(Box::new(ty.clone())),
             *CTX_EXT,
             &[self.get_ty(ty)]
         )
     }
     fn weakening(&mut self, ty: &Ty) -> Morph {
         self.def_morph(
-            Morph::Weakening(Box::new((*ty).clone())),
+            Morph::Weakening(Box::new(ty.clone())),
             *WKN,
             &[self.get_ty(ty)]
         )
     }
     fn var(&mut self, ty: &Ty) -> Tm {
         self.def_tm(
-            Tm::Var(Box::new((*ty).clone())),
+            Tm::Var(Box::new(ty.clone())),
             *VAR,
             &[self.get_ty(ty)]
         )
@@ -187,21 +187,21 @@ impl Model for Cwf {
 
     fn id_morph(&mut self, ctx: &Ctx) -> Morph {
         self.def_morph(
-            Morph::Identity(Box::new((*ctx).clone())),
+            Morph::Identity(Box::new(ctx.clone())),
             *ID_MORPH,
             &[self.get_ctx(ctx)]
         )
     }
     fn compose(&mut self, g: &Morph, f: &Morph) -> Morph {
         self.def_morph(
-            Morph::Composition(Box::new((*g).clone()), Box::new((*f).clone())),
+            Morph::Composition(Box::new(g.clone()), Box::new(f.clone())),
             *COMP,
             &[self.get_morph(g), self.get_morph(f)]
         )
     }
     fn extension(&mut self, f: &Morph, ty: &Ty, tm: &Tm) -> Morph {
         self.def_morph(
-            Morph::Extension(Box::new((*f).clone()), Box::new((*ty).clone()), Box::new((*tm).clone())),
+            Morph::Extension(Box::new(f.clone()), Box::new(ty.clone()), Box::new(tm.clone())),
             *MOR_EXT,
             &[self.get_morph(f), self.get_ty(ty), self.get_tm(tm)]
         )
@@ -209,14 +209,14 @@ impl Model for Cwf {
 
     fn subst_ty(&mut self, f: &Morph, ty: &Ty) -> Ty {
         self.def_ty(
-            Ty::Subst(Box::new((*f).clone()), Box::new((*ty).clone())),
+            Ty::Subst(Box::new(f.clone()), Box::new(ty.clone())),
             *SUBST_TY,
             &[self.get_morph(f), self.get_ty(ty)]
         )
     }
     fn subst_tm(&mut self, f: &Morph, tm: &Tm) -> Tm {
         self.def_tm(
-            Tm::Subst(Box::new((*f).clone()), Box::new((*tm).clone())),
+            Tm::Subst(Box::new(f.clone()), Box::new(tm.clone())),
             *SUBST_TM,
             &[self.get_morph(f), self.get_tm(tm)]
         )
@@ -224,14 +224,14 @@ impl Model for Cwf {
 
     fn eq_ty(&mut self, l: &Tm, r: &Tm) -> Ty {
         self.def_ty(
-            Ty::Eq(Box::new((*l).clone()), Box::new((*r).clone())),
+            Ty::Eq(Box::new(l.clone()), Box::new(r.clone())),
             *EQ_TY,
             &[self.get_tm(l), self.get_tm(r)]
         )
     }
     fn refl(&mut self, tm: &Tm) -> Tm {
         self.def_tm(
-            Tm::Refl(Box::new((*tm).clone())),
+            Tm::Refl(Box::new(tm.clone())),
             *REFL,
             &[self.get_tm(tm)]
         )
@@ -239,30 +239,35 @@ impl Model for Cwf {
 
     fn bool_ty(&mut self, ctx: &Ctx) -> Ty {
         self.def_ty(
-            Ty::Bool(Box::new((*ctx).clone())),
+            Ty::Bool(Box::new(ctx.clone())),
             *BOOL,
             &[self.get_ctx(ctx)]
         )
     }
     fn true_tm(&mut self, ctx: &Ctx) -> Tm {
         self.def_tm(
-            Tm::True(Box::new((*ctx).clone())),
+            Tm::True(Box::new(ctx.clone())),
             *TRUE,
             &[self.get_ctx(ctx)]
         )
     }
     fn false_tm(&mut self, ctx: &Ctx) -> Tm {
         self.def_tm(
-            Tm::True(Box::new((*ctx).clone())),
+            Tm::True(Box::new(ctx.clone())),
             *TRUE,
             &[self.get_ctx(ctx)]
         )
     }
-    fn elim_bool(&mut self, into: &Ty, true_case: &Tm, false_case: &Tm) -> Tm {
+    fn elim_bool(&mut self, base_ctx: &Ctx, into: &Ty, true_case: &Tm, false_case: &Tm) -> Tm {
         self.def_tm(
-            Tm::ElimBool(Box::new((*into).clone()), Box::new((*true_case).clone()), Box::new((*false_case).clone())),
+            Tm::ElimBool(
+                Box::new(base_ctx.clone()),
+                Box::new(into.clone()),
+                Box::new(true_case.clone()),
+                Box::new(false_case.clone())),
             *BOOL_ELIM,
-            &[self.get_ty(into), self.get_tm(true_case), self.get_tm(false_case)]
+            &[self.get_ctx(base_ctx), self.get_ty(into),
+              self.get_tm(true_case), self.get_tm(false_case)]
         )
     }
 }
