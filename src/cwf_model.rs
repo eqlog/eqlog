@@ -108,7 +108,7 @@ impl Cwf {
         where F: FnOnce(&mut Self) -> &mut HashMap<T, size_t>
     {
         let id = self.def_op(op, args);
-        map(self).insert((*node).clone(), id);
+        map(self).insert(node.clone(), id);
         id
     }
     fn def_ctx(&mut self, node: Ctx, op: size_t, args: &[size_t]) -> Ctx {
