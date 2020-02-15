@@ -30,11 +30,6 @@ pub Expr: Expr =  {
                     ty: Box::new(ty),
                     val: Box::new(val),
                     body: Box::new(body) },
-    "elim" <val: Expr> "into" <into_ctx: CtxExts> ":" <into_ty: Expr> <cases: ElimCase*> "end" =>
-        Expr::Elim { val: Box::new(val),
-                     into_ctx: into_ctx,
-                     into_ty: Box::new(into_ty),
-                     cases: cases },
     Expr2
 };
 Expr2: Expr = {
@@ -50,12 +45,21 @@ Expr3: Expr = {
 Expr4: Expr = {
     <Id> <ArgExpr*> => Expr::App(<>),
     <NumExpr>,
+    <ElimExpr>,
     "(" <Expr> ")",
 };
 ArgExpr: Expr = {
     <Id> => Expr::App(<>, vec![]),
     <NumExpr>,
+    <ElimExpr>,
     "(" <Expr> ")"
+};
+ElimExpr: Expr = {
+    "elim" <val: Expr> "into" <into_ctx: CtxExts> ":" <into_ty: Expr> <cases: ElimCase*> "end" =>
+        Expr::Elim { val: Box::new(val),
+                     into_ctx: into_ctx,
+                     into_ty: Box::new(into_ty),
+                     cases: cases },
 };
 NumExpr: Expr = {
     <Nat> =>
