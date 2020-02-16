@@ -139,6 +139,7 @@ const phl_theory cwf = {
         cod(id(G)) -= G,
         comp(id(G), f) -= f,
         comp(f, id(G)) -= f,
+        comp(h, comp(g, f)) -= comp(comp(h, g), f),
         ty_ctx(subst_ty(f, A)) -= cod(f),
         tm_ty(subst_tm(f, a)) -= subst_ty(f, tm_ty(a)),
         subst_ty(id(G), A) -= A,
