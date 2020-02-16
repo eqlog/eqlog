@@ -253,8 +253,8 @@ impl Model for Cwf {
     }
     fn false_tm(&mut self, ctx: &Ctx) -> Tm {
         self.def_tm(
-            Tm::True(Box::new(ctx.clone())),
-            *TRUE,
+            Tm::False(Box::new(ctx.clone())),
+            *FALSE,
             &[self.get_ctx(ctx)]
         )
     }
