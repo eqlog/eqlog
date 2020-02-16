@@ -153,7 +153,10 @@ const phl_theory cwf = {
         cod(mor_ext(f, A, b)) -= cod(f),
         comp(mor_ext(f, A, b), wkn(A)) -= f,
         subst_tm(mor_ext(f, A, b), var(A)) -= b,
+        // mor_ext uniqueness
         w == wkn(A) && g == mor_ext(f, A, b) && f == comp(g0, w) && b == subst_tm(g0, var(A)) |= g == g0,
+        // mor_ext naturality
+        comp(g, mor_ext(f, A, b)) -= mor_ext(comp(g, f), A, subst_tm(g, b)),
         !Eq(a, b) && A == tm_ty(a) && A0 == tm_ty(b) |= A == A0,
         ty_ctx(Eq(a, b)) -= ty_ctx(tm_ty(a)),
         tm_ty(c) == Eq(a, b) |= a == b,
