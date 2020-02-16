@@ -1,5 +1,5 @@
-def negb (a : bool) : bool :=
-    elim a into (_ : bool) : bool
-    | => false
-    | => true
+def eta (a : bool) : a = elim a into (_ : bool) : bool | => true | => false end :=
+    elim a into (b : bool) : b = elim b into (_ : bool) : bool | => true | => false end
+    | => refl true
+    | => refl false
     end.

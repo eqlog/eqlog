@@ -207,6 +207,9 @@ impl<TModel: Model> TypeChecker<TModel> {
         let false_case_tm = self.check_tm_ty(&cases[1].1, &expected_ty_false_case)?;
 
         let tm = self.model.elim_bool(&cur_ctx_syn, &into_ty, &true_case_tm, &false_case_tm);
+        // Define substitutions by true and false
+        Self::subst_tm(&mut self.model, &true_bar, &tm);
+        Self::subst_tm(&mut self.model, &false_bar, &tm);
         Ok((tm, into_ty))
     }
 
@@ -295,6 +298,16 @@ impl<TModel: Model> TypeChecker<TModel> {
                 let codomain = Self::morph_codomain(model, g);
                 model.false_tm(&codomain)
             },
+            Tm::ElimBool(ctx, into_ty, true_case, false_case) => {
+                let ctx_bool = model.bool_ty(ctx);
+                let w = model.weakening(&ctx_bool);
+                // w : ctx -> ctx.bool (where into_ty, true_case and false_case) live
+                let gw = Self::comp_morphs(model, g, &w);
+                Self::subst_ty(model, &gw, &*into_ty);
+                Self::subst_tm(model, &gw, &*true_case);
+                Self::subst_tm(model, &gw, &*false_case);
+                gtm
+            },
             _ => gtm
         }
     }
@@ -369,5 +382,15 @@ def trans (a b c d e : bool)
         verify_def("
 def uip (a b : bool) (p : a = b) (q : b = a) : p = q :=
     refl p.")
+    }
+
+    #[test]
+    fn eta() {
+        verify_def("
+def eta (a : bool) : a = elim a into (_ : bool) : bool | => true | => false end :=
+    elim a into (b : bool) : b = elim b into (_ : bool) : bool | => true | => false end
+    | => refl true
+    | => refl false
+    end.")
     }
 }

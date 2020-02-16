@@ -316,3 +316,23 @@ fn subst_id() {
     let subst_refl_eq_true_true = cwf.subst_tm(&id, &refl_eq_true_true);
     assert!(cwf.tm_eq(&refl_eq_true_true, &subst_refl_eq_true_true));
 }
+
+#[test]
+#[allow(non_snake_case)]
+fn test_subst_var() {
+    // this tests that
+    // <1(G), Bool(G), True(G)>(Var(Bool(G))) = True(G)
+    let mut cwf = Cwf::new();
+    let empty_ctx = cwf.empty_ctx();
+    let empty_ctx_bool = cwf.bool_ty(&empty_ctx);
+    let G = cwf.comprehension(&empty_ctx_bool);
+    let G_B = cwf.bool_ty(&G);
+
+    let G_id = cwf.id_morph(&G);
+    let G_T = cwf.true_tm(&G);
+    let G_T_bar = cwf.extension(&G_id, &G_B, &G_T);
+
+    let D_var = cwf.var(&G_B);
+    let subst_var = cwf.subst_tm(&G_T_bar, &D_var);
+    assert!(cwf.tm_eq(&subst_var, &G_T));
+}
