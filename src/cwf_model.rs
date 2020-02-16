@@ -302,3 +302,17 @@ fn eq_subst() {
     let fafa = cwf.eq_ty(&fa, &fa);
     assert!(cwf.ty_eq(&fafa, &faa));
 }
+
+#[test]
+fn subst_id() {
+    let mut cwf = Cwf::new();
+    let empty = cwf.empty_ctx();
+    let id = cwf.id_morph(&empty);
+    let true_tm = cwf.true_tm(&empty);
+    let eq_true_true = cwf.eq_ty(&true_tm, &true_tm);
+    let refl_eq_true_true = cwf.refl(&true_tm);
+    let subst_eq_true_true = cwf.subst_ty(&id, &eq_true_true);
+    assert!(cwf.ty_eq(&eq_true_true, &subst_eq_true_true));
+    let subst_refl_eq_true_true = cwf.subst_tm(&id, &refl_eq_true_true);
+    assert!(cwf.tm_eq(&refl_eq_true_true, &subst_refl_eq_true_true));
+}
