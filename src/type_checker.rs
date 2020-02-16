@@ -302,6 +302,7 @@ impl<TModel: Model> TypeChecker<TModel> {
     fn comp_morphs(model: &mut TModel, g: &Morph, f: &Morph) -> Morph {
         let gf = model.compose(g, f);
         match f {
+            Morph::Identity(_) => g.clone(),
             Morph::Composition(f, e) => {
                 // g . (f . e) = (g . f) . e
                 let gf = model.compose(g, &*f);
