@@ -9,7 +9,6 @@ pub enum Ctx {
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Morph {
     Identity(Box<Ctx>),
-    Initial(Box<Ctx>), // Initial morphism from <> -> G
     Weakening(Box<Ty>), // G -> G.A
     Composition(Box<Morph>, Box<Morph>), // g . f
     // f : G -> D
