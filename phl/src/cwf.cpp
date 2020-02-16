@@ -46,7 +46,7 @@ extern "C" bool are_equal(partial_structure* pstruct, size_t l, size_t r) {
     size_t lr = get_representative(pstruct->equality, l);
     size_t rr = get_representative(pstruct->equality, r);
 #ifndef NDEBUG
-    printf("[%zu] == [%zu] => %s\n", l, r, lr == rr ? "true" : "false");
+    //printf("[%zu] == [%zu] => %s\n", l, r, lr == rr ? "true" : "false");
 #endif
     return lr == rr;
 }
