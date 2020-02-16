@@ -339,12 +339,12 @@ mod tests {
     }
 
     #[test]
-    fn test_id() {
+    fn id() {
         verify_def("def id (b : bool) : bool := b.");
     }
 
     #[test]
-    fn test_negb() {
+    fn negb() {
         verify_def("
 def negb (b : bool) : bool :=
     elim b into (_ : bool) : bool
@@ -354,7 +354,7 @@ def negb (b : bool) : bool :=
     }
 
     #[test]
-    fn test_transitive() {
+    fn transitive() {
         verify_def("
 def trans (a b c d e : bool)
           (p1 : a = b)
