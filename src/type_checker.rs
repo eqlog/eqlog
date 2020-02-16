@@ -253,69 +253,76 @@ impl<TModel: Model> TypeChecker<TModel> {
         Ok(self.model.eq_ty(&tma, &tmb))
     }
 
-    fn subst_ty(model: &mut TModel, f: &Morph, ty: &Ty) -> Ty {
-        Self::def_ty_rec(model, f, ty);
-        model.subst_ty(f, ty)
-    }
+    fn subst_ty(model: &mut TModel, g: &Morph, ty: &Ty) -> Ty {
+        model.subst_ty(g, ty);
 
-    fn subst_tm(model: &mut TModel, f: &Morph, tm: &Tm) -> Tm {
-        Self::def_tm_rec(model, f, tm);
-        model.subst_tm(f, tm)
-    }
-
-    fn def_morph_rec(model: &mut TModel, g: &Morph, f: &Morph) {
-        match f {
-            Morph::Composition(ref f, ref e) => {
-                // g . (f . e)
-                let comp = model.compose(g, &*f);
-                Self::def_morph_rec(model, &comp, e);
-            },
-            //Morph::Extension(ref f, ref s, ref tm) {
-            //    // g . <f, s, tm>
-            //    let _comp = self.model.compose(g, f);
-            //    self.def_morph_rec(g, &*f);
-            //    let _tm = self.model.subst_tm(g, s)
-            //}
-            _ => ()
-        }
-    }
-
-    fn def_ty_rec(model: &mut TModel, g: &Morph, ty: &Ty) {
         match ty {
-            Ty::Subst(ref f, ref s) => {
+            Ty::Subst(f, s) => {
                 // g (f s) = (g . f) s
-                let gf = model.compose(g, &*f);
-                Self::def_morph_rec(model, g, &*f);
-                model.subst_ty(&gf, &*s);
-                Self::def_ty_rec(model, &gf, &*s);
+                let gf = Self::comp_morphs(model, g, &*f);
+                Self::subst_ty(model, &gf, &*s)
             },
-            Ty::Eq(ref a, ref b) => {
-                let ga = model.subst_tm(g, &*a);
-                Self::def_tm_rec(model, g, &*a);
-                let gb = model.subst_tm(g, &*b);
-                Self::def_tm_rec(model, g, &*b);
+            Ty::Bool(_) => {
+                let codomain = Self::morph_codomain(model, g);
+                model.bool_ty(&codomain)
+            },
+            Ty::Eq(a, b) => {
+                let ga = Self::subst_tm(model, g, &*a);
+                let gb = Self::subst_tm(model, g, &*b);
 
-                model.eq_ty(&ga, &gb);
+                model.eq_ty(&ga, &gb)
             },
-            _ => ()
         }
     }
 
-    fn def_tm_rec(model: &mut TModel, g: &Morph, tm: &Tm) {
+    fn subst_tm(model: &mut TModel, g: &Morph, tm: &Tm) -> Tm {
+        let gtm = model.subst_tm(g, tm);
         match tm {
-            Tm::Subst(ref f, ref tm) => {
+            Tm::Subst(f, tm) => {
                 // g (f tm) = (g . f) tm
+                let gf = Self::comp_morphs(model, g, &*f);
+                Self::subst_tm(model, &gf, &*tm)
+            },
+            Tm::Refl(a) => {
+                let ga = Self::subst_tm(model, g, &*a);
+                model.refl(&ga)
+            },
+            Tm::True(_) => {
+                let codomain = Self::morph_codomain(model, g);
+                model.true_tm(&codomain)
+            },
+            Tm::False(_) => {
+                let codomain = Self::morph_codomain(model, g);
+                model.false_tm(&codomain)
+            },
+            _ => gtm
+        }
+    }
+
+    fn comp_morphs(model: &mut TModel, g: &Morph, f: &Morph) -> Morph {
+        let gf = model.compose(g, f);
+        match f {
+            Morph::Composition(f, e) => {
+                // g . (f . e) = (g . f) . e
                 let gf = model.compose(g, &*f);
-                Self::def_morph_rec(model, g, &*f);
-                model.subst_tm(&gf, &*tm);
-                Self::def_tm_rec(model, &gf, &*tm);
+                Self::comp_morphs(model, &gf, e)
             },
-            Tm::Refl(ref a) => {
-                let ga = model.subst_tm(g, &*a);
-                Self::def_tm_rec(model, g, &*a);
-                model.refl(&ga);
-            },
-            _ => ()
+            Morph::Extension(f, s, tm) => {
+                // g . <f, s, tm> = <g . f, s, gtm>
+                let gf = Self::comp_morphs(model, g, f);
+                let gtm = model.subst_tm(g, tm);
+                model.extension(&gf, &*s, &gtm)
+            }
+            _ => gf
+        }
+    }
+
+    fn morph_codomain(model: &mut TModel, morph: &Morph) -> Ctx {
+        match morph {
+            Morph::Identity(ctx) => (**ctx).clone(),
+            Morph::Weakening(ty) => model.comprehension(&*ty),
+            Morph::Composition(g, _) => Self::morph_codomain(model, g),
+            Morph::Extension(f, _, _) => Self::morph_codomain(model, f),
         }
     }
 }
