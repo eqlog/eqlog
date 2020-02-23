@@ -1,0 +1,8 @@
+[package]
+name = "eqlog"
+version = "0.1.0"
+authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>"]
+edition = "2018"
+
+[dependencies]
+maplit = "1.0.2"
