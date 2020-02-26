@@ -1,18 +1,10 @@
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
 use std::iter::{FromIterator, once};
-
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Element(pub u32);
-impl Default for Element {
-    fn default() -> Self {
-        Element(4816230)
-    }
-}
-
-#[cfg(test)] fn el(x: u32) -> Element {
-    Element(x)
-}
+use crate::union_find::UnionFind;
+use crate::element::Element;
+#[cfg(test)]
+use crate::element::el;
 
 pub type Row = Vec<Element>;
 
@@ -168,7 +160,7 @@ fn is_element_index(rows: &HashSet<Row>, index: &ElementIndex) -> bool {
 mod test_is_element_index {
     use super::*;
 
-    fn example() -> (HashSet<Row>, ElementIndex) {
+    pub fn example() -> (HashSet<Row>, ElementIndex) {
         let rows: HashSet<Row> = hashset!{
             vec![el(0), el(1), el(2)],
             vec![el(1), el(2), el(3)],
@@ -331,9 +323,9 @@ impl Extend<Row> for Relation {
 
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SortId(usize);
+pub struct SortId(pub usize);
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct RelationId(usize);
+pub struct RelationId(pub usize);
 
 // Some default values, fixed but chosen randomly
 impl Default for SortId {
@@ -351,7 +343,7 @@ pub struct Signature {
 pub struct Model<'a> {
     signature: &'a Signature,
     element_sorts: HashMap<Element, SortId>,
-    element_representatives: Vec<usize>,
+    element_representatives: UnionFind,
     relations: Vec<Relation>,
 }
 
@@ -362,7 +354,7 @@ impl<'a> Model<'a> {
     pub fn element_sorts(&self) -> &HashMap<Element, SortId> {
         &self.element_sorts
     }
-    pub fn element_representatives(&self) -> &Vec<usize> {
+    pub fn element_representatives(&self) -> &UnionFind {
         &self.element_representatives
     }
     pub fn relations(&self) -> &Vec<Relation> {
@@ -377,7 +369,7 @@ impl<'a> Model<'a> {
         Model {
             signature,
             element_sorts: HashMap::new(),
-            element_representatives: Vec::new(),
+            element_representatives: UnionFind::new(),
             relations
         }
     }
@@ -386,11 +378,7 @@ impl<'a> Model<'a> {
         let SortId(s) = sort;
         assert!(s < self.signature.sort_number);
 
-        let index = self.element_representatives.len();
-        assert!(index <= (u32::max_value() as usize));
-
-        self.element_representatives.push(index);
-        let el = Element(index as u32);
+        let el = self.element_representatives.add_element();
         self.element_sorts.insert(el, sort);
         el
     }
