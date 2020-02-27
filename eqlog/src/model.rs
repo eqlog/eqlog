@@ -343,7 +343,7 @@ pub struct Signature {
 pub struct Model<'a> {
     signature: &'a Signature,
     element_sorts: HashMap<Element, SortId>,
-    element_representatives: UnionFind,
+    representatives: UnionFind,
     relations: Vec<Relation>,
 }
 
@@ -354,8 +354,8 @@ impl<'a> Model<'a> {
     pub fn element_sorts(&self) -> &HashMap<Element, SortId> {
         &self.element_sorts
     }
-    pub fn element_representatives(&self) -> &UnionFind {
-        &self.element_representatives
+    pub fn representatives(&self) -> &UnionFind {
+        &self.representatives
     }
     pub fn relations(&self) -> &Vec<Relation> {
         &self.relations
@@ -369,7 +369,7 @@ impl<'a> Model<'a> {
         Model {
             signature,
             element_sorts: HashMap::new(),
-            element_representatives: UnionFind::new(),
+            representatives: UnionFind::new(),
             relations
         }
     }
@@ -378,7 +378,7 @@ impl<'a> Model<'a> {
         let SortId(s) = sort;
         assert!(s < self.signature.sort_number);
 
-        let el = self.element_representatives.add_element();
+        let el = self.representatives.new_element();
         self.element_sorts.insert(el, sort);
         el
     }
