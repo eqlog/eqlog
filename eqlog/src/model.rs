@@ -400,3 +400,164 @@ impl<'a> Model<'a> {
         }));
     }
 }
+
+#[cfg(test)]
+mod test_model {
+    use super::*;
+
+    fn assert_valid_signature(sig: &Signature) {
+        for SortId(s) in sig.relation_arities.iter().flatten() {
+            assert!(*s < sig.sort_number);
+        }
+    }
+
+    fn assert_valid_model(m: &Model) {
+        assert_valid_signature(m.signature);
+
+        // precisely the canonical representatives have associated sorts
+        let reprs: HashSet<Element> = HashSet::from_iter(
+            (0 .. m.representatives.len()).
+            map(|x| Element(x as u32)).
+            filter(|el| m.representatives.is_canonical_const(*el))
+        );
+        let keys: HashSet<Element> = HashSet::from_iter(m.element_sorts.keys().map(|x| *x));
+        assert_eq!(reprs, keys);
+
+        // the sort of every representative is valid according to the signature
+        for SortId(s) in m.element_sorts.values() {
+            assert!(*s < m.signature.sort_number);
+        }
+
+        // m has the right number of relations
+        assert_eq!(m.relations.len(), m.signature.relation_arities.len());
+
+        for (rel, arity) in m.relations.iter().zip(m.signature.relation_arities.iter()) {
+            for row in rel.rows() {
+                // this row has the right length
+                assert_eq!(row.len(), arity.len());
+                for (el, sort) in row.iter().zip(arity.iter()) {
+                    // el is a canonical representative
+                    assert!(m.representatives.is_canonical_const(*el));
+                    // el has the sort specified by arity
+                    assert_eq!(m.element_sorts[el], *sort);
+                }
+            }
+        }
+    }
+
+    fn example_signature() -> Signature {
+        Signature {
+            sort_number: 2,
+            relation_arities: vec![
+                vec![SortId(0), SortId(1)],
+                vec![],
+                vec![SortId(1), SortId(0), SortId(1)],
+                vec![SortId(0), SortId(0)]
+            ],
+        }
+    }
+
+    #[test]
+    fn example_signature_is_valid() {
+        let sig = example_signature();
+        assert_valid_signature(&sig);
+    }
+
+    #[test]
+    fn new_model_is_valid() {
+        let sig = example_signature();
+        let m = Model::new(&sig);
+
+        assert_valid_model(&m);
+    }
+
+    #[test]
+    fn new_element() {
+        let sig = example_signature();
+        let mut m = Model::new(&sig);
+        let el0 = m.new_element(SortId(0));
+        assert_eq!(el0, Element(0), );
+        assert_valid_model(&m);
+
+        let el1 = m.new_element(SortId(1));
+        assert_eq!(el1, Element(1));
+        assert_valid_model(&m);
+
+        let el2 = m.new_element(SortId(1));
+        assert_eq!(el2, Element(2));
+        assert_valid_model(&m);
+    }
+
+    #[test] #[should_panic]
+    fn new_element_invalid_sort() {
+        let sig = example_signature();
+        let mut m = Model::new(&sig);
+        m.new_element(SortId(2));
+    }
+
+    #[test]
+    fn extend() {
+        let sig = example_signature();
+        let mut m = Model::new(&sig);
+        let el0 = m.new_element(SortId(0));
+        let el1 = m.new_element(SortId(0));
+        let el2 = m.new_element(SortId(0));
+        let el3 = m.new_element(SortId(1));
+        let el4 = m.new_element(SortId(1));
+
+        m.extend_relation(RelationId(0), vec![
+            vec![el0, el3],
+            vec![el1, el3],
+        ]);
+        assert_valid_model(&m);
+        assert_eq!(
+            *m.relations[0].rows(),
+            hashset!{vec![el0, el3], vec![el1, el3]}
+        );
+
+        m.extend_relation(RelationId(0), vec![
+            vec![el1, el4],
+        ]);
+        assert_valid_model(&m);
+
+        m.extend_relation(RelationId(1), vec![vec![]]);
+        assert_valid_model(&m);
+
+        m.extend_relation(RelationId(2), vec![
+            vec![el3, el2, el4],
+            vec![el4, el2, el4],
+        ]);
+        assert_valid_model(&m);
+
+        m.extend_relation(RelationId(3), vec![
+            vec![el0, el0]
+        ]);
+        assert_valid_model(&m);
+    }
+
+    #[test] #[should_panic]
+    fn extend_invalid_sorts() {
+        let sig = example_signature();
+        let mut m = Model::new(&sig);
+        let el0 = m.new_element(SortId(0));
+        let el1 = m.new_element(SortId(1));
+
+        m.extend_relation(RelationId(0), vec![
+            vec![el1, el0],
+            vec![el0, el1],
+        ]);
+    }
+
+    #[test] #[should_panic]
+    fn extend_invalid_arity() {
+        let sig = example_signature();
+        let mut m = Model::new(&sig);
+        let el0 = m.new_element(SortId(0));
+        let el1 = m.new_element(SortId(1));
+
+        m.extend_relation(RelationId(0), vec![
+            vec![el0, el1],
+            vec![el0, el1, el1],
+        ]);
+    }
+}
