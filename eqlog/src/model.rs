@@ -253,8 +253,6 @@ fn test_make_element_index() {
 
 pub struct Relation {
     row_len: usize,
-    // all rows in this relation
-    rows: HashSet<Row>,
     // indices for projections specified by a list of indices into the row
     projection_indices: HashMap<Vec<usize>, ProjectionIndex>,
     // maps elements into the set of rows containing them
@@ -265,8 +263,7 @@ impl Relation {
     fn new(row_len: usize) -> Self {
         Relation {
             row_len,
-            rows: HashSet::new(),
-            projection_indices: HashMap::new(),
+            projection_indices: hashmap!{ vec![] => hashmap!{ vec![] => hashset!{} } },
             element_index: HashMap::new(),
         }
     }
@@ -275,8 +272,11 @@ impl Relation {
         self.row_len
     }
     pub fn rows(&self) -> &HashSet<Row> {
-        &self.rows
+        &self.projection_indices.get(&vec![]).unwrap().get(&vec![]).unwrap()
     }
+    // fn rows_mut(&mut self) -> &mut HashSet<Row> {
+    //     self.projection_indices.get_mut(&vec![]).unwrap().get_mut(&vec![]).unwrap()
+    // }
     pub fn projection_indices(&self) -> &HashMap<Vec<usize>, ProjectionIndex> {
         &self.projection_indices
     }
@@ -292,10 +292,11 @@ impl Relation {
             assert!(*i < self.row_len);
         }
 
-        let index = make_projection_index(&projection, &self.rows);
+        let index = make_projection_index(&projection, self.rows());
         self.projection_indices.insert(projection, index);
     }
     pub fn remove_projection_index(&mut self, projection: &Vec<usize>) {
+        assert_ne!(*projection, vec![]);
         self.projection_indices.remove(projection);
     }
 }
@@ -304,19 +305,15 @@ impl Extend<Row> for Relation {
     fn extend<I: IntoIterator<Item = Row>>(&mut self, rows: I) {
         for row in rows {
             assert_eq!(row.len(), self.row_len);
-            let was_inserted = self.rows.insert(row.clone());
-
-            if was_inserted {
-                for (projection, mut index) in self.projection_indices.iter_mut() {
-                    extend_projection_index(&projection, &mut index, once(row.clone()));
-                }
-                extend_element_index(&mut self.element_index, once(row));
+            for (projection, mut index) in self.projection_indices.iter_mut() {
+                extend_projection_index(&projection, &mut index, once(row.clone()));
             }
+            extend_element_index(&mut self.element_index, once(row));
         }
 
-        debug_assert!(is_element_index(&self.rows, &self.element_index));
+        debug_assert!(is_element_index(self.rows(), &self.element_index));
         for (projection, index) in &self.projection_indices {
-            debug_assert!(is_projection_index(&self.rows, projection, index));
+            debug_assert!(is_projection_index(self.rows(), projection, index));
         }
     }
 }
@@ -359,6 +356,16 @@ impl<'a> Model<'a> {
     }
     pub fn relations(&self) -> &Vec<Relation> {
         &self.relations
+    }
+    pub fn add_projection_index(&mut self, relation_id: RelationId, projection: Vec<usize>) {
+        let RelationId(r) = relation_id;
+        assert!(r < self.relations.len());
+        self.relations[r].add_projection_index(projection);
+    }
+    pub fn projection_indices(&self, relation_id: RelationId) -> &HashMap<Vec<usize>, ProjectionIndex> {
+        let RelationId(r) = relation_id;
+        assert!(r < self.relations.len());
+        self.relations[r].projection_indices()
     }
 
     pub fn new(signature: &'a Signature) -> Self {
