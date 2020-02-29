@@ -8,12 +8,17 @@ pub struct RelationInJoinPlan {
     pub relation_id: RelationId,
     pub equality_local_indices: Vec<usize>,
     pub equality_joined_indices: Vec<usize>,
+    pub diagonal_equalities: Vec<(usize, usize)>,
     pub copied_indices: Vec<usize>,
 }
 pub struct JoinPlan(pub Vec<RelationInJoinPlan>);
 
+fn satisfies_diagonal_equalities(diagonal_equalities: &[(usize, usize)], row: &[Element]) -> bool {
+    diagonal_equalities.iter().all(|(e1, e2)| row[*e1] == row[*e2])
+}
+
 fn visit_join_impl<V>(
-    rels: &[(&[usize], &ProjectionIndex, &[usize])],
+    rels: &[(&[usize], &ProjectionIndex, &[usize], &[(usize, usize)])],
     rel_index: usize,
     projection_buffer: &mut Vec<Element>,
     current_joined_row_size: usize,
@@ -28,14 +33,14 @@ where
         return;
     }
 
-    let (projection, index, copied_indices) = rels[rel_index];
+    let (projection, index, copied_indices, diag_eqs) = rels[rel_index];
 
     projection_buffer.resize(projection.len(), Element::default());
     project(projection, joined_row, &mut projection_buffer[..]);
 
     if let Some(matching_rows) = index.get(&projection_buffer[..]) {
         let next_joined_row_size = current_joined_row_size + copied_indices.len();
-        for row in matching_rows {
+        for row in matching_rows.iter().filter(|row| satisfies_diagonal_equalities(diag_eqs, row)) {
             project(
                 copied_indices,
                 &row,
@@ -58,12 +63,17 @@ where
     for<'a> V: FnMut(&'a [Element])
 {
     let JoinPlan(p) = plan;
-    let rels: Vec<(&[usize], &ProjectionIndex, &[usize])> =
+    let rels: Vec<(&[usize], &ProjectionIndex, &[usize], &[(usize, usize)])> =
         Vec::from_iter(p.iter().map(|rijp| {
             let RelationId(rid) = rijp.relation_id;
             let model_indices = model.relations()[rid].projection_indices();
             let index = &model_indices[&rijp.equality_local_indices];
-            (&rijp.equality_joined_indices[..], index, &rijp.copied_indices[..])
+            (
+                &rijp.equality_joined_indices[..],
+                index,
+                &rijp.copied_indices[..],
+                &rijp.diagonal_equalities[..]
+            )
         }));
 
     let mut projection_buffer: Vec<Element> = Vec::with_capacity(
@@ -137,6 +147,7 @@ mod test {
                 equality_local_indices: vec![],
                 equality_joined_indices: vec![],
                 copied_indices: vec![1, 0, 1],
+                diagonal_equalities: vec![],
             }
         ]);
 
@@ -174,12 +185,14 @@ mod test {
                 equality_local_indices: vec![],
                 equality_joined_indices: vec![],
                 copied_indices: vec![1, 0],
+                diagonal_equalities: vec![],
             },
             RelationInJoinPlan {
                 relation_id: r,
                 equality_local_indices: vec![1],
                 equality_joined_indices: vec![0],
                 copied_indices: vec![0],
+                diagonal_equalities: vec![],
             },
         ]);
 
@@ -225,12 +238,14 @@ mod test {
                 equality_local_indices: vec![],
                 equality_joined_indices: vec![],
                 copied_indices: vec![1, 0],
+                diagonal_equalities: vec![],
             },
             RelationInJoinPlan {
                 relation_id: r,
                 equality_local_indices: vec![1],
                 equality_joined_indices: vec![0],
                 copied_indices: vec![0],
+                diagonal_equalities: vec![],
             },
         ]);
 
@@ -242,6 +257,62 @@ mod test {
             vec![b0, a1, a0],
             vec![b0, a1, a1],
             vec![b1, a1, a1],
+        });
+    }
+
+    #[test]
+    fn binary_diagonal() {
+        let sig = Signature {
+            sort_number: 2,
+            relation_arities: vec![
+                vec![SortId(0), SortId(1)],
+                vec![SortId(1), SortId(1)],
+            ],
+        };
+
+        let r0 = RelationId(0);
+        let r1 = RelationId(1);
+
+        let mut model = Model::new(&sig);
+
+        let a0 = model.new_element(SortId(0));
+        let a1 = model.new_element(SortId(0));
+        let b0 = model.new_element(SortId(1));
+        let b1 = model.new_element(SortId(1));
+
+        model.extend_relation(r0, vec![
+            vec![a0, b0],
+            vec![a1, b0],
+            vec![a1, b1],
+        ]);
+        model.extend_relation(r1, vec![
+            vec![b0, b0],
+            vec![b1, b0],
+            vec![b0, b1],
+        ]);
+
+        let plan = JoinPlan(vec![
+            RelationInJoinPlan {
+                relation_id: r0,
+                equality_local_indices: vec![],
+                equality_joined_indices: vec![],
+                copied_indices: vec![0, 1],
+                diagonal_equalities: vec![],
+            },
+            RelationInJoinPlan {
+                relation_id: r1,
+                equality_local_indices: vec![0],
+                equality_joined_indices: vec![1],
+                copied_indices: vec![],
+                diagonal_equalities: vec![(0, 1)],
+            },
+        ]);
+
+        model.add_projection_index(r1, vec![0]);
+
+        assert_eq!(compute_join(&model, &plan), hashset!{
+            vec![a0, b0],
+            vec![a1, b0],
         });
     }
 }
