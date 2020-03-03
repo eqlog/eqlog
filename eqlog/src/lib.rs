@@ -1,6 +1,6 @@
 #[macro_use] extern crate maplit;
 pub mod model;
 pub mod join;
-mod element;
+pub mod element;
 mod union_find;
-mod signature;
+pub mod signature;
