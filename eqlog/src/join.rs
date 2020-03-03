@@ -217,7 +217,8 @@ mod test {
             ],
         };
 
-        let r = RelationId(0);
+        let r0 = RelationId(0);
+        let r1 = RelationId(1);
 
         let mut model = Model::new(&sig);
 
@@ -231,32 +232,34 @@ mod test {
             vec![a1, b0],
             vec![a1, b1],
         ]);
+        model.extend_relation(RelationId(1), vec![
+            vec![b0, a0],
+            vec![b1, a1],
+        ]);
 
         let plan = JoinPlan(vec![
             RelationInJoinPlan {
-                relation_id: r,
+                relation_id: r0,
                 equality_local_indices: vec![],
                 equality_joined_indices: vec![],
                 copied_indices: vec![1, 0],
                 diagonal_equalities: vec![],
             },
             RelationInJoinPlan {
-                relation_id: r,
+                relation_id: r1,
                 equality_local_indices: vec![1],
-                equality_joined_indices: vec![0],
+                equality_joined_indices: vec![1],
                 copied_indices: vec![0],
                 diagonal_equalities: vec![],
             },
         ]);
 
-        model.add_projection_index(r, vec![1]);
+        model.add_projection_index(r1, vec![1]);
 
         assert_eq!(compute_join(&model, &plan), hashset!{
-            vec![b0, a0, a0],
-            vec![b0, a0, a1],
-            vec![b0, a1, a0],
-            vec![b0, a1, a1],
-            vec![b1, a1, a1],
+            vec![b0, a0, b0],
+            vec![b0, a1, b1],
+            vec![b1, a1, b1],
         });
     }
 
