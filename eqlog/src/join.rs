@@ -111,10 +111,10 @@ mod test {
 
     #[test]
     fn nullary_join() {
-        let sig = Signature {
-            sort_number: 2,
-            relation_arities: vec![vec![SortId(0), SortId(1)]],
-        };
+        let sig = Signature::from_sorts_arities(
+            2,
+            vec![vec![SortId(0), SortId(1)]],
+        );
         let model = Model::new(&sig);
         let plan = JoinPlan(vec![]);
         assert_eq!(compute_join(&model, &plan), hashset!{vec![]});
@@ -122,10 +122,10 @@ mod test {
 
     #[test]
     fn unary_join() {
-        let sig = Signature {
-            sort_number: 2,
-            relation_arities: vec![vec![SortId(0), SortId(1)]],
-        };
+        let sig = Signature::from_sorts_arities(
+            2,
+            vec![vec![SortId(0), SortId(1)]],
+        );
 
         let r = RelationId(0);
 
@@ -159,10 +159,10 @@ mod test {
 
     #[test]
     fn binary_self_join() {
-        let sig = Signature {
-            sort_number: 2,
-            relation_arities: vec![vec![SortId(0), SortId(1)]],
-        };
+        let sig = Signature::from_sorts_arities(
+            2,
+            vec![vec![SortId(0), SortId(1)]],
+        );
 
         let r = RelationId(0);
 
@@ -209,13 +209,13 @@ mod test {
 
     #[test]
     fn binary_join() {
-        let sig = Signature {
-            sort_number: 2,
-            relation_arities: vec![
+        let sig = Signature::from_sorts_arities(
+            2,
+            vec![
                 vec![SortId(0), SortId(1)],
                 vec![SortId(1), SortId(0)],
             ],
-        };
+        );
 
         let r0 = RelationId(0);
         let r1 = RelationId(1);
@@ -265,13 +265,13 @@ mod test {
 
     #[test]
     fn binary_diagonal() {
-        let sig = Signature {
-            sort_number: 2,
-            relation_arities: vec![
+        let sig = Signature::from_sorts_arities(
+            2,
+            vec![
                 vec![SortId(0), SortId(1)],
                 vec![SortId(1), SortId(1)],
             ],
-        };
+        );
 
         let r0 = RelationId(0);
         let r1 = RelationId(1);

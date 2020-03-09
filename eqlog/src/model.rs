@@ -1,6 +1,6 @@
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
-use std::iter::{FromIterator, once};
+use std::iter::{FromIterator, once, Iterator};
 use crate::union_find::UnionFind;
 use crate::element::Element;
 #[cfg(test)]
@@ -352,7 +352,7 @@ impl<'a> Model<'a> {
 
     pub fn new(signature: &'a Signature) -> Self {
         let relations = Vec::from_iter(
-            signature.relation_arities.iter().
+            signature.iter_arities().
             map(|arity| Relation::new(arity.len()))
         );
         Model {
@@ -364,24 +364,23 @@ impl<'a> Model<'a> {
     }
 
     pub fn new_element(&mut self, sort: SortId) -> Element {
-        let SortId(s) = sort;
-        assert!(s < self.signature.sort_number);
+        assert!(self.signature.has_sort(sort));
 
         let el = self.representatives.new_element();
         self.element_sorts.insert(el, sort);
         el
     }
-    pub fn extend_relation<I: IntoIterator<Item = Row>>(&mut self, relation_id: RelationId, rows: I) {
-        let RelationId(r) = relation_id;
-        assert!(r < self.signature.relation_arities.len());
-
-        let arity = &self.signature.relation_arities[r];
+    pub fn extend_relation<I: IntoIterator<Item = Row>>(&mut self, r: RelationId, rows: I) {
+        let arity =
+            self.signature.get_arity(r).
+            unwrap_or_else(|| panic!("Invalid relation id"));
 
         // get reference to element_sorts so that the lambda passed to `inspect` doesn't need to
         // capture `self`, which is also needed to access `self.relations[r]`
         let element_sorts = &mut self.element_sorts;
+        let RelationId(r0) = r;
 
-        self.relations[r].extend(rows.into_iter().inspect(|row| {
+        self.relations[r0].extend(rows.into_iter().inspect(|row| {
             assert_eq!(arity.len(), row.len());
             for (el, sort) in row.iter().zip(arity.iter()) {
                 assert_eq!(element_sorts.get(el), Some(sort));
@@ -394,15 +393,7 @@ impl<'a> Model<'a> {
 mod test_model {
     use super::*;
 
-    fn assert_valid_signature(sig: &Signature) {
-        for SortId(s) in sig.relation_arities.iter().flatten() {
-            assert!(*s < sig.sort_number);
-        }
-    }
-
     fn assert_valid_model(m: &Model) {
-        assert_valid_signature(m.signature);
-
         // precisely the canonical representatives have associated sorts
         let reprs: HashSet<Element> = HashSet::from_iter(
             (0 .. m.representatives.len()).
@@ -413,14 +404,14 @@ mod test_model {
         assert_eq!(reprs, keys);
 
         // the sort of every representative is valid according to the signature
-        for SortId(s) in m.element_sorts.values() {
-            assert!(*s < m.signature.sort_number);
+        for s in m.element_sorts.values() {
+            assert!(m.signature.has_sort(*s));
         }
 
         // m has the right number of relations
-        assert_eq!(m.relations.len(), m.signature.relation_arities.len());
+        assert_eq!(m.relations.len(), m.signature.relation_number());
 
-        for (rel, arity) in m.relations.iter().zip(m.signature.relation_arities.iter()) {
+        for (rel, arity) in m.relations.iter().zip(m.signature.iter_arities()) {
             for row in rel.rows() {
                 // this row has the right length
                 assert_eq!(row.len(), arity.len());
@@ -435,21 +426,14 @@ mod test_model {
     }
 
     fn example_signature() -> Signature {
-        Signature {
-            sort_number: 2,
-            relation_arities: vec![
-                vec![SortId(0), SortId(1)],
-                vec![],
-                vec![SortId(1), SortId(0), SortId(1)],
-                vec![SortId(0), SortId(0)]
-            ],
-        }
-    }
-
-    #[test]
-    fn example_signature_is_valid() {
-        let sig = example_signature();
-        assert_valid_signature(&sig);
+        let mut sig = Signature::new();
+        let s0 = sig.add_sort();
+        let s1 = sig.add_sort();
+        sig.add_relation(vec![s0, s1]);
+        sig.add_relation(vec![]);
+        sig.add_relation(vec![s1, s0, s1]);
+        sig.add_relation(vec![s0, s0]);
+        sig
     }
 
     #[test]
