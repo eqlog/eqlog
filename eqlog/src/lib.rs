@@ -4,3 +4,4 @@ pub mod join;
 pub mod element;
 mod union_find;
 pub mod signature;
+pub mod syntax;
