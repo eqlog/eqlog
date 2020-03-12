@@ -229,23 +229,38 @@ pub struct Theory {
 }
 
 #[derive(Debug, Eq)]
-struct RefEquality<'a, T>(&'a T);
+struct TermRefEquality<'a>(&'a Term);
 
-// Stolen from
-// https://stackoverflow.com/questions/33847537/how-do-i-make-a-pointer-hashable
-// and used in check_sorts of Theory's impl
-impl<'a, T> std::hash::Hash for RefEquality<'a, T> {
+impl<'a, 'b> PartialEq<TermRefEquality<'b>> for TermRefEquality<'a> {
+    fn eq(&self, other: &TermRefEquality<'b>) -> bool {
+        let TermRefEquality(lhs) = self;
+        let TermRefEquality(rhs) = other;
+        match (lhs, rhs) {
+            (Term::Wildcard(), Term::Wildcard()) => {
+                (*lhs as *const Term) == (*rhs as *const Term)
+            },
+            (Term::Variable(lhs_name), Term::Variable(rhs_name)) => {
+                lhs_name == rhs_name
+            },
+            (Term::Operation(lhs_name, lhs_args), Term::Operation(rhs_name, rhs_args)) => {
+                lhs_name == rhs_name && lhs_args == rhs_args
+            },
+            _ => false,
+        }
+    }
+}
+
+impl<'a> std::hash::Hash for TermRefEquality<'a> {
     fn hash<H>(&self, state: &mut H)
     where
         H: std::hash::Hasher,
     {
-        (self.0 as *const T).hash(state)
-    }
-}
-
-impl<'a, 'b, T> PartialEq<RefEquality<'b, T>> for RefEquality<'a, T> {
-    fn eq(&self, other: &RefEquality<'b, T>) -> bool {
-        self.0 as *const T == other.0 as *const T
+        let TermRefEquality(t) = self;
+        match t {
+            Term::Wildcard() => (*t as *const Term).hash(state),
+            Term::Variable(name) => name.hash(state),
+            Term::Operation(name, args) => (name, args).hash(state),
+        }
     }
 }
 
@@ -323,9 +338,9 @@ impl Theory {
         let require_sort = |
             t: &'a Term,
             s: SortId,
-            sort_requirements: &mut HashMap<RefEquality<'a, Term>, SortId>,
+            sort_requirements: &mut HashMap<TermRefEquality<'a>, SortId>,
         | {
-            if let Some(old) = sort_requirements.get(&RefEquality(t)) {
+            if let Some(old) = sort_requirements.get(&TermRefEquality(t)) {
                 if *old != s {
                     let (old_name, _) = self.sort_names.iter().find(|(_, s0)| **s0 == *old).unwrap();
                     let (s_name, _) = self.sort_names.iter().find(|(_, s0)| **s0 == s).unwrap();
@@ -335,26 +350,26 @@ impl Theory {
                     );
                 }
             } else {
-                sort_requirements.insert(RefEquality(t), s);
+                sort_requirements.insert(TermRefEquality(t), s);
             }
         };
 
         let require_equal_sorts = |
             lhs: &'a Term,
             rhs: &'a Term,
-            sort_requirements: &mut HashMap<RefEquality<'a, Term>, SortId>,
+            sort_requirements: &mut HashMap<TermRefEquality<'a>, SortId>,
         | {
-            if let Some(lhs_sort) = sort_requirements.get(&RefEquality(lhs)) {
+            if let Some(lhs_sort) = sort_requirements.get(&TermRefEquality(lhs)) {
                 require_sort(rhs, *lhs_sort, sort_requirements);                        
             };
-            if let Some(rhs_sort) = sort_requirements.get(&RefEquality(rhs)) {
+            if let Some(rhs_sort) = sort_requirements.get(&TermRefEquality(rhs)) {
                 require_sort(lhs, *rhs_sort, sort_requirements);                        
             };
         };
 
         let check_atom = |
             atom: &'a Atom,
-            sort_requirements: &mut HashMap<RefEquality<'a, Term>, SortId>,
+            sort_requirements: &mut HashMap<TermRefEquality<'a>, SortId>,
         | {
             match atom {
                 Atom::Defined(_) => (),
@@ -378,7 +393,7 @@ impl Theory {
             }
         };
 
-        let mut sort_requirements: HashMap<RefEquality<'a, Term>, SortId> = HashMap::new();
+        let mut sort_requirements: HashMap<TermRefEquality<'a>, SortId> = HashMap::new();
         loop {
             let previous_len = sort_requirements.len();
 
@@ -421,7 +436,7 @@ impl Theory {
         }
         
         seq.visit_subterms(|t| {
-            if sort_requirements.get(&RefEquality(t)).is_none() {
+            if sort_requirements.get(&TermRefEquality(t)).is_none() {
                 panic!(
                     "In sequent {}: Sort of term {} could not be inferred",
                     seq, t
@@ -653,7 +668,7 @@ mod test_theory {
     fn add_sequent_valid() {
         let mut theory = theory();
         theory.add_sequent(sequent!(
-            p(x, y) & p(y, _) => o(x, y) = o(y, x) & ~o(x, x)
+            p(x, y) & p(_, z) => o(y, x) = o(z, x) & ~o(y, x)
         ));
     }
 
