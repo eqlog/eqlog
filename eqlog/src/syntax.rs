@@ -673,10 +673,18 @@ mod test_theory {
     }
 
     #[test] #[should_panic]
-    fn add_sequent_undetermined_sort() {
+    fn add_sequent_undetermined_variable_sort() {
         let mut theory = theory();
         theory.add_sequent(sequent!(
             p(x, y) => x = y & z = z
+        ));
+    }
+
+    #[test] #[should_panic]
+    fn add_sequent_undetermined_wildcard_sort() {
+        let mut theory = theory();
+        theory.add_sequent(sequent!(
+            p(x, y) => x = y & _ = _
         ));
     }
 
@@ -705,10 +713,18 @@ mod test_theory {
     }
 
     #[test] #[should_panic]
-    fn add_sequent_invalid_1() {
+    fn add_sequent_wrong_sorts_predicate() {
         let mut theory = theory();
         theory.add_sequent(sequent!(
-            p(x, y, z) & ~z => x = y
+            p(x, y) => p(y, x)
+        ));
+    }
+
+    #[test] #[should_panic]
+    fn add_sequent_variable_used_only_once() {
+        let mut theory = theory();
+        theory.add_sequent(sequent!(
+            p(x, y) & p(z, w) => p(x, w)
         ));
     }
 }
