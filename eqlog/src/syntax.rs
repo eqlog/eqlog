@@ -257,9 +257,9 @@ impl<'a> std::hash::Hash for TermRefEquality<'a> {
     {
         let TermRefEquality(t) = self;
         match t {
-            Term::Wildcard() => (*t as *const Term).hash(state),
-            Term::Variable(name) => name.hash(state),
-            Term::Operation(name, args) => (name, args).hash(state),
+            Term::Wildcard() => (0, *t as *const Term).hash(state),
+            Term::Variable(name) => (1, name).hash(state),
+            Term::Operation(name, args) => (2, (name, args)).hash(state),
         }
     }
 }
