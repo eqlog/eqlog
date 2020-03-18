@@ -1,423 +1,185 @@
 use std::vec::Vec;
 use std::collections::{HashMap, HashSet};
-use std::iter::{FromIterator, once, Iterator};
-use crate::union_find::UnionFind;
-use crate::element::Element;
-#[cfg(test)]
-use crate::element::el;
+use std::iter::{FromIterator, repeat, Iterator, once};
+use crate::union_find::*;
+use crate::element::*;
 use crate::signature::*;
 
 pub type Row = Vec<Element>;
 
-// supposed to map some projection of a full row to the set of all rows with that projection
-pub type ProjectionIndex = HashMap<Row, HashSet<Row>>;
-
-pub fn project<T: Copy>(projection: &[usize], row: &[T], row_projection: &mut [T]) {
-    for (i, p) in projection.iter().enumerate() {
-        row_projection[i] = row[*p];
-    }
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct DeltaRelation {
+    old_rows: HashSet<Row>,
+    new_rows: HashSet<Row>,
 }
 
-fn is_projection_index(rows: &HashSet<Row>, projection: &[usize], index: &ProjectionIndex) -> bool {
-    let mut row_projection = Vec::with_capacity(projection.len());
-    row_projection.resize(projection.len(), Element::default());
-    rows.iter().all(|row| {
-        // all rows should be in the index at the right key
-        project(&projection, row, &mut row_projection[..]);
-        match index.get(&row_projection[..]) {
-            None => false,
-            Some(matching_rows) => matching_rows.contains(row)
-        }
-    }) &&
-    index.iter().all(|(row_proj, matching_rows)| {
-        // rows at some key in the index should have the correct projection and occure in rows
-        matching_rows.iter().all(|row| {
-            project(&projection, row, &mut row_projection[..]);
-            *row_proj == row_projection && rows.contains(row)
-        })
-    })
-}
-
-#[cfg(test)]
-mod test_is_projection_index {
-    use super::*;
-
-    fn example() -> (Vec<usize>, HashSet<Row>, ProjectionIndex) {
-        let projection = vec![0, 2];
-
-        let rows: HashSet<Row> = hashset!{
-            vec![el(0), el(1), el(2)],
-            vec![el(1), el(2), el(3)],
-            vec![el(1), el(0), el(3)],
-            vec![el(3), el(2), el(1)],
-        };
-
-        let index: ProjectionIndex = hashmap!{
-            vec![el(0), el(2)] => hashset!{vec![el(0), el(1), el(2)]},
-            vec![el(1), el(3)] => hashset!{vec![el(1), el(2), el(3)], vec![el(1), el(0), el(3)]},
-            vec![el(3), el(1)] => hashset!{vec![el(3), el(2), el(1)]},
-        };
-
-        (projection, rows, index)
-    }
-
-    #[test]
-    fn completeness() {
-        let (projection, rows, index) = example();
-        assert!(is_projection_index(&rows, &projection, &index));
-    }
-
-    #[test]
-    fn soundness_index_missing_key() {
-        let (projection, mut rows, index) = example();
-        rows.insert(vec![el(500), el(2), el(1)]);
-        assert!(!is_projection_index(&rows, &projection, &index));
-    }
-
-    #[test]
-    fn soundness_index_missing_row() {
-        let (projection, mut rows, index) = example();
-         // `rows` contains at least one row [el(3), _, el(1)] already
-        rows.insert(vec![el(3), el(500), el(1)]); 
-        assert!(!is_projection_index(&rows, &projection, &index));
-    }
-
-    #[test]
-    fn soundness_index_extraneous_key() {
-        let (projection, rows, mut index) = example();
-        index.insert(
-            vec![el(500), el(1)],
-            hashset!{vec![el(500), el(2), el(1)]}
-        );
-        assert!(!is_projection_index(&rows, &projection, &index));
-    }
-
-    #[test]
-    fn soundness_index_extraneous_row() {
-        let (projection, rows, mut index) = example();
-        index.get_mut(&vec![el(1), el(3)]).unwrap().insert(vec![el(1), el(500), el(3)]);
-        assert!(!is_projection_index(&rows, &projection, &index));
-    }
-}
-
-fn extend_projection_index<I>(projection: &[usize], index: &mut ProjectionIndex, rows: I)
-where
-    I: IntoIterator<Item = Row>
-{
-    let mut row_projection = Vec::with_capacity(projection.len());
-    row_projection.resize(projection.len(), Element::default());
-    for row in rows {
-        project(projection, &row, &mut row_projection);
-
-        match index.get_mut(&row_projection) {
-            Some(matching_rows) => {
-                matching_rows.insert(row);
-            },
-            None => {
-                index.insert(row_projection.clone(), hashset!{row});
-            },
-        }
-    }
-}
-
-fn make_projection_index(projection: &[usize], rows: &HashSet<Row>) -> ProjectionIndex {
-    let mut index: ProjectionIndex = HashMap::new();
-    extend_projection_index(projection, &mut index, rows.iter().map(|row| row.clone()));
-    index
-}
-
-#[cfg(test)] #[test]
-fn test_make_projection_index() {
-    let rows: HashSet<Row> = hashset!{
-        vec![el(0), el(1), el(2)],
-        vec![el(1), el(2), el(3)],
-        vec![el(1), el(0), el(3)],
-        vec![el(3), el(2), el(1)],
-    };
-    
-    for projection in &[vec![], vec![0], vec![1], vec![2], vec![0, 2], vec![1, 0], vec![2, 1, 0]] {
-        let index = make_projection_index(&projection, &rows);
-        assert!(is_projection_index(&rows, &projection, &index));
-    }
-}
-
-type ElementIndex = HashMap<Element, HashSet<Row>>;
-
-fn is_element_index(rows: &HashSet<Row>, index: &ElementIndex) -> bool {
-    index.iter().all(|(el, matching_rows)| {
-        matching_rows.iter().all(|row| row.contains(el) && rows.contains(row))
-    }) &&
-    rows.iter().all(|row| {
-        row.iter().all(|el| {
-            match index.get(el) {
-                None => false,
-                Some(matching_rows) => matching_rows.contains(row),
-            }
-        })
-    })
-}
-
-#[cfg(test)]
-mod test_is_element_index {
-    use super::*;
-
-    pub fn example() -> (HashSet<Row>, ElementIndex) {
-        let rows: HashSet<Row> = hashset!{
-            vec![el(0), el(1), el(2)],
-            vec![el(1), el(2), el(3)],
-            vec![el(1), el(0), el(3)],
-            vec![el(3), el(2), el(1)],
-        };
-
-        let index: ElementIndex = hashmap!{
-            el(0) => hashset!{vec![el(0), el(1), el(2)], vec![el(1), el(0), el(3)]},
-            el(1) => rows.clone(),
-            el(2) => hashset!{vec![el(0), el(1), el(2)], vec![el(1), el(2), el(3)], vec![el(3), el(2), el(1)]},
-            el(3) => hashset!{vec![el(1), el(0), el(3)], vec![el(1), el(2), el(3)], vec![el(3), el(2), el(1)]},
-        };
-
-        (rows, index)
-    }
-
-    #[test]
-    fn completeness() {
-        let (rows, index) = example();
-        assert!(is_element_index(&rows, &index));
-    }
-
-    #[test]
-    fn completeness_empty_els() {
-        let (rows, mut index) = example();
-        index.insert(el(500), hashset!{});
-        assert!(is_element_index(&rows, &index));
-    }
-
-    #[test]
-    fn soundness_index_missing_key() {
-        let (mut rows, index) = example();
-        rows.insert(vec![el(500), el(500), el(500)]);
-        assert!(!is_element_index(&rows, &index));
-    }
-
-    #[test]
-    fn soundness_index_missing_row() {
-        let (mut rows, index) = example();
-        rows.insert(vec![el(0), el(2), el(3)]);
-        assert!(!is_element_index(&rows, &index));
-    }
-
-    #[test]
-    fn soundness_index_extraneous_row() {
-        let (rows, mut index) = example();
-        index.get_mut(&el(0)).unwrap().insert(vec![el(3), el(2), el(1)]);
-        assert!(!is_element_index(&rows, &index));
-    }
-
-    #[test]
-    fn soundness_index_extraneous_key_and_row() {
-        let (rows, mut index) = example();
-        index.insert(el(500), hashset!{vec![el(500), el(600), el(700)]});
-        assert!(!is_element_index(&rows, &index));
-    }
-}
-
-fn extend_element_index<I>(index: &mut ElementIndex, rows: I)
-where
-    I: IntoIterator<Item = Row>
-{
-    for row in rows {
-        for el in &row {
-            match index.get_mut(el) {
-                Some(matching_rows) => {
-                    matching_rows.insert(row.clone());
-                },
-                None => {
-                    index.insert(*el, hashset!{row.clone()});
-                },
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-fn make_element_index(rows: &HashSet<Row>) -> ElementIndex {
-    let mut index: ElementIndex = HashMap::new();
-    extend_element_index(&mut index, rows.iter().map(|row| row.clone()));
-    index
-}
-
-#[cfg(test)] #[test]
-fn test_make_element_index() {
-    let (rows, index) = test_is_element_index::example();
-    assert_eq!(make_element_index(&rows), index);
-}
-
-pub struct Relation {
-    row_len: usize,
-    // indices for projections specified by a list of indices into the row
-    projection_indices: HashMap<Vec<usize>, ProjectionIndex>,
-    // maps elements into the set of rows containing them
-    element_index: HashMap<Element, HashSet<Row>>,
-}
-
-impl Relation {
-    fn new(row_len: usize) -> Self {
-        Relation {
-            row_len,
-            projection_indices: hashmap!{ vec![] => hashmap!{ vec![] => hashset!{} } },
-            element_index: HashMap::new(),
-        }
-    }
-    
-    pub fn row_len(&self) -> usize {
-        self.row_len
-    }
-    pub fn rows(&self) -> &HashSet<Row> {
-        &self.projection_indices.get(&vec![]).unwrap().get(&vec![]).unwrap()
-    }
-    // fn rows_mut(&mut self) -> &mut HashSet<Row> {
-    //     self.projection_indices.get_mut(&vec![]).unwrap().get_mut(&vec![]).unwrap()
-    // }
-    pub fn projection_indices(&self) -> &HashMap<Vec<usize>, ProjectionIndex> {
-        &self.projection_indices
-    }
-    pub fn element_index(&self) -> &ElementIndex {
-        &self.element_index
-    }
-    pub fn add_projection_index(&mut self, projection: Vec<usize>) {
-        if self.projection_indices.contains_key(&projection) {
-            return;
-        }
-
-        for i in &projection {
-            assert!(*i < self.row_len);
-        }
-
-        let index = make_projection_index(&projection, self.rows());
-        self.projection_indices.insert(projection, index);
-    }
-    pub fn remove_projection_index(&mut self, projection: &Vec<usize>) {
-        assert_ne!(*projection, vec![]);
-        self.projection_indices.remove(projection);
-    }
-}
-
-impl Extend<Row> for Relation {
-    fn extend<I: IntoIterator<Item = Row>>(&mut self, rows: I) {
-        for row in rows {
-            assert_eq!(row.len(), self.row_len);
-            for (projection, mut index) in self.projection_indices.iter_mut() {
-                extend_projection_index(&projection, &mut index, once(row.clone()));
-            }
-            extend_element_index(&mut self.element_index, once(row));
-        }
-
-        debug_assert!(is_element_index(self.rows(), &self.element_index));
-        for (projection, index) in &self.projection_indices {
-            debug_assert!(is_projection_index(self.rows(), projection, index));
-        }
-    }
-}
-
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Model<'a> {
     signature: &'a Signature,
     element_sorts: HashMap<Element, SortId>,
     representatives: UnionFind,
-    relations: Vec<Relation>,
+    relations: Vec<DeltaRelation>,
 }
 
 impl<'a> Model<'a> {
-    pub fn signature(&self) -> &'a Signature {
-        self.signature
-    }
-    pub fn element_sorts(&self) -> &HashMap<Element, SortId> {
-        &self.element_sorts
-    }
-    pub fn representatives(&self) -> &UnionFind {
-        &self.representatives
-    }
-    pub fn relations(&self) -> &Vec<Relation> {
-        &self.relations
-    }
-    pub fn add_projection_index(&mut self, relation_id: RelationId, projection: Vec<usize>) {
-        let RelationId(r) = relation_id;
-        assert!(r < self.relations.len());
-        self.relations[r].add_projection_index(projection);
-    }
-    pub fn projection_indices(&self, relation_id: RelationId) -> &HashMap<Vec<usize>, ProjectionIndex> {
-        let RelationId(r) = relation_id;
-        assert!(r < self.relations.len());
-        self.relations[r].projection_indices()
-    }
-
     pub fn new(signature: &'a Signature) -> Self {
         let relations = Vec::from_iter(
-            signature.iter_arities().
-            map(|arity| Relation::new(arity.len()))
+            repeat(DeltaRelation { old_rows: hashset!{}, new_rows: hashset!{} }).
+            take(signature.relation_number())
         );
         Model {
             signature,
             element_sorts: HashMap::new(),
             representatives: UnionFind::new(),
-            relations
+            relations: relations,
         }
     }
+    pub fn signature(&self) -> &'a Signature {
+        self.signature
+    }
+    pub fn elements<'b>(&'b self) -> impl Iterator<Item = (Element, SortId)> + 'b {
+        self.element_sorts.iter().map(|(el, s)| (*el, *s))
+    }
+    pub fn element_sort(&self, el: Element) -> SortId {
+        *self.element_sorts.get(&el).unwrap()
+    }
+    pub fn representative_const(&self, el: Element) -> Element {
+        self.representatives.find_const(el)
+    }
+    pub fn representative(&mut self, el: Element) -> Element {
+        self.representatives.find(el)
+    }
+    pub fn old_rows<'b>(&'b self, relation_id: RelationId) -> impl Iterator<Item = &'b [Element]> {
+        let RelationId(r) = relation_id;
+        self.relations[r].old_rows.iter().map(|row| row.as_slice())
+    }
+    pub fn new_rows<'b>(&'b self, relation_id: RelationId) -> impl Iterator<Item = &'b [Element]> {
+        let RelationId(r) = relation_id;
+        self.relations[r].new_rows.iter().map(|row| row.as_slice())
+    }
+    pub fn rows<'b>(&'b self, relation_id: RelationId) -> impl Iterator<Item = &'b [Element]> {
+        self.old_rows(relation_id).chain(self.new_rows(relation_id))
+    }
 
-    pub fn new_element(&mut self, sort: SortId) -> Element {
+    pub fn age_rows(&mut self) {
+        for DeltaRelation { new_rows, old_rows } in &mut self.relations {
+            old_rows.extend(new_rows.drain());
+        }
+    }
+    pub fn adjoin_element(&mut self, sort: SortId) -> Element {
         assert!(self.signature.has_sort(sort));
 
         let el = self.representatives.new_element();
         self.element_sorts.insert(el, sort);
         el
     }
-    pub fn extend_relation<I: IntoIterator<Item = Row>>(&mut self, r: RelationId, rows: I) {
+    pub fn adjoin_rows<I: IntoIterator<Item = Row>>(&mut self, r: RelationId, rows: I) {
         let arity =
             self.signature.get_arity(r).
             unwrap_or_else(|| panic!("Invalid relation id"));
 
         // get reference to element_sorts so that the lambda passed to `inspect` doesn't need to
-        // capture `self`, which is also needed to access `self.relations[r]`
+        // capture `self`, which is also needed to access `self.relations`
         let element_sorts = &mut self.element_sorts;
         let RelationId(r0) = r;
+        let DeltaRelation { new_rows, old_rows } = &mut self.relations[r0];
 
-        self.relations[r0].extend(rows.into_iter().inspect(|row| {
-            assert_eq!(arity.len(), row.len());
-            for (el, sort) in row.iter().zip(arity.iter()) {
-                assert_eq!(element_sorts.get(el), Some(sort));
-            }
-        }));
+        new_rows.extend(
+            rows.into_iter().inspect(|row| {
+                assert_eq!(arity.len(), row.len());
+                for (el, sort) in row.iter().zip(arity.iter()) {
+                    assert_eq!(element_sorts.get(el), Some(sort));
+                }
+            }).filter(|row| !old_rows.contains(row))
+        );
+    }
+    pub fn remove_rows<'b, I: IntoIterator<Item = &'b Row>>(&mut self, r: RelationId, rows: I) {
+        let RelationId(r0) = r;
+        let DeltaRelation { new_rows, old_rows } = &mut self.relations[r0];
+        for row in rows {
+            new_rows.remove(row);
+            old_rows.remove(row);
+        }
+    }
+
+    pub fn equate(&mut self, mut a: Element, mut b: Element) -> Element {
+        a = self.representatives.find(a);
+        b = self.representatives.find(b);
+
+        // TODO: choose which element to pick based on how many rows it appears in
+        let Element(a0) = a;
+        if a0 % 2 == 0 {
+            self.identify_with(a, b);
+            b
+        } else {
+            self.identify_with(b, a);
+            a
+        }
+    }
+
+    pub fn identify_with(&mut self, before: Element, after: Element) {
+        assert_eq!(self.element_sort(before), self.element_sort(after));
+
+        let mut matching_rows: Vec<Row> = vec![];
+        for r in 0 .. self.signature.relation_number() {
+            let DeltaRelation { new_rows, old_rows } = &self.relations[r];
+            matching_rows.extend(
+                old_rows.iter().chain(new_rows.iter()).
+                filter(|row| row.iter().find(|el| **el == before).is_some()).
+                cloned()
+            );
+            self.remove_rows(RelationId(r), matching_rows.iter());
+            self.adjoin_rows(RelationId(r), matching_rows.drain(..).map(|mut row| {
+                for el in row.iter_mut() {
+                    if *el == before {
+                        *el = after;
+                    }
+                }
+                row
+            }));
+        }
+
+        self.representatives.merge_into(before, after);
+        self.element_sorts.remove(&before);
+    }
+}
+
+impl<'a> Extend<(RelationId, Row)> for Model<'a> {
+    fn extend<I: IntoIterator<Item = (RelationId, Row)>>(&mut self, rows: I) {
+        for (r, row) in rows {
+            self.adjoin_rows(r, once(row));
+        }
     }
 }
 
 #[cfg(test)]
-mod test_model {
+mod test {
     use super::*;
 
     fn assert_valid_model(m: &Model) {
-        // precisely the canonical representatives have associated sorts
-        let reprs: HashSet<Element> = HashSet::from_iter(
-            (0 .. m.representatives.len()).
-            map(|x| Element(x as u32)).
-            filter(|el| m.representatives.is_canonical_const(*el))
-        );
-        let keys: HashSet<Element> = HashSet::from_iter(m.element_sorts.keys().map(|x| *x));
-        assert_eq!(reprs, keys);
-
-        // the sort of every representative is valid according to the signature
-        for s in m.element_sorts.values() {
-            assert!(m.signature.has_sort(*s));
+        for (el, s) in m.elements() {
+            // el's sort is a valid sort in m's signature
+            assert!(m.signature.has_sort(s));
+            // el is a canonical representative
+            assert_eq!(m.representative_const(el), el);
         }
 
-        // m has the right number of relations
-        assert_eq!(m.relations.len(), m.signature.relation_number());
+        for (r, arity) in m.signature.iter_arities().enumerate() {
+            let old_rows = clone_rows(m.old_rows(RelationId(r)));
+            let new_rows = clone_rows(m.new_rows(RelationId(r)));
+            assert!(old_rows.is_disjoint(&new_rows));
+            let rows = clone_rows(m.rows(RelationId(r)));
+            assert_eq!(
+                HashSet::from_iter(old_rows.union(&new_rows).cloned()),
+                rows
+            );
 
-        for (rel, arity) in m.relations.iter().zip(m.signature.iter_arities()) {
-            for row in rel.rows() {
+            for row in rows {
                 // this row has the right length
                 assert_eq!(row.len(), arity.len());
                 for (el, sort) in row.iter().zip(arity.iter()) {
                     // el is a canonical representative
-                    assert!(m.representatives.is_canonical_const(*el));
+                    assert!(m.representative_const(*el) == *el);
                     // el has the sort specified by arity
                     assert_eq!(m.element_sorts[el], *sort);
                 }
@@ -425,112 +187,234 @@ mod test_model {
         }
     }
 
-    fn example_signature() -> Signature {
+    static S0: SortId = SortId(0);
+    static S1: SortId = SortId(1);
+    static R0: RelationId = RelationId(0);
+    static R1: RelationId = RelationId(1);
+    static R2: RelationId = RelationId(2);
+    static R3: RelationId = RelationId(3);
+    fn sig() -> Signature {
         let mut sig = Signature::new();
-        let s0 = sig.add_sort();
-        let s1 = sig.add_sort();
-        sig.add_relation(vec![s0, s1]);
-        sig.add_relation(vec![]);
-        sig.add_relation(vec![s1, s0, s1]);
-        sig.add_relation(vec![s0, s0]);
+        assert_eq!(sig.add_sort(), S0);
+        assert_eq!(sig.add_sort(), S1);
+        assert_eq!(sig.add_relation(vec![S0, S1]), R0);
+        assert_eq!(sig.add_relation(vec![]), R1);
+        assert_eq!(sig.add_relation(vec![S1, S0, S1]), R2);
+        assert_eq!(sig.add_relation(vec![S0, S0]), R3);
         sig
     }
 
     #[test]
     fn new_model_is_valid() {
-        let sig = example_signature();
+        let sig = sig();
         let m = Model::new(&sig);
 
         assert_valid_model(&m);
     }
 
     #[test]
-    fn new_element() {
-        let sig = example_signature();
+    fn adjoin_element() {
+        let sig = sig();
         let mut m = Model::new(&sig);
-        let el0 = m.new_element(SortId(0));
-        assert_eq!(el0, Element(0), );
+        let el0 = m.adjoin_element(S0);
+        assert_eq!(m.representative(el0), el0);
         assert_valid_model(&m);
 
-        let el1 = m.new_element(SortId(1));
-        assert_eq!(el1, Element(1));
+        let el1 = m.adjoin_element(S1);
+        assert_eq!(m.representative(el0), el0);
+        assert_eq!(m.representative(el1), el1);
         assert_valid_model(&m);
 
-        let el2 = m.new_element(SortId(1));
-        assert_eq!(el2, Element(2));
+        let el2 = m.adjoin_element(S1);
+        assert_eq!(m.representative(el0), el0);
+        assert_eq!(m.representative(el1), el1);
+        assert_eq!(m.representative(el2), el2);
         assert_valid_model(&m);
     }
 
     #[test] #[should_panic]
-    fn new_element_invalid_sort() {
-        let sig = example_signature();
+    fn adjoin_element_invalid_sort() {
+        let sig = sig();
         let mut m = Model::new(&sig);
-        m.new_element(SortId(2));
+        m.adjoin_element(SortId(65433));
+    }
+
+    fn clone_rows<'a, I: Iterator<Item = &'a [Element]>>(rows: I) -> HashSet<Row> {
+        HashSet::from_iter(rows.map(|els| els.to_vec()))
+        // HashSet::from_iter(rows.map(<[Element]>::to_vec))
     }
 
     #[test]
-    fn extend() {
-        let sig = example_signature();
+    fn adjoin_rows() {
+        let sig = sig();
         let mut m = Model::new(&sig);
-        let el0 = m.new_element(SortId(0));
-        let el1 = m.new_element(SortId(0));
-        let el2 = m.new_element(SortId(0));
-        let el3 = m.new_element(SortId(1));
-        let el4 = m.new_element(SortId(1));
+        let el0 = m.adjoin_element(S0);
+        let el1 = m.adjoin_element(S0);
+        let el2 = m.adjoin_element(S0);
+        let el3 = m.adjoin_element(S1);
+        let el4 = m.adjoin_element(S1);
 
-        m.extend_relation(RelationId(0), vec![
+        m.adjoin_rows(R0, vec![
             vec![el0, el3],
             vec![el1, el3],
         ]);
         assert_valid_model(&m);
         assert_eq!(
-            *m.relations[0].rows(),
+            clone_rows(m.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3]}
         );
+        assert_eq!(clone_rows(m.rows(R1)), hashset!{});
+        assert_eq!(clone_rows(m.rows(R2)), hashset!{});
+        assert_eq!(clone_rows(m.rows(R3)), hashset!{});
 
-        m.extend_relation(RelationId(0), vec![
+        m.adjoin_rows(R0, vec![
+            vec![el1, el4],
             vec![el1, el4],
         ]);
         assert_valid_model(&m);
+        assert_eq!(
+            clone_rows(m.rows(R0)),
+            hashset!{vec![el0, el3], vec![el1, el3], vec![el1, el4]}
+        );
 
-        m.extend_relation(RelationId(1), vec![vec![]]);
+        m.adjoin_rows(R1, vec![vec![]]);
         assert_valid_model(&m);
+        assert_eq!(
+            clone_rows(m.rows(R0)),
+            hashset!{vec![el0, el3], vec![el1, el3], vec![el1, el4]}
+        );
+        assert_eq!(
+            clone_rows(m.rows(R1)),
+            hashset!{vec![]}
+        );
 
-        m.extend_relation(RelationId(2), vec![
+        m.adjoin_rows(R2, vec![
             vec![el3, el2, el4],
             vec![el4, el2, el4],
         ]);
         assert_valid_model(&m);
 
-        m.extend_relation(RelationId(3), vec![
+        m.adjoin_rows(R3, vec![
             vec![el0, el0]
         ]);
         assert_valid_model(&m);
     }
 
-    #[test] #[should_panic]
-    fn extend_invalid_sorts() {
-        let sig = example_signature();
+    #[test]
+    fn extend() {
+        let sig = sig();
         let mut m = Model::new(&sig);
-        let el0 = m.new_element(SortId(0));
-        let el1 = m.new_element(SortId(1));
+        let el0 = m.adjoin_element(S0);
+        let el2 = m.adjoin_element(S0);
+        let el3 = m.adjoin_element(S1);
+        let el4 = m.adjoin_element(S1);
 
-        m.extend_relation(RelationId(0), vec![
-            vec![el1, el0],
-            vec![el0, el1],
+        m.extend(vec![
+            (R0, vec![el0, el3]),
+            (R2, vec![el3, el2, el4]),
         ]);
+        assert_valid_model(&m);
+        assert_eq!(
+            clone_rows(m.rows(R0)),
+            hashset!{vec![el0, el3]}
+        );
+        assert_eq!(clone_rows(m.rows(R1)), hashset!{});
+        assert_eq!(
+            clone_rows(m.rows(R2)),
+            hashset!{vec![el3, el2, el4]}
+        );
+        assert_eq!(clone_rows(m.rows(R3)), hashset!{});
     }
 
-    #[test] #[should_panic]
-    fn extend_invalid_arity() {
-        let sig = example_signature();
+    #[test]
+    fn old_new_rows() {
+        let sig = sig();
         let mut m = Model::new(&sig);
-        let el0 = m.new_element(SortId(0));
-        let el1 = m.new_element(SortId(1));
+        let el0 = m.adjoin_element(S0);
+        let el2 = m.adjoin_element(S0);
+        let el3 = m.adjoin_element(S1);
+        let el4 = m.adjoin_element(S1);
 
-        m.extend_relation(RelationId(0), vec![
-            vec![el0, el1],
-            vec![el0, el1, el1],
+        m.extend(vec![
+            (R0, vec![el0, el3]),
+            (R2, vec![el3, el2, el4]),
         ]);
+        assert_valid_model(&m);
+        assert_eq!(
+            clone_rows(m.new_rows(R0)),
+            hashset!{vec![el0, el3]}
+        );
+        assert_eq!(clone_rows(m.new_rows(R1)), hashset!{});
+        assert_eq!(
+            clone_rows(m.new_rows(R2)),
+            hashset!{vec![el3, el2, el4]}
+        );
+        assert_eq!(clone_rows(m.new_rows(R3)), hashset!{});
+
+        assert!(m.old_rows(R0).next().is_none());
+        assert!(m.old_rows(R1).next().is_none());
+        assert!(m.old_rows(R2).next().is_none());
+        assert!(m.old_rows(R3).next().is_none());
+
+        let mut n = m.clone();
+        n.age_rows();
+        assert_valid_model(&n);
+
+        assert_eq!(clone_rows(n.old_rows(R0)), clone_rows(m.rows(R0)));
+        assert_eq!(clone_rows(n.old_rows(R1)), clone_rows(m.rows(R1)));
+        assert_eq!(clone_rows(n.old_rows(R2)), clone_rows(m.rows(R2)));
+        assert_eq!(clone_rows(n.old_rows(R3)), clone_rows(m.rows(R3)));
+
+        assert!(n.new_rows(R0).next().is_none());
+        assert!(n.new_rows(R1).next().is_none());
+        assert!(n.new_rows(R2).next().is_none());
+        assert!(n.new_rows(R3).next().is_none());
+
+        n.extend(once((R1, vec![])));
+        assert!(n.old_rows(R1).next().is_none());
+        assert_eq!(clone_rows(n.rows(R1)), hashset!{vec![]});
+
+        n.extend(once((R2, vec![el3, el2, el4]))); // already in old rows
+        assert_valid_model(&n);
+        assert!(n.old_rows(R2).find(|row| row == &[el3, el2, el4]).is_some());
+        assert!(n.new_rows(R2).next().is_none());
+    }
+
+    #[test]
+    fn equate() {
+        let sig = sig();
+        let mut m = Model::new(&sig);
+        let el0 = m.adjoin_element(S0);
+        let el1 = m.adjoin_element(S0);
+        let el2 = m.adjoin_element(S0);
+        let el3 = m.adjoin_element(S1);
+        let el4 = m.adjoin_element(S1);
+
+        m.adjoin_rows(R2, vec![
+            vec![el3, el0, el4],
+            vec![el3, el1, el4],
+            vec![el4, el2, el3],
+        ]);
+        m.age_rows();
+        m.adjoin_rows(R2, vec![
+            vec![el3, el1, el3],
+        ]);
+
+        m.identify_with(el1, el0);
+        assert_valid_model(&m);
+
+        assert_eq!(m.representative(el0), el0);
+        assert_eq!(m.representative(el1), el0);
+        assert_eq!(m.representative(el2), el2);
+        assert_eq!(m.representative(el3), el3);
+
+        assert_eq!(
+            clone_rows(m.old_rows(R2)),
+            hashset!{vec![el3, el0, el4], vec![el4, el2, el3]}
+        );
+        assert_eq!(
+            clone_rows(m.new_rows(R2)),
+            hashset!{vec![el3, el0, el3]}
+        );
     }
 }

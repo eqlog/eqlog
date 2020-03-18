@@ -2,6 +2,7 @@ use crate::element::Element;
 
 use std::vec::Vec;
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct UnionFind(Vec<Element>);
 
 impl UnionFind {
@@ -42,10 +43,6 @@ impl UnionFind {
         el
     }
 
-    pub fn is_canonical(&mut self, a: Element) -> bool {
-        self.find(a) == a
-    }
-
     pub fn find_const(&self, a: Element) -> Element {
         let UnionFind(vec) = self;
         let Element(a_) = a;
@@ -60,10 +57,6 @@ impl UnionFind {
         }
 
         el
-    }
-
-    pub fn is_canonical_const(&self, a: Element) -> bool {
-        self.find_const(a) == a
     }
 
     pub fn merge_into(&mut self, a: Element, b: Element) -> Element {
