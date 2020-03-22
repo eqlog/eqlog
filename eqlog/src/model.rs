@@ -1,9 +1,10 @@
-use std::vec::Vec;
-use std::collections::{HashMap, HashSet};
-use std::iter::{FromIterator, repeat, Iterator, once};
 use crate::union_find::*;
 use crate::element::*;
 use crate::signature::*;
+use std::vec::Vec;
+use std::collections::HashSet;
+use std::iter::{FromIterator, repeat, once};
+use std::mem::swap;
 
 pub type Row = Vec<Element>;
 
@@ -13,11 +14,18 @@ struct DeltaRelation {
     new_rows: HashSet<Row>,
 }
 
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+struct ElementInfo {
+    row_occurences: usize,
+    sort: SortId,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Model<'a> {
     signature: &'a Signature,
-    element_sorts: HashMap<Element, SortId>,
+    element_infos: Vec<ElementInfo>,
     representatives: UnionFind,
+    dirty_elements: HashSet<Element>,
     relations: Vec<DeltaRelation>,
 }
 
@@ -29,8 +37,10 @@ impl<'a> Model<'a> {
         );
         Model {
             signature,
-            element_sorts: HashMap::new(),
+            //element_sorts: HashMap::new(),
+            element_infos: Vec::new(),
             representatives: UnionFind::new(),
+            dirty_elements: HashSet::new(),
             relations: relations,
         }
     }
@@ -38,10 +48,13 @@ impl<'a> Model<'a> {
         self.signature
     }
     pub fn elements<'b>(&'b self) -> impl Iterator<Item = (Element, SortId)> + 'b {
-        self.element_sorts.iter().map(|(el, s)| (*el, *s))
+        self.element_infos.iter().enumerate().map(|(el0, info)|
+            (Element(el0 as u32), info.sort)
+        )
     }
     pub fn element_sort(&self, el: Element) -> SortId {
-        *self.element_sorts.get(&el).unwrap()
+        let Element(el0) = el;
+        self.element_infos[el0 as usize].sort
     }
     pub fn representative_const(&self, el: Element) -> Element {
         self.representatives.find_const(el)
@@ -69,29 +82,36 @@ impl<'a> Model<'a> {
     pub fn adjoin_element(&mut self, sort: SortId) -> Element {
         assert!(self.signature.has_sort(sort));
 
-        let el = self.representatives.new_element();
-        self.element_sorts.insert(el, sort);
-        el
+        let Element(el) = self.representatives.new_element();
+        debug_assert_eq!(el as usize, self.element_infos.len());
+        self.element_infos.push(ElementInfo { sort, row_occurences: 0 });
+        Element(el)
     }
-    pub fn adjoin_rows<I: IntoIterator<Item = Row>>(&mut self, r: RelationId, rows: I) {
+    pub fn adjoin_rows<I: IntoIterator<Item = Row>>(&mut self, r: RelationId, rows: I) -> usize {
         let arity =
             self.signature.get_arity(r).
             unwrap_or_else(|| panic!("Invalid relation id"));
 
-        // get reference to element_sorts so that the lambda passed to `inspect` doesn't need to
-        // capture `self`, which is also needed to access `self.relations`
-        let element_sorts = &mut self.element_sorts;
-        let RelationId(r0) = r;
-        let DeltaRelation { new_rows, old_rows } = &mut self.relations[r0];
+        let element_infos = &mut self.element_infos;
+        let DeltaRelation { new_rows, old_rows } = &mut self.relations[r.0];
+        let representatives = &mut self.representatives;
 
+        let before_len = new_rows.len();
         new_rows.extend(
-            rows.into_iter().inspect(|row| {
+            rows.into_iter().
+            map(|mut row| {
                 assert_eq!(arity.len(), row.len());
-                for (el, sort) in row.iter().zip(arity.iter()) {
-                    assert_eq!(element_sorts.get(el), Some(sort));
+                for (el, sort) in row.iter_mut().zip(arity) {
+                    *el = representatives.find(*el);
+                    let info = &mut element_infos[el.0 as usize];
+                    assert_eq!(info.sort, *sort);
+                    info.row_occurences += 1;
                 }
-            }).filter(|row| !old_rows.contains(row))
+                row
+            }).
+            filter(|row| !old_rows.contains(row))
         );
+        new_rows.len() - before_len
     }
     pub fn remove_rows<'b, I: IntoIterator<Item = &'b Row>>(&mut self, r: RelationId, rows: I) {
         let RelationId(r0) = r;
@@ -103,44 +123,53 @@ impl<'a> Model<'a> {
     }
 
     pub fn equate(&mut self, mut a: Element, mut b: Element) -> Element {
+        assert_eq!(self.element_sort(a), self.element_sort(b));
+
         a = self.representatives.find(a);
         b = self.representatives.find(b);
 
-        // TODO: choose which element to pick based on how many rows it appears in
-        let Element(a0) = a;
-        if a0 % 2 == 0 {
-            self.identify_with(a, b);
-            b
-        } else {
-            self.identify_with(b, a);
-            a
+        if a == b {
+            return a;
         }
+
+        let eis = &mut self.element_infos;
+
+        // make b the element with maximal row_occurences
+        if eis[a.0 as usize].row_occurences > eis[b.0 as usize].row_occurences {
+            swap(&mut a, &mut b);
+        }
+
+        self.representatives.merge_into(a, b);
+        eis[b.0 as usize].row_occurences += eis[a.0 as usize].row_occurences;
+        self.dirty_elements.insert(a);
+
+        b
     }
 
-    pub fn identify_with(&mut self, before: Element, after: Element) {
-        assert_eq!(self.element_sort(before), self.element_sort(after));
+    pub fn canonicalize_elements(&mut self) {
+        // Swap out self.dirty_elements for an empty list
+        let mut dirty_elements = HashSet::new();
+        swap(&mut dirty_elements, &mut self.dirty_elements);
 
-        let mut matching_rows: Vec<Row> = vec![];
-        for r in 0 .. self.signature.relation_number() {
-            let DeltaRelation { new_rows, old_rows } = &self.relations[r];
-            matching_rows.extend(
-                old_rows.iter().chain(new_rows.iter()).
-                filter(|row| row.iter().find(|el| **el == before).is_some()).
-                cloned()
+        let mut dirty_rows: Vec<Row> = vec![];
+        for r in (0 .. self.signature.relation_number()).map(RelationId) {
+            debug_assert!(dirty_rows.is_empty());
+
+            dirty_rows.extend(
+                self.old_rows(r).chain(self.new_rows(r)).
+                filter(|row| row.iter().find(|el| dirty_elements.contains(*el)).is_some()).
+                map(|row| row.to_vec())
             );
-            self.remove_rows(RelationId(r), matching_rows.iter());
-            self.adjoin_rows(RelationId(r), matching_rows.drain(..).map(|mut row| {
-                for el in row.iter_mut() {
-                    if *el == before {
-                        *el = after;
-                    }
-                }
-                row
-            }));
+            // remove_rows doesn't access dirty_elements
+            self.remove_rows(r, dirty_rows.iter());
+            // adjoin_rows will make rows canonical when adjoining
+            self.adjoin_rows(r, dirty_rows.drain(..));
         }
 
-        self.representatives.merge_into(before, after);
-        self.element_sorts.remove(&before);
+        // self.dirty_elements is already empty, but let's reuse the allocated capacity of
+        // dirty_elements:
+        dirty_elements.clear();
+        swap(&mut dirty_elements, &mut self.dirty_elements);
     }
 }
 
@@ -157,11 +186,9 @@ mod test {
     use super::*;
 
     fn assert_valid_model(m: &Model) {
-        for (el, s) in m.elements() {
-            // el's sort is a valid sort in m's signature
+        for (_, s) in m.elements() {
+            // element's sort is a valid sort in m's signature
             assert!(m.signature.has_sort(s));
-            // el is a canonical representative
-            assert_eq!(m.representative_const(el), el);
         }
 
         for (r, arity) in m.signature.iter_arities().enumerate() {
@@ -178,10 +205,12 @@ mod test {
                 // this row has the right length
                 assert_eq!(row.len(), arity.len());
                 for (el, sort) in row.iter().zip(arity.iter()) {
-                    // el is a canonical representative
-                    assert!(m.representative_const(*el) == *el);
+                    let repr = m.representative_const(*el);
+                    if repr != *el {
+                        assert!(m.dirty_elements.contains(el));
+                    }
                     // el has the sort specified by arity
-                    assert_eq!(m.element_sorts[el], *sort);
+                    assert_eq!(m.element_sort(repr), *sort);
                 }
             }
         }
@@ -381,7 +410,7 @@ mod test {
     }
 
     #[test]
-    fn equate() {
+    fn equate_canonicalize() {
         let sig = sig();
         let mut m = Model::new(&sig);
         let el0 = m.adjoin_element(S0);
@@ -398,9 +427,13 @@ mod test {
         m.age_rows();
         m.adjoin_rows(R2, vec![
             vec![el3, el1, el3],
+            vec![el4, el0, el3],
+            vec![el4, el0, el4],
         ]);
 
-        m.identify_with(el1, el0);
+        assert_eq!(m.equate(el0, el1), el0);
+        assert_valid_model(&m);
+        m.canonicalize_elements();
         assert_valid_model(&m);
 
         assert_eq!(m.representative(el0), el0);
@@ -409,12 +442,20 @@ mod test {
         assert_eq!(m.representative(el3), el3);
 
         assert_eq!(
-            clone_rows(m.old_rows(R2)),
-            hashset!{vec![el3, el0, el4], vec![el4, el2, el3]}
+            clone_rows(m.rows(R2)),
+            hashset!{
+                vec![el3, el0, el4],
+                vec![el3, el0, el4],
+                vec![el4, el2, el3],
+                vec![el3, el0, el3],
+                vec![el4, el0, el3],
+                vec![el4, el0, el4],
+            }
         );
-        assert_eq!(
-            clone_rows(m.new_rows(R2)),
-            hashset!{vec![el3, el0, el3]}
-        );
+        assert!(clone_rows(m.old_rows(R2)).is_subset(&hashset!{
+            vec![el3, el0, el4],
+            vec![el3, el1, el4],
+            vec![el4, el2, el3],
+        }));
     }
 }
