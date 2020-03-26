@@ -594,9 +594,6 @@ fn to_presentation<'a>(
                 term_queue.push_back(rhs);
             },
             Atom::Defined(t) => {
-                if let Term::Operation(_, _) = t {} else {
-                    panic!("{}: Cannot require that variable or wildcard is defined", atom);
-                }
                 term_queue.push_back(t);
             },
             Atom::Predicate(name, args) => {
@@ -633,7 +630,7 @@ fn to_presentation<'a>(
     }
 
     while let Some(t) = term_queue.pop_front() {
-        if let Term::Operation(name, args) = t {
+        if let Term::Operation(name, args) = t  {
             let r = *names.operations.get(name).unwrap_or_else(|| panic!(
                 "{}: Undeclared operation symbol",
                 name,
@@ -659,29 +656,39 @@ fn to_presentation<'a>(
                 } else {
                     added_terms.insert(arg, (global_index, *sort));
                 }
-                for arg in args {
-                    term_queue.push_back(arg);
-                }
+            }
+            for arg in args {
+                term_queue.push_back(arg);
             }
             row_len += args.len() + 1;
         }
     }
 
     for atom in &formula.0 {
-        if let Atom::Equal(lhs, rhs) = atom {
-            let lhs_index = added_terms.get(lhs);
-            let rhs_index = added_terms.get(rhs);
-            match (lhs_index, rhs_index) {
-                (Some((i, s)), Some((j, t))) => {
-                    assert!(
-                        *s == *t,
-                        "Sort mismatch: {} has sort {} but {} has sort {}",
-                        lhs, names.sort_name(*s), rhs, names.sort_name(*t),
-                    );
-                    presentation.equalities.push((*i, *j)); },
-                (Some((i, s)), _) => { added_terms.insert(rhs, (*i, *s)); },
-                (_, Some((j, t))) => { added_terms.insert(lhs, (*j, *t)); },
-                _ => panic!("Neither {} nor {} appear in operation or predicate", lhs, rhs),
+        match atom {
+            Atom::Predicate(_, _) => {},
+            Atom::Defined(t) => {
+                assert!(
+                    added_terms.contains_key(t),
+                    "Variable or wildcard {} must be defined in premise but is never used",
+                    t
+                );
+            },
+            Atom::Equal(lhs, rhs) => {
+                let lhs_index = added_terms.get(lhs);
+                let rhs_index = added_terms.get(rhs);
+                match (lhs_index, rhs_index) {
+                    (Some((i, s)), Some((j, t))) => {
+                        assert!(
+                            *s == *t,
+                            "Sort mismatch: {} has sort {} but {} has sort {}",
+                            lhs, names.sort_name(*s), rhs, names.sort_name(*t),
+                        );
+                        presentation.equalities.push((*i, *j)); },
+                    (Some((i, s)), _) => { added_terms.insert(rhs, (*i, *s)); },
+                    (_, Some((j, t))) => { added_terms.insert(lhs, (*j, *t)); },
+                    _ => panic!("Neither {} nor {} appear in operation or predicate", lhs, rhs),
+                }
             }
         }
     }
@@ -824,7 +831,11 @@ pub fn to_surjection_presentation(
         Sequent::Reduction(from, to) => {
             let mut premise = vec![Atom::Defined(to.clone())];
             if let Term::Operation(_, args) = &from {
-                premise.extend(args.iter().cloned().map(Atom::Defined));
+                premise.extend(
+                    args.iter().
+                    cloned().
+                    map(Atom::Defined)
+                );
             }
             let conclusion = vec![Atom::Equal(from.clone(), to.clone())];
             to_surjection_presentation_impl(
@@ -846,6 +857,7 @@ mod test_presentations {
     const O: RelationId = RelationId(0);
     const P: RelationId = RelationId(1);
     const Q: RelationId = RelationId(2);
+    const PLUS: RelationId = RelationId(3);
 
     fn symbol_names(sig: &mut Signature) -> SymbolNames {
         let mut builder = SignatureBuilder::new(sig);
@@ -854,6 +866,7 @@ mod test_presentations {
         assert_eq!(builder.add_operation("o".to_string(), vec![S1, S0], S1), O);
         assert_eq!(builder.add_predicate("p".to_string(), vec![S0, S1]), P);
         assert_eq!(builder.add_predicate("q".to_string(), vec![S0, S0]), Q);
+        assert_eq!(builder.add_operation("plus".to_string(), vec![S1, S1], S1), PLUS);
         builder.names
     }
 
@@ -956,6 +969,41 @@ mod test_presentations {
         assert_eq!(sp.codomain_equalities, vec![]);
     }
 
+    #[test]
+    fn reduction() {
+        let mut sig = Signature::new();
+        let names = symbol_names(&mut sig);
+        let sp0 = to_surjection_presentation(&sig, &names, &sequent!(
+            o(o(x, y), y) ~> o(x, y)
+        ));
+        let _ = sp0.clone().checked(&sig);
+        assert_eq!(sp0.domain.relations, vec![O, O]);
+        assert_eq!(sp0.domain.equalities.clone().sort(), vec![(0, 3), (1, 4)].sort());
+        assert_eq!(sp0.codomain_relations, vec![(O, vec![2, 1, 2])]);
+        assert_eq!(sp0.codomain_equalities, vec![]);
+
+        let sp1 = to_surjection_presentation(&sig, &names, &sequent!(
+            plus(X, Y) ~> plus(Y, X)
+        ));
+        let _ = sp1.clone().checked(&sig);
+        assert_eq!(sp1.domain.relations, vec![PLUS]);
+        assert_eq!(sp1.domain.equalities, vec![]);
+        assert_eq!(sp1.codomain_relations, vec![(PLUS, vec![1, 0, 2])]);
+        assert_eq!(sp1.codomain_equalities, vec![]);
+
+        let sp2 = to_surjection_presentation(&sig, &names, &sequent!(
+            plus(X, plus(X, plus(X, X))) ~> X
+        ));
+        let _ = sp2.clone().checked(&sig);
+        assert_eq!(sp2.domain.relations, vec![PLUS, PLUS]);
+        assert_eq!(
+            sp2.domain.equalities.clone().sort(),
+            vec![(0, 3), (0, 4), (1, 5)].sort()
+        );
+        assert_eq!(sp2.codomain_relations, vec![(PLUS, vec![0, 2, 0])]);
+        assert_eq!(sp2.codomain_equalities, vec![]);
+    }
+
     #[test] #[should_panic]
     fn variable_used_once() {
         let mut sig = Signature::new();
@@ -1024,7 +1072,7 @@ mod test_presentations {
         let mut sig = Signature::new();
         let names = symbol_names(&mut sig);
         to_surjection_presentation(&sig, &names, &sequent!(
-            p(x, y) & !x & !y => p(x, y)
+            p(x, _) & !z & => p(x, z)
         ));
     }
 
