@@ -2,33 +2,37 @@ use crate::model::*;
 use crate::signature::*;
 use crate::element::Element;
 use std::cmp::max;
+use std::fmt::Debug;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Presentation {
-    pub relations: Vec<RelationId>,
+pub struct Presentation<Relation> {
+    pub relations: Vec<Relation>,
     pub equalities: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct RelationInPresentation {
-    id: RelationId,
+struct RelationInPresentation<Relation> {
+    id: Relation,
     equalities: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct CheckedPresentation<'a> {
-    signature: &'a Signature,
-    rips: Vec<RelationInPresentation>,
+pub struct CheckedPresentation<Sig: Signature> {
+    signature: Sig,
+    rips: Vec<RelationInPresentation<Sig::Relation>>,
     row_length: usize,
 }
 
-impl Presentation {
-    pub fn checked<'a>(self, signature: &'a Signature) -> CheckedPresentation<'a> {
+impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> Presentation<Relation> {
+    pub fn checked<Sig: Signature<Relation = Relation>>(
+        self,
+        signature: Sig,
+    ) -> CheckedPresentation<Sig> {
         let Presentation { relations, mut equalities} = self;
         let arities =
             relations.iter().
-            map(|r| signature.get_arity(*r).unwrap().iter());
-        let row_arity: Vec<SortId> =
+            map(|r| signature.arity(*r).iter());
+        let row_arity: Vec<Sig::Sort> =
             arities.clone().
             flatten().
             cloned().
@@ -39,7 +43,7 @@ impl Presentation {
 
         equalities.sort_by_key(|(lhs, rhs)| max(*lhs, *rhs));
 
-        let mut rips: Vec<RelationInPresentation> = Vec::with_capacity(relations.len());
+        let mut rips: Vec<RelationInPresentation<Relation>> = Vec::with_capacity(relations.len());
         let mut remaining_equalities: &[(usize, usize)] = equalities.as_slice();
         let mut current_row_position = 0;
 
@@ -69,17 +73,17 @@ impl Presentation {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct RelationInInterpretation<'a> {
-    rip: &'a RelationInPresentation,
+struct RelationInInterpretation<'a, Relation> {
+    rip: &'a RelationInPresentation<Relation>,
     use_new_rows: bool,
     use_old_rows: bool,
 }
 
-fn visit_new_interpretations_impl<'b>(
-    model: &Model,
-    visitor: &mut impl for<'c> FnMut(&'c [Element]),
+fn visit_new_interpretations_impl<'a, Sig: Signature>(
+    model: &Model<Sig>,
+    visitor: &mut impl for<'b> FnMut(&'b [Element]),
     interpretation: &mut Vec<Element>,
-    mut riis: impl Iterator<Item = RelationInInterpretation<'b>> + Clone
+    mut riis: impl Iterator<Item = RelationInInterpretation<'a, Sig::Relation>> + Clone
 ) {
     if let Some(RelationInInterpretation{rip, use_new_rows, use_old_rows}) = riis.next() {
         let before_len = interpretation.len();
@@ -119,16 +123,13 @@ fn visit_new_interpretations_impl<'b>(
     }
 }
 
-impl<'a> CheckedPresentation<'a> {
+impl<Sig: Signature> CheckedPresentation<Sig> {
     pub fn visit_new_interpretations(
         &self,
-        model: &Model,
+        model: &Model<Sig>,
         mut visitor: impl for<'b> FnMut(&'b [Element])
     ) {
-        assert_eq!(
-            self.signature as *const Signature,
-            model.signature() as *const Signature
-        );
+        // TODO: check whether signatures are equal?
 
         let mut interpretation: Vec<Element> = Vec::with_capacity(self.row_length);
         for i in 0 .. self.rips.len() {
@@ -151,9 +152,9 @@ mod test_interpretation {
     use super::*;
     use std::collections::HashSet;
 
-    fn compute_new_interpretation(
-        presentation: &CheckedPresentation,
-        model: &Model,
+    fn compute_new_interpretation<Sig: Signature>(
+        presentation: &CheckedPresentation<Sig>,
+        model: &Model<Sig>,
     ) -> HashSet<Row> {
         let mut result: HashSet<Row> = HashSet::new();
         presentation.visit_new_interpretations(model, |row| {
@@ -164,11 +165,14 @@ mod test_interpretation {
 
     #[test]
     fn nullary_interpretation() {
-        // the interpretation over the empty product is the singleton row [], but this is never new
-        let sig = Signature::from_sorts_arities(
-            2,
-            vec![vec![SortId(0), SortId(1)]],
-        );
+        arities!{
+            pub enum Sort {S0, S1},
+            pub enum Relation {
+                R: S0 x S1,
+            },
+        }
+        let sig = StaticSignature::<Sort, Relation>::new();
+
         let model = Model::new(&sig);
         let presentation = Presentation {
             relations: vec![],
@@ -179,27 +183,29 @@ mod test_interpretation {
 
     #[test]
     fn unary_interpretation() {
-        let sig = Signature::from_sorts_arities(
-            2,
-            vec![vec![SortId(0), SortId(1)]],
-        );
-
-        let r = RelationId(0);
+        arities!{
+            pub enum Sort {S0, S1},
+            pub enum Relation {
+                R: S0 x S1,
+            },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
 
         let mut model = Model::new(&sig);
+        let a0 = model.adjoin_element(S0);
+        let a1 = model.adjoin_element(S0);
+        let b0 = model.adjoin_element(S1);
+        let b1 = model.adjoin_element(S1);
 
-        let a0 = model.adjoin_element(SortId(0));
-        let a1 = model.adjoin_element(SortId(0));
-        let b0 = model.adjoin_element(SortId(1));
-        let b1 = model.adjoin_element(SortId(1));
-
-        model.adjoin_rows(RelationId(0), vec![
+        model.adjoin_rows(R, vec![
             vec![a0, b1],
             vec![a1, b0],
         ]);
 
         let presentation = Presentation {
-            relations: vec![r],
+            relations: vec![R],
             equalities: vec![],
         }.checked(&sig);
 
@@ -215,28 +221,31 @@ mod test_interpretation {
 
     #[test]
     fn binary_self_join() {
-        let sig = Signature::from_sorts_arities(
-            2,
-            vec![vec![SortId(0), SortId(1)]],
-        );
-
-        let r = RelationId(0);
+        arities!{
+            pub enum Sort {S0, S1},
+            pub enum Relation {
+                R: S0 x S1,
+            },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
 
         let mut model = Model::new(&sig);
 
-        let a0 = model.adjoin_element(SortId(0));
-        let a1 = model.adjoin_element(SortId(0));
-        let b0 = model.adjoin_element(SortId(1));
-        let b1 = model.adjoin_element(SortId(1));
+        let a0 = model.adjoin_element(S0);
+        let a1 = model.adjoin_element(S0);
+        let b0 = model.adjoin_element(S1);
+        let b1 = model.adjoin_element(S1);
 
-        model.adjoin_rows(RelationId(0), vec![
+        model.adjoin_rows(R, vec![
             vec![a0, b0],
             vec![a1, b0],
             vec![a1, b1],
         ]);
 
         let presentation = Presentation {
-            relations: vec![r, r],
+            relations: vec![R, R],
             equalities: vec![(1, 3)],
         }.checked(&sig);
 
@@ -254,36 +263,36 @@ mod test_interpretation {
 
     #[test]
     fn binary_join() {
-        let sig = Signature::from_sorts_arities(
-            2,
-            vec![
-                vec![SortId(0), SortId(1)],
-                vec![SortId(1), SortId(0)],
-            ],
-        );
-
-        let r0 = RelationId(0);
-        let r1 = RelationId(1);
+        arities!{
+            pub enum Sort {S0, S1},
+            pub enum Relation {
+                R0: S0 x S1,
+                R1: S1 x S0,
+            },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
 
         let mut model = Model::new(&sig);
 
-        let a0 = model.adjoin_element(SortId(0));
-        let a1 = model.adjoin_element(SortId(0));
-        let b0 = model.adjoin_element(SortId(1));
-        let b1 = model.adjoin_element(SortId(1));
+        let a0 = model.adjoin_element(S0);
+        let a1 = model.adjoin_element(S0);
+        let b0 = model.adjoin_element(S1);
+        let b1 = model.adjoin_element(S1);
 
-        model.adjoin_rows(r0, vec![
+        model.adjoin_rows(R0, vec![
             vec![a0, b0],
             vec![a1, b0],
             vec![a1, b1],
         ]);
-        model.adjoin_rows(r1, vec![
+        model.adjoin_rows(R1, vec![
             vec![b0, a0],
             vec![b1, a1],
         ]);
 
         let presentation = Presentation {
-            relations: vec![r0, r1],
+            relations: vec![R0, R1],
             equalities: vec![(0, 3)],
         }.checked(&sig);
 
@@ -295,10 +304,10 @@ mod test_interpretation {
 
         model.age_rows();
 
-        model.adjoin_rows(r0, vec![
+        model.adjoin_rows(R0, vec![
             vec![a0, b1],
         ]);
-        model.adjoin_rows(r1, vec![
+        model.adjoin_rows(R1, vec![
             vec![b1, a0],
         ]);
         assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{
@@ -311,37 +320,37 @@ mod test_interpretation {
 
     #[test]
     fn binary_diagonal() {
-        let sig = Signature::from_sorts_arities(
-            2,
-            vec![
-                vec![SortId(0), SortId(1)],
-                vec![SortId(1), SortId(1)],
-            ],
-        );
-
-        let r0 = RelationId(0);
-        let r1 = RelationId(1);
+        arities!{
+            pub enum Sort {S0, S1},
+            pub enum Relation {
+                R0: S0 x S1,
+                R1: S1 x S1,
+            },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
 
         let mut model = Model::new(&sig);
 
-        let a0 = model.adjoin_element(SortId(0));
-        let a1 = model.adjoin_element(SortId(0));
-        let b0 = model.adjoin_element(SortId(1));
-        let b1 = model.adjoin_element(SortId(1));
+        let a0 = model.adjoin_element(S0);
+        let a1 = model.adjoin_element(S0);
+        let b0 = model.adjoin_element(S1);
+        let b1 = model.adjoin_element(S1);
 
-        model.adjoin_rows(r0, vec![
+        model.adjoin_rows(R0, vec![
             vec![a0, b0],
             vec![a1, b0],
             vec![a1, b1],
         ]);
-        model.adjoin_rows(r1, vec![
+        model.adjoin_rows(R1, vec![
             vec![b0, b0],
             vec![b1, b0],
             vec![b0, b1],
         ]);
 
         let presentation = Presentation {
-            relations: vec![r0, r1],
+            relations: vec![R0, R1],
             equalities: vec![(2, 3), (1, 2)],
         }.checked(&sig);
 
@@ -353,25 +362,28 @@ mod test_interpretation {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SurjectionPresentation {
-    pub domain: Presentation,
+pub struct SurjectionPresentation<Relation> {
+    pub domain: Presentation<Relation>,
     pub codomain_equalities: Vec<(usize, usize)>,
-    pub codomain_relations: Vec<(RelationId, Vec<usize>)>,
+    pub codomain_relations: Vec<(Relation, Vec<usize>)>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct CheckedSurjectionPresentation<'a> {
-    domain: CheckedPresentation<'a>,
+pub struct CheckedSurjectionPresentation<Sig: Signature> {
+    domain: CheckedPresentation<Sig>,
     codomain_equalities: Vec<(usize, usize)>,
-    codomain_relations: Vec<(RelationId, Vec<usize>)>,
+    codomain_relations: Vec<(Sig::Relation, Vec<usize>)>,
 }
 
-impl SurjectionPresentation {
-    pub fn checked<'a>(self, signature: &'a Signature) -> CheckedSurjectionPresentation<'a> {
+impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> SurjectionPresentation<Relation> {
+    pub fn checked<Sig: Signature<Relation = Relation>>(
+        self,
+        signature: Sig,
+    ) -> CheckedSurjectionPresentation<Sig> {
         let domain = self.domain.checked(signature);
-        let row_arity: Vec<SortId> =
+        let row_arity: Vec<Sig::Sort> =
             domain.rips.iter().
-            map(|rip| signature.get_arity(rip.id).unwrap().iter()).
+            map(|rip| domain.signature.arity(rip.id).iter()).
             flatten().
             cloned().
             collect();
@@ -380,7 +392,7 @@ impl SurjectionPresentation {
             assert_eq!(row_arity[*lhs], row_arity[*rhs]);
         }
         for (r, arg_indices) in &self.codomain_relations {
-            let arity = signature.get_arity(*r).unwrap();
+            let arity = domain.signature.arity(*r);
             assert_eq!(arg_indices.len(), arity.len());
             for (ai, s) in arg_indices.iter().zip(arity) {
                 assert_eq!(row_arity[*ai], *s);
@@ -395,15 +407,13 @@ impl SurjectionPresentation {
     }
 }
 
-pub fn close_model(presentations: &[CheckedSurjectionPresentation], model: &mut Model) {
-    for presentation in presentations {
-        assert_eq!(
-            presentation.domain.signature as *const Signature,
-            model.signature() as *const Signature,
-        );
-    }
+pub fn close_model<Sig: Signature>(
+    presentations: &[CheckedSurjectionPresentation<Sig>],
+    model: &mut Model<Sig>
+) {
+    // TODO: check whether signatures are equal?
     let mut conc_eqs: Vec<(Element, Element)> = vec![];
-    let mut conc_rows: Vec<(RelationId, Vec<Element>)> = vec![];
+    let mut conc_rows: Vec<(Sig::Relation, Vec<Element>)> = vec![];
 
     loop {
         for presentation in presentations {
@@ -425,9 +435,8 @@ pub fn close_model(presentations: &[CheckedSurjectionPresentation], model: &mut 
         debug_assert!(conc_eqs.is_empty());
 
         let no_new_rows: bool =
-            (0 .. model.signature().relation_number()).
-            map(RelationId).
-            all(|r| model.new_rows(r).next().is_none());
+            model.signature().relations().iter().
+            all(|&r| model.new_rows(r).next().is_none());
         if no_new_rows {
             break;
         }
@@ -447,16 +456,20 @@ mod test_close_model {
 
     #[test]
     fn symmetry() {
-        let s0 = SortId(0);
-        let r0 = RelationId(0);
-        let sig = Signature::from_sorts_arities(1, vec![vec![s0, s0]]);
+        arities!{
+            pub enum Sort {S},
+            pub enum Relation { R: S x S },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
         let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(s0);
-        let el1 = model.adjoin_element(s0);
-        let el2 = model.adjoin_element(s0);
-        let el3 = model.adjoin_element(s0);
-        let el4 = model.adjoin_element(s0);
-        model.adjoin_rows(r0, vec![
+        let el0 = model.adjoin_element(S);
+        let el1 = model.adjoin_element(S);
+        let el2 = model.adjoin_element(S);
+        let el3 = model.adjoin_element(S);
+        let el4 = model.adjoin_element(S);
+        model.adjoin_rows(R, vec![
             vec![el0, el1],
             vec![el2, el2],
             vec![el3, el4],
@@ -465,16 +478,16 @@ mod test_close_model {
 
         let symmetry = SurjectionPresentation {
             domain: Presentation {
-                relations: vec![r0],
+                relations: vec![R],
                 equalities: vec![],
             },
             codomain_equalities: vec![],
-            codomain_relations: vec![(r0, vec![1, 0])],
+            codomain_relations: vec![(R, vec![1, 0])],
         }.checked(&sig);
 
         close_model(&[symmetry], &mut model);
 
-        assert_eq!(save_rows(model.rows(r0)), hashset!{
+        assert_eq!(save_rows(model.rows(R)), hashset!{
             vec![el0, el1],
             vec![el1, el0],
             vec![el2, el2],
@@ -488,21 +501,25 @@ mod test_close_model {
 
     #[test]
     fn transitivity() {
-        let s0 = SortId(0);
-        let r0 = RelationId(0);
-        let sig = Signature::from_sorts_arities(1, vec![vec![s0, s0]]);
+        arities!{
+            pub enum Sort {S},
+            pub enum Relation { R: S x S },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
         let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(s0);
-        let el1 = model.adjoin_element(s0);
-        let el2 = model.adjoin_element(s0);
-        let el3 = model.adjoin_element(s0);
-        let el4 = model.adjoin_element(s0);
-        let el5 = model.adjoin_element(s0);
-        let el6 = model.adjoin_element(s0);
-        let el7 = model.adjoin_element(s0);
-        let el8 = model.adjoin_element(s0);
-        let el9 = model.adjoin_element(s0);
-        model.adjoin_rows(r0, vec![
+        let el0 = model.adjoin_element(S);
+        let el1 = model.adjoin_element(S);
+        let el2 = model.adjoin_element(S);
+        let el3 = model.adjoin_element(S);
+        let el4 = model.adjoin_element(S);
+        let el5 = model.adjoin_element(S);
+        let el6 = model.adjoin_element(S);
+        let el7 = model.adjoin_element(S);
+        let el8 = model.adjoin_element(S);
+        let el9 = model.adjoin_element(S);
+        model.adjoin_rows(R, vec![
             vec![el0, el1],
 
             vec![el2, el3],
@@ -519,14 +536,14 @@ mod test_close_model {
 
         let transitivity = SurjectionPresentation {
             domain: Presentation {
-                relations: vec![r0, r0],
+                relations: vec![R, R],
                 equalities: vec![(1, 2)],
             },
-            codomain_relations: vec![(r0, vec![0, 3])],
+            codomain_relations: vec![(R, vec![0, 3])],
             codomain_equalities: vec![],
         }.checked(&sig);
 
-        let mut expected = save_rows(model.rows(r0));
+        let mut expected = save_rows(model.rows(R));
         for a in &[el2, el3, el4] {
             for b in &[el2, el3, el4] {
                 expected.insert(vec![*a, *b]);
@@ -544,7 +561,7 @@ mod test_close_model {
 
         close_model(&[transitivity], &mut model);
 
-        assert_eq!(save_rows(model.rows(r0)), expected);
+        assert_eq!(save_rows(model.rows(R)), expected);
         for &el in &[el0, el1, el2, el3, el4, el5, el6, el7, el8, el9] {
             assert_eq!(model.representative(el), el);
         }
@@ -552,20 +569,24 @@ mod test_close_model {
 
     #[test]
     fn antisymmetry() {
-        let s0 = SortId(0);
-        let r0 = RelationId(0);
-        let sig = Signature::from_sorts_arities(1, vec![vec![s0, s0]]);
+        arities!{
+            pub enum Sort {S},
+            pub enum Relation { R: S x S },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
         let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(s0);
-        let el1 = model.adjoin_element(s0);
-        let el2 = model.adjoin_element(s0);
-        let el3 = model.adjoin_element(s0);
-        let el4 = model.adjoin_element(s0);
-        let el5 = model.adjoin_element(s0);
-        let el6 = model.adjoin_element(s0);
-        let el7 = model.adjoin_element(s0);
+        let el0 = model.adjoin_element(S);
+        let el1 = model.adjoin_element(S);
+        let el2 = model.adjoin_element(S);
+        let el3 = model.adjoin_element(S);
+        let el4 = model.adjoin_element(S);
+        let el5 = model.adjoin_element(S);
+        let el6 = model.adjoin_element(S);
+        let el7 = model.adjoin_element(S);
 
-        model.adjoin_rows(r0, vec![
+        model.adjoin_rows(R, vec![
             vec![el0, el1],
 
             vec![el2, el3],
@@ -580,7 +601,7 @@ mod test_close_model {
 
         let antisymmetry = SurjectionPresentation {
             domain: Presentation {
-                relations: vec![r0, r0],
+                relations: vec![R, R],
                 equalities: vec![(0, 3), (1, 2)],
             },
             codomain_relations: vec![],
@@ -591,7 +612,7 @@ mod test_close_model {
 
         let elx = model.representative(el2);
         assert_eq!(model.representative(el3), elx);
-        assert_eq!(save_rows(model.rows(r0)), hashset!{
+        assert_eq!(save_rows(model.rows(R)), hashset!{
             vec![el0, el1],
 
             vec![elx, elx],
@@ -609,21 +630,25 @@ mod test_close_model {
 
     #[test]
     fn antisymmetry_transitivity() {
-        let s0 = SortId(0);
-        let r0 = RelationId(0);
-        let sig = Signature::from_sorts_arities(1, vec![vec![s0, s0]]);
+        arities!{
+            pub enum Sort {S},
+            pub enum Relation { R: S x S },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
 
         let transitivity = SurjectionPresentation {
             domain: Presentation {
-                relations: vec![r0, r0],
+                relations: vec![R, R],
                 equalities: vec![(1, 2)],
             },
-            codomain_relations: vec![(r0, vec![0, 3])],
+            codomain_relations: vec![(R, vec![0, 3])],
             codomain_equalities: vec![],
         }.checked(&sig);
         let antisymmetry = SurjectionPresentation {
             domain: Presentation {
-                relations: vec![r0, r0],
+                relations: vec![R, R],
                 equalities: vec![(0, 3), (1, 2)],
             },
             codomain_relations: vec![],
@@ -631,16 +656,16 @@ mod test_close_model {
         }.checked(&sig);
 
         let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(s0);
-        let el1 = model.adjoin_element(s0);
-        let el2 = model.adjoin_element(s0);
-        let el3 = model.adjoin_element(s0);
-        let el4 = model.adjoin_element(s0);
-        let el5 = model.adjoin_element(s0);
-        let el6 = model.adjoin_element(s0);
-        let el7 = model.adjoin_element(s0);
+        let el0 = model.adjoin_element(S);
+        let el1 = model.adjoin_element(S);
+        let el2 = model.adjoin_element(S);
+        let el3 = model.adjoin_element(S);
+        let el4 = model.adjoin_element(S);
+        let el5 = model.adjoin_element(S);
+        let el6 = model.adjoin_element(S);
+        let el7 = model.adjoin_element(S);
 
-        model.adjoin_rows(r0, vec![
+        model.adjoin_rows(R, vec![
             vec![el0, el1],
 
             vec![el2, el3],
@@ -655,10 +680,10 @@ mod test_close_model {
 
         // Add a cycle of elements, i.e. a sequence in which each element is related to the next
         let cycle_elements: Vec<Element> =
-            repeat_with(|| model.adjoin_element(s0)).
+            repeat_with(|| model.adjoin_element(S)).
             take(10).
             collect();
-        model.adjoin_rows(r0,
+        model.adjoin_rows(R,
             cycle_elements.iter().
             zip(cycle_elements.iter().skip(1).chain(once(cycle_elements.first().unwrap()))).
             map(|(a, b)| vec![*a, *b])
@@ -682,7 +707,7 @@ mod test_close_model {
             assert_eq!(model.representative(el), elz);
         }
 
-        assert_eq!(save_rows(model.rows(r0)), hashset!{
+        assert_eq!(save_rows(model.rows(R)), hashset!{
             vec![el0, el1],
             vec![elx, elx],
             vec![ely, ely],

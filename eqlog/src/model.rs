@@ -3,7 +3,7 @@ use crate::element::*;
 use crate::signature::*;
 use std::vec::Vec;
 use std::collections::HashSet;
-use std::iter::{FromIterator, repeat, once};
+use std::iter::{FromIterator, once};
 use std::mem::swap;
 
 pub type Row = Vec<Element>;
@@ -15,44 +15,43 @@ struct DeltaRelation {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct ElementInfo {
+struct ElementInfo<Sort> {
     row_occurences: usize,
-    sort: SortId,
+    sort: Sort,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Model<'a> {
-    signature: &'a Signature,
-    element_infos: Vec<ElementInfo>,
+pub struct Model<Sig: Signature> {
+    signature: Sig,
+    element_infos: Vec<ElementInfo<Sig::Sort>>,
     representatives: UnionFind,
     dirty_elements: HashSet<Element>,
     relations: Vec<DeltaRelation>,
 }
 
-impl<'a> Model<'a> {
-    pub fn new(signature: &'a Signature) -> Self {
+impl<Sig: Signature> Model<Sig> {
+    pub fn new(signature: Sig) -> Self {
         let relations = Vec::from_iter(
-            repeat(DeltaRelation { old_rows: hashset!{}, new_rows: hashset!{} }).
-            take(signature.relation_number())
+            signature.relations().iter().
+            map(|_| DeltaRelation { old_rows: hashset!{}, new_rows: hashset!{} })
         );
         Model {
             signature,
-            //element_sorts: HashMap::new(),
             element_infos: Vec::new(),
             representatives: UnionFind::new(),
             dirty_elements: HashSet::new(),
             relations: relations,
         }
     }
-    pub fn signature(&self) -> &'a Signature {
-        self.signature
+    pub fn signature(&self) -> &Sig {
+        &self.signature
     }
-    pub fn elements<'b>(&'b self) -> impl Iterator<Item = (Element, SortId)> + 'b {
+    pub fn elements<'a>(&'a self) -> impl Iterator<Item = (Element, Sig::Sort)> + 'a {
         self.element_infos.iter().enumerate().map(|(el0, info)|
             (Element(el0 as u32), info.sort)
         )
     }
-    pub fn element_sort(&self, el: Element) -> SortId {
+    pub fn element_sort(&self, el: Element) -> Sig::Sort {
         let Element(el0) = el;
         self.element_infos[el0 as usize].sort
     }
@@ -62,16 +61,14 @@ impl<'a> Model<'a> {
     pub fn representative(&mut self, el: Element) -> Element {
         self.representatives.find(el)
     }
-    pub fn old_rows<'b>(&'b self, relation_id: RelationId) -> impl Iterator<Item = &'b [Element]> {
-        let RelationId(r) = relation_id;
-        self.relations[r].old_rows.iter().map(|row| row.as_slice())
+    pub fn old_rows<'a>(&'a self, relation: Sig::Relation) -> impl Iterator<Item = &'a [Element]> {
+        self.relations[relation.into()].old_rows.iter().map(|row| row.as_slice())
     }
-    pub fn new_rows<'b>(&'b self, relation_id: RelationId) -> impl Iterator<Item = &'b [Element]> {
-        let RelationId(r) = relation_id;
-        self.relations[r].new_rows.iter().map(|row| row.as_slice())
+    pub fn new_rows<'a>(&'a self, relation: Sig::Relation) -> impl Iterator<Item = &'a [Element]> {
+        self.relations[relation.into()].new_rows.iter().map(|row| row.as_slice())
     }
-    pub fn rows<'b>(&'b self, relation_id: RelationId) -> impl Iterator<Item = &'b [Element]> {
-        self.old_rows(relation_id).chain(self.new_rows(relation_id))
+    pub fn rows<'a>(&'a self, relation: Sig::Relation) -> impl Iterator<Item = &'a [Element]> {
+        self.old_rows(relation).chain(self.new_rows(relation))
     }
 
     pub fn age_rows(&mut self) {
@@ -79,21 +76,22 @@ impl<'a> Model<'a> {
             old_rows.extend(new_rows.drain());
         }
     }
-    pub fn adjoin_element(&mut self, sort: SortId) -> Element {
-        assert!(self.signature.has_sort(sort));
-
+    pub fn adjoin_element(&mut self, sort: Sig::Sort) -> Element {
         let Element(el) = self.representatives.new_element();
         debug_assert_eq!(el as usize, self.element_infos.len());
         self.element_infos.push(ElementInfo { sort, row_occurences: 0 });
         Element(el)
     }
-    pub fn adjoin_rows<I: IntoIterator<Item = Row>>(&mut self, r: RelationId, rows: I) -> usize {
-        let arity =
-            self.signature.get_arity(r).
-            unwrap_or_else(|| panic!("Invalid relation id"));
+
+    pub fn adjoin_rows(
+        &mut self,
+        relation: Sig::Relation,
+        rows: impl IntoIterator<Item = Row>,
+    ) -> usize {
+        let arity = self.signature.arity(relation);
 
         let element_infos = &mut self.element_infos;
-        let DeltaRelation { new_rows, old_rows } = &mut self.relations[r.0];
+        let DeltaRelation { new_rows, old_rows } = &mut self.relations[relation.into()];
         let representatives = &mut self.representatives;
 
         let before_len = new_rows.len();
@@ -113,9 +111,12 @@ impl<'a> Model<'a> {
         );
         new_rows.len() - before_len
     }
-    pub fn remove_rows<'b, I: IntoIterator<Item = &'b Row>>(&mut self, r: RelationId, rows: I) {
-        let RelationId(r0) = r;
-        let DeltaRelation { new_rows, old_rows } = &mut self.relations[r0];
+    pub fn remove_rows<'a>(
+        &mut self,
+        relation: Sig::Relation,
+        rows: impl IntoIterator<Item = &'a Row>
+    ) {
+        let DeltaRelation { new_rows, old_rows } = &mut self.relations[relation.into()];
         for row in rows {
             new_rows.remove(row);
             old_rows.remove(row);
@@ -152,7 +153,10 @@ impl<'a> Model<'a> {
         swap(&mut dirty_elements, &mut self.dirty_elements);
 
         let mut dirty_rows: Vec<Row> = vec![];
-        for r in (0 .. self.signature.relation_number()).map(RelationId) {
+        let rels = self.signature.relations().to_vec(); 
+        // TODO: do not copy rels; can't iter over `self.signature.relations()` directly because
+        // this would borrow `self`
+        for r in rels {
             debug_assert!(dirty_rows.is_empty());
 
             dirty_rows.extend(
@@ -173,8 +177,8 @@ impl<'a> Model<'a> {
     }
 }
 
-impl<'a> Extend<(RelationId, Row)> for Model<'a> {
-    fn extend<I: IntoIterator<Item = (RelationId, Row)>>(&mut self, rows: I) {
+impl<Sig: Signature> Extend<(Sig::Relation, Row)> for Model<Sig> {
+    fn extend<I: IntoIterator<Item = (Sig::Relation, Row)>>(&mut self, rows: I) {
         for (r, row) in rows {
             self.adjoin_rows(r, once(row));
         }
@@ -184,18 +188,37 @@ impl<'a> Extend<(RelationId, Row)> for Model<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+    arities!{
+        pub enum ExampleSort {S0, S1},
+        pub enum ExampleRelation {
+            R0: S0 x S1,
+            R1: ,
+            R2: S1 x S0 x S1,
+            R3: S0 x S0,
+        },
+    }
+    use ExampleSort::*;
+    use ExampleRelation::*;
+    type ExampleSignature = StaticSignature<ExampleSort, ExampleRelation>;
+    type Model = super::Model<ExampleSignature>;
+
+    fn clone_rows<'a, I: Iterator<Item = &'a [Element]>>(rows: I) -> HashSet<Row> {
+        HashSet::from_iter(rows.map(|els| els.to_vec()))
+    }
 
     fn assert_valid_model(m: &Model) {
+        let sig = m.signature();
         for (_, s) in m.elements() {
             // element's sort is a valid sort in m's signature
-            assert!(m.signature.has_sort(s));
+            assert!(sig.sorts().iter().find(|s0| **s0 == s).is_some());
         }
 
-        for (r, arity) in m.signature.iter_arities().enumerate() {
-            let old_rows = clone_rows(m.old_rows(RelationId(r)));
-            let new_rows = clone_rows(m.new_rows(RelationId(r)));
+        for &r in sig.relations() {
+            let arity = sig.arity(r);
+            let old_rows = clone_rows(m.old_rows(r));
+            let new_rows = clone_rows(m.new_rows(r));
             assert!(old_rows.is_disjoint(&new_rows));
-            let rows = clone_rows(m.rows(RelationId(r)));
+            let rows = clone_rows(m.rows(r));
             assert_eq!(
                 HashSet::from_iter(old_rows.union(&new_rows).cloned()),
                 rows
@@ -216,35 +239,15 @@ mod test {
         }
     }
 
-    static S0: SortId = SortId(0);
-    static S1: SortId = SortId(1);
-    static R0: RelationId = RelationId(0);
-    static R1: RelationId = RelationId(1);
-    static R2: RelationId = RelationId(2);
-    static R3: RelationId = RelationId(3);
-    fn sig() -> Signature {
-        let mut sig = Signature::new();
-        assert_eq!(sig.add_sort(), S0);
-        assert_eq!(sig.add_sort(), S1);
-        assert_eq!(sig.add_relation(vec![S0, S1]), R0);
-        assert_eq!(sig.add_relation(vec![]), R1);
-        assert_eq!(sig.add_relation(vec![S1, S0, S1]), R2);
-        assert_eq!(sig.add_relation(vec![S0, S0]), R3);
-        sig
-    }
-
     #[test]
     fn new_model_is_valid() {
-        let sig = sig();
-        let m = Model::new(&sig);
-
+        let m = Model::new(ExampleSignature::new());
         assert_valid_model(&m);
     }
 
     #[test]
     fn adjoin_element() {
-        let sig = sig();
-        let mut m = Model::new(&sig);
+        let mut m = Model::new(ExampleSignature::new());
         let el0 = m.adjoin_element(S0);
         assert_eq!(m.representative(el0), el0);
         assert_valid_model(&m);
@@ -261,22 +264,9 @@ mod test {
         assert_valid_model(&m);
     }
 
-    #[test] #[should_panic]
-    fn adjoin_element_invalid_sort() {
-        let sig = sig();
-        let mut m = Model::new(&sig);
-        m.adjoin_element(SortId(65433));
-    }
-
-    fn clone_rows<'a, I: Iterator<Item = &'a [Element]>>(rows: I) -> HashSet<Row> {
-        HashSet::from_iter(rows.map(|els| els.to_vec()))
-        // HashSet::from_iter(rows.map(<[Element]>::to_vec))
-    }
-
     #[test]
     fn adjoin_rows() {
-        let sig = sig();
-        let mut m = Model::new(&sig);
+        let mut m = Model::new(ExampleSignature::new());
         let el0 = m.adjoin_element(S0);
         let el1 = m.adjoin_element(S0);
         let el2 = m.adjoin_element(S0);
@@ -331,8 +321,7 @@ mod test {
 
     #[test]
     fn extend() {
-        let sig = sig();
-        let mut m = Model::new(&sig);
+        let mut m = Model::new(ExampleSignature::new());
         let el0 = m.adjoin_element(S0);
         let el2 = m.adjoin_element(S0);
         let el3 = m.adjoin_element(S1);
@@ -357,8 +346,7 @@ mod test {
 
     #[test]
     fn old_new_rows() {
-        let sig = sig();
-        let mut m = Model::new(&sig);
+        let mut m = Model::new(ExampleSignature::new());
         let el0 = m.adjoin_element(S0);
         let el2 = m.adjoin_element(S0);
         let el3 = m.adjoin_element(S1);
@@ -411,8 +399,7 @@ mod test {
 
     #[test]
     fn equate_canonicalize() {
-        let sig = sig();
-        let mut m = Model::new(&sig);
+        let mut m = Model::new(ExampleSignature::new());
         let el0 = m.adjoin_element(S0);
         let el1 = m.adjoin_element(S0);
         let el2 = m.adjoin_element(S0);

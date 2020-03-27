@@ -1,67 +1,207 @@
-use std::vec::Vec;
+use std::marker::{PhantomData, Sized};
+use std::fmt::Debug;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SortId(pub usize);
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct RelationId(pub usize);
+pub trait Signature {
+    type Sort: 'static + Into<usize> + Copy + PartialEq + Eq + Debug;
+    type Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug;
 
-// Some default values, fixed but chosen randomly
-impl Default for SortId {
-    fn default() -> Self {
-        SortId(2201843232216218232)
+    fn sorts(&self) -> &[Self::Sort];
+    fn relations(&self) -> &[Self::Relation];
+    fn arity(&self, relation: Self::Relation) -> &[Self::Sort];
+}
+
+impl<'a, S: Signature> Signature for &'a S {
+    type Sort = S::Sort;
+    type Relation = S::Relation;
+
+    fn sorts(&self) -> &[Self::Sort] {
+        (*self).sorts()
+    }
+    fn relations(&self) -> &[Self::Relation] {
+        (*self).relations()
+    }
+    fn arity(&self, relation: Self::Relation) -> &[Self::Sort] {
+        (*self).arity(relation)
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Signature {
-    sort_number: usize,
-    relation_arities: Vec<Vec<SortId>>,
-    // relations are identified by their index in `relation_arities`
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct StaticSignature<S, R> {
+    sort: PhantomData<S>,
+    relation: PhantomData<R>,
 }
 
-impl Signature {
+impl<S, R> StaticSignature<S, R> {
     pub fn new() -> Self {
-        Signature {
-            sort_number: 0,
-            relation_arities: vec![],
+        StaticSignature {
+            sort: PhantomData,
+            relation: PhantomData,
         }
     }
-    pub fn from_sorts_arities(sort_number: usize, arities: Vec<Vec<SortId>>) -> Signature {
-        let mut sig = Signature::new();
-        for _ in 0 .. sort_number {
-            sig.add_sort();
+}
+
+pub trait Enumerable: Sized + Copy + Into<usize> + 'static {
+    const VALUES: &'static [Self];
+}
+
+pub trait StaticArity<S> {
+    fn arity(self) -> &'static [S];
+}
+
+impl<S: PartialEq + Eq + Debug, R: PartialEq + Eq + Debug> Signature for StaticSignature<S, R>
+where
+    S: Enumerable,
+    R: Enumerable + StaticArity<S>,
+{
+    type Sort = S;
+    type Relation = R;
+
+    fn sorts(&self) -> &[Self::Sort] {
+        Self::Sort::VALUES
+    }
+    fn relations(&self) -> &[Self::Relation] {
+        Self::Relation::VALUES
+    }
+    fn arity(&self, relation: Self::Relation) -> &[Self::Sort] {
+        relation.arity()
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum RelationKind {
+    Predicate,
+    Operation,
+}
+
+pub trait PredicateOrOperation {
+    fn kind(self) -> RelationKind;
+}
+
+#[macro_export]
+macro_rules! enumerable_type {
+    (pub enum $type:ident { $($variant:ident),* $(,)?}) => {
+        #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+        pub enum $type {
+            $($variant),*
         }
-        for arity in arities.into_iter() {
-            sig.add_relation(arity);
+        impl Into<usize> for $type {
+            fn into(self) -> usize {
+                debug_assert_eq!(
+                    Self::VALUES.iter().position(|v| *v == self),
+                    Some(self as usize)
+                );
+                self as usize
+            }
         }
-        sig
+        impl $crate::signature::Enumerable for $type {
+            const VALUES: &'static [$type] = &[$($type::$variant),*];
+        }
+        impl std::fmt::Display for $type {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+                write!(f, "{:?}", self)
+            }
+        }
     }
-    pub fn add_sort(&mut self) -> SortId {
-        let s = SortId(self.sort_number);
-        self.sort_number += 1;
-        s
+}
+
+#[macro_export]
+macro_rules! arities {
+    (
+        pub enum $sort_type:ident $sorts:tt,
+        pub enum $relation_type:ident {
+            $($relation:ident : $($arg_sort:ident)x* $(-> $cod:ident)?),* $(,)?
+        },
+    ) => {
+        enumerable_type!(pub enum $sort_type $sorts);
+        enumerable_type!(pub enum $relation_type { $($relation),* });
+        impl $crate::signature::StaticArity<$sort_type> for $relation_type {
+            fn arity(self) -> &'static [$sort_type] {
+                match self {
+                    $($relation_type::$relation => {
+                        &[$($sort_type::$arg_sort),* $(, $sort_type::$cod)?]
+                    }),*
+                }
+            }
+        }
+
+        impl $crate::signature::PredicateOrOperation for $relation_type {
+            #[allow(unreachable_code)]
+            fn kind(self) -> RelationKind {
+                match self {
+                    $($relation_type::$relation => {
+                        $(let _ = $sort_type::$cod; return RelationKind::Operation;)?
+                        return RelationKind::Predicate;
+                    }),*
+                }
+            }
+        }
     }
-    pub fn has_sort(&self, s: SortId) -> bool {
-        let SortId(s0) = s;
-        s0 < self.sort_number
-    }
-    pub fn sort_number(&self) -> usize {
-        self.sort_number
-    }
-    pub fn add_relation(&mut self, arity: Vec<SortId>) -> RelationId {
-        assert!(arity.iter().all(|s| self.has_sort(*s)));
-        let r = RelationId(self.relation_arities.len());
-        self.relation_arities.push(arity);
-        r
-    }
-    pub fn iter_arities<'a>(&'a self) -> impl Iterator<Item = &'a [SortId]> {
-        self.relation_arities.iter().map(|arity| arity.as_slice())
-    }
-    pub fn get_arity<'a>(&'a self, r: RelationId) -> Option<&'a [SortId]> {
-        let RelationId(r0) = r;
-        self.relation_arities.get(r0).map(|arity| arity.as_slice())
-    }
-    pub fn relation_number(&self) -> usize {
-        self.relation_arities.len()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn arities() {
+        arities!{
+            pub enum Sort {S0, S1},
+            pub enum Relation {
+                R0: S0 x S1,
+                R1: ,
+                R2: S1 x S0 -> S1,
+                R3: S0 x S0,
+            },
+        }
+        pub use Sort::*;
+        pub use Relation::*;
+        pub type Sig = StaticSignature<Sort, Relation>;
+
+        let s0 = Sig::new();
+        let s = &s0;
+        assert_eq!(
+            s.sorts(),
+            &[S0, S1],
+        );
+        assert_eq!(
+            s.relations(),
+            &[R0, R1, R2, R3],
+        );
+
+        assert_eq!(
+            s.arity(R0),
+            &[S0, S1],
+        );
+        assert_eq!(
+            R0.kind(),
+            RelationKind::Predicate,
+        );
+
+        assert_eq!(
+            s.arity(R1),
+            &[],
+        );
+        assert_eq!(
+            R1.kind(),
+            RelationKind::Predicate,
+        );
+
+        assert_eq!(
+            s.arity(R2),
+            &[S1, S0, S1],
+        );
+        assert_eq!(
+            R2.kind(),
+            RelationKind::Operation,
+        );
+
+        assert_eq!(
+            s.arity(R3),
+            &[S0, S0],
+        );
+        assert_eq!(
+            R3.kind(),
+            RelationKind::Predicate,
+        );
     }
 }
