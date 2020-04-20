@@ -178,7 +178,7 @@ fn test_atom_display() {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Formula(Vec<Atom>);
+pub struct Formula(pub Vec<Atom>);
 
 impl Formula {
     fn visit_subterms<'a, V: FnMut(&'a Term)>(&'a self, mut v: V) {

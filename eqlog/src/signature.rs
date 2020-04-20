@@ -86,10 +86,6 @@ macro_rules! enumerable_type {
         }
         impl Into<usize> for $type {
             fn into(self) -> usize {
-                debug_assert_eq!(
-                    Self::VALUES.iter().position(|v| *v == self),
-                    Some(self as usize)
-                );
                 self as usize
             }
         }
@@ -98,7 +94,7 @@ macro_rules! enumerable_type {
         }
         impl std::fmt::Display for $type {
             fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-                write!(f, "{:?}", self)
+                std::fmt::Debug::fmt(self, f)
             }
         }
     }
@@ -126,11 +122,11 @@ macro_rules! arities {
 
         impl $crate::signature::PredicateOrOperation for $relation_type {
             #[allow(unreachable_code)]
-            fn kind(self) -> RelationKind {
+            fn kind(self) -> $crate::signature::RelationKind {
                 match self {
                     $($relation_type::$relation => {
-                        $(let _ = $sort_type::$cod; return RelationKind::Operation;)?
-                        return RelationKind::Predicate;
+                        $(let _ = $sort_type::$cod; return $crate::signature::RelationKind::Operation;)?
+                        return $crate::signature::RelationKind::Predicate;
                     }),*
                 }
             }
