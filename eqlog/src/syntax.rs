@@ -231,6 +231,7 @@ fn test_formula_display() {
 pub enum Sequent {
     Implication(Formula, Formula),
     Reduction(Term, Term),
+    ConditionalReduction(Formula, Term, Term),
 }
 
 impl Sequent {
@@ -241,6 +242,11 @@ impl Sequent {
                 conclusion.visit_subterms(&mut v);
             },
             Sequent::Reduction(from, to) => {
+                from.visit_subterms(&mut v);
+                to.visit_subterms(&mut v);
+            },
+            Sequent::ConditionalReduction(premise, from, to) => {
+                premise.visit_subterms(&mut v);
                 from.visit_subterms(&mut v);
                 to.visit_subterms(&mut v);
             },
@@ -256,7 +262,12 @@ impl Sequent {
             Sequent::Reduction(from, to) => {
                 next_index = from.assign_wildcard_indices(next_index);
                 to.assign_wildcard_indices(next_index)
-            }
+            },
+            Sequent::ConditionalReduction(premise, from, to) => {
+                next_index = premise.assign_wildcard_indices(next_index);
+                next_index = from.assign_wildcard_indices(next_index);
+                to.assign_wildcard_indices(next_index)
+            },
         }
     }
 }
@@ -270,6 +281,13 @@ impl Display for Sequent {
                 conclusion.fmt(f)
             },
             Sequent::Reduction(from, to) => {
+                from.fmt(f)?;
+                f.write_str(" ~> ")?;
+                to.fmt(f)
+            },
+            Sequent::ConditionalReduction(premise, from, to) => {
+                premise.fmt(f)?;
+                f.write_str(" => ")?;
                 from.fmt(f)?;
                 f.write_str(" ~> ")?;
                 to.fmt(f)
@@ -440,16 +458,29 @@ macro_rules! sequent {
         )
     };
     (@impl [$($prem:tt)*] => $($con:tt)*) => {
-        $crate::syntax::Sequent::Implication(
-            formula!($($prem)*),
-            formula!($($con)*)
-        )
+        sequent!(@impl => [$($prem)*] [] $($con)*)
     };
     (@impl [$($from:tt)*] $to:tt $($tail:tt)*) => {
         sequent!(@impl [$($from)* $to] $($tail)*)
     };
     (@impl [$($from:tt)*]) => {
-        compile_error!("Sequents must be of the form A => B or a ~> b")
+        compile_error!("Sequents must be of the form A => B, or a ~> b, or A => a ~> b")
+    };
+    (@impl => [$($prem:tt)*] [$($from:tt)*] ~> $($to:tt)*) => {
+        $crate::syntax::Sequent::ConditionalReduction(
+            formula!($($prem)*),
+            term!($($from)*),
+            term!($($to)*),
+        )
+    };
+    (@impl => [$($prem:tt)*] [$($con:tt)*]) => {
+        $crate::syntax::Sequent::Implication(
+            formula!($($prem)*),
+            formula!($($con)*)
+        )
+    };
+    (@impl => [$($prem:tt)*] [$($con:tt)*] $head:tt $($tail:tt)*) => {
+        sequent!(@impl => [$($prem)*] [$($con)* $head] $($tail)*)
     };
     ($($toks:tt)*) => {{
         let mut result = sequent!(@impl [] $($toks)*);
@@ -458,8 +489,12 @@ macro_rules! sequent {
     }};
 }
 
+
 #[test]
 fn test_sequent_macro() {
+    //trace_macros!(true);
+    //let _ = sequent!( r(x) => );
+    //trace_macros!(false);
     assert_eq!(sequent!( => ).to_string(), " => ");
     assert_eq!(
         sequent!(f(x, g(z)) = g(y) => ).to_string(),
@@ -490,7 +525,16 @@ fn test_sequent_macro() {
         sequent!(!f(_) & r(g(x), _) & x = _ => r(_, _)).to_string(),
         "!f(_0) & r(g(x), _1) & x = _2 => r(_3, _4)"
     );
+    assert_eq!(
+        sequent!(x = y & r(x, z) => f(x) ~> g(y, z)).to_string(),
+        "x = y & r(x, z) => f(x) ~> g(y, z)"
+    );
+    assert_eq!(
+        sequent!( => f(x) ~> g(y, z)).to_string(),
+        " => f(x) ~> g(y, z)"
+    );
 }
+
 
 fn check_occurence(seq: &Sequent) {
     let mut var_occurences: HashMap<&str, usize> = HashMap::new();
@@ -801,7 +845,14 @@ where
             to_surjection_presentation_impl(signature, premise, conclusion)
         },
         Sequent::Reduction(from, to) => {
-            let mut premise = vec![Atom::Defined(to.clone())];
+            to_surjection_presentation(
+                signature,
+                &Sequent::ConditionalReduction(Formula(vec![]), from.clone(), to.clone())
+            )
+        },
+        Sequent::ConditionalReduction(prem, from, to) => {
+            let mut premise = prem.0.clone(); 
+            premise.push(Atom::Defined(to.clone()));
             if let Term::Operation(_, args) = &from {
                 premise.extend(
                     args.iter().
@@ -829,6 +880,7 @@ mod test_presentations {
             O: S1 x S0 -> S1,
             P: S0 x S1,
             Q: S0 x S0,
+            R: S1 x S1,
             Plus: S1 x S1 -> S1,
         },
     }
@@ -955,6 +1007,21 @@ mod test_presentations {
         );
         assert_eq!(sp2.codomain_relations, vec![(Plus, vec![0, 2, 0])]);
         assert_eq!(sp2.codomain_equalities, vec![]);
+    }
+
+    #[test]
+    fn conditional_reduction() {
+        let sp1 = to_surjection_presentation(sig(), &sequent!(
+            R(X, Y) => Plus(X, Y) ~> Plus(Y, X)
+        ));
+        let _ = sp1.clone().checked(sig());
+        assert_eq!(sp1.domain.relations, vec![R, Plus]);
+        assert_eq!(
+            sp1.domain.equalities.clone().sort(),
+            vec![(0, 3), (1, 2)].clone().sort()
+        );
+        assert_eq!(sp1.codomain_relations, vec![(Plus, vec![0, 1, 4])]);
+        assert_eq!(sp1.codomain_equalities, vec![]);
     }
 
     #[test] #[should_panic]
