@@ -375,6 +375,32 @@ pub struct CheckedSurjectionPresentation<Sig: Signature> {
     codomain_relations: Vec<(Sig::Relation, Vec<usize>)>,
 }
 
+impl<Sig: Signature> CheckedSurjectionPresentation<Sig> {
+    pub fn functionality(signature: Sig, relation: Sig::Relation) -> Self {
+        let l = signature.arity(relation).len();
+        let domain = CheckedPresentation {
+            signature,
+            rips: vec![
+                RelationInPresentation {
+                    id: relation,
+                    equalities: vec![],
+                },
+                RelationInPresentation {
+                    id: relation,
+                    equalities: (0 .. l - 1).map(|i| (i, i + l)).collect()
+                },
+            ],
+            row_length: 2 * l,
+        };
+
+        CheckedSurjectionPresentation {
+            domain,
+            codomain_equalities: vec![(l - 1, 2 * l - 1)],
+            codomain_relations: vec![],
+        }
+    }
+}
+
 impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> SurjectionPresentation<Relation> {
     pub fn checked<Sig: Signature<Relation = Relation>>(
         self,
@@ -713,5 +739,52 @@ mod test_close_model {
             vec![ely, ely],
             vec![elz, elz],
         });
+    }
+
+    #[test]
+    fn functionality() {
+        arities!{
+            pub enum Sort {S},
+            pub enum Relation { O: S x S -> S },
+        }
+        use Sort::*;
+        use Relation::*;
+        let sig = StaticSignature::<Sort, Relation>::new();
+        
+        let functionality = CheckedSurjectionPresentation::functionality(&sig, O);
+
+        let mut model = Model::new(&sig);
+        let el0 = model.adjoin_element(S);
+        let el1 = model.adjoin_element(S);
+        let el2 = model.adjoin_element(S);
+        let el3 = model.adjoin_element(S);
+        let el4 = model.adjoin_element(S);
+        let el5 = model.adjoin_element(S);
+        let el6 = model.adjoin_element(S);
+
+        model.adjoin_rows(O, vec![
+            vec![el0, el1, el1],
+            vec![el0, el1, el2],
+
+            vec![el1, el1, el3],
+            vec![el1, el2, el4],
+
+
+            vec![el3, el2, el5],
+            vec![el4, el1, el6],
+        ]);
+
+        close_model(&[functionality], &mut model);
+
+        let el12 = model.representative(el1);
+        assert_eq!(model.representative(el2), el12);
+
+        let el34 = model.representative(el3);
+        assert_eq!(model.representative(el4), el34);
+
+        let el56 = model.representative(el5);
+        assert_eq!(model.representative(el6), el56);
+
+        assert_eq!(hashset!{el0, el12, el34, el56}.len(), 4);
     }
 }
