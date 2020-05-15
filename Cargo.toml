@@ -3,17 +3,12 @@ name = "qt"
 version = "0.1.0"
 authors = ["Jakob Botsch Nielsen <Jakob.botsch.nielsen@gmail.com>"]
 edition = "2018"
-build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lalrpop-util = "0.17.2"
-regex = "0.2.0"
-libc = "0.2.66"
+eqlog = { path = "eqlog" }
 lazy_static = "1.4.0"
-scopeguard = "1.0.0"
 
 [build-dependencies]
 lalrpop = "0.17.2"
-cmake = "0.1.42"

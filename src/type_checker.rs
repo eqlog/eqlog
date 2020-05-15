@@ -3,6 +3,17 @@ use super::model::Model;
 use super::cwf::*;
 use super::lang::ast::*;
 
+struct TermInContext {
+    ctx_exts: VecDeque<(Element, Element)>,
+    term: Element,
+}
+
+pub struct CwfChecker {
+    cwf: Model<CwfSignature>,
+    current_context: Element,
+    defined_terms: HashMap<String, TermInContext>,
+}
+
 pub struct TypeChecker<T: Model> {
     model: T,
     ctxs : Vec<CtxInfo>,
