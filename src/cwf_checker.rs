@@ -5,30 +5,20 @@ use std::iter::once;
 use crate::lang::ast;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Extension {
-    ty: Element,
-    ext_ctx: Element,
-    wkn: Element,
-    var: Element,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 struct Environment {
-    defs: HashMap<String, (Vec<Extension>, Element)>,
-    empty_ctx: Element,
-    current_extension: Vec<Extension>,
+    defs: HashMap<String, (Vec<Element>, Element)>, // name => (list of contexts, term)
+    current_extension: Vec<Element>, // list of contexts
 }
 
 impl Environment {
     fn new(cwf: &mut Cwf) -> Self {
         Environment {
             defs: HashMap::new(),
-            empty_ctx: cwf.adjoin_element(CwfSort::Ctx),
-            current_extension: vec![],
+            current_extension: vec![cwf.adjoin_element(CwfSort::Ctx)],
         }
     }
     fn current_ctx(&self) -> Element {
-        self.current_extension.last().map(|ext| ext.ext_ctx).unwrap_or(self.empty_ctx)
+        *self.current_extension.last().unwrap()
     }
     fn add_definition(&mut self, cwf: &mut Cwf, def: &ast::Def) {
         let mut self_ = self.clone();
@@ -43,17 +33,16 @@ impl Environment {
         let ext_ctx_el = cwf.adjoin_element(CwfSort::Ctx);
         cwf.adjoin_rows(
             CwfRelation::ExtCtx,
-            once(vec![self.current_ctx(), ty_el, ext_ctx_el]),
+            once(vec![self.current_ctx(), ext_ctx_el]),
+        );
+        cwf.adjoin_rows(
+            CwfRelation::ExtTy,
+            once(vec![ext_ctx_el, ty_el]),
         );
         let wkn_el = adjoin_op(cwf, CwfRelation::Wkn, vec![ext_ctx_el]);
         let var_el = adjoin_op(cwf, CwfRelation::Var, vec![ext_ctx_el]);
 
-        self.current_extension.push(Extension{
-            ty: ty_el,
-            ext_ctx: ext_ctx_el,
-            wkn: wkn_el,
-            var: var_el,
-        });
+        self.current_extension.push(ext_ctx_el);
         self.defs.insert(var_name, (self.current_extension.clone(), var_el));
     }
     fn add_type(&mut self, cwf: &mut Cwf, ty: &ast::Ty) -> Element {
@@ -104,50 +93,43 @@ impl Environment {
                     def_exts.iter().zip(&self.current_extension).
                     take_while(|(lhs, rhs)| lhs == rhs).
                     count();
-                let last_shared_ctx: Element =
-                    self.current_extension[.. shared_context_len].last().
-                    map(|extension| extension.ext_ctx).
-                    unwrap_or(self.empty_ctx);
-                // TODO: The following shouldn't change anything, but it does... whats wrong?
-                // if last_shared_ctx == self.current_ctx() {
-                //     println!("it's in current ctx");
-                //     return def_el;
-                // }
-                let last_shared_identity: Element =
-                    adjoin_op(cwf, CwfRelation::Id, vec![last_shared_ctx]);
-
+                let shared_extension = &self.current_extension[.. shared_context_len];
+                let last_shared_ctx: Element = *shared_extension.last().unwrap();
                 let cur_unshared = &self.current_extension[shared_context_len ..];
                 let def_unshared = &def_exts[shared_context_len ..];
-                assert_eq!(
-                    def_unshared.len(), args.len(),
+
+                let last_shared_identity: Element =
+                    adjoin_op(cwf, CwfRelation::Id, vec![last_shared_ctx]);
+                assert!(
+                    def_unshared.len() == args.len(),
                     "Function `{}` takes `{}` arguments, `{}` were provided",
                     fun, def_unshared.len(), args.len()
                 );
                 let wkn_shared_to_cur =
                     cur_unshared.iter().
                     fold(last_shared_identity, |prev, ext| {
-                        adjoin_op(cwf, CwfRelation::Comp, vec![ext.wkn, prev])
+                        let wkn = adjoin_op(cwf, CwfRelation::Comp, vec![*ext]);
+                        adjoin_op(cwf, CwfRelation::Comp, vec![wkn, prev])
                     });
 
                 let subst_def_to_current =
                     def_unshared.to_vec().iter(). // TODO: can we get rid of to_vec somehow?
                     zip(args).
                     fold(wkn_shared_to_cur, |prev_subst, (next_ext, next_arg)| {
-                        let next_ty_subst =
-                            adjoin_op(cwf, CwfRelation::SubstTy, vec![prev_subst, next_ext.ty]);
-                        let mut arg_el = self.add_term(cwf, next_arg);
-                        close_cwf(cwf);
-                        arg_el = cwf.representative(arg_el);
-                        let arg_ty = tm_ty(cwf, arg_el);
+                        let required_ty = adjoin_op(cwf, CwfRelation::ExtTy, vec![*next_ext]);
+                        let required_ty_subst =
+                            adjoin_op(cwf, CwfRelation::SubstTy, vec![prev_subst, required_ty]);
+                        let arg_el = self.add_term(cwf, next_arg);
+                        let arg_ty_el = tm_ty(cwf, arg_el);
                         close_cwf(cwf);
                         assert!(
-                            els_are_equal(cwf, next_ty_subst, arg_ty),
+                            els_are_equal(cwf, required_ty_subst, arg_ty_el),
                             "The type of term `{:?}` does not equal the type required by `{}`",
                             next_arg, fun,
                         );
                         adjoin_op(
                             cwf,
-                            CwfRelation::MorExt, vec![next_ext.ext_ctx, prev_subst, arg_el],
+                            CwfRelation::MorExt, vec![*next_ext, prev_subst, arg_el],
                         )
                     });
 
@@ -203,7 +185,7 @@ impl Environment {
 
                 let mut self_ = self.clone();
                 self_.extend_ctx(cwf, into_var.clone(), &ast::Ty::Bool);
-                let Extension{ty, ext_ctx, wkn, var} = *self_.current_extension.last().unwrap();
+                let ext_ctx = self_.current_ctx();
                 let into_ty_el = self_.add_type(cwf, into_ty);
 
                 let true_case_el = self.add_term(cwf, true_case);

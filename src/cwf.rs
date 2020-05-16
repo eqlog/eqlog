@@ -18,8 +18,11 @@ arities!{
         SubstTy: Mor x Ty-> Ty,
         SubstTm: Mor x Tm-> Tm,
 
-        ExtCtx: Ctx x Ty x Ctx,
-        // (G, sigma) should be uniquely determined by G.sigma and ExtCtx(G, sigma, G.sigma)
+        ExtCtx: Ctx x Ctx,
+        // ExtCtx(G, D) should hold if a D is a (single step) extension of G
+        // The variable, its type and weaking can be retrieved with the following:
+        ExtTy: Ctx -> Ty,
+        // ExtTy(D) must be defined if and only if Ext(G, D)
         Wkn: Ctx -> Mor,
         // Wkn(D) should only be defined if D = G.sigma for (unique) G and sigma
         Var: Ctx -> Tm,
@@ -80,10 +83,10 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
 
         // domain and codomain of the weakening map
         sequent!(Cod(Wkn(Gsigma)) ~> Gsigma),
-        sequent!(ExtCtx(G, _, Gsigma) => Dom(Wkn(Gsigma)) ~> G),
+        sequent!(ExtCtx(G, Gsigma) => Dom(Wkn(Gsigma)) ~> G),
 
         // type of the variable
-        sequent!(ExtCtx(_, sigma, Gsigma) => TmTy(Var(Gsigma)) ~> SubstTy(Wkn(Gsigma), sigma)),
+        sequent!(TmTy(Var(Gsigma)) ~> SubstTy(Wkn(Gsigma), ExtTy(Gsigma))),
 
         // domain and codomain of extended morphisms
         sequent!(Cod(MorExt(_, f, _)) ~> Cod(f)),
@@ -131,7 +134,7 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
         ),
         // Uniqueness of bool elimination
         sequent!(
-            B = Bool(G) & ExtCtx(G, B, Gbool) & TyCtx(sigma) = Gbool & TmTy(s) = sigma &
+            ExtCtx(G, Gbool) & ExtTy(Gbool) = Bool(G) & TyCtx(sigma) = Gbool & TmTy(s) = sigma &
             SubstTm(MorExt(Gbool, id, True(G)), s) = s_true &
             SubstTm(MorExt(Gbool, id, False(G)), s) = s_false
             =>
