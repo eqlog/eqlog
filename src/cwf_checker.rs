@@ -501,22 +501,25 @@ mod test {
                 tm: Box::new(Tm::BoolElim{
                     discriminee: xvar.clone(),
                     into_var: "y".to_string(),
+                    // into_ty = Eq y (Neg (Neg y))
                     into_ty: Box::new(Ty::Eq(
                         yvar.clone(),
                         Box::new(Tm::Neg(Box::new(Tm::Neg(yvar.clone())))),
                     )),
                     true_case: Box::new(Tm::Let{
+                        // `Refl False : Eq False (Neg True)`
                         body: vec![Def{
                             name: "_0".to_string(),
                             args: vec![],
                             tm: Tm::Typed{
                                 tm: Box::new(Tm::Refl(Box::new(Tm::False))),
                                 ty: Box::new(Ty::Eq(
-                                    Box::new(Tm::Neg(Box::new(Tm::True))),
                                     Box::new(Tm::False),
+                                    Box::new(Tm::Neg(Box::new(Tm::True))),
                                 )),
                             },
                         }],
+                        // ... hence `Refl True : Eq True (Neg (Neg True))`
                         result: Box::new(Tm::Typed{
                             tm: Box::new(Tm::Refl(Box::new(Tm::True))),
                             ty: Box::new(Ty::Eq(
@@ -526,17 +529,19 @@ mod test {
                         }),
                     }),
                     false_case: Box::new(Tm::Let{
+                        // `Refl True : Eq True (Neg False)`
                         body: vec![Def{
                             name: "_1".to_string(),
                             args: vec![],
                             tm: Tm::Typed{
                                 tm: Box::new(Tm::Refl(Box::new(Tm::True))),
                                 ty: Box::new(Ty::Eq(
-                                    Box::new(Tm::Neg(Box::new(Tm::False))),
                                     Box::new(Tm::True),
+                                    Box::new(Tm::Neg(Box::new(Tm::False))),
                                 )),
                             },
                         }],
+                        // ... hence `Refl False : Eq False (Neg (Neg False))`
                         result: Box::new(Tm::Typed{
                             tm: Box::new(Tm::Refl(Box::new(Tm::False))),
                             ty: Box::new(Ty::Eq(
