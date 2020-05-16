@@ -59,10 +59,7 @@ impl Environment {
     fn add_type(&mut self, cwf: &mut Cwf, ty: &ast::Ty) -> Element {
         match ty {
             ast::Ty::Bool => {
-                let bool_el = cwf.adjoin_element(CwfSort::Ty);
-                cwf.adjoin_rows(CwfRelation::Bool, once(vec![self.current_ctx(), bool_el]));
-                close_cwf(cwf);
-                bool_el
+                adjoin_op(cwf, CwfRelation::Bool, vec![self.current_ctx()])
             },
             ast::Ty::Eq(lhs, rhs) => {
                 let lhs_el = self.add_term(cwf, lhs);
@@ -108,9 +105,14 @@ impl Environment {
                     take_while(|(lhs, rhs)| lhs == rhs).
                     count();
                 let last_shared_ctx: Element =
-                    self.current_extension[.. shared_context_len].first().
+                    self.current_extension[.. shared_context_len].last().
                     map(|extension| extension.ext_ctx).
                     unwrap_or(self.empty_ctx);
+                // TODO: The following shouldn't change anything, but it does... whats wrong?
+                // if last_shared_ctx == self.current_ctx() {
+                //     println!("it's in current ctx");
+                //     return def_el;
+                // }
                 let last_shared_identity: Element =
                     adjoin_op(cwf, CwfRelation::Id, vec![last_shared_ctx]);
 
@@ -173,10 +175,14 @@ impl Environment {
             },
             ast::Tm::Neg(arg) => {
                 let arg_el = self.add_term(cwf, arg);
-                let neg_el = cwf.adjoin_element(CwfSort::Tm);
-                cwf.adjoin_rows(CwfRelation::Neg, once(vec![arg_el, neg_el]));
+                let arg_ty_el = tm_ty(cwf, arg_el);
+                let bool_el = adjoin_op(cwf, CwfRelation::Bool, vec![self.current_ctx()]);
                 close_cwf(cwf);
-                neg_el
+                assert!(
+                    els_are_equal(cwf, arg_ty_el, bool_el),
+                    "{:?} must be of type bool", arg,
+                );
+                 adjoin_op(cwf, CwfRelation::Neg, vec![arg_el])
             },
             ast::Tm::Refl(arg) => {
                 let arg_el = self.add_term(cwf, arg);
@@ -187,15 +193,11 @@ impl Environment {
             },
             ast::Tm::BoolElim{discriminee, into_var, into_ty, true_case, false_case} => {
                 let discriminee_el = self.add_term(cwf, discriminee);
-                let mut discriminee_ty_el =
-                    cwf.rows(CwfRelation::TmTy).filter(|r| r[0] == discriminee_el).map(|r| r[1]).next().
-                    unwrap_or_else(|| panic!("Term `{:?}` has unknown type", discriminee));
-
-                let mut bool_el = self.add_type(cwf, &ast::Ty::Bool);
-                discriminee_ty_el = cwf.representative(discriminee_ty_el);
-                bool_el = cwf.representative(bool_el);
-                assert_eq!(
-                    discriminee_ty_el, bool_el,
+                let discriminee_ty_el = tm_ty(cwf, discriminee_el);
+                let bool_el = adjoin_op(cwf, CwfRelation::Bool, vec![self.current_ctx()]);
+                close_cwf(cwf);
+                assert!(
+                    els_are_equal(cwf, discriminee_ty_el, bool_el),
                     "Discriminee {:?} must have type Bool", discriminee
                 );
 
@@ -204,71 +206,38 @@ impl Environment {
                 let Extension{ty, ext_ctx, wkn, var} = *self_.current_extension.last().unwrap();
                 let into_ty_el = self_.add_type(cwf, into_ty);
 
-                let mut true_case_el = self.add_term(cwf, true_case);
-                let mut false_case_el = self.add_term(cwf, false_case);
+                let true_case_el = self.add_term(cwf, true_case);
+                let false_case_el = self.add_term(cwf, false_case);
 
-                let id_el = cwf.adjoin_element(CwfSort::Mor);
-                cwf.adjoin_rows(CwfRelation::Id, once(vec![self.current_ctx(), id_el]));
+                let true_case_ty_el = tm_ty(cwf, true_case_el);
+                let false_case_ty_el = tm_ty(cwf, false_case_el);
 
-                let true_el = cwf.adjoin_element(CwfSort::Tm);
-                cwf.adjoin_rows(CwfRelation::True, once(vec![self.current_ctx(), true_el]));
-                let false_el = cwf.adjoin_element(CwfSort::Tm);
-                cwf.adjoin_rows(CwfRelation::False, once(vec![self.current_ctx(), false_el]));
+                let id_el = adjoin_op(cwf, CwfRelation::Id, vec![self.current_ctx()]);
 
-                let subst_true_el = cwf.adjoin_element(CwfSort::Mor);
-                let subst_false_el = cwf.adjoin_element(CwfSort::Mor);
+                let true_el = adjoin_op(cwf, CwfRelation::True, vec![self.current_ctx()]);
+                let false_el = adjoin_op(cwf, CwfRelation::False, vec![self.current_ctx()]);
 
-                cwf.adjoin_rows(CwfRelation::MorExt, vec![
-                    vec![ext_ctx, id_el, true_el, subst_true_el],
-                    vec![ext_ctx, id_el, false_el, subst_false_el],
-                ]);
+                let subst_true_el = adjoin_op(cwf, CwfRelation::MorExt, vec![ext_ctx, id_el, true_el]);
+                let subst_false_el = adjoin_op(cwf, CwfRelation::MorExt, vec![ext_ctx, id_el, false_el]);
 
-                let mut into_ty_true_el = cwf.adjoin_element(CwfSort::Ty);
-                let mut into_ty_false_el = cwf.adjoin_element(CwfSort::Ty);
-
-                cwf.adjoin_rows(CwfRelation::SubstTy, vec![
-                    vec![subst_true_el, into_ty_el, into_ty_true_el],
-                    vec![subst_false_el, into_ty_el, into_ty_false_el],
-                ]);
+                let into_ty_true_el = adjoin_op(cwf, CwfRelation::SubstTy, vec![subst_true_el, into_ty_el]);
+                let into_ty_false_el = adjoin_op(cwf, CwfRelation::SubstTy, vec![subst_false_el, into_ty_el]);
 
                 close_cwf(cwf);
 
-                true_case_el = cwf.representative(true_case_el);
-                false_case_el = cwf.representative(false_case_el);
-
-                into_ty_true_el = cwf.representative(into_ty_true_el);
-                into_ty_false_el = cwf.representative(into_ty_false_el);
-
-                let true_case_ty_el =
-                    cwf.rows(CwfRelation::TmTy).filter(|r| r[0] == true_case_el).map(|r| r[1]).next().
-                    unwrap_or_else(|| panic!("Term `{:?}` has unknown type", true_case));
-                let false_case_ty_el =
-                    cwf.rows(CwfRelation::TmTy).filter(|r| r[0] == false_case_el).map(|r| r[1]).next().
-                    unwrap_or_else(|| panic!("Term `{:?}` has unknown type", false_case));
-
                 assert!(
-                    true_case_ty_el == into_ty_true_el,
+                    els_are_equal(cwf, true_case_ty_el, into_ty_true_el),
                     "Term {:?} does not have type {:?}[{:?} := {:?}]", true_case, into_ty, into_var, "True"
                 );
                 assert!(
-                    false_case_ty_el == into_ty_false_el,
+                    els_are_equal(cwf, false_case_ty_el, into_ty_false_el),
                     "Term {:?} does not have type {:?}[{:?} := {:?}]", false_case, into_ty, into_var, "False"
                 );
 
-                let elim_el = cwf.adjoin_element(CwfSort::Tm);
-                cwf.adjoin_rows(CwfRelation::BoolElim, once(vec![into_ty_el, true_case_el, false_case_el, elim_el]));
+                let elim_el = adjoin_op(cwf, CwfRelation::BoolElim, vec![into_ty_el, true_case_el, false_case_el]);
+                let subst_discriminee_el = adjoin_op(cwf, CwfRelation::MorExt, vec![ext_ctx, id_el, discriminee_el]);
 
-                let subst_discriminee_el = cwf.adjoin_element(CwfSort::Mor);
-                cwf.adjoin_rows(CwfRelation::MorExt, vec![
-                    vec![ext_ctx, id_el, discriminee_el, subst_discriminee_el],
-                ]);
-
-                let result_el = cwf.adjoin_element(CwfSort::Tm);
-                cwf.adjoin_rows(CwfRelation::SubstTm, once(vec![subst_discriminee_el, elim_el, result_el]));
-
-                close_cwf(cwf);
-
-                cwf.representative(result_el)
+                adjoin_op(cwf, CwfRelation::SubstTm, vec![subst_discriminee_el, elim_el])
             },
         }
     }
@@ -485,6 +454,120 @@ mod test {
             tm: Tm::Typed{
                 tm: Box::new(Tm::Refl(Box::new(Tm::False))),
                 ty: Box::new(Ty::Eq(negtrue_tm, Box::new(Tm::False))),
+            },
+        });
+    }
+
+    #[test]
+    fn neg_neg_substitution() {
+        let mut cwf = Cwf::new(CwfSignature::new());
+        let mut env = Environment::new(&mut cwf);
+
+        env.extend_ctx(&mut cwf, "x".to_string(), &Ty::Bool);
+
+        let yvar = Box::new(Tm::App{fun: "y".to_string(), args: vec![]});
+
+        // b (y : Bool) = Neg (Neg y)
+        env.add_definition(&mut cwf, &ast::Def{
+            name: "b".to_string(),
+            args: vec![("y".to_string(), Ty::Bool)],
+            tm: Tm::Typed{
+                tm: Box::new(Tm::Neg(Box::new(Tm::Neg(yvar)))),
+                ty: Box::new(Ty::Bool),
+            },
+        });
+        
+        // r : Eq False (Neg True) = Refl False
+        env.add_definition(&mut cwf, &ast::Def{
+            name: "r".to_string(),
+            args: vec![],
+            tm: Tm::Typed{
+                tm: Box::new(Tm::Refl(Box::new(Tm::False))),
+                ty: Box::new(Ty::Eq(
+                    Box::new(Tm::False),
+                    Box::new(Tm::Neg(Box::new(Tm::True))),
+                )),
+            },
+        });
+
+        // s : Eq True (b True) = Refl True
+        env.add_definition(&mut cwf, &ast::Def{
+            name: "s".to_string(),
+            args: vec![],
+            tm: Tm::Typed{
+                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
+                ty: Box::new(Ty::Eq(
+                    Box::new(Tm::True),
+                    Box::new(Tm::App{fun: "b".to_string(), args: vec![Tm::True]}),
+                )),
+            },
+        });
+    }
+
+    #[test]
+    fn neg_involutive() {
+        let mut cwf = Cwf::new(CwfSignature::new());
+        let mut env = Environment::new(&mut cwf);
+
+        let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
+        let yvar = Box::new(Tm::App{fun: "y".to_string(), args: vec![]});
+
+        env.add_definition(&mut cwf, &ast::Def{
+            name: "r".to_string(),
+            args: vec![("x".to_string(), Ty::Bool)],
+            tm: Tm::Typed{
+                tm: Box::new(Tm::BoolElim{
+                    discriminee: xvar.clone(),
+                    into_var: "y".to_string(),
+                    into_ty: Box::new(Ty::Eq(
+                        yvar.clone(),
+                        Box::new(Tm::Neg(Box::new(Tm::Neg(yvar.clone())))),
+                    )),
+                    true_case: Box::new(Tm::Let{
+                        body: vec![Def{
+                            name: "_0".to_string(),
+                            args: vec![],
+                            tm: Tm::Typed{
+                                tm: Box::new(Tm::Refl(Box::new(Tm::False))),
+                                ty: Box::new(Ty::Eq(
+                                    Box::new(Tm::Neg(Box::new(Tm::True))),
+                                    Box::new(Tm::False),
+                                )),
+                            },
+                        }],
+                        result: Box::new(Tm::Typed{
+                            tm: Box::new(Tm::Refl(Box::new(Tm::True))),
+                            ty: Box::new(Ty::Eq(
+                                Box::new(Tm::True),
+                                Box::new(Tm::Neg(Box::new(Tm::Neg(Box::new(Tm::True))))),
+                            )),
+                        }),
+                    }),
+                    false_case: Box::new(Tm::Let{
+                        body: vec![Def{
+                            name: "_1".to_string(),
+                            args: vec![],
+                            tm: Tm::Typed{
+                                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
+                                ty: Box::new(Ty::Eq(
+                                    Box::new(Tm::Neg(Box::new(Tm::False))),
+                                    Box::new(Tm::True),
+                                )),
+                            },
+                        }],
+                        result: Box::new(Tm::Typed{
+                            tm: Box::new(Tm::Refl(Box::new(Tm::False))),
+                            ty: Box::new(Ty::Eq(
+                                Box::new(Tm::False),
+                                Box::new(Tm::Neg(Box::new(Tm::Neg(Box::new(Tm::False))))),
+                            )),
+                        }),
+                    }),
+                }),
+                ty: Box::new(Ty::Eq(
+                    xvar.clone(),
+                    Box::new(Tm::Neg(Box::new(Tm::Neg(xvar.clone())))),
+                )),
             },
         });
     }
