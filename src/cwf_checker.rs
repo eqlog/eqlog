@@ -65,19 +65,13 @@ impl Environment {
                 bool_el
             },
             ast::Ty::Eq(lhs, rhs) => {
-                let mut lhs_el = self.add_term(cwf, lhs);
-                let mut rhs_el = self.add_term(cwf, rhs);
+                let lhs_el = self.add_term(cwf, lhs);
+                let rhs_el = self.add_term(cwf, rhs);
+
+                let lhs_ty_el = tm_ty(cwf, lhs_el);
+                let rhs_ty_el = tm_ty(cwf, rhs_el);
 
                 close_cwf(cwf);
-                lhs_el = cwf.representative(lhs_el);
-                rhs_el = cwf.representative(rhs_el);
-
-                let lhs_ty_el =
-                    tm_ty(cwf, lhs_el).
-                    unwrap_or_else(|| panic!("Term `{:?}` has unknown type", lhs));
-                let rhs_ty_el =
-                    tm_ty(cwf, rhs_el).
-                    unwrap_or_else(|| panic!("Term `{:?}` has unknown type", rhs));
 
                 assert!(
                     els_are_equal(cwf, lhs_ty_el, rhs_ty_el),
@@ -91,15 +85,11 @@ impl Environment {
     fn add_term(&mut self, cwf: &mut Cwf, tm: &ast::Tm) -> Element {
         match tm {
             ast::Tm::Typed{tm, ty} => {
-                let mut ty_el = self.add_type(cwf, ty);
-                let mut tm_el = self.add_term(cwf, tm);
+                let ty_el = self.add_type(cwf, ty);
+                let tm_el = self.add_term(cwf, tm);
                 // or the other way round?
+                let tm_el_ty = tm_ty(cwf, tm_el);
                 close_cwf(cwf);
-                ty_el = cwf.representative(ty_el);
-                tm_el = cwf.representative(tm_el);
-                let tm_el_ty =
-                    tm_ty(cwf, tm_el).
-                    unwrap_or_else(|| panic!("Term `{:?}` has unknown type", tm));
                 assert!(
                     els_are_equal(cwf, ty_el, tm_el_ty),
                     "Term `{:?}` does not have type `{:?}`", tm, ty
@@ -146,9 +136,7 @@ impl Environment {
                         let mut arg_el = self.add_term(cwf, next_arg);
                         close_cwf(cwf);
                         arg_el = cwf.representative(arg_el);
-                        let arg_ty =
-                            tm_ty(cwf, arg_el).
-                            unwrap_or_else(|| panic!("`{:?}` has unknown type", next_arg));
+                        let arg_ty = tm_ty(cwf, arg_el);
                         close_cwf(cwf);
                         assert!(
                             els_are_equal(cwf, next_ty_subst, arg_ty),
@@ -332,17 +320,6 @@ mod test {
         let mut cwf = Cwf::new(CwfSignature::new());
         let mut env = Environment::new(&mut cwf);
 
-        // show that True has type Bool
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "_0".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::True),
-                ty: Box::new(Ty::Bool),
-            },
-        });
-
-        // Now it should hold that `Eq True True` is well-defined, and that its the type of
         // `Refl True`
         env.add_definition(&mut cwf, &ast::Def{
             name: "r".to_string(),
@@ -359,17 +336,6 @@ mod test {
         let mut cwf = Cwf::new(CwfSignature::new());
         let mut env = Environment::new(&mut cwf);
 
-        // show that True has type Bool
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "_0".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::True),
-                ty: Box::new(Ty::Bool),
-            },
-        });
-
-        // Now it should hold that `Eq True True` is well-defined, and that its the type of
         // `Refl True`
         env.add_definition(&mut cwf, &ast::Def{
             name: "r".to_string(),
@@ -398,7 +364,6 @@ mod test {
 
         let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
 
-        // show that True has type Bool
         env.add_definition(&mut cwf, &ast::Def{
             name: "r".to_string(),
             args: vec![("x".to_string(), Ty::Bool)],

@@ -170,21 +170,6 @@ pub fn close_cwf(cwf: &mut Cwf) {
     close_model(CWF_AXIOMS.as_slice(), cwf);
 }
 
-pub fn eval_op(cwf: &Cwf, op: CwfRelation, args: &[Element]) -> Option<Element> {
-    assert_eq!(op.kind(), RelationKind::Operation);
-
-    let dom_len: usize = op.arity().len() - 1;
-    let op_dom: &[CwfSort] = &op.arity()[.. dom_len];
-
-    assert!(op_dom.iter().cloned().eq(args.iter().map(|arg| cwf.element_sort(*arg))));
-    
-    cwf.rows(op).filter(|row| &row[.. dom_len] == args).next().map(|row| *row.last().unwrap())
-}
-
-pub fn tm_ty(cwf: &Cwf, tm: Element) -> Option<Element> {
-    eval_op(cwf, CwfRelation::TmTy, &[tm])
-}
-
 pub fn adjoin_op(cwf: &mut Cwf, op: CwfRelation, args: Vec<Element>) -> Element {
     assert_eq!(op.kind(), RelationKind::Operation);
 
@@ -200,6 +185,11 @@ pub fn adjoin_op(cwf: &mut Cwf, op: CwfRelation, args: Vec<Element>) -> Element 
     cwf.adjoin_rows(op, once(row));
     result
 }
+
+pub fn tm_ty(cwf: &mut Cwf, tm: Element) -> Element {
+    adjoin_op(cwf, CwfRelation::TmTy, vec![tm])
+}
+
 
 pub fn els_are_equal(cwf: &mut Cwf, lhs: Element, rhs: Element) -> bool {
     assert_eq!(cwf.element_sort(lhs), cwf.element_sort(rhs));
