@@ -29,6 +29,9 @@ arities!{
         // Var(D) should only be defined if D = G.sigma for (unique) G and sigma
         MorExt: Ctx x Mor x Tm -> Mor,
         // MorExt(D, f, s) should only be defined if D = Dom(f).sigma for some sigma
+        
+        Unit: Ctx -> Ty,
+        UnitTm: Ctx -> Tm,
 
         Bool: Ctx -> Ty,
         True: Ctx -> Tm,
@@ -102,6 +105,17 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
             =>
             g = MorExt(Gsigma, f, s)
         ),
+
+        // context and types of unit constants
+        sequent!(TyCtx(Unit(G)) ~> G),
+        sequent!(TmTy(UnitTm(G)) ~> Unit(G)),
+
+        // substitution stability of unit constants
+        sequent!(SubstTy(f, Unit(Dom(f))) ~> Unit(Cod(f))),
+        sequent!(SubstTm(f, UnitTm(Dom(f))) ~> UnitTm(Cod(f))),
+
+        // uniquness of UniqueEl
+        sequent!(TmTy(t) = Unit(G) => t = UnitTm(G)),
 
         // context and types of bool constants
         sequent!(TyCtx(Bool(G)) ~> G),

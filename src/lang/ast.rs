@@ -10,6 +10,7 @@ pub enum Tm {
     Typed { tm: Box<Tm>, ty: Box<Ty> },
     App { fun: String, args: Vec<Tm> },
     Let { body: Vec<Def>, result: Box<Tm> },
+    UnitTm,
     True,
     False,
     Neg(Box<Tm>),
@@ -26,6 +27,7 @@ pub enum Tm {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
+    Unit,
     Bool,
     Eq(Box<Tm>, Box<Tm>),
 }

@@ -47,6 +47,9 @@ impl Environment {
     }
     fn add_type(&mut self, cwf: &mut Cwf, ty: &ast::Ty) -> Element {
         match ty {
+            ast::Ty::Unit => {
+                adjoin_op(cwf, CwfRelation::Unit, vec![self.current_ctx()])
+            },
             ast::Ty::Bool => {
                 adjoin_op(cwf, CwfRelation::Bool, vec![self.current_ctx()])
             },
@@ -142,6 +145,9 @@ impl Environment {
                 }
                 let result_el = self_.add_term(cwf, result);
                 result_el
+            },
+            ast::Tm::UnitTm => {
+                adjoin_op(cwf, CwfRelation::UnitTm, vec![self.current_ctx()])
             },
             ast::Tm::True => {
                 let true_el = cwf.adjoin_element(CwfSort::Tm);
@@ -263,6 +269,33 @@ mod test {
             name: "r".to_string(),
             args: vec![],
             tm: Tm::Refl(Box::new(Tm::True)),
+        });
+    }
+
+    #[test]
+    fn test_unit_tm_uniqueness() {
+        let mut cwf = Cwf::new(CwfSignature::new());
+        let mut env = Environment::new(&mut cwf);
+
+        let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
+        let yvar = Box::new(Tm::App{fun: "y".to_string(), args: vec![]});
+
+        let typed_xvar = Box::new(Tm::Typed{
+            tm: xvar.clone(),
+            ty: Box::new(Ty::Unit),
+        });
+
+        // `r (x: Unit, y: Unit): x = y`
+        env.add_definition(&mut cwf, &ast::Def{
+            name: "r".to_string(),
+            args: vec![("x".to_string(), Ty::Unit), ("y".to_string(), Ty::Unit)],
+            tm: Tm::Typed{
+                tm: Box::new(Tm::Refl(Box::new(Tm::Typed{
+                    tm: Box::new(Tm::UnitTm),
+                    ty: Box::new(Ty::Unit),
+                }))),
+                ty: Box::new(Ty::Eq(typed_xvar.clone(), yvar.clone())),
+            },
         });
     }
 
