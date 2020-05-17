@@ -108,7 +108,7 @@ impl Environment {
                 let wkn_shared_to_cur =
                     cur_unshared.iter().
                     fold(last_shared_identity, |prev, ext| {
-                        let wkn = adjoin_op(cwf, CwfRelation::Comp, vec![*ext]);
+                        let wkn = adjoin_op(cwf, CwfRelation::Wkn, vec![*ext]);
                         adjoin_op(cwf, CwfRelation::Comp, vec![wkn, prev])
                     });
 
