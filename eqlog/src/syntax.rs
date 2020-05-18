@@ -672,18 +672,18 @@ where
                 );
             },
             Atom::Equal(lhs, rhs) => {
-                let lhs_index = added_terms.get(lhs);
-                let rhs_index = added_terms.get(rhs);
+                let lhs_index = added_terms.get(lhs).cloned();
+                let rhs_index = added_terms.get(rhs).cloned();
                 match (lhs_index, rhs_index) {
                     (Some((i, s)), Some((j, t))) => {
                         assert!(
-                            *s == *t,
+                            s == t,
                             "Sort mismatch: {} has sort {} but {} has sort {}",
                             lhs, s, rhs, t,
                         );
-                        presentation.equalities.push((*i, *j)); },
-                    (Some((i, s)), _) => { added_terms.insert(rhs, (*i, *s)); },
-                    (_, Some((j, t))) => { added_terms.insert(lhs, (*j, *t)); },
+                        presentation.equalities.push((i, j)); },
+                    (Some((i, s)), _) => { added_terms.insert(rhs, (i, s)); },
+                    (_, Some((j, t))) => { added_terms.insert(lhs, (j, t)); },
                     _ => panic!("Neither {} nor {} appear in operation or predicate", lhs, rhs),
                 }
             }
