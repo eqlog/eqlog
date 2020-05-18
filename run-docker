@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Examples:
+# ./run-docker cargo build
+# ./run-docker bash
+
+repo_root="$(dirname "$(realpath $0)")"
+
+docker run \
+	--interactive \
+	--tty \
+	--user $(id --user):$(id --group) \
+	--volume "$repo_root":/exp-epa \
+	--workdir "/exp-epa" \
+	--env "CARGO_HOME=/exp-epa/.cargo" \
+	rust:latest \
+	$@
