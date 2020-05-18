@@ -242,7 +242,6 @@ impl Environment {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ast::*;
     use parser::*;
 
     fn check_defs(text: &str) {
