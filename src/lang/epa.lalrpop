@@ -68,7 +68,7 @@ ArgTm: Tm = {
 };
 ElimTm: Tm = {
     "elim" <discriminee: Tm>
-    "into" "(" <into_var: Id> ":" "bool" ")" ":" <into_ty: Ty>
+    "into" "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
     "|" "true" "=>" <true_case: Tm>
     "|" "false" "=>" <false_case: Tm>
     "end" => Tm::BoolElim { discriminee: Box::new(discriminee),
@@ -77,7 +77,7 @@ ElimTm: Tm = {
                             true_case: Box::new(true_case),
                             false_case: Box::new(false_case) },
     "elim" <discriminee: Tm>
-    "into" "(" <into_var: Id> ":" "bool" ")" ":" <into_ty: Ty>
+    "into" "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
     "|" "false" "=>" <false_case: Tm>
     "|" "true" "=>" <true_case: Tm>
     "end" => Tm::BoolElim { discriminee: Box::new(discriminee),

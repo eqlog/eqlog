@@ -326,7 +326,7 @@ def r : negtrue = false :=
     fn bool_elim_neg() {
         check_defs("
 def negtrue : Bool :=
-  elim true into (x : bool) : Bool
+  elim true into (x : Bool) : Bool
   | true => false
   | false => true
   end.
@@ -349,7 +349,7 @@ def foo (x : Bool) : Bool :=
     fn neg_involutive() {
         check_defs("
 def r (x : Bool) : x = neg (neg x) :=
-  elim x into (y : bool) : y = neg (neg y)
+  elim x into (y : Bool) : y = neg (neg y)
   | true => let _0 : false = neg true := refl false in
             (refl true : true = neg (neg true))
   | false => let _1 : true = neg false := refl true in
