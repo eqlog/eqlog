@@ -1,14 +1,17 @@
 [package]
-name = "qt"
+name = "exp-epa"
 version = "0.1.0"
-authors = ["Jakob Botsch Nielsen <Jakob.botsch.nielsen@gmail.com>"]
+authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>", "Jakob Botsch Nielsen <Jakob.botsch.nielsen@gmail.com>"]
 edition = "2018"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 eqlog = { path = "eqlog" }
+lalrpop-util = "0.19.0"
 lazy_static = "1.4.0"
+regex = "1"
 
 [build-dependencies]
-lalrpop = "0.17.2"
+lalrpop = { version = "0.19.0", features = [ "lexer" ] }

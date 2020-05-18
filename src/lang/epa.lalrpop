@@ -1,0 +1,102 @@
+use std::str::FromStr;
+use crate::lang::ast::{Def, Tm, Ty};
+
+grammar;
+
+pub Unit: Vec<Def> =
+    Def* => <>;
+
+pub Def: Def =
+    "def" <DefBody> "." => <>;
+
+pub DefBody: Def =
+    <name: Id> <args: Args> ":" <ty: Ty> ":=" <tm: Tm> => Def { <> };
+
+pub Args: Vec<(String, Ty)> =
+    ("(" <Id+> ":" <Ty> ")")*
+    => <>.into_iter()
+         .flat_map(
+             |(names, ty)|
+             names.into_iter()
+                  .map(move |name| (name, ty.clone())))
+         .collect();
+
+pub Ty: Ty = {
+    <left: Tm2> "=" <right: Tm> =>
+        Ty::Eq(Box::new(left), Box::new(right)),
+    Ty2
+};
+
+pub Ty2: Ty = {
+    "Unit" => Ty::Unit,
+    "Bool" => Ty::Bool,
+    "(" <Ty> ")",
+};
+
+pub Tm: Tm = {
+    "let" <body: DefBody> "in" <result: Tm> =>
+        Tm::Let { body: vec![body],
+                  result: Box::new(result) },
+    Tm2
+};
+Tm2: Tm = {
+    <left: Tm2> "+" <right: Tm3> =>
+        Tm::App { fun: "plus".to_string(), args: vec![left, right] },
+    Tm3
+};
+Tm3: Tm = {
+    "unit" => Tm::UnitTm,
+    "true" => Tm::True,
+    "false" => Tm::False,
+    "neg" <ArgTm> => Tm::Neg(Box::new(<>)),
+    "refl" <ArgTm> => Tm::Refl(Box::new(<>)),
+    <fun: Id> <args: ArgTm*> => Tm::App { <> },
+    <NumTm>,
+    <ElimTm>,
+    <CastTm>,
+    "(" <Tm> ")",
+};
+ArgTm: Tm = {
+    "unit" => Tm::UnitTm,
+    "true" => Tm::True,
+    "false" => Tm::False,
+    <Id> => Tm::App { fun: <>, args: vec![] },
+    <NumTm>,
+    <ElimTm>,
+    <CastTm>,
+    "(" <Tm> ")"
+};
+ElimTm: Tm = {
+    "elim" <discriminee: Tm>
+    "into" "(" <into_var: Id> ":" "bool" ")" ":" <into_ty: Ty>
+    "|" "true" "=>" <true_case: Tm>
+    "|" "false" "=>" <false_case: Tm>
+    "end" => Tm::BoolElim { discriminee: Box::new(discriminee),
+                            into_var: into_var,
+                            into_ty: Box::new(into_ty),
+                            true_case: Box::new(true_case),
+                            false_case: Box::new(false_case) },
+    "elim" <discriminee: Tm>
+    "into" "(" <into_var: Id> ":" "bool" ")" ":" <into_ty: Ty>
+    "|" "false" "=>" <false_case: Tm>
+    "|" "true" "=>" <true_case: Tm>
+    "end" => Tm::BoolElim { discriminee: Box::new(discriminee),
+                            into_var: into_var,
+                            into_ty: Box::new(into_ty),
+                            true_case: Box::new(true_case),
+                            false_case: Box::new(false_case) }
+};
+NumTm: Tm = {
+    <Nat> =>
+        (0..<>).into_iter()
+              .fold(
+                  Tm::App { fun: "O".to_string(), args: vec![] },
+                  |cur, _| Tm::App { fun: "S".to_string(), args: vec![cur] })
+};
+CastTm: Tm = {
+    "(" <tm: Tm> ":" <ty: Ty> ")" =>
+        Tm::Typed { tm: Box::new(tm), ty: Box::new(ty) }
+}
+
+pub Id: String = r"[A-Za-z_][A-Za-z0-9'_]*" => <>.to_string();
+pub Nat: u32 = r"[0-9]+" => u32::from_str(<>).unwrap();

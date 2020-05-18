@@ -2,6 +2,7 @@
 pub struct Def {
     pub name: String,
     pub args: Vec<(String, Ty)>,
+    pub ty: Ty,
     pub tm: Tm,
 }
 

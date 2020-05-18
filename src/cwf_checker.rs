@@ -3,6 +3,7 @@ use crate::cwf::*;
 use std::collections::HashMap;
 use std::iter::once;
 use crate::lang::ast;
+use crate::lang::parser;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Environment {
@@ -25,7 +26,14 @@ impl Environment {
         for (arg_name, arg_ty) in &def.args {
             self_.extend_ctx(cwf, arg_name.clone(), arg_ty);
         }
+        let ty_el = self_.add_type(cwf, &def.ty);
         let def_el = self_.add_term(cwf, &def.tm);
+        let def_el_ty = tm_ty(cwf, def_el);
+        close_cwf(cwf);
+        assert!(
+            els_are_equal(cwf, ty_el, def_el_ty),
+            "Def body `{:?}` does not have type `{:?}`", def.tm, def.ty
+        );
         self.defs.insert(def.name.clone(), (self_.current_extension, def_el));
     }
     fn extend_ctx(&mut self, cwf: &mut Cwf, var_name: String, ty: &ast::Ty) {
@@ -235,360 +243,118 @@ impl Environment {
 mod test {
     use super::*;
     use ast::*;
+    use parser::*;
+
+    fn check_defs(text: &str) {
+        let unit =
+            match UnitParser::new().parse(text) {
+                Ok(result) => result,
+                Err(err) => panic!("{}", err)
+            };
+        let mut cwf = Cwf::new(CwfSignature::new());
+        let mut env = Environment::new(&mut cwf);
+        for def in &unit {
+            env.add_definition(&mut cwf, &def)
+        }
+    }
 
     #[test]
     fn test_bool_identity() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "id".to_string(),
-            args: vec![("x".to_string(), Ty::Bool)],
-            tm: Tm::App{fun: "x".to_string(), args: vec![]},
-        });
+        check_defs("def id (x : Bool) : Bool := x.")
     }
 
     #[test]
     fn test_bool_identity_typed() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "id".to_string(),
-            args: vec![("x".to_string(), Ty::Bool)],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::App{fun: "x".to_string(), args: vec![]}),
-                ty: Box::new(Ty::Bool),
-            },
-        });
+        check_defs("def id (x : Bool) : Bool := (x : Bool).")
     }
 
     #[test]
     fn test_true_refl() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![],
-            tm: Tm::Refl(Box::new(Tm::True)),
-        });
+        check_defs("def r : true = true := refl true.")
     }
 
     #[test]
     fn test_unit_tm_uniqueness() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-
-        let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
-        let yvar = Box::new(Tm::App{fun: "y".to_string(), args: vec![]});
-
-        let typed_xvar = Box::new(Tm::Typed{
-            tm: xvar.clone(),
-            ty: Box::new(Ty::Unit),
-        });
-
-        // `r (x: Unit, y: Unit): x = y`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![("x".to_string(), Ty::Unit), ("y".to_string(), Ty::Unit)],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::Typed{
-                    tm: Box::new(Tm::UnitTm),
-                    ty: Box::new(Ty::Unit),
-                }))),
-                ty: Box::new(Ty::Eq(typed_xvar.clone(), yvar.clone())),
-            },
-        });
+        check_defs("
+def r (x y : Unit) : (x : Unit) = y :=
+    refl unit.")
     }
 
     #[test]
     fn test_true_refl_typed() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-
-        // `Refl True`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
-                ty: Box::new(Ty::Eq(Box::new(Tm::True), Box::new(Tm::True))),
-            },
-        });
+        check_defs("def r : true = true := (refl true : true = true).")
     }
 
     #[test] #[should_panic]
     fn test_refl_ill_typed() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
+        check_defs("
+def r : true = true :=
+  (refl true : true = true).
 
-        // `Refl True`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
-                ty: Box::new(Ty::Eq(Box::new(Tm::True), Box::new(Tm::True))),
-            },
-        });
-
-        // But this is false: the type of `Refl True` is not `Bool`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r'".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
-                ty: Box::new(Ty::Bool),
-            },
-        });
+def r' : Bool :=
+  (refl true : Bool).")
     }
 
     #[test]
     fn test_refl_of_var() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-
-        let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
-
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![("x".to_string(), Ty::Bool)],
-            tm: Tm::Let{
-                body: vec![
-                    // assert that `x: Bool`
-                    Def{
-                        name: "_0".to_string(),
-                        args: vec![],
-                        tm: Tm::Typed{
-                            tm: xvar.clone(),
-                            ty: Box::new(Ty::Bool),
-                        },
-                    },
-                ],
-                result: Box::new(Tm::Typed{
-                    tm: Box::new(Tm::Refl(xvar.clone())),
-                    ty: Box::new(Ty::Eq(xvar.clone(), xvar.clone())),
-                }),
-            }
-        });
+        check_defs("
+def r (x : Bool) : x = x :=
+  let _0 : Bool := x in
+  refl x.")
     }
 
     #[test]
     fn test_subst_of_refl_of_var() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
+        check_defs("
+def r (x : Bool) : x = x :=
+  let _0 : Bool := x in
+  refl x.
 
-        let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
-
-        // show that True has type Bool
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![("x".to_string(), Ty::Bool)],
-            tm: Tm::Let{
-                body: vec![
-                    // assert that `x: Bool`
-                    Def{
-                        name: "_0".to_string(),
-                        args: vec![],
-                        tm: Tm::Typed{
-                            tm: xvar.clone(),
-                            ty: Box::new(Ty::Bool),
-                        },
-                    },
-                ],
-                result: Box::new(Tm::Typed{
-                    tm: Box::new(Tm::Refl(xvar.clone())),
-                    ty: Box::new(Ty::Eq(xvar.clone(), xvar.clone())),
-                }),
-            }
-        });
-
-        // substitute `True` for `x` in `r`; this should have type `Eq True True`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "rtrue".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::App{fun: "r".to_string(), args: vec![Tm::True]}),
-                ty: Box::new(Ty::Eq(Box::new(Tm::True), Box::new(Tm::True))),
-            },
-        });
+def rtrue : true = true :=
+  r true.")
     }
 
     #[test]
     fn test_neg_of_true() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-
-        // show that `Neg True: Bool`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "negtrue".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Neg(Box::new(Tm::True))),
-                ty: Box::new(Ty::Bool),
-            },
-        });
-
-        let negtrue_tm = Box::new(Tm::App{fun: "negtrue".to_string(), args: vec![]});
-
-        // `refl False: Eq (Neg True) False`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::False))),
-                ty: Box::new(Ty::Eq(negtrue_tm, Box::new(Tm::False))),
-            },
-        });
+        check_defs("
+def negtrue : Bool :=
+  neg true.
+def r : negtrue = false :=
+  refl false.")
     }
 
     #[test]
     fn bool_elim_neg() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
+        check_defs("
+def negtrue : Bool :=
+  elim true into (x : bool) : Bool
+  | true => false
+  | false => true
+  end.
 
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "negtrue".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::BoolElim{
-                    discriminee: Box::new(Tm::True),
-                    into_var: "x".to_string(),
-                    into_ty: Box::new(Ty::Bool),
-                    true_case: Box::new(Tm::False),
-                    false_case: Box::new(Tm::True),
-                }),
-                ty: Box::new(Ty::Bool),
-            },
-        });
-
-        let negtrue_tm = Box::new(Tm::App{fun: "negtrue".to_string(), args: vec![]});
-
-        // `refl False: Eq (Neg True) False`
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::False))),
-                ty: Box::new(Ty::Eq(negtrue_tm, Box::new(Tm::False))),
-            },
-        });
+def r : negtrue = false :=
+  refl false.")
     }
 
     #[test]
     fn neg_neg_substitution() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-
-        env.extend_ctx(&mut cwf, "x".to_string(), &Ty::Bool);
-
-        let yvar = Box::new(Tm::App{fun: "y".to_string(), args: vec![]});
-
-        // b (y : Bool) = Neg (Neg y)
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "b".to_string(),
-            args: vec![("y".to_string(), Ty::Bool)],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Neg(Box::new(Tm::Neg(yvar)))),
-                ty: Box::new(Ty::Bool),
-            },
-        });
-        
-        // r : Eq False (Neg True) = Refl False
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::False))),
-                ty: Box::new(Ty::Eq(
-                    Box::new(Tm::False),
-                    Box::new(Tm::Neg(Box::new(Tm::True))),
-                )),
-            },
-        });
-
-        // s : Eq True (b True) = Refl True
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "s".to_string(),
-            args: vec![],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
-                ty: Box::new(Ty::Eq(
-                    Box::new(Tm::True),
-                    Box::new(Tm::App{fun: "b".to_string(), args: vec![Tm::True]}),
-                )),
-            },
-        });
+        check_defs("
+def foo (x : Bool) : Bool :=
+  let b (y : Bool) : Bool := neg (neg y) in
+  let r : false = neg true := refl false in
+  let s : true = b true := refl true in
+  true.")
     }
 
     #[test]
     fn neg_involutive() {
-        let mut cwf = Cwf::new(CwfSignature::new());
-        let mut env = Environment::new(&mut cwf);
-
-        let xvar = Box::new(Tm::App{fun: "x".to_string(), args: vec![]});
-        let yvar = Box::new(Tm::App{fun: "y".to_string(), args: vec![]});
-
-        env.add_definition(&mut cwf, &ast::Def{
-            name: "r".to_string(),
-            args: vec![("x".to_string(), Ty::Bool)],
-            tm: Tm::Typed{
-                tm: Box::new(Tm::BoolElim{
-                    discriminee: xvar.clone(),
-                    into_var: "y".to_string(),
-                    // into_ty = Eq y (Neg (Neg y))
-                    into_ty: Box::new(Ty::Eq(
-                        yvar.clone(),
-                        Box::new(Tm::Neg(Box::new(Tm::Neg(yvar.clone())))),
-                    )),
-                    true_case: Box::new(Tm::Let{
-                        // `Refl False : Eq False (Neg True)`
-                        body: vec![Def{
-                            name: "_0".to_string(),
-                            args: vec![],
-                            tm: Tm::Typed{
-                                tm: Box::new(Tm::Refl(Box::new(Tm::False))),
-                                ty: Box::new(Ty::Eq(
-                                    Box::new(Tm::False),
-                                    Box::new(Tm::Neg(Box::new(Tm::True))),
-                                )),
-                            },
-                        }],
-                        // ... hence `Refl True : Eq True (Neg (Neg True))`
-                        result: Box::new(Tm::Typed{
-                            tm: Box::new(Tm::Refl(Box::new(Tm::True))),
-                            ty: Box::new(Ty::Eq(
-                                Box::new(Tm::True),
-                                Box::new(Tm::Neg(Box::new(Tm::Neg(Box::new(Tm::True))))),
-                            )),
-                        }),
-                    }),
-                    false_case: Box::new(Tm::Let{
-                        // `Refl True : Eq True (Neg False)`
-                        body: vec![Def{
-                            name: "_1".to_string(),
-                            args: vec![],
-                            tm: Tm::Typed{
-                                tm: Box::new(Tm::Refl(Box::new(Tm::True))),
-                                ty: Box::new(Ty::Eq(
-                                    Box::new(Tm::True),
-                                    Box::new(Tm::Neg(Box::new(Tm::False))),
-                                )),
-                            },
-                        }],
-                        // ... hence `Refl False : Eq False (Neg (Neg False))`
-                        result: Box::new(Tm::Typed{
-                            tm: Box::new(Tm::Refl(Box::new(Tm::False))),
-                            ty: Box::new(Ty::Eq(
-                                Box::new(Tm::False),
-                                Box::new(Tm::Neg(Box::new(Tm::Neg(Box::new(Tm::False))))),
-                            )),
-                        }),
-                    }),
-                }),
-                ty: Box::new(Ty::Eq(
-                    xvar.clone(),
-                    Box::new(Tm::Neg(Box::new(Tm::Neg(xvar.clone())))),
-                )),
-            },
-        });
+        check_defs("
+def r (x : Bool) : x = neg (neg x) :=
+  elim x into (y : bool) : y = neg (neg y)
+  | true => let _0 : false = neg true := refl false in
+            (refl true : true = neg (neg true))
+  | false => let _1 : true = neg false := refl true in
+             (refl false : false = neg (neg false))
+  end.")
     }
 } 
