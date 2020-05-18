@@ -6,9 +6,6 @@ extern crate eqlog;
 #[macro_use]
 extern crate lazy_static;
 
-mod cwf;
-mod lang;
-mod cwf_checker;
-
-fn main() {
-}
+pub mod cwf;
+pub mod lang;
+pub mod cwf_checker;

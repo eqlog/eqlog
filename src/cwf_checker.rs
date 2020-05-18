@@ -3,16 +3,15 @@ use crate::cwf::*;
 use std::collections::HashMap;
 use std::iter::once;
 use crate::lang::ast;
-use crate::lang::parser;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Environment {
+pub struct Environment {
     defs: HashMap<String, (Vec<Element>, Element)>, // name => (list of contexts, term)
     current_extension: Vec<Element>, // list of contexts
 }
 
 impl Environment {
-    fn new(cwf: &mut Cwf) -> Self {
+    pub fn new(cwf: &mut Cwf) -> Self {
         Environment {
             defs: HashMap::new(),
             current_extension: vec![cwf.adjoin_element(CwfSort::Ctx)],
@@ -21,7 +20,7 @@ impl Environment {
     fn current_ctx(&self) -> Element {
         *self.current_extension.last().unwrap()
     }
-    fn add_definition(&mut self, cwf: &mut Cwf, def: &ast::Def) {
+    pub fn add_definition(&mut self, cwf: &mut Cwf, def: &ast::Def) {
         let mut self_ = self.clone();
         for (arg_name, arg_ty) in &def.args {
             self_.extend_ctx(cwf, arg_name.clone(), arg_ty);
@@ -36,7 +35,7 @@ impl Environment {
         );
         self.defs.insert(def.name.clone(), (self_.current_extension, def_el));
     }
-    fn extend_ctx(&mut self, cwf: &mut Cwf, var_name: String, ty: &ast::Ty) {
+    pub fn extend_ctx(&mut self, cwf: &mut Cwf, var_name: String, ty: &ast::Ty) {
         let ty_el = self.add_type(cwf, ty);
         let ext_ctx_el = cwf.adjoin_element(CwfSort::Ctx);
         cwf.adjoin_rows(
@@ -47,13 +46,13 @@ impl Environment {
             CwfRelation::ExtTy,
             once(vec![ext_ctx_el, ty_el]),
         );
-        let wkn_el = adjoin_op(cwf, CwfRelation::Wkn, vec![ext_ctx_el]);
+        adjoin_op(cwf, CwfRelation::Wkn, vec![ext_ctx_el]); // TODO: why is this needed?
         let var_el = adjoin_op(cwf, CwfRelation::Var, vec![ext_ctx_el]);
 
         self.current_extension.push(ext_ctx_el);
         self.defs.insert(var_name, (self.current_extension.clone(), var_el));
     }
-    fn add_type(&mut self, cwf: &mut Cwf, ty: &ast::Ty) -> Element {
+    pub fn add_type(&mut self, cwf: &mut Cwf, ty: &ast::Ty) -> Element {
         match ty {
             ast::Ty::Unit => {
                 adjoin_op(cwf, CwfRelation::Unit, vec![self.current_ctx()])
@@ -79,7 +78,7 @@ impl Environment {
             },
         }
     }
-    fn add_term(&mut self, cwf: &mut Cwf, tm: &ast::Tm) -> Element {
+    pub fn add_term(&mut self, cwf: &mut Cwf, tm: &ast::Tm) -> Element {
         match tm {
             ast::Tm::Typed{tm, ty} => {
                 let ty_el = self.add_type(cwf, ty);
@@ -241,6 +240,7 @@ impl Environment {
 
 #[cfg(test)]
 mod test {
+    use crate::lang::parser;
     use super::*;
     use parser::*;
 
