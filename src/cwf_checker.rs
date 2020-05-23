@@ -1,4 +1,4 @@
-use eqlog::element::*;
+use crate::eqlog::element::*;
 use crate::cwf::*;
 use std::collections::HashMap;
 use std::iter::once;

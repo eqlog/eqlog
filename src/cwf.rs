@@ -1,8 +1,8 @@
-use eqlog::signature::*;
-use eqlog::syntax::*;
-use eqlog::closure::*;
-use eqlog::model::*;
-use eqlog::element::*;
+use crate::eqlog::signature::*;
+use crate::eqlog::syntax::*;
+use crate::eqlog::closure::*;
+use crate::eqlog::model::*;
+use crate::eqlog::element::*;
 use std::iter::once;
 use std::collections::HashSet;
 use std::convert::TryFrom;
