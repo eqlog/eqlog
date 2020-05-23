@@ -330,13 +330,18 @@ mod test {
     }
 
     #[test]
-    fn test_bool_identity_typed() {
+    fn test_bool_identity_asserted() {
         check_defs("def id (x : Bool) : Bool := (x : Bool).")
     }
 
-    #[test]
-    fn test_true_refl() {
-        check_defs("def r : true = true := refl true.")
+    #[test] #[should_panic]
+    fn test_ill_typed_def() {
+        check_defs("def x : Bool := unit.")
+    }
+
+    #[test] #[should_panic]
+    fn test_failing_assertion() {
+        check_defs("def x : Bool := (True: Unit).")
     }
 
     #[test]
@@ -346,19 +351,13 @@ def r (x y : Unit) : x = y :=
     refl unit.")
     }
 
-    #[test]
-    fn test_true_refl_typed() {
-        check_defs("def r : true = true := (refl true : true = true).")
-    }
-
     #[test] #[should_panic]
     fn test_refl_ill_typed() {
         check_defs("
 def r : true = true :=
   (refl true : true = true).
 
-def r' : Bool :=
-  (refl true : Bool).")
+def r' : Bool := refl true.")
     }
 
     #[test]
