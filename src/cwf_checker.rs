@@ -123,6 +123,76 @@ impl Environment {
         self.defs.insert(def.name.clone(), (def_extension, def_tm));
     }
 
+    pub fn add_substitution(
+        &mut self,
+        cwf: &mut Cwf,
+        should_check: EqChecking,
+        dom_extension: &[Element],
+        // args: &[Element],
+        args: &[ast::Tm],
+    ) -> Element {
+
+        let shared_context_len: usize =
+            dom_extension.iter().zip(&self.current_extension).
+            take_while(|(lhs, rhs)| lhs == rhs).
+            count();
+
+        let shared_extension = &self.current_extension[.. shared_context_len];
+        let last_shared_ctx: Element = *shared_extension.last().unwrap();
+
+        let cur_unshared = &self.current_extension[shared_context_len ..];
+        let dom_unshared = &dom_extension[shared_context_len ..];
+
+        assert!(
+            dom_unshared.len() == args.len(),
+            "Need `{}` arguments but `{}` are provided",
+            dom_unshared.len(), args.len()
+        );
+
+        let last_shared_identity: Element =
+            adjoin_op(cwf, CwfRelation::Id, vec![last_shared_ctx]);
+        let wkn_shared_to_cur =
+            cur_unshared.iter().
+            fold(last_shared_identity, |prev, ext| {
+                let wkn = adjoin_op(cwf, CwfRelation::Wkn, vec![*ext]);
+                adjoin_op(cwf, CwfRelation::Comp, vec![wkn, prev])
+            });
+
+        let subst =
+            dom_unshared.to_vec().iter(). // TODO: can we get rid of to_vec somehow?
+            zip(args.iter()).
+            fold(wkn_shared_to_cur, |prev_subst, (next_ext, next_arg)| {
+                let required_ty = adjoin_op(cwf, CwfRelation::ExtTy, vec![*next_ext]);
+                let required_ty_subst =
+                    adjoin_op(cwf, CwfRelation::SubstTy, vec![prev_subst, required_ty]);
+                let arg_el = self.add_term(cwf, should_check, &next_arg);
+                let arg_ty_el = tm_ty(cwf, arg_el);
+                if should_check == EqChecking::Yes {
+                    close_cwf(cwf);
+                    assert!(
+                        els_are_equal(cwf, required_ty_subst, arg_ty_el),
+                        "The type of term `{:?}` does not equal the type required",
+                        next_arg
+                    );
+                }
+                adjoin_op(
+                    cwf,
+                    CwfRelation::MorExt, vec![*next_ext, prev_subst, arg_el],
+                )
+            });
+
+        adjoin_post_compositions(
+            cwf,
+            *dom_extension.last().unwrap(),
+            once(MorphismWithSignature{
+                morph: subst,
+                dom: *dom_extension.last().unwrap(),
+                cod: self.current_ctx(),
+            })
+        );
+        
+        subst
+    }
 
     pub fn add_type(&mut self, cwf: &mut Cwf, should_check: EqChecking, ty: &ast::Ty) -> Element {
         match ty {
@@ -173,56 +243,22 @@ impl Environment {
                 let def =
                     self.defs.get(fun).
                     unwrap_or_else(|| panic!("`{}` is undefined", fun));
-                let def_exts = &def.0;
-                let def_el = def.1;
+                let def_extension: Vec<Element> = def.0.clone();
+                let def_el: Element = def.1;
 
-                let shared_context_len: usize =
-                    def_exts.iter().zip(&self.current_extension).
-                    take_while(|(lhs, rhs)| lhs == rhs).
-                    count();
-                let shared_extension = &self.current_extension[.. shared_context_len];
-                let last_shared_ctx: Element = *shared_extension.last().unwrap();
-                let cur_unshared = &self.current_extension[shared_context_len ..];
-                let def_unshared = &def_exts[shared_context_len ..];
+                let arg_els: Vec<Element> =
+                    args.iter()
+                    .map(|arg| self.add_term(cwf, should_check, arg))
+                    .collect();
 
-                let last_shared_identity: Element =
-                    adjoin_op(cwf, CwfRelation::Id, vec![last_shared_ctx]);
-                assert!(
-                    def_unshared.len() == args.len(),
-                    "Function `{}` takes `{}` arguments, `{}` were provided",
-                    fun, def_unshared.len(), args.len()
+                let subst_el = self.add_substitution(
+                    cwf,
+                    should_check,
+                    &def_extension,
+                    args,
                 );
-                let wkn_shared_to_cur =
-                    cur_unshared.iter().
-                    fold(last_shared_identity, |prev, ext| {
-                        let wkn = adjoin_op(cwf, CwfRelation::Wkn, vec![*ext]);
-                        adjoin_op(cwf, CwfRelation::Comp, vec![wkn, prev])
-                    });
 
-                let subst_def_to_current =
-                    def_unshared.to_vec().iter(). // TODO: can we get rid of to_vec somehow?
-                    zip(args).
-                    fold(wkn_shared_to_cur, |prev_subst, (next_ext, next_arg)| {
-                        let required_ty = adjoin_op(cwf, CwfRelation::ExtTy, vec![*next_ext]);
-                        let required_ty_subst =
-                            adjoin_op(cwf, CwfRelation::SubstTy, vec![prev_subst, required_ty]);
-                        let arg_el = self.add_term(cwf, should_check, next_arg);
-                        let arg_ty_el = tm_ty(cwf, arg_el);
-                        if should_check == EqChecking::Yes {
-                            close_cwf(cwf);
-                            assert!(
-                                els_are_equal(cwf, required_ty_subst, arg_ty_el),
-                                "The type of term `{:?}` does not equal the type required by `{}`",
-                                next_arg, fun,
-                            );
-                        }
-                        adjoin_op(
-                            cwf,
-                            CwfRelation::MorExt, vec![*next_ext, prev_subst, arg_el],
-                        )
-                    });
-
-                adjoin_op(cwf, CwfRelation::SubstTm, vec![subst_def_to_current, def_el])
+                adjoin_op(cwf, CwfRelation::SubstTm, vec![subst_el, def_el])
             },
             ast::Tm::Let{body, result} => {
                 let mut self_with_local_defs = self.clone();
@@ -265,22 +301,22 @@ impl Environment {
                 refl_el
             },
             ast::Tm::BoolElim{discriminee, into_var, into_ty, true_case, false_case} => {
-                let discriminee_el = self.add_term(cwf, should_check, discriminee);
-                let discriminee_ty_el = tm_ty(cwf, discriminee_el);
-                let bool_el = adjoin_op(cwf, CwfRelation::Bool, vec![self.current_ctx()]);
-                if should_check == EqChecking::Yes {
-                    close_cwf(cwf);
-                    assert!(
-                        els_are_equal(cwf, discriminee_ty_el, bool_el),
-                        "Discriminee {:?} must have type Bool", discriminee
-                    );
-                }
+                // let discriminee_el = self.add_term(cwf, should_check, discriminee);
+                // let discriminee_ty_el = tm_ty(cwf, discriminee_el);
+                // let bool_el = adjoin_op(cwf, CwfRelation::Bool, vec![self.current_ctx()]);
+                // if should_check == EqChecking::Yes {
+                //     close_cwf(cwf);
+                //     assert!(
+                //         els_are_equal(cwf, discriminee_ty_el, bool_el),
+                //         "Discriminee {:?} must have type Bool", discriminee
+                //     );
+                // }
 
-                let (into_ty_el, ext_ctx) = self.clone().with_args(
+                let (into_ty_el, into_ty_extension) = self.clone().with_args(
                     cwf, should_check, &[(into_var.clone(), ast::Ty::Bool)],
                     |mut extended_self, cwf, should_check| {
                         let into_ty_el = extended_self.add_type(cwf, should_check, into_ty);
-                        (into_ty_el, extended_self.current_ctx())
+                        (into_ty_el, extended_self.current_extension)
                     });
 
                 let true_case_el = self.add_term(cwf, should_check, true_case);
@@ -294,8 +330,18 @@ impl Environment {
                 let true_el = adjoin_op(cwf, CwfRelation::True, vec![self.current_ctx()]);
                 let false_el = adjoin_op(cwf, CwfRelation::False, vec![self.current_ctx()]);
 
-                let subst_true_el = adjoin_op(cwf, CwfRelation::MorExt, vec![ext_ctx, id_el, true_el]);
-                let subst_false_el = adjoin_op(cwf, CwfRelation::MorExt, vec![ext_ctx, id_el, false_el]);
+                let subst_true_el = self.add_substitution(
+                    cwf,
+                    should_check,
+                    &into_ty_extension,
+                    &[ast::Tm::True],
+                );
+                let subst_false_el = self.add_substitution(
+                    cwf,
+                    should_check,
+                    &into_ty_extension,
+                    &[ast::Tm::False],
+                );
 
                 let into_ty_true_el = adjoin_op(cwf, CwfRelation::SubstTy, vec![subst_true_el, into_ty_el]);
                 let into_ty_false_el = adjoin_op(cwf, CwfRelation::SubstTy, vec![subst_false_el, into_ty_el]);
@@ -314,7 +360,12 @@ impl Environment {
                 }
 
                 let elim_el = adjoin_op(cwf, CwfRelation::BoolElim, vec![into_ty_el, true_case_el, false_case_el]);
-                let subst_discriminee_el = adjoin_op(cwf, CwfRelation::MorExt, vec![ext_ctx, id_el, discriminee_el]);
+                let subst_discriminee_el = self.add_substitution(
+                    cwf,
+                    should_check,
+                    &into_ty_extension,
+                    &[*discriminee.clone()],
+                );
 
                 adjoin_op(cwf, CwfRelation::SubstTm, vec![subst_discriminee_el, elim_el])
             },
@@ -402,7 +453,7 @@ def r : negtrue = false :=
     }
 
     #[test]
-    fn bool_elim_neg() {
+    fn bool_elim_neg_true() {
         check_defs("
 def negtrue : Bool :=
   elim true into (x : Bool) : Bool
@@ -434,5 +485,18 @@ def r (x : Bool) : x = neg (neg x) :=
   | false => let _1 : true = neg false := refl true in
              (refl false : false = neg (neg false))
   end.")
+    }
+
+    #[test]
+    fn bool_elim_neg() {
+        check_defs("
+def neg_ (x : Bool): Bool :=
+  elim x into (y : Bool) : Bool
+  | true => false
+  | false => true
+  end.
+  
+def neg_true : neg_ true = false := refl false.  
+  ");
     }
 } 

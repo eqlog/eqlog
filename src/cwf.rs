@@ -4,6 +4,8 @@ use eqlog::closure::*;
 use eqlog::model::*;
 use eqlog::element::*;
 use std::iter::once;
+use std::collections::HashSet;
+use std::convert::TryFrom;
 
 arities!{
     pub enum CwfSort {Ctx, Mor, Ty, Tm},
@@ -29,6 +31,8 @@ arities!{
         // Var(D) should only be defined if D = G.sigma for (unique) G and sigma
         MorExt: Ctx x Mor x Tm -> Mor,
         // MorExt(D, f, s) should only be defined if D = Dom(f).sigma for some sigma
+        
+        IterExtCtx: Ctx x Ctx, // the transitive closure of ExtCtx
         
         Unit: Ctx -> Ty,
         UnitTm: Ctx -> Tm,
@@ -105,6 +109,9 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
             =>
             g = MorExt(Gsigma, f, s)
         ),
+
+        sequent!(ExtCtx(G, Gsigma) => IterExtCtx(G, Gsigma)),
+        sequent!(IterExtCtx(G, D) & IterExtCtx(D, E) => IterExtCtx(G, E)),
 
         // context and types of unit constants
         sequent!(TyCtx(Unit(G)) ~> G),
@@ -187,6 +194,11 @@ pub fn close_cwf(cwf: &mut Cwf) {
     close_model(CWF_AXIOMS.as_slice(), cwf);
 }
 
+pub fn els_are_equal(cwf: &mut Cwf, lhs: Element, rhs: Element) -> bool {
+    assert_eq!(cwf.element_sort(lhs), cwf.element_sort(rhs));
+    cwf.representative(lhs) == cwf.representative(rhs)
+}
+
 pub fn adjoin_op(cwf: &mut Cwf, op: CwfRelation, args: Vec<Element>) -> Element {
     assert_eq!(op.kind(), RelationKind::Operation);
 
@@ -207,8 +219,81 @@ pub fn tm_ty(cwf: &mut Cwf, tm: Element) -> Element {
     adjoin_op(cwf, CwfRelation::TmTy, vec![tm])
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct MorphismWithSignature {
+    pub morph: Element,
+    pub dom: Element,
+    pub cod: Element,
+}
 
-pub fn els_are_equal(cwf: &mut Cwf, lhs: Element, rhs: Element) -> bool {
-    assert_eq!(cwf.element_sort(lhs), cwf.element_sort(rhs));
-    cwf.representative(lhs) == cwf.representative(rhs)
+fn adjoin_post_compositions_step(
+    cwf: &mut Cwf,
+    dom_root_ctx: Element,
+    after_morphisms: impl IntoIterator<Item = MorphismWithSignature>,
+) -> Vec<MorphismWithSignature> {
+
+    let new_morphisms: HashSet<MorphismWithSignature> = HashSet::new();
+
+    let before_morphisms: Vec<MorphismWithSignature> =
+        cwf.rows(CwfRelation::Dom)
+        .filter_map(|dom_row| {
+            let [morph, dom] = <[Element; 2]>::try_from(dom_row).unwrap();
+
+            // TODO: checking `dom != dom_root_ctx` shouldn't be neccessary once IterExtCtx can be
+            // made reflexive
+            if dom != dom_root_ctx {
+                // return None if dom is not an iterated ext of dom_root_ctx
+                cwf.rows(CwfRelation::IterExtCtx).find(|r| r == &[dom_root_ctx, dom])?;
+            }
+
+            let cod = cwf.rows(CwfRelation::Cod).find(|r| r[0] == morph)?[1];
+
+            Some(MorphismWithSignature{
+                morph: morph,
+                dom: dom,
+                cod: cod,
+            })
+        })
+        .collect();
+
+    let composition_exists: HashSet<(Element, Element)> =
+        cwf.rows(CwfRelation::Comp)
+        .map(|r| (r[0], r[1]))
+        .collect();
+
+    after_morphisms.into_iter()
+        .zip(before_morphisms)
+        // ... but only matching pairs
+        .filter(|&(after, before)| after.dom == before.cod)
+        // ... for which the composition doesn't exist already
+        .filter(|&(after, before)| !composition_exists.contains(&(after.morph, before.morph)))
+        .map(|(after, before)| {
+            let comp = adjoin_op(cwf, CwfRelation::Comp, vec![after.morph, before.morph]);
+            println!("Added composition");
+            MorphismWithSignature{
+                morph: comp,
+                dom: before.dom,
+                cod: after.cod,
+            }
+        })
+        .collect()
+}
+
+pub fn adjoin_post_compositions(
+    cwf: &mut Cwf,
+    dom_root_ctx: Element,
+    after_morphisms: impl IntoIterator<Item = MorphismWithSignature>,
+) {
+
+    let mut after_morphisms: Vec<MorphismWithSignature> = after_morphisms.into_iter().collect();
+
+    while !after_morphisms.is_empty() {
+        close_cwf(cwf);
+        for m in after_morphisms.iter_mut() {
+            m.morph = cwf.representative(m.morph);
+            m.dom = cwf.representative(m.dom);
+            m.cod = cwf.representative(m.cod);
+        }
+        after_morphisms = adjoin_post_compositions_step(cwf, dom_root_ctx, after_morphisms);
+    }
 }
