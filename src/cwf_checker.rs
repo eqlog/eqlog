@@ -279,7 +279,7 @@ impl Environment {
                 let (into_ty_el, ext_ctx) = self.clone().with_args(
                     cwf, should_check, &[(into_var.clone(), ast::Ty::Bool)],
                     |mut extended_self, cwf, should_check| {
-                        let into_ty_el = extended_self.add_type(cwf, EqChecking::Yes, into_ty);
+                        let into_ty_el = extended_self.add_type(cwf, should_check, into_ty);
                         (into_ty_el, extended_self.current_ctx())
                     });
 
