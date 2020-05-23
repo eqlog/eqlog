@@ -210,13 +210,11 @@ impl Environment {
             ast::Tm::True => {
                 let true_el = cwf.adjoin_element(CwfSort::Tm);
                 cwf.adjoin_rows(CwfRelation::True, once(vec![self.current_ctx(), true_el]));
-                close_cwf(cwf); // TODO: why?
                 true_el
             },
             ast::Tm::False => {
                 let false_el = cwf.adjoin_element(CwfSort::Tm);
                 cwf.adjoin_rows(CwfRelation::False, once(vec![self.current_ctx(), false_el]));
-                close_cwf(cwf); // TODO: why?
                 false_el
             },
             ast::Tm::Neg(arg) => {
@@ -236,7 +234,6 @@ impl Environment {
                 let arg_el = self.add_term(cwf, should_check, arg);
                 let refl_el = cwf.adjoin_element(CwfSort::Tm);
                 cwf.adjoin_rows(CwfRelation::Refl, once(vec![arg_el, refl_el]));
-                close_cwf(cwf); // TODO: why?
                 refl_el
             },
             ast::Tm::BoolElim{discriminee, into_var, into_ty, true_case, false_case} => {
