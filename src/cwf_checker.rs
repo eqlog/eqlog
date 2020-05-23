@@ -42,19 +42,6 @@ impl Environment {
         );
         self.defs.insert(var_name, (self.current_extension.clone(), var_el));
     }
-    pub fn check_definition(mut self, mut cwf: Cwf, def: &ast::Def) {
-        for (arg_name, arg_ty) in &def.args {
-            self.extend_cwf_checked(&mut cwf, arg_name.clone(), arg_ty);
-        }
-        let ty_el = self.add_type(&mut cwf, EqChecking::Yes, &def.ty);
-        let tm_el = self.add_term(&mut cwf, EqChecking::Yes, &def.tm);
-        let def_el_ty = tm_ty(&mut cwf, tm_el);
-        close_cwf(&mut cwf);
-        assert!(
-            els_are_equal(&mut cwf, ty_el, def_el_ty),
-            "Def body `{:?}` does not have type `{:?}`", def.tm, def.ty
-        );
-    }
 
     // Adjoin an new context extension by `ty` and adjoin the appropriate `Var` term
     pub fn extend_ctx_unchecked(&mut self, cwf: &mut Cwf, var_name: String, ty: &ast::Ty) {
@@ -74,25 +61,66 @@ impl Environment {
         self.current_extension.push(ext_ctx_el);
         self.defs.insert(var_name, (self.current_extension.clone(), var_el));
     }
-    pub fn add_definition_unchecked(&mut self, cwf: &mut Cwf, def: &ast::Def) {
-        let mut extended_self = self.clone();
 
-        for (arg_name, arg_ty) in &def.args {
-            extended_self.extend_ctx_unchecked(cwf, arg_name.clone(), arg_ty);
+    fn check_with_args<R>(
+        mut self,
+        mut cwf: Cwf,
+        args: &[(String, ast::Ty)],
+        f: impl Fn (Environment, &mut Cwf, EqChecking) -> R,
+    ) -> R {
+        for (arg_name, arg_ty) in args {
+            self.extend_cwf_checked(&mut cwf, arg_name.to_string(), arg_ty);
         }
-        extended_self.add_type(cwf, EqChecking::No, &def.ty); // TODO: is this necessary?
-        let def_el = extended_self.add_term(cwf, EqChecking::No, &def.tm);
-        tm_ty(cwf, def_el); // TODO: is this necessary?
+        f(self, &mut cwf, EqChecking::Yes)
+    }
 
-        self.defs.insert(def.name.clone(), (extended_self.current_extension, def_el));
+    fn unchecked_with_args<R>(
+        mut self,
+        cwf: &mut Cwf,
+        args: &[(String, ast::Ty)],
+        f: impl Fn (Environment, &mut Cwf, EqChecking) -> R,
+    ) -> R {
+        for (arg_name, arg_ty) in args {
+            self.extend_ctx_unchecked(cwf, arg_name.to_string(), arg_ty);
+        }
+        f(self, cwf, EqChecking::No)
+    }
+
+    // Run a function that checks a piece of syntax that contains free variables. The function
+    // takes a modified Environment and Cwf.
+    fn with_args<R>(
+        self,
+        cwf: &mut Cwf,
+        should_check: EqChecking,
+        args: &[(String, ast::Ty)],
+        f: impl Fn (Environment, &mut Cwf, EqChecking) -> R,
+    ) -> R {
+        if should_check == EqChecking::Yes {
+            self.clone().check_with_args(cwf.clone(), args, &f);
+        }
+
+        self.unchecked_with_args(cwf, args, &f)
     }
 
     pub fn add_definition(&mut self, cwf: &mut Cwf, should_check: EqChecking, def: &ast::Def) {
-        if should_check == EqChecking::Yes {
-            self.clone().check_definition(cwf.clone(), def);
-        }
+        let (def_tm, def_extension) = self.clone().with_args(cwf, should_check, def.args.as_slice(),
+            |mut extended_self, cwf, should_check| {
+                let def_ty = extended_self.add_type(cwf, should_check, &def.ty);
+                let def_tm = extended_self.add_term(cwf, should_check, &def.tm);
+                let def_tm_ty = tm_ty(cwf, def_tm);
 
-        self.add_definition_unchecked(cwf, def);
+                if should_check == EqChecking::Yes {
+                    close_cwf(cwf);
+                    assert!(
+                        els_are_equal(cwf, def_ty, def_tm_ty),
+                        "Def body `{:?}` does not have type `{:?}`", def.tm, def.ty
+                    );
+                }
+
+                (def_tm, extended_self.current_extension)
+            });
+
+        self.defs.insert(def.name.clone(), (def_extension, def_tm));
     }
 
 
@@ -248,23 +276,12 @@ impl Environment {
                     );
                 }
 
-                if should_check == EqChecking::Yes {
-                    let mut extended_self = self.clone();
-                    let mut extended_cwf = cwf.clone();
-                    extended_self.extend_cwf_checked(
-                        &mut extended_cwf,
-                        into_var.clone(),
-                        &ast::Ty::Bool,
-                    );
-                    extended_self.add_type(&mut extended_cwf, EqChecking::Yes, into_ty);
-                }
-
-                // even when we should_check, we've already checked the into_type, so now we don't
-                // have to anymore
-                let mut extended_self = self.clone();
-                extended_self.extend_ctx_unchecked(cwf, into_var.clone(), &ast::Ty::Bool);
-                let ext_ctx = extended_self.current_ctx();
-                let into_ty_el = extended_self.add_type(cwf, EqChecking::No, into_ty);
+                let (into_ty_el, ext_ctx) = self.clone().with_args(
+                    cwf, should_check, &[(into_var.clone(), ast::Ty::Bool)],
+                    |mut extended_self, cwf, should_check| {
+                        let into_ty_el = extended_self.add_type(cwf, EqChecking::Yes, into_ty);
+                        (into_ty_el, extended_self.current_ctx())
+                    });
 
                 let true_case_el = self.add_term(cwf, should_check, true_case);
                 let false_case_el = self.add_term(cwf, should_check, false_case);
