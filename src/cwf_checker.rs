@@ -246,11 +246,6 @@ impl Environment {
                 let def_extension: Vec<Element> = def.0.clone();
                 let def_el: Element = def.1;
 
-                let arg_els: Vec<Element> =
-                    args.iter()
-                    .map(|arg| self.add_term(cwf, should_check, arg))
-                    .collect();
-
                 let subst_el = self.add_substitution(
                     cwf,
                     should_check,
@@ -324,11 +319,6 @@ impl Environment {
 
                 let true_case_ty_el = tm_ty(cwf, true_case_el);
                 let false_case_ty_el = tm_ty(cwf, false_case_el);
-
-                let id_el = adjoin_op(cwf, CwfRelation::Id, vec![self.current_ctx()]);
-
-                let true_el = adjoin_op(cwf, CwfRelation::True, vec![self.current_ctx()]);
-                let false_el = adjoin_op(cwf, CwfRelation::False, vec![self.current_ctx()]);
 
                 let subst_true_el = self.add_substitution(
                     cwf,

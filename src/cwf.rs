@@ -232,8 +232,6 @@ fn adjoin_post_compositions_step(
     after_morphisms: impl IntoIterator<Item = MorphismWithSignature>,
 ) -> Vec<MorphismWithSignature> {
 
-    let new_morphisms: HashSet<MorphismWithSignature> = HashSet::new();
-
     let before_morphisms: Vec<MorphismWithSignature> =
         cwf.rows(CwfRelation::Dom)
         .filter_map(|dom_row| {
