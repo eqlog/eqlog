@@ -12,6 +12,8 @@ docker run \
 	--user $(id --user):$(id --group) \
 	--volume "$repo_root":/exp-epa \
 	--workdir "/exp-epa" \
+	--env "RUSTFLAGS=$RUSTFLAGS" \
+	--env "RUST_BACKTRACE=$RUST_BACKTRACE" \
 	--env "CARGO_HOME=/exp-epa/.cargo" \
 	rust:latest \
 	$@
