@@ -89,7 +89,7 @@ macro_rules! enumerable_type {
                 self as usize
             }
         }
-        impl $crate::signature::Enumerable for $type {
+        impl $crate::eqlog::signature::Enumerable for $type {
             const VALUES: &'static [$type] = &[$($type::$variant),*];
         }
         impl std::fmt::Display for $type {
@@ -110,7 +110,7 @@ macro_rules! arities {
     ) => {
         enumerable_type!(pub enum $sort_type $sorts);
         enumerable_type!(pub enum $relation_type { $($relation),* });
-        impl $crate::signature::StaticArity<$sort_type> for $relation_type {
+        impl $crate::eqlog::signature::StaticArity<$sort_type> for $relation_type {
             fn arity(self) -> &'static [$sort_type] {
                 match self {
                     $($relation_type::$relation => {
@@ -120,13 +120,13 @@ macro_rules! arities {
             }
         }
 
-        impl $crate::signature::PredicateOrOperation for $relation_type {
+        impl $crate::eqlog::signature::PredicateOrOperation for $relation_type {
             #[allow(unreachable_code)]
-            fn kind(self) -> $crate::signature::RelationKind {
+            fn kind(self) -> $crate::eqlog::signature::RelationKind {
                 match self {
                     $($relation_type::$relation => {
-                        $(let _ = $sort_type::$cod; return $crate::signature::RelationKind::Operation;)?
-                        return $crate::signature::RelationKind::Predicate;
+                        $(let _ = $sort_type::$cod; return $crate::eqlog::signature::RelationKind::Operation;)?
+                        return $crate::eqlog::signature::RelationKind::Predicate;
                     }),*
                 }
             }

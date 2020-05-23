@@ -1,5 +1,5 @@
-use crate::signature::*;
-use crate::closure::*;
+use super::signature::*;
+use super::closure::*;
 use std::fmt::{self, Display, Formatter};
 use std::collections::{VecDeque, HashMap};
 use std::iter::once;
@@ -299,14 +299,14 @@ impl Display for Sequent {
 #[macro_export]
 macro_rules! term {
     ($x:ident) => {
-        $crate::syntax::Term::Variable(stringify!($x).to_string())
+        $crate::eqlog::syntax::Term::Variable(stringify!($x).to_string())
     };
     (_) => {
-        $crate::syntax::Term::Wildcard(None)
+        $crate::eqlog::syntax::Term::Wildcard(None)
     };
     ($f:ident $arg:tt) => {
         term!(@impl
-              (|args| $crate::syntax::Term::Operation(stringify!($f).to_string(), args))
+              (|args| $crate::eqlog::syntax::Term::Operation(stringify!($f).to_string(), args))
               []
               $arg
         )
@@ -378,7 +378,7 @@ macro_rules! atom {
     // a predicate applied to terms
     ($p:ident $args:tt) => {
         term!(@impl
-              (|args| $crate::syntax::Atom::Predicate(stringify!($p).to_string(), args))
+              (|args| $crate::eqlog::syntax::Atom::Predicate(stringify!($p).to_string(), args))
               []
               $args
         )
@@ -452,7 +452,7 @@ fn test_formula_macro() {
 #[macro_export]
 macro_rules! sequent {
     (@impl [$($from:tt)*] ~> $($to:tt)*) => {
-        $crate::syntax::Sequent::Reduction(
+        $crate::eqlog::syntax::Sequent::Reduction(
             term!($($from)*),
             term!($($to)*)
         )
@@ -467,14 +467,14 @@ macro_rules! sequent {
         compile_error!("Sequents must be of the form A => B, or a ~> b, or A => a ~> b")
     };
     (@impl => [$($prem:tt)*] [$($from:tt)*] ~> $($to:tt)*) => {
-        $crate::syntax::Sequent::ConditionalReduction(
+        $crate::eqlog::syntax::Sequent::ConditionalReduction(
             formula!($($prem)*),
             term!($($from)*),
             term!($($to)*),
         )
     };
     (@impl => [$($prem:tt)*] [$($con:tt)*]) => {
-        $crate::syntax::Sequent::Implication(
+        $crate::eqlog::syntax::Sequent::Implication(
             formula!($($prem)*),
             formula!($($con)*)
         )

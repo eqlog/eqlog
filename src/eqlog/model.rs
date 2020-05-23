@@ -1,6 +1,6 @@
-use crate::union_find::*;
-use crate::element::*;
-use crate::signature::*;
+use super::union_find::*;
+use super::element::*;
+use super::signature::*;
 use std::vec::Vec;
 use std::collections::HashSet;
 use std::iter::{FromIterator, once};
