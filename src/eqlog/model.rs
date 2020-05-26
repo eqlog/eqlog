@@ -14,32 +14,57 @@ struct DeltaRelation {
     new_rows: HashSet<Row>,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct ElementInfo<Sort> {
-    row_occurences: usize,
-    sort: Sort,
-}
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Model<Sig: Signature> {
     signature: Sig,
-    element_infos: Vec<ElementInfo<Sig::Sort>>,
+    element_sorts: Vec<Sig::Sort>,
     representatives: UnionFind,
-    dirty_elements: HashSet<Element>,
     relations: Vec<DeltaRelation>,
 }
 
 impl<Sig: Signature> Model<Sig> {
+    pub fn self_check(&self) {
+        let sig = self.signature();
+
+        assert_eq!(self.representatives.len(), self.element_sorts.len());
+        for (el0, &s) in self.element_sorts.iter().enumerate() {
+            // TODO check whether el0 < u32 max
+            let el = Element(el0 as u32);
+            // element's sort is a valid sort in m's signature
+            assert!(sig.sorts().iter().find(|s0| **s0 == s).is_some());
+            // el's sort is the same as that of its representative
+            let repr = self.representatives.find_const(el);
+            assert_eq!(s, self.element_sorts[repr.0 as usize]);
+        }
+
+        assert_eq!(self.relations.len(), sig.relations().len());
+
+        for &r in sig.relations() {
+            let arity = sig.arity(r);
+            let r0: usize = r.into();
+            let DeltaRelation{old_rows, new_rows} = &self.relations[r0];
+
+            assert!(old_rows.is_disjoint(new_rows));
+
+            for row in old_rows.iter().chain(new_rows) {
+                // this row has the right length
+                assert_eq!(row.len(), arity.len());
+                for (&el, &sort) in row.iter().zip(arity.iter()) {
+                    assert_eq!(self.element_sort(el), sort);
+                }
+            }
+        }
+    }
+
     pub fn new(signature: Sig) -> Self {
         let relations = Vec::from_iter(
             signature.relations().iter().
-            map(|_| DeltaRelation { old_rows: hashset!{}, new_rows: hashset!{} })
+            map(|_| DeltaRelation { old_rows: HashSet::default(), new_rows: HashSet::default() })
         );
         Model {
             signature,
-            element_infos: Vec::new(),
+            element_sorts: Vec::new(),
             representatives: UnionFind::new(),
-            dirty_elements: HashSet::new(),
             relations: relations,
         }
     }
@@ -47,13 +72,22 @@ impl<Sig: Signature> Model<Sig> {
         &self.signature
     }
     pub fn elements<'a>(&'a self) -> impl Iterator<Item = (Element, Sig::Sort)> + 'a {
-        self.element_infos.iter().enumerate().map(|(el0, info)|
-            (Element(el0 as u32), info.sort)
+        self.element_sorts.iter().enumerate().map(|(el0, sort)|
+            (Element(el0 as u32), *sort)
         )
     }
     pub fn element_sort(&self, el: Element) -> Sig::Sort {
-        let Element(el0) = el;
-        self.element_infos[el0 as usize].sort
+        self.element_sorts[el.0 as usize]
+    }
+    pub fn sort_elements<'a>(&'a self, sort: Sig::Sort) -> impl Iterator<Item = Element> + 'a {
+        self.elements()
+        .filter_map(move |(el, el_sort)| {
+            if el_sort == sort {
+                Some(el)
+            } else {
+                None
+            }
+        })
     }
     pub fn representative_const(&self, el: Element) -> Element {
         self.representatives.find_const(el)
@@ -75,12 +109,16 @@ impl<Sig: Signature> Model<Sig> {
         for DeltaRelation { new_rows, old_rows } in &mut self.relations {
             old_rows.extend(new_rows.drain());
         }
+        #[cfg(debug_assertions)]
+        self.self_check();
     }
     pub fn adjoin_element(&mut self, sort: Sig::Sort) -> Element {
-        let Element(el) = self.representatives.new_element();
-        debug_assert_eq!(el as usize, self.element_infos.len());
-        self.element_infos.push(ElementInfo { sort, row_occurences: 0 });
-        Element(el)
+        let el = self.representatives.new_element();
+        debug_assert_eq!(el.0 as usize, self.element_sorts.len());
+        self.element_sorts.push(sort);
+        #[cfg(debug_assertions)]
+        self.self_check();
+        el
     }
 
     pub fn adjoin_rows(
@@ -90,26 +128,35 @@ impl<Sig: Signature> Model<Sig> {
     ) -> usize {
         let arity = self.signature.arity(relation);
 
-        let element_infos = &mut self.element_infos;
         let DeltaRelation { new_rows, old_rows } = &mut self.relations[relation.into()];
         let representatives = &mut self.representatives;
+        let element_sorts = &self.element_sorts;
 
         let before_len = new_rows.len();
         new_rows.extend(
             rows.into_iter().
-            map(|mut row| {
+            filter_map(|mut row| {
                 assert_eq!(arity.len(), row.len());
-                for (el, sort) in row.iter_mut().zip(arity) {
+                for (el, &required_sort) in row.iter_mut().zip(arity) {
                     *el = representatives.find(*el);
-                    let info = &mut element_infos[el.0 as usize];
-                    assert_eq!(info.sort, *sort);
-                    info.row_occurences += 1;
+                    let el_sort = element_sorts[el.0 as usize];
+                    assert_eq!(el_sort, required_sort);
                 }
-                row
-            }).
-            filter(|row| !old_rows.contains(row))
+
+                if !old_rows.contains(&row) {
+                    Some(row)
+                } else {
+                    None
+                }
+            })
         );
-        new_rows.len() - before_len
+
+        let new_row_num = new_rows.len() - before_len;
+
+        #[cfg(debug_assertions)]
+        self.self_check();
+
+        new_row_num
     }
     pub fn remove_rows<'a>(
         &mut self,
@@ -121,6 +168,8 @@ impl<Sig: Signature> Model<Sig> {
             new_rows.remove(row);
             old_rows.remove(row);
         }
+        #[cfg(debug_assertions)]
+        self.self_check();
     }
 
     pub fn equate(&mut self, mut a: Element, mut b: Element) -> Element {
@@ -133,47 +182,44 @@ impl<Sig: Signature> Model<Sig> {
             return a;
         }
 
-        let eis = &mut self.element_infos;
-
-        // make b the element with maximal row_occurences
-        if eis[a.0 as usize].row_occurences > eis[b.0 as usize].row_occurences {
+        // make b the element with the lower id
+        if b.0 > a.0 {
             swap(&mut a, &mut b);
         }
 
         self.representatives.merge_into(a, b);
-        eis[b.0 as usize].row_occurences += eis[a.0 as usize].row_occurences;
-        self.dirty_elements.insert(a);
+
+        #[cfg(debug_assertions)]
+        self.self_check();
 
         b
     }
 
     pub fn canonicalize_elements(&mut self) {
-        // Swap out self.dirty_elements for an empty list
-        let mut dirty_elements = HashSet::new();
-        swap(&mut dirty_elements, &mut self.dirty_elements);
-
-        let mut dirty_rows: Vec<Row> = vec![];
-        let rels = self.signature.relations().to_vec(); 
         // TODO: do not copy rels; can't iter over `self.signature.relations()` directly because
         // this would borrow `self`
-        for r in rels {
+        for r in self.signature.relations().to_vec() {
+            let dirty_rows: Vec<Row> = Vec::new();
             debug_assert!(dirty_rows.is_empty());
 
-            dirty_rows.extend(
-                self.old_rows(r).chain(self.new_rows(r)).
-                filter(|row| row.iter().find(|el| dirty_elements.contains(*el)).is_some()).
-                map(|row| row.to_vec())
-            );
-            // remove_rows doesn't access dirty_elements
+            let dirty_rows: Vec<Row> =
+                 // old and new rows
+                self.old_rows(r).chain(self.new_rows(r))
+                // containing at least one dirty element
+                // TODO: use representative instead of the const version; aliasing issues
+                .filter(|row| {
+                    row.iter()
+                        .find(|el| self.representative_const(**el) != **el)
+                        .is_some()
+                })
+                .map(|row| row.to_vec())
+                .collect();
             self.remove_rows(r, dirty_rows.iter());
-            // adjoin_rows will make rows canonical when adjoining
-            self.adjoin_rows(r, dirty_rows.drain(..));
+            self.adjoin_rows(r, dirty_rows.into_iter());
         }
 
-        // self.dirty_elements is already empty, but let's reuse the allocated capacity of
-        // dirty_elements:
-        dirty_elements.clear();
-        swap(&mut dirty_elements, &mut self.dirty_elements);
+        #[cfg(debug_assertions)]
+        self.self_check();
     }
 }
 
@@ -206,62 +252,23 @@ mod test {
         HashSet::from_iter(rows.map(|els| els.to_vec()))
     }
 
-    fn assert_valid_model(m: &Model) {
-        let sig = m.signature();
-        for (_, s) in m.elements() {
-            // element's sort is a valid sort in m's signature
-            assert!(sig.sorts().iter().find(|s0| **s0 == s).is_some());
-        }
-
-        for &r in sig.relations() {
-            let arity = sig.arity(r);
-            let old_rows = clone_rows(m.old_rows(r));
-            let new_rows = clone_rows(m.new_rows(r));
-            assert!(old_rows.is_disjoint(&new_rows));
-            let rows = clone_rows(m.rows(r));
-            assert_eq!(
-                HashSet::from_iter(old_rows.union(&new_rows).cloned()),
-                rows
-            );
-
-            for row in rows {
-                // this row has the right length
-                assert_eq!(row.len(), arity.len());
-                for (el, sort) in row.iter().zip(arity.iter()) {
-                    let repr = m.representative_const(*el);
-                    if repr != *el {
-                        assert!(m.dirty_elements.contains(el));
-                    }
-                    // el has the sort specified by arity
-                    assert_eq!(m.element_sort(repr), *sort);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn new_model_is_valid() {
-        let m = Model::new(ExampleSignature::new());
-        assert_valid_model(&m);
-    }
-
     #[test]
     fn adjoin_element() {
         let mut m = Model::new(ExampleSignature::new());
         let el0 = m.adjoin_element(S0);
         assert_eq!(m.representative(el0), el0);
-        assert_valid_model(&m);
+        m.self_check();
 
         let el1 = m.adjoin_element(S1);
         assert_eq!(m.representative(el0), el0);
         assert_eq!(m.representative(el1), el1);
-        assert_valid_model(&m);
+        m.self_check();
 
         let el2 = m.adjoin_element(S1);
         assert_eq!(m.representative(el0), el0);
         assert_eq!(m.representative(el1), el1);
         assert_eq!(m.representative(el2), el2);
-        assert_valid_model(&m);
+        m.self_check();
     }
 
     #[test]
@@ -277,7 +284,7 @@ mod test {
             vec![el0, el3],
             vec![el1, el3],
         ]);
-        assert_valid_model(&m);
+        m.self_check();
         assert_eq!(
             clone_rows(m.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3]}
@@ -290,14 +297,14 @@ mod test {
             vec![el1, el4],
             vec![el1, el4],
         ]);
-        assert_valid_model(&m);
+        m.self_check();
         assert_eq!(
             clone_rows(m.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3], vec![el1, el4]}
         );
 
         m.adjoin_rows(R1, vec![vec![]]);
-        assert_valid_model(&m);
+        m.self_check();
         assert_eq!(
             clone_rows(m.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3], vec![el1, el4]}
@@ -311,12 +318,12 @@ mod test {
             vec![el3, el2, el4],
             vec![el4, el2, el4],
         ]);
-        assert_valid_model(&m);
+        m.self_check();
 
         m.adjoin_rows(R3, vec![
             vec![el0, el0]
         ]);
-        assert_valid_model(&m);
+        m.self_check();
     }
 
     #[test]
@@ -331,7 +338,7 @@ mod test {
             (R0, vec![el0, el3]),
             (R2, vec![el3, el2, el4]),
         ]);
-        assert_valid_model(&m);
+        m.self_check();
         assert_eq!(
             clone_rows(m.rows(R0)),
             hashset!{vec![el0, el3]}
@@ -356,7 +363,7 @@ mod test {
             (R0, vec![el0, el3]),
             (R2, vec![el3, el2, el4]),
         ]);
-        assert_valid_model(&m);
+        m.self_check();
         assert_eq!(
             clone_rows(m.new_rows(R0)),
             hashset!{vec![el0, el3]}
@@ -375,7 +382,7 @@ mod test {
 
         let mut n = m.clone();
         n.age_rows();
-        assert_valid_model(&n);
+        n.self_check();
 
         assert_eq!(clone_rows(n.old_rows(R0)), clone_rows(m.rows(R0)));
         assert_eq!(clone_rows(n.old_rows(R1)), clone_rows(m.rows(R1)));
@@ -392,7 +399,7 @@ mod test {
         assert_eq!(clone_rows(n.rows(R1)), hashset!{vec![]});
 
         n.extend(once((R2, vec![el3, el2, el4]))); // already in old rows
-        assert_valid_model(&n);
+        n.self_check();
         assert!(n.old_rows(R2).find(|row| row == &[el3, el2, el4]).is_some());
         assert!(n.new_rows(R2).next().is_none());
     }
@@ -419,9 +426,9 @@ mod test {
         ]);
 
         assert_eq!(m.equate(el0, el1), el0);
-        assert_valid_model(&m);
+        m.self_check();
         m.canonicalize_elements();
-        assert_valid_model(&m);
+        m.self_check();
 
         assert_eq!(m.representative(el0), el0);
         assert_eq!(m.representative(el1), el0);
