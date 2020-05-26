@@ -72,6 +72,7 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
 
         // composition is associative
         sequent!(Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f)),
+        sequent!(Comp(Comp(h, g), f) ~> Comp(h, Comp(g, f))),
         // TODO: is the other direction needed?
 
 
@@ -85,7 +86,9 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
 
         // functoriality of substitution: composition
         sequent!(SubstTy(g, SubstTy(f, sigma)) ~> SubstTy(Comp(g, f), sigma)),
+        sequent!(SubstTy(Comp(g, f), sigma) ~> SubstTy(g, SubstTy(f, sigma))),
         sequent!(SubstTm(g, SubstTm(f, s)) ~> SubstTm(Comp(g, f), s)),
+        sequent!(SubstTm(Comp(g, f), s) ~> SubstTm(g, SubstTm(f, s))),
 
 
         // domain and codomain of the weakening map
@@ -146,12 +149,14 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
         sequent!(
             TyCtx(sigma) = Gbool
             =>
-            SubstTm(MorExt(Gbool, f, True(Cod(f))), BoolElim(sigma, true_case, _)) ~> true_case
+            SubstTm(MorExt(Gbool, f, True(Cod(f))), BoolElim(sigma, true_case, _))
+            ~> SubstTm(f, true_case)
         ),
         sequent!(
             TyCtx(sigma) = Gbool
             =>
-            SubstTm(MorExt(Gbool, f, False(Cod(f))), BoolElim(sigma, _, false_case)) ~> false_case
+            SubstTm(MorExt(Gbool, f, False(Cod(f))), BoolElim(sigma, _, false_case))
+            ~> SubstTm(f, false_case)
         ),
         // Uniqueness of bool elimination
         sequent!(
@@ -267,7 +272,6 @@ fn adjoin_post_compositions_step(
             }
 
             let comp = adjoin_op(cwf, CwfRelation::Comp, vec![after.morph, before.morph]);
-            println!("Added composition");
             v.push(MorphismWithSignature{
                 morph: comp,
                 dom: before.dom,
