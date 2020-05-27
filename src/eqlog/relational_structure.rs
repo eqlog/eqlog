@@ -1,6 +1,6 @@
 use super::union_find::*;
 use super::element::*;
-use super::signature::*;
+use super::relational_signature::*;
 use std::vec::Vec;
 use std::collections::HashSet;
 use std::iter::{FromIterator, once};
@@ -15,14 +15,14 @@ struct DeltaRelation {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Model<Sig: Signature> {
+pub struct RelationalStructure<Sig: RelationalSignature> {
     signature: Sig,
     element_sorts: Vec<Sig::Sort>,
     representatives: UnionFind,
     relations: Vec<DeltaRelation>,
 }
 
-impl<Sig: Signature> Model<Sig> {
+impl<Sig: RelationalSignature> RelationalStructure<Sig> {
     pub fn self_check(&self) {
         let sig = self.signature();
 
@@ -50,7 +50,7 @@ impl<Sig: Signature> Model<Sig> {
                 // this row has the right length
                 assert_eq!(row.len(), arity.len());
                 for (&el, &sort) in row.iter().zip(arity.iter()) {
-                    assert_eq!(self.element_sort(el), sort);
+                    assert_eq!(self.element_sorts[el.0 as usize], sort);
                 }
             }
         }
@@ -61,7 +61,7 @@ impl<Sig: Signature> Model<Sig> {
             signature.relations().iter().
             map(|_| DeltaRelation { old_rows: HashSet::default(), new_rows: HashSet::default() })
         );
-        Model {
+        RelationalStructure {
             signature,
             element_sorts: Vec::new(),
             representatives: UnionFind::new(),
@@ -223,7 +223,7 @@ impl<Sig: Signature> Model<Sig> {
     }
 }
 
-impl<Sig: Signature> Extend<(Sig::Relation, Row)> for Model<Sig> {
+impl<Sig: RelationalSignature> Extend<(Sig::Relation, Row)> for RelationalStructure<Sig> {
     fn extend<I: IntoIterator<Item = (Sig::Relation, Row)>>(&mut self, rows: I) {
         for (r, row) in rows {
             self.adjoin_rows(r, once(row));
@@ -234,7 +234,7 @@ impl<Sig: Signature> Extend<(Sig::Relation, Row)> for Model<Sig> {
 #[cfg(test)]
 mod test {
     use super::*;
-    arities!{
+    relational_arities!{
         pub enum ExampleSort {S0, S1},
         pub enum ExampleRelation {
             R0: S0 x S1,
@@ -246,7 +246,7 @@ mod test {
     use ExampleSort::*;
     use ExampleRelation::*;
     type ExampleSignature = StaticSignature<ExampleSort, ExampleRelation>;
-    type Model = super::Model<ExampleSignature>;
+    type RelationalStructure = super::RelationalStructure<ExampleSignature>;
 
     fn clone_rows<'a, I: Iterator<Item = &'a [Element]>>(rows: I) -> HashSet<Row> {
         HashSet::from_iter(rows.map(|els| els.to_vec()))
@@ -254,189 +254,189 @@ mod test {
 
     #[test]
     fn adjoin_element() {
-        let mut m = Model::new(ExampleSignature::new());
-        let el0 = m.adjoin_element(S0);
-        assert_eq!(m.representative(el0), el0);
-        m.self_check();
+        let mut rs = RelationalStructure::new(ExampleSignature::new());
+        let el0 = rs.adjoin_element(S0);
+        assert_eq!(rs.representative(el0), el0);
+        rs.self_check();
 
-        let el1 = m.adjoin_element(S1);
-        assert_eq!(m.representative(el0), el0);
-        assert_eq!(m.representative(el1), el1);
-        m.self_check();
+        let el1 = rs.adjoin_element(S1);
+        assert_eq!(rs.representative(el0), el0);
+        assert_eq!(rs.representative(el1), el1);
+        rs.self_check();
 
-        let el2 = m.adjoin_element(S1);
-        assert_eq!(m.representative(el0), el0);
-        assert_eq!(m.representative(el1), el1);
-        assert_eq!(m.representative(el2), el2);
-        m.self_check();
+        let el2 = rs.adjoin_element(S1);
+        assert_eq!(rs.representative(el0), el0);
+        assert_eq!(rs.representative(el1), el1);
+        assert_eq!(rs.representative(el2), el2);
+        rs.self_check();
     }
 
     #[test]
     fn adjoin_rows() {
-        let mut m = Model::new(ExampleSignature::new());
-        let el0 = m.adjoin_element(S0);
-        let el1 = m.adjoin_element(S0);
-        let el2 = m.adjoin_element(S0);
-        let el3 = m.adjoin_element(S1);
-        let el4 = m.adjoin_element(S1);
+        let mut rs = RelationalStructure::new(ExampleSignature::new());
+        let el0 = rs.adjoin_element(S0);
+        let el1 = rs.adjoin_element(S0);
+        let el2 = rs.adjoin_element(S0);
+        let el3 = rs.adjoin_element(S1);
+        let el4 = rs.adjoin_element(S1);
 
-        m.adjoin_rows(R0, vec![
+        rs.adjoin_rows(R0, vec![
             vec![el0, el3],
             vec![el1, el3],
         ]);
-        m.self_check();
+        rs.self_check();
         assert_eq!(
-            clone_rows(m.rows(R0)),
+            clone_rows(rs.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3]}
         );
-        assert_eq!(clone_rows(m.rows(R1)), hashset!{});
-        assert_eq!(clone_rows(m.rows(R2)), hashset!{});
-        assert_eq!(clone_rows(m.rows(R3)), hashset!{});
+        assert_eq!(clone_rows(rs.rows(R1)), hashset!{});
+        assert_eq!(clone_rows(rs.rows(R2)), hashset!{});
+        assert_eq!(clone_rows(rs.rows(R3)), hashset!{});
 
-        m.adjoin_rows(R0, vec![
+        rs.adjoin_rows(R0, vec![
             vec![el1, el4],
             vec![el1, el4],
         ]);
-        m.self_check();
+        rs.self_check();
         assert_eq!(
-            clone_rows(m.rows(R0)),
+            clone_rows(rs.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3], vec![el1, el4]}
         );
 
-        m.adjoin_rows(R1, vec![vec![]]);
-        m.self_check();
+        rs.adjoin_rows(R1, vec![vec![]]);
+        rs.self_check();
         assert_eq!(
-            clone_rows(m.rows(R0)),
+            clone_rows(rs.rows(R0)),
             hashset!{vec![el0, el3], vec![el1, el3], vec![el1, el4]}
         );
         assert_eq!(
-            clone_rows(m.rows(R1)),
+            clone_rows(rs.rows(R1)),
             hashset!{vec![]}
         );
 
-        m.adjoin_rows(R2, vec![
+        rs.adjoin_rows(R2, vec![
             vec![el3, el2, el4],
             vec![el4, el2, el4],
         ]);
-        m.self_check();
+        rs.self_check();
 
-        m.adjoin_rows(R3, vec![
+        rs.adjoin_rows(R3, vec![
             vec![el0, el0]
         ]);
-        m.self_check();
+        rs.self_check();
     }
 
     #[test]
     fn extend() {
-        let mut m = Model::new(ExampleSignature::new());
-        let el0 = m.adjoin_element(S0);
-        let el2 = m.adjoin_element(S0);
-        let el3 = m.adjoin_element(S1);
-        let el4 = m.adjoin_element(S1);
+        let mut rs = RelationalStructure::new(ExampleSignature::new());
+        let el0 = rs.adjoin_element(S0);
+        let el2 = rs.adjoin_element(S0);
+        let el3 = rs.adjoin_element(S1);
+        let el4 = rs.adjoin_element(S1);
 
-        m.extend(vec![
+        rs.extend(vec![
             (R0, vec![el0, el3]),
             (R2, vec![el3, el2, el4]),
         ]);
-        m.self_check();
+        rs.self_check();
         assert_eq!(
-            clone_rows(m.rows(R0)),
+            clone_rows(rs.rows(R0)),
             hashset!{vec![el0, el3]}
         );
-        assert_eq!(clone_rows(m.rows(R1)), hashset!{});
+        assert_eq!(clone_rows(rs.rows(R1)), hashset!{});
         assert_eq!(
-            clone_rows(m.rows(R2)),
+            clone_rows(rs.rows(R2)),
             hashset!{vec![el3, el2, el4]}
         );
-        assert_eq!(clone_rows(m.rows(R3)), hashset!{});
+        assert_eq!(clone_rows(rs.rows(R3)), hashset!{});
     }
 
     #[test]
     fn old_new_rows() {
-        let mut m = Model::new(ExampleSignature::new());
-        let el0 = m.adjoin_element(S0);
-        let el2 = m.adjoin_element(S0);
-        let el3 = m.adjoin_element(S1);
-        let el4 = m.adjoin_element(S1);
+        let mut rs = RelationalStructure::new(ExampleSignature::new());
+        let el0 = rs.adjoin_element(S0);
+        let el2 = rs.adjoin_element(S0);
+        let el3 = rs.adjoin_element(S1);
+        let el4 = rs.adjoin_element(S1);
 
-        m.extend(vec![
+        rs.extend(vec![
             (R0, vec![el0, el3]),
             (R2, vec![el3, el2, el4]),
         ]);
-        m.self_check();
+        rs.self_check();
         assert_eq!(
-            clone_rows(m.new_rows(R0)),
+            clone_rows(rs.new_rows(R0)),
             hashset!{vec![el0, el3]}
         );
-        assert_eq!(clone_rows(m.new_rows(R1)), hashset!{});
+        assert_eq!(clone_rows(rs.new_rows(R1)), hashset!{});
         assert_eq!(
-            clone_rows(m.new_rows(R2)),
+            clone_rows(rs.new_rows(R2)),
             hashset!{vec![el3, el2, el4]}
         );
-        assert_eq!(clone_rows(m.new_rows(R3)), hashset!{});
+        assert_eq!(clone_rows(rs.new_rows(R3)), hashset!{});
 
-        assert!(m.old_rows(R0).next().is_none());
-        assert!(m.old_rows(R1).next().is_none());
-        assert!(m.old_rows(R2).next().is_none());
-        assert!(m.old_rows(R3).next().is_none());
+        assert!(rs.old_rows(R0).next().is_none());
+        assert!(rs.old_rows(R1).next().is_none());
+        assert!(rs.old_rows(R2).next().is_none());
+        assert!(rs.old_rows(R3).next().is_none());
 
-        let mut n = m.clone();
-        n.age_rows();
-        n.self_check();
+        let mut rs0 = rs.clone();
+        rs0.age_rows();
+        rs0.self_check();
 
-        assert_eq!(clone_rows(n.old_rows(R0)), clone_rows(m.rows(R0)));
-        assert_eq!(clone_rows(n.old_rows(R1)), clone_rows(m.rows(R1)));
-        assert_eq!(clone_rows(n.old_rows(R2)), clone_rows(m.rows(R2)));
-        assert_eq!(clone_rows(n.old_rows(R3)), clone_rows(m.rows(R3)));
+        assert_eq!(clone_rows(rs0.old_rows(R0)), clone_rows(rs.rows(R0)));
+        assert_eq!(clone_rows(rs0.old_rows(R1)), clone_rows(rs.rows(R1)));
+        assert_eq!(clone_rows(rs0.old_rows(R2)), clone_rows(rs.rows(R2)));
+        assert_eq!(clone_rows(rs0.old_rows(R3)), clone_rows(rs.rows(R3)));
 
-        assert!(n.new_rows(R0).next().is_none());
-        assert!(n.new_rows(R1).next().is_none());
-        assert!(n.new_rows(R2).next().is_none());
-        assert!(n.new_rows(R3).next().is_none());
+        assert!(rs0.new_rows(R0).next().is_none());
+        assert!(rs0.new_rows(R1).next().is_none());
+        assert!(rs0.new_rows(R2).next().is_none());
+        assert!(rs0.new_rows(R3).next().is_none());
 
-        n.extend(once((R1, vec![])));
-        assert!(n.old_rows(R1).next().is_none());
-        assert_eq!(clone_rows(n.rows(R1)), hashset!{vec![]});
+        rs0.extend(once((R1, vec![])));
+        assert!(rs0.old_rows(R1).next().is_none());
+        assert_eq!(clone_rows(rs0.rows(R1)), hashset!{vec![]});
 
-        n.extend(once((R2, vec![el3, el2, el4]))); // already in old rows
-        n.self_check();
-        assert!(n.old_rows(R2).find(|row| row == &[el3, el2, el4]).is_some());
-        assert!(n.new_rows(R2).next().is_none());
+        rs0.extend(once((R2, vec![el3, el2, el4]))); // already in old rows
+        rs0.self_check();
+        assert!(rs0.old_rows(R2).find(|row| row == &[el3, el2, el4]).is_some());
+        assert!(rs0.new_rows(R2).next().is_none());
     }
 
     #[test]
     fn equate_canonicalize() {
-        let mut m = Model::new(ExampleSignature::new());
-        let el0 = m.adjoin_element(S0);
-        let el1 = m.adjoin_element(S0);
-        let el2 = m.adjoin_element(S0);
-        let el3 = m.adjoin_element(S1);
-        let el4 = m.adjoin_element(S1);
+        let mut rs = RelationalStructure::new(ExampleSignature::new());
+        let el0 = rs.adjoin_element(S0);
+        let el1 = rs.adjoin_element(S0);
+        let el2 = rs.adjoin_element(S0);
+        let el3 = rs.adjoin_element(S1);
+        let el4 = rs.adjoin_element(S1);
 
-        m.adjoin_rows(R2, vec![
+        rs.adjoin_rows(R2, vec![
             vec![el3, el0, el4],
             vec![el3, el1, el4],
             vec![el4, el2, el3],
         ]);
-        m.age_rows();
-        m.adjoin_rows(R2, vec![
+        rs.age_rows();
+        rs.adjoin_rows(R2, vec![
             vec![el3, el1, el3],
             vec![el4, el0, el3],
             vec![el4, el0, el4],
         ]);
 
-        assert_eq!(m.equate(el0, el1), el0);
-        m.self_check();
-        m.canonicalize_elements();
-        m.self_check();
+        assert_eq!(rs.equate(el0, el1), el0);
+        rs.self_check();
+        rs.canonicalize_elements();
+        rs.self_check();
 
-        assert_eq!(m.representative(el0), el0);
-        assert_eq!(m.representative(el1), el0);
-        assert_eq!(m.representative(el2), el2);
-        assert_eq!(m.representative(el3), el3);
+        assert_eq!(rs.representative(el0), el0);
+        assert_eq!(rs.representative(el1), el0);
+        assert_eq!(rs.representative(el2), el2);
+        assert_eq!(rs.representative(el3), el3);
 
         assert_eq!(
-            clone_rows(m.rows(R2)),
+            clone_rows(rs.rows(R2)),
             hashset!{
                 vec![el3, el0, el4],
                 vec![el3, el0, el4],
@@ -446,7 +446,7 @@ mod test {
                 vec![el4, el0, el4],
             }
         );
-        assert!(clone_rows(m.old_rows(R2)).is_subset(&hashset!{
+        assert!(clone_rows(rs.old_rows(R2)).is_subset(&hashset!{
             vec![el3, el0, el4],
             vec![el3, el1, el4],
             vec![el4, el2, el3],

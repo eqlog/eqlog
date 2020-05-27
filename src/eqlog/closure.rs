@@ -1,4 +1,5 @@
-use super::model::*;
+use super::relational_signature::*;
+use super::relational_structure::*;
 use super::signature::*;
 use super::element::Element;
 use std::cmp::max;
@@ -80,7 +81,7 @@ struct RelationInInterpretation<'a, Relation> {
 }
 
 fn visit_new_interpretations_impl<'a, Sig: Signature>(
-    model: &Model<Sig>,
+    structure: &RelationalStructure<Sig>,
     visitor: &mut impl for<'b> FnMut(&'b [Element]),
     interpretation: &mut Vec<Element>,
     mut riis: impl Iterator<Item = RelationInInterpretation<'a, Sig::Relation>> + Clone
@@ -91,11 +92,11 @@ fn visit_new_interpretations_impl<'a, Sig: Signature>(
             rip.equalities.iter().all(|(lhs, rhs)| interp[*lhs] == interp[*rhs])
         };
         if use_old_rows {
-            for row in model.old_rows(rip.id) {
+            for row in structure.old_rows(rip.id) {
                 interpretation.extend_from_slice(row);
                 if satisfies_equalities(interpretation) {
                     visit_new_interpretations_impl(
-                        model,
+                        structure,
                         visitor,
                         interpretation,
                         riis.clone(),
@@ -105,11 +106,11 @@ fn visit_new_interpretations_impl<'a, Sig: Signature>(
             }
         }
         if use_new_rows {
-            for row in model.new_rows(rip.id) {
+            for row in structure.new_rows(rip.id) {
                 interpretation.extend_from_slice(row);
                 if satisfies_equalities(interpretation) {
                     visit_new_interpretations_impl(
-                        model,
+                        structure,
                         visitor,
                         interpretation,
                         riis.clone(),
@@ -126,7 +127,7 @@ fn visit_new_interpretations_impl<'a, Sig: Signature>(
 impl<Sig: Signature> CheckedPresentation<Sig> {
     pub fn visit_new_interpretations(
         &self,
-        model: &Model<Sig>,
+        structure: &RelationalStructure<Sig>,
         mut visitor: impl for<'b> FnMut(&'b [Element])
     ) {
         // TODO: check whether signatures are equal?
@@ -134,7 +135,7 @@ impl<Sig: Signature> CheckedPresentation<Sig> {
         let mut interpretation: Vec<Element> = Vec::with_capacity(self.row_length);
         for i in 0 .. self.rips.len() {
             visit_new_interpretations_impl(
-                model,
+                structure,
                 &mut visitor,
                 &mut interpretation,
                 self.rips.iter().enumerate().map(|(j, rip)| RelationInInterpretation {
@@ -154,10 +155,10 @@ mod test_interpretation {
 
     fn compute_new_interpretation<Sig: Signature>(
         presentation: &CheckedPresentation<Sig>,
-        model: &Model<Sig>,
+        structure: &RelationalStructure<Sig>,
     ) -> HashSet<Row> {
         let mut result: HashSet<Row> = HashSet::new();
-        presentation.visit_new_interpretations(model, |row| {
+        presentation.visit_new_interpretations(structure, |row| {
             result.insert(row.to_vec());
         });
         result
@@ -173,12 +174,12 @@ mod test_interpretation {
         }
         let sig = StaticSignature::<Sort, Relation>::new();
 
-        let model = Model::new(&sig);
+        let structure = RelationalStructure::new(sig);
         let presentation = Presentation {
             relations: vec![],
             equalities: vec![],
-        }.checked(&sig);
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{});
+        }.checked(sig);
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{});
     }
 
     #[test]
@@ -193,13 +194,13 @@ mod test_interpretation {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
 
-        let mut model = Model::new(&sig);
-        let a0 = model.adjoin_element(S0);
-        let a1 = model.adjoin_element(S0);
-        let b0 = model.adjoin_element(S1);
-        let b1 = model.adjoin_element(S1);
+        let mut structure = RelationalStructure::new(sig);
+        let a0 = structure.adjoin_element(S0);
+        let a1 = structure.adjoin_element(S0);
+        let b0 = structure.adjoin_element(S1);
+        let b1 = structure.adjoin_element(S1);
 
-        model.adjoin_rows(R, vec![
+        structure.adjoin_rows(R, vec![
             vec![a0, b1],
             vec![a1, b0],
         ]);
@@ -207,16 +208,16 @@ mod test_interpretation {
         let presentation = Presentation {
             relations: vec![R],
             equalities: vec![],
-        }.checked(&sig);
+        }.checked(sig);
 
         assert_eq!(
-            compute_new_interpretation(&presentation, &model), hashset!{
+            compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b1],
             vec![a1, b0],
         });
 
-        model.age_rows();
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{});
+        structure.age_rows();
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{});
     }
 
     #[test]
@@ -231,14 +232,14 @@ mod test_interpretation {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
 
-        let mut model = Model::new(&sig);
+        let mut structure = RelationalStructure::new(sig);
 
-        let a0 = model.adjoin_element(S0);
-        let a1 = model.adjoin_element(S0);
-        let b0 = model.adjoin_element(S1);
-        let b1 = model.adjoin_element(S1);
+        let a0 = structure.adjoin_element(S0);
+        let a1 = structure.adjoin_element(S0);
+        let b0 = structure.adjoin_element(S1);
+        let b1 = structure.adjoin_element(S1);
 
-        model.adjoin_rows(R, vec![
+        structure.adjoin_rows(R, vec![
             vec![a0, b0],
             vec![a1, b0],
             vec![a1, b1],
@@ -247,9 +248,9 @@ mod test_interpretation {
         let presentation = Presentation {
             relations: vec![R, R],
             equalities: vec![(1, 3)],
-        }.checked(&sig);
+        }.checked(sig);
 
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b0, a0, b0],
             vec![a0, b0, a1, b0],
             vec![a1, b0, a0, b0],
@@ -257,8 +258,8 @@ mod test_interpretation {
             vec![a1, b1, a1, b1],
         });
 
-        model.age_rows();
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{});
+        structure.age_rows();
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{});
     }
 
     #[test]
@@ -274,19 +275,19 @@ mod test_interpretation {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
 
-        let mut model = Model::new(&sig);
+        let mut structure = RelationalStructure::new(sig);
 
-        let a0 = model.adjoin_element(S0);
-        let a1 = model.adjoin_element(S0);
-        let b0 = model.adjoin_element(S1);
-        let b1 = model.adjoin_element(S1);
+        let a0 = structure.adjoin_element(S0);
+        let a1 = structure.adjoin_element(S0);
+        let b0 = structure.adjoin_element(S1);
+        let b1 = structure.adjoin_element(S1);
 
-        model.adjoin_rows(R0, vec![
+        structure.adjoin_rows(R0, vec![
             vec![a0, b0],
             vec![a1, b0],
             vec![a1, b1],
         ]);
-        model.adjoin_rows(R1, vec![
+        structure.adjoin_rows(R1, vec![
             vec![b0, a0],
             vec![b1, a1],
         ]);
@@ -294,23 +295,23 @@ mod test_interpretation {
         let presentation = Presentation {
             relations: vec![R0, R1],
             equalities: vec![(0, 3)],
-        }.checked(&sig);
+        }.checked(sig);
 
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b0, b0, a0],
             vec![a1, b0, b1, a1],
             vec![a1, b1, b1, a1],
         });
 
-        model.age_rows();
+        structure.age_rows();
 
-        model.adjoin_rows(R0, vec![
+        structure.adjoin_rows(R0, vec![
             vec![a0, b1],
         ]);
-        model.adjoin_rows(R1, vec![
+        structure.adjoin_rows(R1, vec![
             vec![b1, a0],
         ]);
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
              vec![a0, b1, b1, a0],
              vec![a0, b1, b0, a0],
              vec![a0, b0, b1, a0],
@@ -331,19 +332,19 @@ mod test_interpretation {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
 
-        let mut model = Model::new(&sig);
+        let mut structure = RelationalStructure::new(sig);
 
-        let a0 = model.adjoin_element(S0);
-        let a1 = model.adjoin_element(S0);
-        let b0 = model.adjoin_element(S1);
-        let b1 = model.adjoin_element(S1);
+        let a0 = structure.adjoin_element(S0);
+        let a1 = structure.adjoin_element(S0);
+        let b0 = structure.adjoin_element(S1);
+        let b1 = structure.adjoin_element(S1);
 
-        model.adjoin_rows(R0, vec![
+        structure.adjoin_rows(R0, vec![
             vec![a0, b0],
             vec![a1, b0],
             vec![a1, b1],
         ]);
-        model.adjoin_rows(R1, vec![
+        structure.adjoin_rows(R1, vec![
             vec![b0, b0],
             vec![b1, b0],
             vec![b0, b1],
@@ -352,9 +353,9 @@ mod test_interpretation {
         let presentation = Presentation {
             relations: vec![R0, R1],
             equalities: vec![(2, 3), (1, 2)],
-        }.checked(&sig);
+        }.checked(sig);
 
-        assert_eq!(compute_new_interpretation(&presentation, &model), hashset!{
+        assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b0, b0, b0],
             vec![a1, b0, b0, b0],
         });
@@ -433,9 +434,9 @@ impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> Surjection
     }
 }
 
-pub fn close_model<Sig: Signature>(
+pub fn close_structure<Sig: Signature>(
     presentations: &[CheckedSurjectionPresentation<Sig>],
-    model: &mut Model<Sig>
+    structure: &mut RelationalStructure<Sig>
 ) {
     // TODO: check whether signatures are equal?
     let mut conc_eqs: Vec<(Element, Element)> = vec![];
@@ -443,7 +444,7 @@ pub fn close_model<Sig: Signature>(
 
     loop {
         for presentation in presentations {
-            presentation.domain.visit_new_interpretations(model, |row| {
+            presentation.domain.visit_new_interpretations(structure, |row| {
                 conc_rows.extend(presentation.codomain_relations.iter().map(|(r, row_indices)| {
                     (*r, row_indices.iter().map(|i| row[*i]).collect())
                 }));
@@ -453,16 +454,16 @@ pub fn close_model<Sig: Signature>(
             });
         }
 
-        model.age_rows();
-        conc_eqs.drain(..).for_each(|(lhs, rhs)| { model.equate(lhs, rhs); });
-        model.canonicalize_elements();
-        model.extend(conc_rows.drain(..));
+        structure.age_rows();
+        conc_eqs.drain(..).for_each(|(lhs, rhs)| { structure.equate(lhs, rhs); });
+        structure.canonicalize_elements();
+        structure.extend(conc_rows.drain(..));
         debug_assert!(conc_rows.is_empty());
         debug_assert!(conc_eqs.is_empty());
 
         let no_new_rows: bool =
-            model.signature().relations().iter().
-            all(|&r| model.new_rows(r).next().is_none());
+            structure.signature().relations().iter().
+            all(|&r| structure.new_rows(r).next().is_none());
         if no_new_rows {
             break;
         }
@@ -470,7 +471,7 @@ pub fn close_model<Sig: Signature>(
 }
 
 #[cfg(test)]
-mod test_close_model {
+mod test_close_structure {
     use super::*;
 
     use std::collections::HashSet;
@@ -489,13 +490,13 @@ mod test_close_model {
         use Sort::*;
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
-        let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(S);
-        let el1 = model.adjoin_element(S);
-        let el2 = model.adjoin_element(S);
-        let el3 = model.adjoin_element(S);
-        let el4 = model.adjoin_element(S);
-        model.adjoin_rows(R, vec![
+        let mut structure = RelationalStructure::new(sig);
+        let el0 = structure.adjoin_element(S);
+        let el1 = structure.adjoin_element(S);
+        let el2 = structure.adjoin_element(S);
+        let el3 = structure.adjoin_element(S);
+        let el4 = structure.adjoin_element(S);
+        structure.adjoin_rows(R, vec![
             vec![el0, el1],
             vec![el2, el2],
             vec![el3, el4],
@@ -509,11 +510,11 @@ mod test_close_model {
             },
             codomain_equalities: vec![],
             codomain_relations: vec![(R, vec![1, 0])],
-        }.checked(&sig);
+        }.checked(sig);
 
-        close_model(&[symmetry], &mut model);
+        close_structure(&[symmetry], &mut structure);
 
-        assert_eq!(save_rows(model.rows(R)), hashset!{
+        assert_eq!(save_rows(structure.rows(R)), hashset!{
             vec![el0, el1],
             vec![el1, el0],
             vec![el2, el2],
@@ -521,7 +522,7 @@ mod test_close_model {
             vec![el4, el3],
         });
         for &el in &[el0, el1, el2, el3, el4] {
-            assert_eq!(model.representative(el), el);
+            assert_eq!(structure.representative(el), el);
         }
     }
 
@@ -534,18 +535,18 @@ mod test_close_model {
         use Sort::*;
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
-        let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(S);
-        let el1 = model.adjoin_element(S);
-        let el2 = model.adjoin_element(S);
-        let el3 = model.adjoin_element(S);
-        let el4 = model.adjoin_element(S);
-        let el5 = model.adjoin_element(S);
-        let el6 = model.adjoin_element(S);
-        let el7 = model.adjoin_element(S);
-        let el8 = model.adjoin_element(S);
-        let el9 = model.adjoin_element(S);
-        model.adjoin_rows(R, vec![
+        let mut structure = RelationalStructure::new(sig);
+        let el0 = structure.adjoin_element(S);
+        let el1 = structure.adjoin_element(S);
+        let el2 = structure.adjoin_element(S);
+        let el3 = structure.adjoin_element(S);
+        let el4 = structure.adjoin_element(S);
+        let el5 = structure.adjoin_element(S);
+        let el6 = structure.adjoin_element(S);
+        let el7 = structure.adjoin_element(S);
+        let el8 = structure.adjoin_element(S);
+        let el9 = structure.adjoin_element(S);
+        structure.adjoin_rows(R, vec![
             vec![el0, el1],
 
             vec![el2, el3],
@@ -567,9 +568,9 @@ mod test_close_model {
             },
             codomain_relations: vec![(R, vec![0, 3])],
             codomain_equalities: vec![],
-        }.checked(&sig);
+        }.checked(sig);
 
-        let mut expected = save_rows(model.rows(R));
+        let mut expected = save_rows(structure.rows(R));
         for a in &[el2, el3, el4] {
             for b in &[el2, el3, el4] {
                 expected.insert(vec![*a, *b]);
@@ -585,11 +586,11 @@ mod test_close_model {
 
         expected.insert(vec![el7, el9]);
 
-        close_model(&[transitivity], &mut model);
+        close_structure(&[transitivity], &mut structure);
 
-        assert_eq!(save_rows(model.rows(R)), expected);
+        assert_eq!(save_rows(structure.rows(R)), expected);
         for &el in &[el0, el1, el2, el3, el4, el5, el6, el7, el8, el9] {
-            assert_eq!(model.representative(el), el);
+            assert_eq!(structure.representative(el), el);
         }
     }
 
@@ -602,17 +603,17 @@ mod test_close_model {
         use Sort::*;
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
-        let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(S);
-        let el1 = model.adjoin_element(S);
-        let el2 = model.adjoin_element(S);
-        let el3 = model.adjoin_element(S);
-        let el4 = model.adjoin_element(S);
-        let el5 = model.adjoin_element(S);
-        let el6 = model.adjoin_element(S);
-        let el7 = model.adjoin_element(S);
+        let mut structure = RelationalStructure::new(sig);
+        let el0 = structure.adjoin_element(S);
+        let el1 = structure.adjoin_element(S);
+        let el2 = structure.adjoin_element(S);
+        let el3 = structure.adjoin_element(S);
+        let el4 = structure.adjoin_element(S);
+        let el5 = structure.adjoin_element(S);
+        let el6 = structure.adjoin_element(S);
+        let el7 = structure.adjoin_element(S);
 
-        model.adjoin_rows(R, vec![
+        structure.adjoin_rows(R, vec![
             vec![el0, el1],
 
             vec![el2, el3],
@@ -632,13 +633,13 @@ mod test_close_model {
             },
             codomain_relations: vec![],
             codomain_equalities: vec![(0, 1)],
-        }.checked(&sig);
+        }.checked(sig);
 
-        close_model(&[antisymmetry], &mut model);
+        close_structure(&[antisymmetry], &mut structure);
 
-        let elx = model.representative(el2);
-        assert_eq!(model.representative(el3), elx);
-        assert_eq!(save_rows(model.rows(R)), hashset!{
+        let elx = structure.representative(el2);
+        assert_eq!(structure.representative(el3), elx);
+        assert_eq!(save_rows(structure.rows(R)), hashset!{
             vec![el0, el1],
 
             vec![elx, elx],
@@ -650,7 +651,7 @@ mod test_close_model {
             vec![el7, el5],
         });
         for &el in &[el0, el1, el4, el5, el6, el7] {
-            assert_eq!(model.representative(el), el);
+            assert_eq!(structure.representative(el), el);
         }
     }
 
@@ -671,7 +672,7 @@ mod test_close_model {
             },
             codomain_relations: vec![(R, vec![0, 3])],
             codomain_equalities: vec![],
-        }.checked(&sig);
+        }.checked(sig);
         let antisymmetry = SurjectionPresentation {
             domain: Presentation {
                 relations: vec![R, R],
@@ -679,19 +680,19 @@ mod test_close_model {
             },
             codomain_relations: vec![],
             codomain_equalities: vec![(0, 1)],
-        }.checked(&sig);
+        }.checked(sig);
 
-        let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(S);
-        let el1 = model.adjoin_element(S);
-        let el2 = model.adjoin_element(S);
-        let el3 = model.adjoin_element(S);
-        let el4 = model.adjoin_element(S);
-        let el5 = model.adjoin_element(S);
-        let el6 = model.adjoin_element(S);
-        let el7 = model.adjoin_element(S);
+        let mut structure = RelationalStructure::new(sig);
+        let el0 = structure.adjoin_element(S);
+        let el1 = structure.adjoin_element(S);
+        let el2 = structure.adjoin_element(S);
+        let el3 = structure.adjoin_element(S);
+        let el4 = structure.adjoin_element(S);
+        let el5 = structure.adjoin_element(S);
+        let el6 = structure.adjoin_element(S);
+        let el7 = structure.adjoin_element(S);
 
-        model.adjoin_rows(R, vec![
+        structure.adjoin_rows(R, vec![
             vec![el0, el1],
 
             vec![el2, el3],
@@ -706,34 +707,34 @@ mod test_close_model {
 
         // Add a cycle of elements, i.e. a sequence in which each element is related to the next
         let cycle_elements: Vec<Element> =
-            repeat_with(|| model.adjoin_element(S)).
+            repeat_with(|| structure.adjoin_element(S)).
             take(10).
             collect();
-        model.adjoin_rows(R,
+        structure.adjoin_rows(R,
             cycle_elements.iter().
             zip(cycle_elements.iter().skip(1).chain(once(cycle_elements.first().unwrap()))).
             map(|(a, b)| vec![*a, *b])
         );
 
-        close_model(&[transitivity, antisymmetry], &mut model);
+        close_structure(&[transitivity, antisymmetry], &mut structure);
 
         for &el in &[el0, el1, el4] {
-            assert_eq!(model.representative(el), el);
+            assert_eq!(structure.representative(el), el);
         }
 
-        let elx = model.representative(el2);
-        assert_eq!(model.representative(el3), elx);
+        let elx = structure.representative(el2);
+        assert_eq!(structure.representative(el3), elx);
 
-        let ely = model.representative(el5);
-        assert_eq!(model.representative(el6), ely);
-        assert_eq!(model.representative(el7), ely);
+        let ely = structure.representative(el5);
+        assert_eq!(structure.representative(el6), ely);
+        assert_eq!(structure.representative(el7), ely);
 
-        let elz = model.representative(*cycle_elements.first().unwrap());
+        let elz = structure.representative(*cycle_elements.first().unwrap());
         for el in cycle_elements {
-            assert_eq!(model.representative(el), elz);
+            assert_eq!(structure.representative(el), elz);
         }
 
-        assert_eq!(save_rows(model.rows(R)), hashset!{
+        assert_eq!(save_rows(structure.rows(R)), hashset!{
             vec![el0, el1],
             vec![elx, elx],
             vec![ely, ely],
@@ -751,18 +752,18 @@ mod test_close_model {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
         
-        let functionality = CheckedSurjectionPresentation::functionality(&sig, O);
+        let functionality = CheckedSurjectionPresentation::functionality(sig, O);
 
-        let mut model = Model::new(&sig);
-        let el0 = model.adjoin_element(S);
-        let el1 = model.adjoin_element(S);
-        let el2 = model.adjoin_element(S);
-        let el3 = model.adjoin_element(S);
-        let el4 = model.adjoin_element(S);
-        let el5 = model.adjoin_element(S);
-        let el6 = model.adjoin_element(S);
+        let mut structure = RelationalStructure::new(sig);
+        let el0 = structure.adjoin_element(S);
+        let el1 = structure.adjoin_element(S);
+        let el2 = structure.adjoin_element(S);
+        let el3 = structure.adjoin_element(S);
+        let el4 = structure.adjoin_element(S);
+        let el5 = structure.adjoin_element(S);
+        let el6 = structure.adjoin_element(S);
 
-        model.adjoin_rows(O, vec![
+        structure.adjoin_rows(O, vec![
             vec![el0, el1, el1],
             vec![el0, el1, el2],
 
@@ -774,16 +775,16 @@ mod test_close_model {
             vec![el4, el1, el6],
         ]);
 
-        close_model(&[functionality], &mut model);
+        close_structure(&[functionality], &mut structure);
 
-        let el12 = model.representative(el1);
-        assert_eq!(model.representative(el2), el12);
+        let el12 = structure.representative(el1);
+        assert_eq!(structure.representative(el2), el12);
 
-        let el34 = model.representative(el3);
-        assert_eq!(model.representative(el4), el34);
+        let el34 = structure.representative(el3);
+        assert_eq!(structure.representative(el4), el34);
 
-        let el56 = model.representative(el5);
-        assert_eq!(model.representative(el6), el56);
+        let el56 = structure.representative(el5);
+        assert_eq!(structure.representative(el6), el56);
 
         assert_eq!(hashset!{el0, el12, el34, el56}.len(), 4);
     }

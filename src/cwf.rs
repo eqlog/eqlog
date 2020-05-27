@@ -1,7 +1,7 @@
 use crate::eqlog::signature::*;
 use crate::eqlog::syntax::*;
 use crate::eqlog::closure::*;
-use crate::eqlog::model::*;
+use crate::eqlog::relational_structure::*;
 use crate::eqlog::element::*;
 use std::iter::once;
 use std::collections::HashSet;
@@ -51,7 +51,7 @@ arities!{
 }
 pub type CwfSignature = StaticSignature<CwfSort, CwfRelation>;
 
-pub type Cwf = Model<CwfSignature>;
+pub type Cwf = RelationalStructure<CwfSignature>;
 
 lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSignature>> =
     vec![
@@ -181,10 +181,10 @@ lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSigna
         // equality reflection
         sequent!(eq_ty = Eq(s, t) & TmTy(e0) = eq_ty & TmTy(e1) = eq_ty => s = t & e0 = e1),
     ].iter().
-    map(|s| to_surjection_presentation(CwfSignature::new(), s).checked(CwfSignature::new())).
+    map(|s| to_surjection_presentation(&CwfSignature::new(), s).checked(CwfSignature::new())).
     chain(
         CwfSignature::new().relations().iter().
-        filter(|r| r.kind() == RelationKind::Operation).
+        filter(|r| r.relation_kind() == RelationKind::Operation).
         map(|r| CheckedSurjectionPresentation::functionality(CwfSignature::new(), *r))
     ).
     collect();
@@ -196,7 +196,7 @@ fn test_cwf_axioms() {
 }
 
 pub fn close_cwf(cwf: &mut Cwf) {
-    close_model(CWF_AXIOMS.as_slice(), cwf);
+    close_structure(CWF_AXIOMS.as_slice(), cwf);
 }
 
 pub fn els_are_equal(cwf: &mut Cwf, lhs: Element, rhs: Element) -> bool {
@@ -205,7 +205,7 @@ pub fn els_are_equal(cwf: &mut Cwf, lhs: Element, rhs: Element) -> bool {
 }
 
 pub fn adjoin_op(cwf: &mut Cwf, op: CwfRelation, args: Vec<Element>) -> Element {
-    assert_eq!(op.kind(), RelationKind::Operation);
+    assert_eq!(op.relation_kind(), RelationKind::Operation);
 
     let dom_len: usize = op.arity().len() - 1;
     let op_dom: &[CwfSort] = &op.arity()[.. dom_len];

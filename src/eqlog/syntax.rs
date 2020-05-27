@@ -560,22 +560,22 @@ fn check_occurence(seq: &Sequent) {
 }
 
 fn to_presentation<'a, Sig: Signature>(
-    signature: Sig,
+    signature: &Sig,
     formula: &'a Formula,
 ) -> (Presentation<Sig::Relation>, HashMap<&'a Term, (usize, Sig::Sort)>) 
 where
     Sig::Sort: Display,
     Sig::Relation: Display,
-    Sig::Relation: PredicateOrOperation,
+    //Sig::Relation: PredicateOrOperation,
 {
     let predicates: HashMap<String, Sig::Relation> =
         signature.relations().iter().cloned().
-        filter(|r| r.kind() == RelationKind::Predicate).
+        filter(|&r| signature.relation_kind(r) == RelationKind::Predicate).
         map(|r| (r.to_string(), r)).
         collect();
     let operations: HashMap<String, Sig::Relation> =
         signature.relations().iter().cloned().
-        filter(|r| r.kind() == RelationKind::Operation).
+        filter(|&r| signature.relation_kind(r) == RelationKind::Operation).
         map(|r| (r.to_string(), r)).
         collect();
 
@@ -694,25 +694,25 @@ where
 }
 
 pub fn to_surjection_presentation_impl<'a, Sig: Signature>(
-    signature: Sig,
+    signature: &Sig,
     premise: &'a Formula,
     conclusion: &'a Formula,
 ) -> SurjectionPresentation<Sig::Relation>
 where
     Sig::Sort: Display,
     Sig::Relation: Display,
-    Sig::Relation: PredicateOrOperation,
+    // Sig::Relation: PredicateOrOperation,
 {
-    let (domain, mut added_terms) = to_presentation(&signature, premise);
+    let (domain, mut added_terms) = to_presentation(signature, premise);
 
     let predicates: HashMap<String, Sig::Relation> =
         signature.relations().iter().cloned().
-        filter(|r| r.kind() == RelationKind::Predicate).
+        filter(|&r| signature.relation_kind(r) == RelationKind::Predicate).
         map(|r| (r.to_string(), r)).
         collect();
     let operations: HashMap<String, Sig::Relation> =
         signature.relations().iter().cloned().
-        filter(|r| r.kind() == RelationKind::Operation).
+        filter(|&r| signature.relation_kind(r) == RelationKind::Operation).
         map(|r| (r.to_string(), r)).
         collect();
 
@@ -830,13 +830,13 @@ where
 }
 
 pub fn to_surjection_presentation<Sig: Signature>(
-    signature: Sig,
+    signature: &Sig,
     sequent: &Sequent,
 ) -> SurjectionPresentation<Sig::Relation>
 where
     Sig::Sort: Display,
     Sig::Relation: Display,
-    Sig::Relation: PredicateOrOperation,
+    // Sig::Relation: PredicateOrOperation,
 {
     check_occurence(sequent);
 
@@ -884,6 +884,7 @@ mod test_presentations {
             Plus: S1 x S1 -> S1,
         },
     }
+    // const sig: StaticSignature<Sort, Relation> = StaticSignature::new();
     use Relation::*;
     fn sig() -> StaticSignature<Sort, Relation> {
         StaticSignature::new()
@@ -891,7 +892,7 @@ mod test_presentations {
 
     #[test]
     fn trivial_sequent() {
-        let sp = to_surjection_presentation(sig(), &sequent!(
+        let sp = to_surjection_presentation(&sig(), &sequent!(
              => 
         ));
         let _ = sp.clone().checked(sig());
@@ -903,11 +904,11 @@ mod test_presentations {
 
     #[test]
     fn equality_in_premise() {
-        let sp0 = to_surjection_presentation(sig(), &sequent!(
+        let sp0 = to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) & x = y => 
         ));
         let _ = sp0.clone().checked(sig());
-        assert_eq!(sp0, to_surjection_presentation(sig(), &sequent!(
+        assert_eq!(sp0, to_surjection_presentation(&sig(), &sequent!(
             Q(x, x) =>
         )));
 
@@ -916,7 +917,7 @@ mod test_presentations {
         assert_eq!(sp0.codomain_relations, vec![]);
         assert_eq!(sp0.codomain_equalities, vec![]);
 
-        let sp1 = to_surjection_presentation(sig(), &sequent!(
+        let sp1 = to_surjection_presentation(&sig(), &sequent!(
             P(x, O(_, x)) & P(x0, O(_, x0)) & x = x0 => 
         ));
         let _ = sp1.clone().checked(sig());
@@ -933,7 +934,7 @@ mod test_presentations {
 
     #[test]
     fn equality_in_conclusion() {
-        let sp0 = to_surjection_presentation(sig(), &sequent!(
+        let sp0 = to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) & Q(y, x) => x = y
         ));
         let _ = sp0.clone().checked(sig());
@@ -942,7 +943,7 @@ mod test_presentations {
         assert_eq!(sp0.codomain_relations, vec![]);
         assert_eq!(sp0.codomain_equalities, vec![(0, 1)]);
 
-        let sp1 = to_surjection_presentation(sig(), &sequent!(
+        let sp1 = to_surjection_presentation(&sig(), &sequent!(
             !O(x, y) & !O(x, y0) => O(x, y) = O(x, y0)
         ));
         let _ = sp1.clone().checked(sig());
@@ -954,7 +955,7 @@ mod test_presentations {
 
     #[test]
     fn predicate_in_conclusion() {
-        let sp = to_surjection_presentation(sig(), &sequent!(
+        let sp = to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) => Q(y, x)
         ));
         let _ = sp.clone().checked(sig());
@@ -966,7 +967,7 @@ mod test_presentations {
 
     #[test]
     fn operation_in_conclusion() {
-        let sp = to_surjection_presentation(sig(), &sequent!(
+        let sp = to_surjection_presentation(&sig(), &sequent!(
             !O(x, y) & P(y, x0) => O(x, y) = O(x0, y)
         ));
         let _ = sp.clone().checked(sig());
@@ -978,7 +979,7 @@ mod test_presentations {
 
     #[test]
     fn reduction() {
-        let sp0 = to_surjection_presentation(sig(), &sequent!(
+        let sp0 = to_surjection_presentation(&sig(), &sequent!(
             O(O(x, y), y) ~> O(x, y)
         ));
         let _ = sp0.clone().checked(sig());
@@ -987,7 +988,7 @@ mod test_presentations {
         assert_eq!(sp0.codomain_relations, vec![(O, vec![2, 1, 2])]);
         assert_eq!(sp0.codomain_equalities, vec![]);
 
-        let sp1 = to_surjection_presentation(sig(), &sequent!(
+        let sp1 = to_surjection_presentation(&sig(), &sequent!(
             Plus(X, Y) ~> Plus(Y, X)
         ));
         let _ = sp1.clone().checked(sig());
@@ -996,7 +997,7 @@ mod test_presentations {
         assert_eq!(sp1.codomain_relations, vec![(Plus, vec![1, 0, 2])]);
         assert_eq!(sp1.codomain_equalities, vec![]);
 
-        let sp2 = to_surjection_presentation(sig(), &sequent!(
+        let sp2 = to_surjection_presentation(&sig(), &sequent!(
             Plus(X, Plus(X, Plus(X, X))) ~> X
         ));
         let _ = sp2.clone().checked(sig());
@@ -1011,7 +1012,7 @@ mod test_presentations {
 
     #[test]
     fn conditional_reduction() {
-        let sp1 = to_surjection_presentation(sig(), &sequent!(
+        let sp1 = to_surjection_presentation(&sig(), &sequent!(
             R(X, Y) => Plus(X, Y) ~> Plus(Y, X)
         ));
         let _ = sp1.clone().checked(sig());
@@ -1026,63 +1027,63 @@ mod test_presentations {
 
     #[test] #[should_panic]
     fn variable_used_once() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) & => Q(x, x)
         ));
     }
 
     #[test] #[should_panic]
     fn not_surjective_variable() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             Q(x, _) => Q(x, z) & Q(x, z)
         ));
     }
 
     #[test] #[should_panic]
     fn not_surjective_operation() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             P(x, y) & P(x, z) => O(y, x) = O(z, x)
         ));
     }
 
     #[test] #[should_panic]
     fn predicate_arity_number() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             Q(x, y, z) & Q(y, x, z) =>
         ));
     }
 
     #[test] #[should_panic]
     fn predicate_arity_sorts() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             P(x, y) & P(O(y, x), y) =>
         ));
     }
 
     #[test] #[should_panic]
     fn operation_arity_number() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             !O(y, _, x) => P(x, y)
         ));
     }
 
     #[test] #[should_panic]
     fn operation_arity_sorts() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             !O(y, x) => O(x, y) = O(y, x)
         ));
     }
 
     #[test] #[should_panic]
     fn defined_variable() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             P(x, _) & !z & => P(x, z)
         ));
     }
 
     #[test] #[should_panic]
     fn defined_in_conclusion() {
-        to_surjection_presentation(sig(), &sequent!(
+        to_surjection_presentation(&sig(), &sequent!(
             P(x, y) => !O(y, x)
         ));
     }
