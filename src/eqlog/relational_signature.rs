@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use super::enumerable::*;
-use std::marker::{PhantomData, Sized};
+use std::marker::PhantomData;
 
 pub trait RelationalSignature {
     type Sort: 'static + Into<usize> + Copy + PartialEq + Eq + Debug;

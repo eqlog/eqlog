@@ -1,4 +1,3 @@
-use std::marker::{PhantomData, Sized};
 use std::fmt::Debug;
 use super::enumerable::*;
 pub use super::relational_signature::*;

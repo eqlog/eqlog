@@ -1,4 +1,3 @@
-use super::relational_signature::*;
 use super::relational_structure::*;
 use super::signature::*;
 use super::element::Element;

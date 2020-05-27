@@ -25,13 +25,13 @@ pub enum Tracing {
     No, // No.
 }
 
-pub fn adjoin_element(cwf: &mut Cwf, tracing: Tracing, sort: CwfSort) -> Element {
+pub fn adjoin_element(cwf: &mut Cwf, _tracing: Tracing, sort: CwfSort) -> Element {
     cwf.adjoin_element(sort)
 }
-pub fn adjoin_row(cwf: &mut Cwf, tracing: Tracing, r: CwfRelation, row: Vec<Element>) {
+pub fn adjoin_row(cwf: &mut Cwf, _tracing: Tracing, r: CwfRelation, row: Vec<Element>) {
     cwf.adjoin_rows(r, once(row));
 }
-pub fn adjoin_op(cwf: &mut Cwf, tracing: Tracing, op: CwfRelation, args: Vec<Element>) -> Element {
+pub fn adjoin_op(cwf: &mut Cwf, _tracing: Tracing, op: CwfRelation, args: Vec<Element>) -> Element {
     assert_eq!(op.relation_kind(), RelationKind::Operation);
 
     let dom_len: usize = op.arity().len() - 1;
@@ -46,15 +46,15 @@ pub fn adjoin_op(cwf: &mut Cwf, tracing: Tracing, op: CwfRelation, args: Vec<Ele
     cwf.adjoin_rows(op, once(row));
     result
 }
-pub fn close_cwf(cwf: &mut Cwf, tracing: Tracing) {
+pub fn close_cwf(cwf: &mut Cwf, _tracing: Tracing) {
     let sp_iter = 
-        CWF_THEORY.functionalities.iter().map(|(r, sp)| sp)
-        .chain(CWF_THEORY.axioms.iter().map(|(seq, sp)| sp));
+        CWF_THEORY.functionalities.iter().map(|(_, sp)| sp)
+        .chain(CWF_THEORY.axioms.iter().map(|(_, sp)| sp));
     close_structure(sp_iter, cwf);
 }
 
 impl Scope {
-    fn new(cwf: &mut Cwf, tracing: Tracing) -> Self {
+    pub fn new(cwf: &mut Cwf, tracing: Tracing) -> Self {
         let empty_ctx = adjoin_element(cwf, tracing, CwfSort::Ctx);
         adjoin_op(cwf, tracing, CwfRelation::Id, vec![empty_ctx]);
         Scope {

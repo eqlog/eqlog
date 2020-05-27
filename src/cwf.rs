@@ -1,12 +1,5 @@
-use crate::eqlog::signature::*;
-use crate::eqlog::syntax::*;
-use crate::eqlog::closure::*;
 use crate::eqlog::relational_structure::*;
-use crate::eqlog::element::*;
 use crate::eqlog::theory::*;
-use std::iter::once;
-use std::collections::HashSet;
-use std::convert::TryFrom;
 
 arities!{
     pub enum CwfSort {Ctx, Mor, Ty, Tm},

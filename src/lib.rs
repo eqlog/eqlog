@@ -3,7 +3,7 @@
 extern crate lalrpop_util;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
+#[macro_use] #[cfg(test)]
 extern crate maplit;
 
 #[macro_use]
