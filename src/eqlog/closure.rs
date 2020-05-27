@@ -434,8 +434,9 @@ impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> Surjection
     }
 }
 
-pub fn close_structure<Sig: Signature>(
-    presentations: &[CheckedSurjectionPresentation<Sig>],
+pub fn close_structure<'a, Sig: 'a + Signature>(
+    // presentations: &[CheckedSurjectionPresentation<Sig>],
+    presentations: impl Clone + IntoIterator<Item = &'a CheckedSurjectionPresentation<Sig>>,
     structure: &mut RelationalStructure<Sig>
 ) {
     // TODO: check whether signatures are equal?
@@ -443,7 +444,7 @@ pub fn close_structure<Sig: Signature>(
     let mut conc_rows: Vec<(Sig::Relation, Vec<Element>)> = vec![];
 
     loop {
-        for presentation in presentations {
+        for presentation in presentations.clone() {
             presentation.domain.visit_new_interpretations(structure, |row| {
                 conc_rows.extend(presentation.codomain_relations.iter().map(|(r, row_indices)| {
                     (*r, row_indices.iter().map(|i| row[*i]).collect())

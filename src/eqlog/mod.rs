@@ -6,3 +6,5 @@ mod union_find;
 pub mod relational_structure;
 pub mod closure;
 #[macro_use] pub mod syntax;
+pub mod theory;
+pub mod model;

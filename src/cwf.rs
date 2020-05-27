@@ -53,6 +53,7 @@ pub type CwfSignature = StaticSignature<CwfSort, CwfRelation>;
 
 pub type Cwf = RelationalStructure<CwfSignature>;
 
+
 lazy_static! { static ref CWF_AXIOMS: Vec<CheckedSurjectionPresentation<CwfSignature>> =
     vec![
         // domain and codomain of identities
