@@ -109,8 +109,10 @@ pub fn extend_ctx_unchecked(
     let ty_el = add_type(cwf, scope, tracing, EqChecking::No, ty);
     let ext_ctx_el = adjoin_element(cwf, tracing, CwfSort::Ctx);
     adjoin_row(cwf, tracing, CwfRelation::ExtCtx, vec![current_ctx(scope), ext_ctx_el]);
+    adjoin_op(cwf, tracing, CwfRelation::Id, vec![ext_ctx_el]);
+    adjoin_op(cwf, tracing, CwfRelation::Wkn, vec![ext_ctx_el]);
+    adjoin_row(cwf, tracing, CwfRelation::IterExtCtx, vec![current_ctx(scope), ext_ctx_el]);
     adjoin_row(cwf, tracing, CwfRelation::ExtTy, vec![ext_ctx_el, ty_el]);
-    adjoin_op(cwf, tracing, CwfRelation::Wkn, vec![ext_ctx_el]); // TODO: why is this needed?
     let var_el = adjoin_op(cwf, tracing, CwfRelation::Var, vec![ext_ctx_el]);
 
     scope.current_extension.push(ext_ctx_el);
@@ -204,12 +206,10 @@ fn adjoin_post_compositions_step(
         .filter_map(|dom_row| {
             let [morph, dom] = <[Element; 2]>::try_from(dom_row).unwrap();
 
-            // TODO: checking `dom != dom_root_ctx` shouldn't be neccessary once IterExtCtx can be
-            // made reflexive
-            if dom != dom_root_ctx {
-                // return None if dom is not an iterated ext of dom_root_ctx
-                cwf.rows(CwfRelation::IterExtCtx).find(|r| r == &[dom_root_ctx, dom])?;
-            }
+            // TODO: why doesn't this work?
+            // if cwf.rows(CwfRelation::IterExtCtx).find(|r| r == &[dom_root_ctx, dom]).is_none() {
+            //     return None;
+            // }
 
             let cod = cwf.rows(CwfRelation::Cod).find(|r| r[0] == morph)?[1];
 
@@ -649,5 +649,23 @@ def neg_ (x : Bool): Bool :=
   
 def neg_true : neg_ true = false := refl false.  
   ");
+    }
+
+    #[test]
+    fn bool_elim_involutive() {
+        check_defs("
+def neg_ (x : Bool): Bool :=
+  elim x into (y : Bool) : Bool
+  | true => false
+  | false => true
+  end.
+
+def r (x : Bool) : x = neg_ (neg_ x) :=
+  elim x into (y : Bool) : y = neg_ (neg_ y)
+  | true => let _0 : false = neg_ true := refl false in
+            (refl true : true = neg_ (neg_ true))
+  | false => let _1 : true = neg_ false := refl true in
+             (refl false : false = neg_ (neg_ false))
+  end.")
     }
 } 
