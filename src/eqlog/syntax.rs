@@ -562,7 +562,7 @@ fn check_occurence(seq: &Sequent) {
 fn to_presentation<'a, Sig: Signature>(
     signature: &Sig,
     formula: &'a Formula,
-) -> (Presentation<Sig::Relation>, HashMap<&'a Term, (usize, Sig::Sort)>) 
+) -> (Presentation<Sig>, HashMap<&'a Term, (usize, Sig::Sort)>) 
 where
     Sig::Sort: Display,
     Sig::Relation: Display,
@@ -580,7 +580,8 @@ where
         collect();
 
     let mut added_terms: HashMap<&'a Term, (usize, Sig::Sort)> = HashMap::new();
-    let mut presentation = Presentation { relations: vec![], equalities: vec![] };
+    let mut relations: Vec<Sig::Relation> = Vec::new();
+    let mut equalities: Vec<(usize, usize)> = Vec::new();
     let mut row_len: usize = 0;
 
     let mut term_queue: VecDeque<&Term> = VecDeque::new();
@@ -598,7 +599,7 @@ where
                     "{}: Undeclared predicate symbol",
                     name,
                 ));
-                presentation.relations.push(r);
+                relations.push(r);
 
                 let arity = signature.arity(r);
                 assert!(
@@ -615,7 +616,7 @@ where
                             "Sort mismatch: {} must have sort {} but has sort {}",
                             arg, sort, sort0,
                         );
-                        presentation.equalities.push((*global_index0, global_index));
+                        equalities.push((*global_index0, global_index));
                     } else {
                         added_terms.insert(arg, (global_index, *sort));
                         term_queue.push_back(arg);
@@ -632,7 +633,7 @@ where
                 "{}: Undeclared operation symbol",
                 name,
             ));
-            presentation.relations.push(r);
+            relations.push(r);
 
             let arity = signature.arity(r);
             assert!(
@@ -649,7 +650,7 @@ where
                         "Sort mismatch: {} must have sort {} but has sort {}",
                         arg, sort, sort0,
                     );
-                    presentation.equalities.push((*global_index0, global_index));
+                    equalities.push((*global_index0, global_index));
                 } else {
                     added_terms.insert(arg, (global_index, *sort));
                 }
@@ -681,7 +682,7 @@ where
                             "Sort mismatch: {} has sort {} but {} has sort {}",
                             lhs, s, rhs, t,
                         );
-                        presentation.equalities.push((i, j)); },
+                        equalities.push((i, j)); },
                     (Some((i, s)), _) => { added_terms.insert(rhs, (i, s)); },
                     (_, Some((j, t))) => { added_terms.insert(lhs, (j, t)); },
                     _ => panic!("Neither {} nor {} appear in operation or predicate", lhs, rhs),
@@ -690,14 +691,14 @@ where
         }
     }
 
-    (presentation, added_terms)
+    (Presentation::new(signature, relations, equalities), added_terms)
 }
 
 pub fn to_surjection_presentation_impl<'a, Sig: Signature>(
     signature: &Sig,
     premise: &'a Formula,
     conclusion: &'a Formula,
-) -> SurjectionPresentation<Sig::Relation>
+) -> SurjectionPresentation<Sig>
 where
     Sig::Sort: Display,
     Sig::Relation: Display,
@@ -822,17 +823,13 @@ where
         }
     }
 
-    SurjectionPresentation {
-        domain,
-        codomain_equalities,
-        codomain_relations,
-    }
+    SurjectionPresentation::new(signature, domain, codomain_relations, codomain_equalities)
 }
 
 pub fn to_surjection_presentation<Sig: Signature>(
     signature: &Sig,
     sequent: &Sequent,
-) -> SurjectionPresentation<Sig::Relation>
+) -> SurjectionPresentation<Sig>
 where
     Sig::Sort: Display,
     Sig::Relation: Display,
@@ -873,6 +870,7 @@ where
 #[cfg(test)]
 mod test_presentations {
     use super::*;
+    use std::collections::HashSet;
 
     arities!{
         pub enum Sort {S0, S1},
@@ -884,10 +882,30 @@ mod test_presentations {
             Plus: S1 x S1 -> S1,
         },
     }
-    // const sig: StaticSignature<Sort, Relation> = StaticSignature::new();
     use Relation::*;
-    fn sig() -> StaticSignature<Sort, Relation> {
-        StaticSignature::new()
+    type Sig = StaticSignature<Sort, Relation>;
+    fn sig() -> Sig {
+        Sig::new()
+    }
+
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    struct Parts {
+        domain_relations: Vec<Relation>,
+        domain_equalities: HashSet<(usize, usize)>,
+        codomain_relations: HashSet<(Relation, Vec<usize>)>,
+        codomain_equalities: HashSet<(usize, usize)>,
+    }
+
+    fn disassemble(surj_pres: &SurjectionPresentation<Sig>) -> Parts {
+        Parts {
+            domain_relations: surj_pres.domain().relations().collect(),
+            domain_equalities: surj_pres.domain().equalities().collect(),
+            codomain_relations:
+                surj_pres.codomain_relations()
+                .map(|(r, row)| (r, row.to_vec()))
+                .collect(),
+            codomain_equalities: surj_pres.codomain_equalities().collect(),
+        }
     }
 
     #[test]
@@ -895,11 +913,12 @@ mod test_presentations {
         let sp = to_surjection_presentation(&sig(), &sequent!(
              => 
         ));
-        let _ = sp.clone().checked(sig());
-        assert_eq!(sp.domain.relations, vec![]);
-        assert_eq!(sp.domain.equalities, vec![]);
-        assert_eq!(sp.codomain_relations, vec![]);
-        assert_eq!(sp.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp), Parts{
+            domain_relations: vec![],
+            domain_equalities: hashset![],
+            codomain_relations: hashset![],
+            codomain_equalities: hashset![],
+        });
     }
 
     #[test]
@@ -907,29 +926,28 @@ mod test_presentations {
         let sp0 = to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) & x = y => 
         ));
-        let _ = sp0.clone().checked(sig());
         assert_eq!(sp0, to_surjection_presentation(&sig(), &sequent!(
             Q(x, x) =>
         )));
 
-        assert_eq!(sp0.domain.relations, vec![Q]);
-        assert_eq!(sp0.domain.equalities, vec![(0, 1)]);
-        assert_eq!(sp0.codomain_relations, vec![]);
-        assert_eq!(sp0.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp0), Parts{
+            domain_relations: vec![Q],
+            domain_equalities: hashset!{(0, 1)},
+            codomain_relations: hashset![],
+            codomain_equalities: hashset![],
+        });
 
         let sp1 = to_surjection_presentation(&sig(), &sequent!(
             P(x, O(_, x)) & P(x0, O(_, x0)) & x = x0 => 
         ));
-        let _ = sp1.clone().checked(sig());
         // P(0, 1) & P(2, 3) & o(4, 5, 6) & O(7, 8, 9) & <equalities> => 
 
-        assert_eq!(sp1.domain.relations, vec![P, P, O, O]);
-        assert_eq!(
-            sp1.domain.equalities.clone().sort(),
-            vec![(1, 6), (0, 5), (3, 9), (2, 8), (0, 2)].sort()
-        );
-        assert_eq!(sp1.codomain_relations, vec![]);
-        assert_eq!(sp1.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp1), Parts{
+            domain_relations: vec![P, P, O, O],
+            domain_equalities: hashset!{(1, 6), (0, 5), (3, 9), (2, 8), (0, 2)},
+            codomain_relations: hashset!{},
+            codomain_equalities: hashset!{},
+        });
     }
 
     #[test]
@@ -937,20 +955,22 @@ mod test_presentations {
         let sp0 = to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) & Q(y, x) => x = y
         ));
-        let _ = sp0.clone().checked(sig());
-        assert_eq!(sp0.domain.relations, vec![Q, Q]);
-        assert_eq!(sp0.domain.equalities.clone().sort(), vec![(0, 3), (1, 2)].sort());
-        assert_eq!(sp0.codomain_relations, vec![]);
-        assert_eq!(sp0.codomain_equalities, vec![(0, 1)]);
+        assert_eq!(disassemble(&sp0), Parts{
+            domain_relations: vec![Q, Q],
+            domain_equalities: hashset!{(0, 3), (1, 2)},
+            codomain_relations: hashset!{},
+            codomain_equalities: hashset!{(0, 1)},
+        });
 
         let sp1 = to_surjection_presentation(&sig(), &sequent!(
             !O(x, y) & !O(x, y0) => O(x, y) = O(x, y0)
         ));
-        let _ = sp1.clone().checked(sig());
-        assert_eq!(sp1.domain.relations, vec![O, O]);
-        assert_eq!(sp1.domain.equalities, vec![(0, 3)]);
-        assert_eq!(sp1.codomain_relations, vec![]);
-        assert_eq!(sp1.codomain_equalities, vec![(2, 5)]);
+        assert_eq!(disassemble(&sp1), Parts{
+            domain_relations: vec![O, O],
+            domain_equalities: hashset!{(0, 3)},
+            codomain_relations: hashset!{},
+            codomain_equalities: hashset!{(2, 5)},
+        });
     }
 
     #[test]
@@ -958,11 +978,12 @@ mod test_presentations {
         let sp = to_surjection_presentation(&sig(), &sequent!(
             Q(x, y) => Q(y, x)
         ));
-        let _ = sp.clone().checked(sig());
-        assert_eq!(sp.domain.relations, vec![Q]);
-        assert_eq!(sp.domain.equalities, vec![]);
-        assert_eq!(sp.codomain_relations, vec![(Q, vec![1, 0])]);
-        assert_eq!(sp.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp), Parts{
+            domain_relations: vec![Q],
+            domain_equalities: hashset!{},
+            codomain_relations: hashset!{(Q, vec![1, 0])},
+            codomain_equalities: hashset!{},
+        });
     }
 
     #[test]
@@ -970,11 +991,12 @@ mod test_presentations {
         let sp = to_surjection_presentation(&sig(), &sequent!(
             !O(x, y) & P(y, x0) => O(x, y) = O(x0, y)
         ));
-        let _ = sp.clone().checked(sig());
-        assert_eq!(sp.domain.relations, vec![P, O]);
-        assert_eq!(sp.domain.equalities, vec![(0, 3)]);
-        assert_eq!(sp.codomain_relations, vec![(O, vec![1, 0, 4])]);
-        assert_eq!(sp.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp), Parts{
+            domain_relations: vec![P, O],
+            domain_equalities: hashset!{(0, 3)},
+            codomain_relations: hashset!{(O, vec![1, 0, 4])},
+            codomain_equalities: hashset!{},
+        });
     }
 
     #[test]
@@ -982,47 +1004,45 @@ mod test_presentations {
         let sp0 = to_surjection_presentation(&sig(), &sequent!(
             O(O(x, y), y) ~> O(x, y)
         ));
-        let _ = sp0.clone().checked(sig());
-        assert_eq!(sp0.domain.relations, vec![O, O]);
-        assert_eq!(sp0.domain.equalities.clone().sort(), vec![(0, 3), (1, 4)].sort());
-        assert_eq!(sp0.codomain_relations, vec![(O, vec![2, 1, 2])]);
-        assert_eq!(sp0.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp0), Parts{
+            domain_relations: vec![O, O],
+            domain_equalities: hashset!{(0, 3), (1, 4), (2, 5)},
+            codomain_relations: hashset!{(O, vec![2, 1, 2])},
+            codomain_equalities: hashset!{},
+        });
 
         let sp1 = to_surjection_presentation(&sig(), &sequent!(
             Plus(X, Y) ~> Plus(Y, X)
         ));
-        let _ = sp1.clone().checked(sig());
-        assert_eq!(sp1.domain.relations, vec![Plus]);
-        assert_eq!(sp1.domain.equalities, vec![]);
-        assert_eq!(sp1.codomain_relations, vec![(Plus, vec![1, 0, 2])]);
-        assert_eq!(sp1.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp1), Parts{
+            domain_relations: vec![Plus],
+            domain_equalities: hashset!{},
+            codomain_relations: hashset!{(Plus, vec![1, 0, 2])},
+            codomain_equalities: hashset!{},
+        });
 
         let sp2 = to_surjection_presentation(&sig(), &sequent!(
             Plus(X, Plus(X, Plus(X, X))) ~> X
         ));
-        let _ = sp2.clone().checked(sig());
-        assert_eq!(sp2.domain.relations, vec![Plus, Plus]);
-        assert_eq!(
-            sp2.domain.equalities.clone().sort(),
-            vec![(0, 3), (0, 4), (1, 5)].sort()
-        );
-        assert_eq!(sp2.codomain_relations, vec![(Plus, vec![0, 2, 0])]);
-        assert_eq!(sp2.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp2), Parts{
+            domain_relations: vec![Plus, Plus],
+            domain_equalities: hashset!{(0, 3), (0, 4), (1, 5)},
+            codomain_relations: hashset!{(Plus, vec![0, 2, 0])},
+            codomain_equalities: hashset!{},
+        });
     }
 
     #[test]
     fn conditional_reduction() {
-        let sp1 = to_surjection_presentation(&sig(), &sequent!(
+        let sp = to_surjection_presentation(&sig(), &sequent!(
             R(X, Y) => Plus(X, Y) ~> Plus(Y, X)
         ));
-        let _ = sp1.clone().checked(sig());
-        assert_eq!(sp1.domain.relations, vec![R, Plus]);
-        assert_eq!(
-            sp1.domain.equalities.clone().sort(),
-            vec![(0, 3), (1, 2)].clone().sort()
-        );
-        assert_eq!(sp1.codomain_relations, vec![(Plus, vec![0, 1, 4])]);
-        assert_eq!(sp1.codomain_equalities, vec![]);
+        assert_eq!(disassemble(&sp), Parts{
+            domain_relations: vec![R, Plus],
+            domain_equalities: hashset!{(0, 3), (1, 2)},
+            codomain_relations: hashset!{(Plus, vec![0, 1, 4])},
+            codomain_equalities: hashset!{},
+        });
     }
 
     #[test] #[should_panic]

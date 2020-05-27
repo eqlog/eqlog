@@ -5,31 +5,24 @@ use super::element::Element;
 use std::cmp::max;
 use std::fmt::Debug;
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Presentation<Relation> {
-    pub relations: Vec<Relation>,
-    pub equalities: Vec<(usize, usize)>,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct RelationInPresentation<Relation> {
-    id: Relation,
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct RelationInPresentation<Sig: Signature> {
+    id: Sig::Relation,
     equalities: Vec<(usize, usize)>,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct CheckedPresentation<Sig: Signature> {
-    signature: Sig,
-    rips: Vec<RelationInPresentation<Sig::Relation>>,
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Presentation<Sig: Signature> {
+    rips: Vec<RelationInPresentation<Sig>>,
     row_length: usize,
 }
 
-impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> Presentation<Relation> {
-    pub fn checked<Sig: Signature<Relation = Relation>>(
-        self,
-        signature: Sig,
-    ) -> CheckedPresentation<Sig> {
-        let Presentation { relations, mut equalities} = self;
+impl<Sig: Signature> Presentation<Sig> {
+    pub fn new(
+        signature: &Sig,
+        relations: Vec<Sig::Relation>,
+        mut equalities: Vec<(usize, usize)>,
+    ) -> Self {
         let arities =
             relations.iter().
             map(|r| signature.arity(*r).iter());
@@ -44,7 +37,7 @@ impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> Presentati
 
         equalities.sort_by_key(|(lhs, rhs)| max(*lhs, *rhs));
 
-        let mut rips: Vec<RelationInPresentation<Relation>> = Vec::with_capacity(relations.len());
+        let mut rips: Vec<RelationInPresentation<Sig>> = Vec::with_capacity(relations.len());
         let mut remaining_equalities: &[(usize, usize)] = equalities.as_slice();
         let mut current_row_position = 0;
 
@@ -65,26 +58,31 @@ impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> Presentati
             });
 
         }
-        CheckedPresentation {
-            signature,
+        Presentation {
             rips,
             row_length,
         }
     }
+    pub fn relations<'a>(&'a self) -> impl 'a + Iterator<Item = Sig::Relation> {
+        self.rips.iter().map(|rip| rip.id)
+    }
+    pub fn equalities<'a>(&'a self) -> impl 'a + Iterator<Item = (usize, usize)> {
+        self.rips.iter().map(|rip| rip.equalities.iter().copied()).flatten()
+    }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct RelationInInterpretation<'a, Relation> {
-    rip: &'a RelationInPresentation<Relation>,
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct RelationInInterpretation<'a, Sig: Signature> {
+    rip: &'a RelationInPresentation<Sig>,
     use_new_rows: bool,
     use_old_rows: bool,
 }
 
-fn visit_new_interpretations_impl<'a, Sig: Signature>(
+fn visit_new_interpretations_impl<'a, Sig: 'a + Signature>(
     structure: &RelationalStructure<Sig>,
     visitor: &mut impl for<'b> FnMut(&'b [Element]),
     interpretation: &mut Vec<Element>,
-    mut riis: impl Iterator<Item = RelationInInterpretation<'a, Sig::Relation>> + Clone
+    mut riis: impl Iterator<Item = RelationInInterpretation<'a, Sig>> + Clone
 ) {
     if let Some(RelationInInterpretation{rip, use_new_rows, use_old_rows}) = riis.next() {
         let before_len = interpretation.len();
@@ -124,27 +122,23 @@ fn visit_new_interpretations_impl<'a, Sig: Signature>(
     }
 }
 
-impl<Sig: Signature> CheckedPresentation<Sig> {
-    pub fn visit_new_interpretations(
-        &self,
-        structure: &RelationalStructure<Sig>,
-        mut visitor: impl for<'b> FnMut(&'b [Element])
-    ) {
-        // TODO: check whether signatures are equal?
-
-        let mut interpretation: Vec<Element> = Vec::with_capacity(self.row_length);
-        for i in 0 .. self.rips.len() {
-            visit_new_interpretations_impl(
-                structure,
-                &mut visitor,
-                &mut interpretation,
-                self.rips.iter().enumerate().map(|(j, rip)| RelationInInterpretation {
-                    rip: rip,
-                    use_new_rows: i <= j,
-                    use_old_rows: i != j,
-                }),
-            );
-        }
+pub fn visit_new_interpretations<Sig: Signature>(
+    presentation: &Presentation<Sig>,
+    structure: &RelationalStructure<Sig>,
+    mut visitor: impl for<'b> FnMut(&'b [Element])
+) {
+    let mut interpretation: Vec<Element> = Vec::with_capacity(presentation.row_length);
+    for i in 0 .. presentation.rips.len() {
+        visit_new_interpretations_impl(
+            structure,
+            &mut visitor,
+            &mut interpretation,
+            presentation.rips.iter().enumerate().map(|(j, rip)| RelationInInterpretation {
+                rip: rip,
+                use_new_rows: i <= j,
+                use_old_rows: i != j,
+            }),
+        );
     }
 }
 
@@ -154,11 +148,11 @@ mod test_interpretation {
     use std::collections::HashSet;
 
     fn compute_new_interpretation<Sig: Signature>(
-        presentation: &CheckedPresentation<Sig>,
+        presentation: &Presentation<Sig>,
         structure: &RelationalStructure<Sig>,
     ) -> HashSet<Row> {
         let mut result: HashSet<Row> = HashSet::new();
-        presentation.visit_new_interpretations(structure, |row| {
+        visit_new_interpretations(presentation, structure, |row| {
             result.insert(row.to_vec());
         });
         result
@@ -175,10 +169,7 @@ mod test_interpretation {
         let sig = StaticSignature::<Sort, Relation>::new();
 
         let structure = RelationalStructure::new(sig);
-        let presentation = Presentation {
-            relations: vec![],
-            equalities: vec![],
-        }.checked(sig);
+        let presentation = Presentation::new(&sig, vec![], vec![]);
         assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{});
     }
 
@@ -205,10 +196,7 @@ mod test_interpretation {
             vec![a1, b0],
         ]);
 
-        let presentation = Presentation {
-            relations: vec![R],
-            equalities: vec![],
-        }.checked(sig);
+        let presentation = Presentation::new(&sig, vec![R], vec![]);
 
         assert_eq!(
             compute_new_interpretation(&presentation, &structure), hashset!{
@@ -245,10 +233,7 @@ mod test_interpretation {
             vec![a1, b1],
         ]);
 
-        let presentation = Presentation {
-            relations: vec![R, R],
-            equalities: vec![(1, 3)],
-        }.checked(sig);
+        let presentation = Presentation::new(&sig, vec![R, R], vec![(1, 3)]);
 
         assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b0, a0, b0],
@@ -292,10 +277,7 @@ mod test_interpretation {
             vec![b1, a1],
         ]);
 
-        let presentation = Presentation {
-            relations: vec![R0, R1],
-            equalities: vec![(0, 3)],
-        }.checked(sig);
+        let presentation = Presentation::new(&sig, vec![R0, R1], vec![(0, 3)]);
 
         assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b0, b0, a0],
@@ -350,10 +332,7 @@ mod test_interpretation {
             vec![b0, b1],
         ]);
 
-        let presentation = Presentation {
-            relations: vec![R0, R1],
-            equalities: vec![(2, 3), (1, 2)],
-        }.checked(sig);
+        let presentation = Presentation::new(&sig, vec![R0, R1], vec![(2, 3), (1, 2)]);
 
         assert_eq!(compute_new_interpretation(&presentation, &structure), hashset!{
             vec![a0, b0, b0, b0],
@@ -362,25 +341,47 @@ mod test_interpretation {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct SurjectionPresentation<Relation> {
-    pub domain: Presentation<Relation>,
-    pub codomain_equalities: Vec<(usize, usize)>,
-    pub codomain_relations: Vec<(Relation, Vec<usize>)>,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct CheckedSurjectionPresentation<Sig: Signature> {
-    domain: CheckedPresentation<Sig>,
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SurjectionPresentation<Sig: Signature> {
+    domain: Presentation<Sig>,
     codomain_equalities: Vec<(usize, usize)>,
     codomain_relations: Vec<(Sig::Relation, Vec<usize>)>,
 }
 
-impl<Sig: Signature> CheckedSurjectionPresentation<Sig> {
-    pub fn functionality(signature: Sig, relation: Sig::Relation) -> Self {
+impl<Sig: Signature> SurjectionPresentation<Sig> {
+    pub fn new(
+        signature: &Sig,
+        domain: Presentation<Sig>,
+        codomain_relations: Vec<(Sig::Relation, Vec<usize>)>,
+        codomain_equalities: Vec<(usize, usize)>,
+    ) -> Self {
+        let row_arity: Vec<Sig::Sort> =
+            domain.rips.iter().
+            map(|rip| signature.arity(rip.id).iter()).
+            flatten().
+            cloned().
+            collect();
+
+        for (lhs, rhs) in &codomain_equalities {
+            assert_eq!(row_arity[*lhs], row_arity[*rhs]);
+        }
+        for (r, arg_indices) in &codomain_relations {
+            let arity = signature.arity(*r);
+            assert_eq!(arg_indices.len(), arity.len());
+            for (ai, s) in arg_indices.iter().zip(arity) {
+                assert_eq!(row_arity[*ai], *s);
+            }
+        }
+
+        SurjectionPresentation {
+            domain,
+            codomain_equalities,
+            codomain_relations,
+        }
+    }
+    pub fn functionality(signature: &Sig, relation: Sig::Relation) -> Self {
         let l = signature.arity(relation).len();
-        let domain = CheckedPresentation {
-            signature,
+        let domain = Presentation {
             rips: vec![
                 RelationInPresentation {
                     id: relation,
@@ -394,49 +395,26 @@ impl<Sig: Signature> CheckedSurjectionPresentation<Sig> {
             row_length: 2 * l,
         };
 
-        CheckedSurjectionPresentation {
+        SurjectionPresentation {
             domain,
             codomain_equalities: vec![(l - 1, 2 * l - 1)],
             codomain_relations: vec![],
         }
     }
-}
-
-impl<Relation: 'static + Into<usize> + Copy + PartialEq + Eq + Debug> SurjectionPresentation<Relation> {
-    pub fn checked<Sig: Signature<Relation = Relation>>(
-        self,
-        signature: Sig,
-    ) -> CheckedSurjectionPresentation<Sig> {
-        let domain = self.domain.checked(signature);
-        let row_arity: Vec<Sig::Sort> =
-            domain.rips.iter().
-            map(|rip| domain.signature.arity(rip.id).iter()).
-            flatten().
-            cloned().
-            collect();
-
-        for (lhs, rhs) in &self.codomain_equalities {
-            assert_eq!(row_arity[*lhs], row_arity[*rhs]);
-        }
-        for (r, arg_indices) in &self.codomain_relations {
-            let arity = domain.signature.arity(*r);
-            assert_eq!(arg_indices.len(), arity.len());
-            for (ai, s) in arg_indices.iter().zip(arity) {
-                assert_eq!(row_arity[*ai], *s);
-            }
-        }
-
-        CheckedSurjectionPresentation {
-            domain,
-            codomain_equalities: self.codomain_equalities,
-            codomain_relations: self.codomain_relations,
-        }
+    pub fn domain(&self) -> &Presentation<Sig> {
+        &self.domain
+    }
+    pub fn codomain_relations<'a>(&'a self) -> impl 'a + Iterator<Item = (Sig::Relation, &'a [usize])> {
+        self.codomain_relations.iter().map(|(r, row)| (*r, row.as_slice()))
+    }
+    pub fn codomain_equalities<'a>(&'a self) -> impl 'a + Iterator<Item = (usize, usize)> {
+        self.codomain_equalities.iter().copied()
     }
 }
 
+
 pub fn close_structure<'a, Sig: 'a + Signature>(
-    // presentations: &[CheckedSurjectionPresentation<Sig>],
-    presentations: impl Clone + IntoIterator<Item = &'a CheckedSurjectionPresentation<Sig>>,
+    presentations: impl Clone + IntoIterator<Item = &'a SurjectionPresentation<Sig>>,
     structure: &mut RelationalStructure<Sig>
 ) {
     // TODO: check whether signatures are equal?
@@ -445,7 +423,7 @@ pub fn close_structure<'a, Sig: 'a + Signature>(
 
     loop {
         for presentation in presentations.clone() {
-            presentation.domain.visit_new_interpretations(structure, |row| {
+            visit_new_interpretations(&presentation.domain, structure, |row| {
                 conc_rows.extend(presentation.codomain_relations.iter().map(|(r, row_indices)| {
                     (*r, row_indices.iter().map(|i| row[*i]).collect())
                 }));
@@ -504,14 +482,12 @@ mod test_close_structure {
             vec![el4, el3],
         ]);
 
-        let symmetry = SurjectionPresentation {
-            domain: Presentation {
-                relations: vec![R],
-                equalities: vec![],
-            },
-            codomain_equalities: vec![],
-            codomain_relations: vec![(R, vec![1, 0])],
-        }.checked(sig);
+        let symmetry = SurjectionPresentation::new(
+            &sig,
+            Presentation::new(&sig, vec![R], vec![]),
+            vec![(R, vec![1, 0])],
+            vec![],
+        );
 
         close_structure(&[symmetry], &mut structure);
 
@@ -562,14 +538,12 @@ mod test_close_structure {
             vec![el8, el9],
         ]);
 
-        let transitivity = SurjectionPresentation {
-            domain: Presentation {
-                relations: vec![R, R],
-                equalities: vec![(1, 2)],
-            },
-            codomain_relations: vec![(R, vec![0, 3])],
-            codomain_equalities: vec![],
-        }.checked(sig);
+        let transitivity = SurjectionPresentation::new(
+            &sig,
+            Presentation::new(&sig, vec![R, R], vec![(1, 2)]),
+            vec![(R, vec![0, 3])],
+            vec![],
+        );
 
         let mut expected = save_rows(structure.rows(R));
         for a in &[el2, el3, el4] {
@@ -627,14 +601,12 @@ mod test_close_structure {
             vec![el7, el5],
         ]);
 
-        let antisymmetry = SurjectionPresentation {
-            domain: Presentation {
-                relations: vec![R, R],
-                equalities: vec![(0, 3), (1, 2)],
-            },
-            codomain_relations: vec![],
-            codomain_equalities: vec![(0, 1)],
-        }.checked(sig);
+        let antisymmetry = SurjectionPresentation::new(
+            &sig,
+            Presentation::new(&sig, vec![R, R], vec![(0, 3), (1, 2)]),
+            vec![],
+            vec![(0, 1)],
+        );
 
         close_structure(&[antisymmetry], &mut structure);
 
@@ -666,22 +638,18 @@ mod test_close_structure {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
 
-        let transitivity = SurjectionPresentation {
-            domain: Presentation {
-                relations: vec![R, R],
-                equalities: vec![(1, 2)],
-            },
-            codomain_relations: vec![(R, vec![0, 3])],
-            codomain_equalities: vec![],
-        }.checked(sig);
-        let antisymmetry = SurjectionPresentation {
-            domain: Presentation {
-                relations: vec![R, R],
-                equalities: vec![(0, 3), (1, 2)],
-            },
-            codomain_relations: vec![],
-            codomain_equalities: vec![(0, 1)],
-        }.checked(sig);
+        let transitivity = SurjectionPresentation::new(
+            &sig,
+            Presentation::new(&sig, vec![R, R], vec![(1, 2)]),
+            vec![(R, vec![0, 3])],
+            vec![],
+        );
+        let antisymmetry = SurjectionPresentation::new(
+            &sig,
+            Presentation::new(&sig, vec![R, R], vec![(0, 3), (1, 2)]),
+            vec![],
+            vec![(0, 1)],
+        );
 
         let mut structure = RelationalStructure::new(sig);
         let el0 = structure.adjoin_element(S);
@@ -753,7 +721,7 @@ mod test_close_structure {
         use Relation::*;
         let sig = StaticSignature::<Sort, Relation>::new();
         
-        let functionality = CheckedSurjectionPresentation::functionality(sig, O);
+        let functionality = SurjectionPresentation::functionality(&sig, O);
 
         let mut structure = RelationalStructure::new(sig);
         let el0 = structure.adjoin_element(S);

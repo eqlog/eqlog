@@ -6,8 +6,8 @@ use std::fmt::Display;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Theory<Sig: Signature> {
     pub signature: Sig,
-    pub functionalities: Vec<(Sig::Relation, CheckedSurjectionPresentation<Sig>)>,
-    pub axioms: Vec<(Sequent, CheckedSurjectionPresentation<Sig>)>,
+    pub functionalities: Vec<(Sig::Relation, SurjectionPresentation<Sig>)>,
+    pub axioms: Vec<(Sequent, SurjectionPresentation<Sig>)>,
 }
 
 impl<Sig: Signature + Copy> Theory<Sig>
@@ -22,12 +22,12 @@ where
                 sig.relations().iter()
                 .copied()
                 .filter(|&r| sig.relation_kind(r) == RelationKind::Operation)
-                .map(|op| (op, CheckedSurjectionPresentation::functionality(sig, op)))
+                .map(|op| (op, SurjectionPresentation::functionality(&sig, op)))
                 .collect(),
             axioms:
                 axioms.into_iter()
                 .map(|sequent| {
-                    let csp = to_surjection_presentation(&sig, &sequent).checked(sig);
+                    let csp = to_surjection_presentation(&sig, &sequent);
                     (sequent, csp)
                 })
                 .collect(),
