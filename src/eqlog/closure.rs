@@ -412,24 +412,47 @@ impl<Sig: Signature> SurjectionPresentation<Sig> {
     }
 }
 
+pub enum Conclusion<Sig: Signature> {
+    Row(Sig::Relation, Row),
+    Equation(Element, Element),
+}
+
+pub fn visit_new_conclusions<Sig: Signature>(
+    surjection_presentation: &SurjectionPresentation<Sig>,
+    structure: &RelationalStructure<Sig>,
+    mut visitor: impl FnMut(Conclusion<Sig>),
+) {
+    let SurjectionPresentation{
+        domain,
+        codomain_equalities,
+        codomain_relations,
+    } = surjection_presentation;
+
+    visit_new_interpretations(&domain, structure, |row| {
+        for (r, row_indices) in codomain_relations {
+            visitor(Conclusion::Row(*r, row_indices.iter().map(|&i| row[i]).collect()));
+        }
+        for &(lhs, rhs) in codomain_equalities {
+            visitor(Conclusion::Equation(row[lhs], row[rhs]));
+        }
+    });
+}
 
 pub fn close_structure<'a, Sig: 'a + Signature>(
     presentations: impl Clone + IntoIterator<Item = &'a SurjectionPresentation<Sig>>,
     structure: &mut RelationalStructure<Sig>
 ) {
-    // TODO: check whether signatures are equal?
     let mut conc_eqs: Vec<(Element, Element)> = vec![];
     let mut conc_rows: Vec<(Sig::Relation, Vec<Element>)> = vec![];
 
     loop {
         for presentation in presentations.clone() {
-            visit_new_interpretations(&presentation.domain, structure, |row| {
-                conc_rows.extend(presentation.codomain_relations.iter().map(|(r, row_indices)| {
-                    (*r, row_indices.iter().map(|i| row[*i]).collect())
-                }));
-                conc_eqs.extend(presentation.codomain_equalities.iter().map(|(lhs_index, rhs_index)| {
-                    (row[*lhs_index], row[*rhs_index])
-                }));
+            visit_new_conclusions(presentation, structure, |conclusion| {
+                match conclusion {
+                    Conclusion::Row(r, row) => conc_rows.push((r, row)),
+                    Conclusion::Equation(lhs, rhs) => conc_eqs.push((lhs, rhs)),
+                }
+
             });
         }
 
