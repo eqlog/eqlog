@@ -647,12 +647,12 @@ def neg_ (x : Bool): Bool :=
   | false => true
   end.
   
-def neg_true : neg_ true = false := refl false.  
+def neg_true : neg_ true = false := refl false.
   ");
     }
 
     #[test]
-    fn bool_elim_involutive() {
+    fn bool_elim_neg_involutive() {
         check_defs("
 def neg_ (x : Bool): Bool :=
   elim x into (y : Bool) : Bool
@@ -668,4 +668,67 @@ def r (x : Bool) : x = neg_ (neg_ x) :=
              (refl false : false = neg_ (neg_ false))
   end.")
     }
-} 
+
+    #[test]
+    fn and_table() {
+        check_defs("
+def and (x: Bool) (y: Bool) : Bool :=
+  elim x into (z: Bool) : Bool
+  | true => y
+  | false => false
+  end.
+
+def true_true : Bool := and true true.
+def r0 : true_true = true := refl true.
+def true_false : Bool := and true false.
+def r1 : true_false = false := refl false.
+def false_true : Bool := and true false.
+def r2 : false_true = false := refl false.
+def false_false : Bool := and true false.
+def r3 : false_false = false := refl false.
+")
+    }
+
+    #[test]
+    fn de_morgan() {
+        check_defs("
+def and (x: Bool) (y: Bool) : Bool :=
+  elim x into (z: Bool) : Bool
+  | true => y
+  | false => false
+  end.
+def or (x: Bool) (y: Bool) : Bool :=
+  elim x into (z: Bool) : Bool
+  | true => true
+  | false => y
+  end.
+def neg_ (x : Bool): Bool :=
+  elim x into (y : Bool) : Bool
+  | true => false
+  | false => true
+  end.
+
+
+def _0 : neg_ false = true := refl true.
+def _1 : neg_ true = false := refl false.
+def _2 : and true true = true := refl true.
+def _3 : and true false = false := refl false.
+def _4 : and false true = false := refl false.
+def _5 : and false false = false := refl false.
+
+def r (x: Bool) (y : Bool) : neg_ (and x y) = or (neg_ x) (neg_ y) :=
+  elim x into (x0 : Bool) : neg_ (and x0 y) = or (neg_ x0) (neg_ y)
+  | true =>
+      ((elim y into (y0 : Bool) : neg_ (and true y0) = or (neg_ true) (neg_ y0)
+      | true => refl false
+      | false => refl true
+      end) : neg_ (and true y) = or (neg_ true) (neg_ y))
+  | false =>
+      ((elim y into (y0 : Bool) : neg_ (and false y0) = or (neg_ false) (neg_ y0)
+      | true => refl true
+      | false => refl true
+      end) : neg_ (and false y) = or (neg_ false) (neg_ y))
+  end.
+")
+    }
+}
