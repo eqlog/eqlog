@@ -49,8 +49,8 @@ pub Ty2: Ty = {
 };
 
 pub Tm: Tm = {
-    "let" <body: DefBody> "in" <result: Tm> =>
-        Tm::Let { body: vec![body],
+    "let" <body: Def*> "in" <result: Tm> =>
+        Tm::Let { body,
                   result: Box::new(result) },
     Tm2
 };

@@ -803,10 +803,12 @@ def r : negtrue = false :=
     fn neg_neg_substitution() {
         check_defs("
 def foo (x : Bool) : Bool :=
-  let b (y : Bool) : Bool := neg (neg y) in
-  let r : false = neg true := refl false in
-  let s : true = b true := refl true in
-  true.")
+  let
+    def b (y : Bool) : Bool := neg (neg y).
+    def r : false = neg true := refl false.
+    def s : true = b true := refl true.
+  in
+    true.")
     }
 
     #[test]
@@ -814,10 +816,16 @@ def foo (x : Bool) : Bool :=
         check_defs("
 def r (x : Bool) : x = neg (neg x) :=
   elim x into (y : Bool) : y = neg (neg y)
-  | true => let _0 : false = neg true := refl false in
-            (refl true : true = neg (neg true))
-  | false => let _1 : true = neg false := refl true in
-             (refl false : false = neg (neg false))
+  | true =>
+      let
+        def _0 : false = neg true := refl false.
+      in
+        (refl true : true = neg (neg true))
+  | false =>
+      let
+        def _1 : true = neg false := refl true.
+      in
+        (refl false : false = neg (neg false))
   end.")
     }
 
@@ -845,10 +853,16 @@ def neg_ (x : Bool): Bool :=
 
 def r (x : Bool) : x = neg_ (neg_ x) :=
   elim x into (y : Bool) : y = neg_ (neg_ y)
-  | true => let _0 : false = neg_ true := refl false in
-            (refl true : true = neg_ (neg_ true))
-  | false => let _1 : true = neg_ false := refl true in
-             (refl false : false = neg_ (neg_ false))
+  | true =>
+      let
+        def _0 : false = neg_ true := refl false.
+      in
+        (refl true : true = neg_ (neg_ true))
+  | false =>
+      let
+        def _1 : true = neg_ false := refl true.
+      in
+        (refl false : false = neg_ (neg_ false))
   end.")
     }
 
