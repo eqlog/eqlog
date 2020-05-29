@@ -46,7 +46,15 @@ arities!{
         Nat: Ctx -> Ty,
         Z: Ctx -> Tm,
         S: Tm -> Tm,
-        Ind: Ty x Tm x Tm -> Tm,
+        Ind: Ty x Tm x Tm x Ctx -> Tm,
+        // If BoolElim(sigma, zero_case, succ_case, result_ctx) = ind, then we must have
+        // - TyCtx(sigma) is of the form G.(n : Nat(G))
+        // - G |- zero_case : sigma[n := Z]
+        // - TyCtx(TmTy(succ_case)) is of the form
+        //   G.(n' : Nat(G)).(h : sigma[n := n'])
+        // - TmTy(succ_case) = sigma[n := S(n')]
+        // - TyCtx(TmTy(ind)) is of the from G.(n'' : Nat(G))
+        // - ind : sigma[n := n'']
 
         Eq: Tm x Tm -> Ty,
         Refl: Tm -> Tm,
@@ -181,32 +189,33 @@ lazy_static! { pub static ref CWF_AXIOMS: Vec<Sequent> = vec![
     sequent!(SubstTm(f, S(t)) ~> S(SubstTm(f, t))),
 
     // type of Ind
-    sequent!(TmTy(Ind(sigma, _, _)) ~> sigma),
-    // substituting Z into bool elimination
+    // TODO: this should be explicitly enforced in cwf_checker
+
+    // substituting Z into Ind
     sequent!(
-        TyCtx(sigma) = Gnat
-        =>
-        SubstTm(MorExt(Gnat, f, Z(Cod(f))), Ind(sigma, z0, _))
-        ~>
-        SubstTm(f, z0)
+        SubstTm(MorExt(E, f, Z(Cod(f))), Ind(_, zero_case, _, E))
+        ~> SubstTm(f, zero_case)
     ),
-    // substituting S(s) into bool elimination
+    // substituting S(s) into Ind
     sequent!(
-        // D = _.(n : N)
-        // D |- ind = Ind(sigma, _, s0) : sigma
-        // E = D.sigma
-        // E |- s0: sigma[n := S(n)]
-        ind = Ind(sigma, _, s0) & TyCtx(sigma) = D & TyCtx(TmTy(s0)) = E
+        ind = Ind(_, _, succ_case, E) // E = (n'' : Nat)
+        // & TyCtx(sigma) = G // G = (n : Nat)
+        & TyCtx(TmTy(succ_case)) = D // D = (n' : Nat) (h : sigma[n := n']
+        & ExtCtx(G0, D) // G0 = (n' : Nat)
         =>
-        // <f, S(k)>(i) for some Dom(f) |- k : N
-        SubstTm(MorExt(D, f, S(k)), ind)
-        ~>
-        // <<f, k>, <f, k>(i)>(s_0)
+        SubstTm(MorExt(E, f, S(x)), ind) ~> // ind[n'' := S(x)]
+        // succ_case[n' := x, h := ind[n'' := x]]
         SubstTm(
-            MorExt(E, MorExt(D0, f, k), SubstTm(MorExt(D, f, k), ind)),
-            s0
+            // [n' := x, h := ind[n'' := x]]
+            MorExt(
+                D,
+                MorExt(G0, f, x), // [n' := x]
+                SubstTm(MorExt(E, f, x), ind) // ind[n'' := x]
+            ),
+            succ_case
         )
     ),
+
     // TODO: uniqueness of Ind
 
     // context of equality types
