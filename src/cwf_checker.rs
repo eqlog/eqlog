@@ -171,27 +171,147 @@ pub fn add_definition(
     should_check: EqChecking,
     def: &ast::Def,
 ) {
-    let (def_tm, def_extension) =
-        with_args(
-            cwf, scope, tracing, should_check, def.args.as_slice(),
-            |cwf, mut scope, tracing, should_check| {
-                let def_ty = add_type(cwf, &mut scope, tracing, should_check, &def.ty);
-                let def_tm = add_term(cwf, &mut scope, tracing, should_check, &def.tm);
-                let def_tm_ty = tm_ty(cwf, tracing, def_tm);
+    match def {
+        ast::Def::Def{name, args, ty, tm} => {
+            let (def_tm, def_extension) = with_args(
+                cwf, scope, tracing, should_check, args.as_slice(),
+                |cwf, mut scope, tracing, should_check| {
+                    let def_ty = add_type(cwf, &mut scope, tracing, should_check, &ty);
+                    let def_tm = add_term(cwf, &mut scope, tracing, should_check, &tm);
+                    let def_tm_ty = tm_ty(cwf, tracing, def_tm);
 
-                if should_check == EqChecking::Yes {
-                    close_cwf(cwf, tracing);
-                    assert!(
-                        els_are_equal(cwf, def_ty, def_tm_ty),
-                        "Def body `{:?}` does not have type `{:?}`", def.tm, def.ty
-                    );
-                }
+                    if should_check == EqChecking::Yes {
+                        close_cwf(cwf, tracing);
+                        assert!(
+                            els_are_equal(cwf, def_ty, def_tm_ty),
+                            "Def body `{:?}` does not have type `{:?}`", tm, ty
+                        );
+                    }
 
-                (def_tm, scope.current_extension)
+                    (def_tm, scope.current_extension)
+                },
+            );
+            scope.defs.insert(name.clone(), (def_extension, def_tm));
+        },
+        ast::Def::Ind{
+            name,
+            into_var,
+            into_ty,
+            zero_case,
+            succ_nat_var,
+            succ_hyp_var,
+            succ_hyp_ty,
+            succ_tm,
+        } => {
+            let (into_ty_el, into_ty_extension) = with_args(
+                cwf, scope, tracing, should_check, &[(into_var.clone(), ast::Ty::Nat)],
+                |cwf, mut scope, tracing, should_check| {
+                    let into_ty_el = add_type(cwf, &mut scope, tracing, should_check, into_ty);
+                    (into_ty_el, scope.current_extension)
+                });
+
+            let zero_case_el = add_term(cwf, scope, tracing, should_check, zero_case);
+            let zero_case_ty_el = tm_ty(cwf, tracing, zero_case_el);
+            let subst_zero_el = add_substitution(
+                cwf,
+                scope,
+                tracing,
+                should_check,
+                &into_ty_extension,
+                &[ast::Tm::Z],
+            );
+            let into_ty_zero_el = adjoin_op(
+                cwf,
+                tracing,
+                CwfRelation::SubstTy,
+                vec![subst_zero_el, into_ty_el],
+            );
+            if should_check == EqChecking::Yes {
+                close_cwf(cwf, tracing);
+
+                assert!(
+                    els_are_equal(cwf, zero_case_ty_el, into_ty_zero_el),
+                    "Term {:?} does not have type {:?}[{:?} := 0]",
+                    zero_case, into_ty, into_var,
+                );
             }
-        );
 
-    scope.defs.insert(def.name.clone(), (def_extension, def_tm));
+            let (succ_case_el, succ_case_extension) = with_args(
+                cwf, scope, tracing, should_check,
+                // TODO: check whether succ_hyp_ty is into_ty[into_var := succ_var]
+                &[(succ_nat_var.clone(), ast::Ty::Nat), (succ_hyp_var.clone(), succ_hyp_ty.clone())],
+                |cwf, mut scope, tracing, should_check| {
+                    let succ_case_el = add_term(cwf, &mut scope, tracing, should_check, succ_tm);
+                    let succ_tm_ty_el = tm_ty(cwf, tracing, succ_case_el);
+
+                    let succ_var_tm = ast::Tm::App{fun: succ_nat_var.clone(), args: vec![]};
+                    let subst_succ_el = add_substitution(
+                        cwf, &mut scope, tracing, should_check,
+                        &into_ty_extension,
+                        &[ast::Tm::S(Box::new(succ_var_tm))],
+                    );
+                    let into_ty_succ_el = adjoin_op(
+                        cwf, tracing,
+                        CwfRelation::SubstTy,
+                        vec![subst_succ_el, into_ty_el],
+                    );
+                    if should_check == EqChecking::Yes {
+                        close_cwf(cwf, tracing);
+
+                        assert!(
+                            els_are_equal(cwf, succ_tm_ty_el, into_ty_succ_el),
+                            "Term {:?} does not have type {:?}[{} := S {}]",
+                            succ_tm, into_ty, into_var, succ_nat_var,
+                        );
+                    }
+
+                    (succ_case_el, scope.current_extension)
+                },
+            );
+
+            let (ind_el, result_extension) = with_args(
+                cwf, scope, tracing, EqChecking::No,
+                &[(into_var.clone(), ast::Ty::Nat)],
+                |cwf, mut scope, tracing, should_check| {
+                    let rename_mor_el = add_substitution(
+                        cwf, &mut scope, tracing, should_check,
+                        &into_ty_extension,
+                        &[ast::Tm::App{fun: into_var.clone(), args: vec![]}],
+                    );
+                    let into_ty_subst = adjoin_op(
+                        cwf, tracing,
+                        CwfRelation::SubstTy,
+                        vec![rename_mor_el, into_ty_el],
+                    );
+                    let ind_el = adjoin_op(
+                        cwf, tracing,
+                        CwfRelation::Ind,
+                        vec![into_ty_el, zero_case_el, succ_case_el, current_ctx(&scope)],
+                    );
+                    adjoin_row(
+                        cwf,
+                        tracing,
+                        CwfRelation::TmTy,
+                        vec![ind_el, into_ty_subst],
+                    );
+
+                    let _subst_hyp_el = add_substitution(
+                        cwf, &mut scope, tracing, should_check,
+                        &succ_case_extension,
+                        &[
+                            ast::Tm::App{fun: into_var.clone(), args: vec![]},
+                            ast::Tm::AlreadyAdded(ind_el),
+                        ],
+                    );
+
+                    (ind_el, scope.current_extension)
+                },
+            );
+
+            scope.defs.insert(name.clone(), (result_extension, ind_el));
+        },
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -353,6 +473,10 @@ pub fn add_type(
     should_check: EqChecking, ty: &ast::Ty
 ) -> Element {
     match ty {
+        ast::Ty::AlreadyAdded(el) => {
+            assert_eq!(cwf.element_sort(*el), CwfSort::Ty);
+            *el
+        }
         ast::Ty::Unit => {
             adjoin_op(cwf, tracing, CwfRelation::Unit, vec![current_ctx(scope)])
         },
@@ -390,6 +514,10 @@ pub fn add_term(
     tm: &ast::Tm
 ) -> Element {
     match tm {
+        ast::Tm::AlreadyAdded(el) => {
+            assert_eq!(cwf.element_sort(*el), CwfSort::Tm);
+            *el
+        },
         ast::Tm::Typed{tm, ty} => {
             let ty_el = add_type(cwf, scope, tracing, should_check, ty);
             let tm_el = add_term(cwf, scope, tracing, should_check, tm);
@@ -574,18 +702,6 @@ pub fn add_term(
             }
 
             adjoin_op(cwf, tracing, CwfRelation::S, vec![arg_el])
-        },
-        ast::Tm::Ind{
-            discriminee,
-            into_var,
-            into_ty,
-            zero_case,
-            succ_nat_var,
-            succ_hyp_var,
-            succ_hyp_ty,
-            succ_tm,
-        } => {
-            panic!("Not implemented")
         },
     }
 }
@@ -807,6 +923,18 @@ def one : Nat := S zero.
 def two : Nat := S one.
 def two_ : Nat := 2.
 def r : two = two_ := refl (S (S Z)).
+")
+    }
+    #[test]
+    fn nat_ind_succ_0() {
+        check_defs("
+ind succ (m : Nat) : Nat
+  | Z => S Z
+  | (S pred : Nat) (hyp : Nat) => S pred
+  end.
+
+def r0 : succ 0 = 1 := refl 1.
+def r1 : succ 1 = 2 := refl 2.
 ")
     }
 }

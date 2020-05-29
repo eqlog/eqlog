@@ -1,13 +1,23 @@
+use crate::eqlog::element::*;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Def {
-    pub name: String,
-    pub args: Vec<(String, Ty)>,
-    pub ty: Ty,
-    pub tm: Tm,
+pub enum Def {
+    Def { name: String, args: Vec<(String, Ty)>, ty: Ty, tm: Tm },
+    Ind {
+        name: String,
+        into_var: String,
+        into_ty: Ty,
+        zero_case: Tm,
+        succ_nat_var: String,
+        succ_hyp_var: String,
+        succ_hyp_ty: Ty,
+        succ_tm: Tm,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Tm {
+    AlreadyAdded(Element),
     Typed { tm: Box<Tm>, ty: Box<Ty> },
     App { fun: String, args: Vec<Tm> },
     Let { body: Vec<Def>, result: Box<Tm> },
@@ -25,21 +35,12 @@ pub enum Tm {
     Refl(Box<Tm>),
     Z,
     S(Box<Tm>),
-    Ind {
-        discriminee: Box<Tm>,
-        into_var: String,
-        into_ty: Box<Ty>,
-        zero_case: Box<Tm>,
-        succ_nat_var: String,
-        succ_hyp_var: String,
-        succ_hyp_ty: Box<Ty>,
-        succ_tm: Box<Tm>,
-    },
 }
 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
+    AlreadyAdded(Element),
     Unit,
     Bool,
     Nat,
