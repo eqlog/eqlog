@@ -23,6 +23,18 @@ pub enum Tm {
         false_case: Box<Tm>,
     },
     Refl(Box<Tm>),
+    Z,
+    S(Box<Tm>),
+    Ind {
+        discriminee: Box<Tm>,
+        into_var: String,
+        into_ty: Box<Ty>,
+        zero_case: Box<Tm>,
+        succ_nat_var: String,
+        succ_hyp_var: String,
+        succ_hyp_ty: Box<Ty>,
+        succ_tm: Box<Tm>,
+    },
 }
 
 
@@ -30,5 +42,6 @@ pub enum Tm {
 pub enum Ty {
     Unit,
     Bool,
+    Nat,
     Eq(Box<Tm>, Box<Tm>),
 }

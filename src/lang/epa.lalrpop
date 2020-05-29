@@ -30,6 +30,7 @@ pub Ty: Ty = {
 pub Ty2: Ty = {
     "Unit" => Ty::Unit,
     "Bool" => Ty::Bool,
+    "Nat" => Ty::Nat,
     "(" <Ty> ")",
 };
 
@@ -48,11 +49,14 @@ Tm3: Tm = {
     "unit" => Tm::UnitTm,
     "true" => Tm::True,
     "false" => Tm::False,
+    "Z" => Tm::Z,
     "neg" <ArgTm> => Tm::Neg(Box::new(<>)),
     "refl" <ArgTm> => Tm::Refl(Box::new(<>)),
+    "S" <ArgTm> => Tm::S(Box::new(<>)),
     <fun: Id> <args: ArgTm*> => Tm::App { <> },
     <NumTm>,
     <ElimTm>,
+    <IndTm>,
     <CastTm>,
     "(" <Tm> ")",
 };
@@ -60,9 +64,11 @@ ArgTm: Tm = {
     "unit" => Tm::UnitTm,
     "true" => Tm::True,
     "false" => Tm::False,
+    "Z" => Tm::Z,
     <Id> => Tm::App { fun: <>, args: vec![] },
     <NumTm>,
     <ElimTm>,
+    <IndTm>,
     <CastTm>,
     "(" <Tm> ")"
 };
@@ -86,12 +92,31 @@ ElimTm: Tm = {
                             true_case: Box::new(true_case),
                             false_case: Box::new(false_case) }
 };
+IndTm: Tm = {
+    "ind" <discriminee: Tm>
+    "into" "(" <into_var: Id> ":" "Nat" ")" ":" <into_ty: Ty>
+    "|" "Z" "=>" <zero_case: Tm>
+    "|"
+        "(" "S" <succ_nat_var: Id> ":" "Nat" ")"
+        "(" <succ_hyp_var: Id> ":" <succ_hyp_ty: Ty> ")"
+        "=>"
+        <succ_tm: Tm>
+    "end"
+    => Tm::Ind {
+        discriminee: Box::new(discriminee),
+        into_var,
+        into_ty: Box::new(into_ty),
+        zero_case: Box::new(zero_case),
+        succ_nat_var,
+        succ_hyp_var,
+        succ_hyp_ty: Box::new(succ_hyp_ty),
+        succ_tm: Box::new(succ_tm),
+    }
+};
 NumTm: Tm = {
     <Nat> =>
         (0..<>).into_iter()
-              .fold(
-                  Tm::App { fun: "O".to_string(), args: vec![] },
-                  |cur, _| Tm::App { fun: "S".to_string(), args: vec![cur] })
+        .fold(Tm::Z, |cur, _| Tm::S(Box::new(cur))),
 };
 CastTm: Tm = {
     "(" <tm: Tm> ":" <ty: Ty> ")" =>

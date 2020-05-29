@@ -359,6 +359,9 @@ pub fn add_type(
         ast::Ty::Bool => {
             adjoin_op(cwf, tracing, CwfRelation::Bool, vec![current_ctx(scope)])
         },
+        ast::Ty::Nat => {
+            panic!("Not implemented")
+        },
         ast::Ty::Eq(lhs, rhs) => {
             let lhs_el = add_term(cwf, scope, tracing, should_check, lhs);
             let rhs_el = add_term(cwf, scope, tracing, should_check, rhs);
@@ -554,6 +557,20 @@ pub fn add_term(
             );
 
             adjoin_op(cwf, tracing, CwfRelation::SubstTm, vec![subst_discriminee_el, elim_el])
+        },
+        ast::Tm::Z => panic!("Not implemented"),
+        ast::Tm::S(pred) => panic!("Not implemented"),
+        ast::Tm::Ind{
+            discriminee,
+            into_var,
+            into_ty,
+            zero_case,
+            succ_nat_var,
+            succ_hyp_var,
+            succ_hyp_ty,
+            succ_tm,
+        } => {
+            panic!("Not implemented")
         },
     }
 }
