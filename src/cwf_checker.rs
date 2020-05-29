@@ -926,11 +926,11 @@ def r : two = two_ := refl (S (S Z)).
 ")
     }
     #[test]
-    fn nat_ind_succ_0() {
+    fn nat_ind_succ() {
         check_defs("
 ind succ (m : Nat) : Nat
   | Z => S Z
-  | (S pred : Nat) (hyp : Nat) => S pred
+  | (S pred : Nat) (hyp : Nat) => S hyp
   end.
 
 def r0 : succ 0 = 1 := refl 1.
