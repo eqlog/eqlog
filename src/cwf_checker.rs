@@ -510,18 +510,46 @@ pub fn add_term(
                 );
             }
 
-            let elim_el = adjoin_op(
-                cwf,
-                tracing,
-                CwfRelation::BoolElim,
-                vec![into_ty_el, true_case_el, false_case_el]
+            let (elim_el, result_extension) = with_args(
+                cwf, scope, tracing, EqChecking::No, &[(into_var.clone(), ast::Ty::Bool)],
+                |cwf, mut scope, tracing, should_check| {
+                    let rename_mor_el = add_substitution(
+                        cwf,
+                        &mut scope,
+                        tracing,
+                        should_check,
+                        &into_ty_extension,
+                        &[ast::Tm::App{fun: into_var.clone(), args: vec![]}],
+                    );
+                    let into_ty_subst = adjoin_op(
+                        cwf,
+                        tracing,
+                        CwfRelation::SubstTy,
+                        vec![rename_mor_el, into_ty_el],
+                    );
+                    let elim_el = adjoin_op(
+                        cwf,
+                        tracing,
+                        CwfRelation::BoolElim,
+                        vec![into_ty_el, true_case_el, false_case_el, current_ctx(&scope)],
+                    );
+                    adjoin_row(
+                        cwf,
+                        tracing,
+                        CwfRelation::TmTy,
+                        vec![elim_el, into_ty_subst],
+                    );
+
+                    (elim_el, scope.current_extension)
+                },
             );
+
             let subst_discriminee_el = add_substitution(
                 cwf,
                 scope,
                 tracing,
                 should_check,
-                &into_ty_extension,
+                &result_extension,
                 &[*discriminee.clone()],
             );
 
