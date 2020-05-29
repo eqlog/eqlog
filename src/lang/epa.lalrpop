@@ -8,13 +8,21 @@ pub Unit: Vec<Def> =
 
 pub Def: Def = {
     "def" <DefBody> "." => <>,
-    "ind" <IndBody> "." => <>,
+    "nat_ind" <NatIndBody> "." => <>,
+    "bool_ind" <BoolIndBody> "." => <>,
 }
 
 pub DefBody: Def =
     <name: Id> <args: Args> ":" <ty: Ty> ":=" <tm: Tm> => Def::Def { <> };
 
-pub IndBody: Def = {
+pub BoolIndBody: Def = {
+    <name: Id> "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
+    "|" "true" "=>" <true_case: Tm>
+    "|" "false" "=>" <false_case: Tm>
+    => Def::BoolInd { <> }
+}
+
+pub NatIndBody: Def = {
     <name: Id> "(" <into_var: Id> ":" "Nat" ")" ":" <into_ty: Ty>
     "|" "Z" "=>" <zero_case: Tm>
     "|"
@@ -22,8 +30,7 @@ pub IndBody: Def = {
         "(" <succ_hyp_var: Id> ":" <succ_hyp_ty: Ty> ")"
         "=>"
         <succ_tm: Tm>
-    "end"
-    => Def::Ind { <> }
+    => Def::NatInd { <> }
 }
 
 pub Args: Vec<(String, Ty)> =
@@ -69,7 +76,6 @@ Tm3: Tm = {
     "S" <ArgTm> => Tm::S(Box::new(<>)),
     <fun: Id> <args: ArgTm*> => Tm::App { <> },
     <NumTm>,
-    <ElimTm>,
     <CastTm>,
     "(" <Tm> ")",
 };
@@ -80,29 +86,8 @@ ArgTm: Tm = {
     "Z" => Tm::Z,
     <Id> => Tm::App { fun: <>, args: vec![] },
     <NumTm>,
-    <ElimTm>,
     <CastTm>,
     "(" <Tm> ")"
-};
-ElimTm: Tm = {
-    "elim" <discriminee: Tm>
-    "into" "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
-    "|" "true" "=>" <true_case: Tm>
-    "|" "false" "=>" <false_case: Tm>
-    "end" => Tm::BoolElim { discriminee: Box::new(discriminee),
-                            into_var: into_var,
-                            into_ty: Box::new(into_ty),
-                            true_case: Box::new(true_case),
-                            false_case: Box::new(false_case) },
-    "elim" <discriminee: Tm>
-    "into" "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
-    "|" "false" "=>" <false_case: Tm>
-    "|" "true" "=>" <true_case: Tm>
-    "end" => Tm::BoolElim { discriminee: Box::new(discriminee),
-                            into_var: into_var,
-                            into_ty: Box::new(into_ty),
-                            true_case: Box::new(true_case),
-                            false_case: Box::new(false_case) }
 };
 NumTm: Tm = {
     <Nat> =>

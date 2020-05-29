@@ -3,7 +3,14 @@ use crate::eqlog::element::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Def {
     Def { name: String, args: Vec<(String, Ty)>, ty: Ty, tm: Tm },
-    Ind {
+    BoolInd {
+        name: String,
+        into_var: String,
+        into_ty: Ty,
+        true_case: Tm,
+        false_case: Tm,
+    },
+    NatInd {
         name: String,
         into_var: String,
         into_ty: Ty,
@@ -25,13 +32,6 @@ pub enum Tm {
     True,
     False,
     Neg(Box<Tm>),
-    BoolElim {
-        discriminee: Box<Tm>,
-        into_var: String,
-        into_ty: Box<Ty>,
-        true_case: Box<Tm>,
-        false_case: Box<Tm>,
-    },
     Refl(Box<Tm>),
     Z,
     S(Box<Tm>),

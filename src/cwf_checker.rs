@@ -193,7 +193,100 @@ pub fn add_definition(
             );
             scope.defs.insert(name.clone(), (def_extension, def_tm));
         },
-        ast::Def::Ind{
+        ast::Def::BoolInd{name, into_var, into_ty, true_case, false_case} => {
+            let (into_ty_el, into_ty_extension) = with_args(
+                cwf, scope, tracing, should_check, &[(into_var.clone(), ast::Ty::Bool)],
+                |cwf, mut scope, tracing, should_check| {
+                    let into_ty_el = add_type(cwf, &mut scope, tracing, should_check, into_ty);
+                    (into_ty_el, scope.current_extension)
+                });
+
+            let true_case_el = add_term(cwf, scope, tracing, should_check, true_case);
+            let false_case_el = add_term(cwf, scope, tracing, should_check, false_case);
+
+            let true_case_ty_el = tm_ty(cwf, tracing, true_case_el);
+            let false_case_ty_el = tm_ty(cwf, tracing, false_case_el);
+
+            let subst_true_el = add_substitution(
+                cwf,
+                scope,
+                tracing,
+                should_check,
+                &into_ty_extension,
+                &[ast::Tm::True],
+            );
+            let subst_false_el = add_substitution(
+                cwf,
+                scope,
+                tracing,
+                should_check,
+                &into_ty_extension,
+                &[ast::Tm::False],
+            );
+
+            let into_ty_true_el = adjoin_op(
+                cwf,
+                tracing,
+                CwfRelation::SubstTy,
+                vec![subst_true_el, into_ty_el],
+            );
+            let into_ty_false_el = adjoin_op(
+                cwf,
+                tracing,
+                CwfRelation::SubstTy,
+                vec![subst_false_el, into_ty_el],
+            );
+
+            if should_check == EqChecking::Yes {
+                close_cwf(cwf, tracing);
+
+                assert!(
+                    els_are_equal(cwf, true_case_ty_el, into_ty_true_el),
+                    "Term {:?} does not have type {:?}[{:?} := {:?}]", true_case, into_ty, into_var, "True"
+                );
+                assert!(
+                    els_are_equal(cwf, false_case_ty_el, into_ty_false_el),
+                    "Term {:?} does not have type {:?}[{:?} := {:?}]", false_case, into_ty, into_var, "False"
+                );
+            }
+
+            let (elim_el, result_extension) = with_args(
+                cwf, scope, tracing, EqChecking::No, &[(into_var.clone(), ast::Ty::Bool)],
+                |cwf, mut scope, tracing, should_check| {
+                    let rename_mor_el = add_substitution(
+                        cwf,
+                        &mut scope,
+                        tracing,
+                        should_check,
+                        &into_ty_extension,
+                        &[ast::Tm::App{fun: into_var.clone(), args: vec![]}],
+                    );
+                    let into_ty_subst = adjoin_op(
+                        cwf,
+                        tracing,
+                        CwfRelation::SubstTy,
+                        vec![rename_mor_el, into_ty_el],
+                    );
+                    let elim_el = adjoin_op(
+                        cwf,
+                        tracing,
+                        CwfRelation::BoolElim,
+                        vec![into_ty_el, true_case_el, false_case_el, current_ctx(&scope)],
+                    );
+                    adjoin_row(
+                        cwf,
+                        tracing,
+                        CwfRelation::TmTy,
+                        vec![elim_el, into_ty_subst],
+                    );
+
+                    (elim_el, scope.current_extension)
+                },
+            );
+
+            scope.defs.insert(name.clone(), (result_extension, elim_el));
+        },
+        ast::Def::NatInd{
             name,
             into_var,
             into_ty,
@@ -584,108 +677,6 @@ pub fn add_term(
             let arg_el = add_term(cwf, scope, tracing, should_check, arg);
             adjoin_op(cwf, tracing, CwfRelation::Refl, vec![arg_el])
         },
-        ast::Tm::BoolElim{discriminee, into_var, into_ty, true_case, false_case} => {
-            let (into_ty_el, into_ty_extension) = with_args(
-                cwf, scope, tracing, should_check, &[(into_var.clone(), ast::Ty::Bool)],
-                |cwf, mut scope, tracing, should_check| {
-                    let into_ty_el = add_type(cwf, &mut scope, tracing, should_check, into_ty);
-                    (into_ty_el, scope.current_extension)
-                });
-
-            let true_case_el = add_term(cwf, scope, tracing, should_check, true_case);
-            let false_case_el = add_term(cwf, scope, tracing, should_check, false_case);
-
-            let true_case_ty_el = tm_ty(cwf, tracing, true_case_el);
-            let false_case_ty_el = tm_ty(cwf, tracing, false_case_el);
-
-            let subst_true_el = add_substitution(
-                cwf,
-                scope,
-                tracing,
-                should_check,
-                &into_ty_extension,
-                &[ast::Tm::True],
-            );
-            let subst_false_el = add_substitution(
-                cwf,
-                scope,
-                tracing,
-                should_check,
-                &into_ty_extension,
-                &[ast::Tm::False],
-            );
-
-            let into_ty_true_el = adjoin_op(
-                cwf,
-                tracing,
-                CwfRelation::SubstTy,
-                vec![subst_true_el, into_ty_el],
-            );
-            let into_ty_false_el = adjoin_op(
-                cwf,
-                tracing,
-                CwfRelation::SubstTy,
-                vec![subst_false_el, into_ty_el],
-            );
-
-            if should_check == EqChecking::Yes {
-                close_cwf(cwf, tracing);
-
-                assert!(
-                    els_are_equal(cwf, true_case_ty_el, into_ty_true_el),
-                    "Term {:?} does not have type {:?}[{:?} := {:?}]", true_case, into_ty, into_var, "True"
-                );
-                assert!(
-                    els_are_equal(cwf, false_case_ty_el, into_ty_false_el),
-                    "Term {:?} does not have type {:?}[{:?} := {:?}]", false_case, into_ty, into_var, "False"
-                );
-            }
-
-            let (elim_el, result_extension) = with_args(
-                cwf, scope, tracing, EqChecking::No, &[(into_var.clone(), ast::Ty::Bool)],
-                |cwf, mut scope, tracing, should_check| {
-                    let rename_mor_el = add_substitution(
-                        cwf,
-                        &mut scope,
-                        tracing,
-                        should_check,
-                        &into_ty_extension,
-                        &[ast::Tm::App{fun: into_var.clone(), args: vec![]}],
-                    );
-                    let into_ty_subst = adjoin_op(
-                        cwf,
-                        tracing,
-                        CwfRelation::SubstTy,
-                        vec![rename_mor_el, into_ty_el],
-                    );
-                    let elim_el = adjoin_op(
-                        cwf,
-                        tracing,
-                        CwfRelation::BoolElim,
-                        vec![into_ty_el, true_case_el, false_case_el, current_ctx(&scope)],
-                    );
-                    adjoin_row(
-                        cwf,
-                        tracing,
-                        CwfRelation::TmTy,
-                        vec![elim_el, into_ty_subst],
-                    );
-
-                    (elim_el, scope.current_extension)
-                },
-            );
-
-            let subst_discriminee_el = add_substitution(
-                cwf,
-                scope,
-                tracing,
-                should_check,
-                &result_extension,
-                &[*discriminee.clone()],
-            );
-
-            adjoin_op(cwf, tracing, CwfRelation::SubstTm, vec![subst_discriminee_el, elim_el])
-        },
         ast::Tm::Z => {
             adjoin_op(cwf, tracing, CwfRelation::Z, vec![current_ctx(scope)])
         },
@@ -789,13 +780,12 @@ def r : negtrue = false :=
     #[test]
     fn bool_elim_neg_true() {
         check_defs("
-def negtrue : Bool :=
-  elim true into (x : Bool) : Bool
+bool_ind neg_ (x : Bool) : Bool
   | true => false
   | false => true
-  end.
+  .
 
-def r : negtrue = false :=
+def r : neg_ true = false :=
   refl false.")
     }
 
@@ -814,8 +804,7 @@ def foo (x : Bool) : Bool :=
     #[test]
     fn neg_involutive() {
         check_defs("
-def r (x : Bool) : x = neg (neg x) :=
-  elim x into (y : Bool) : y = neg (neg y)
+bool_ind r (x : Bool) : x = neg (neg x)
   | true =>
       let
         def _0 : false = neg true := refl false.
@@ -826,33 +815,19 @@ def r (x : Bool) : x = neg (neg x) :=
         def _1 : true = neg false := refl true.
       in
         (refl false : false = neg (neg false))
-  end.")
-    }
-
-    #[test]
-    fn bool_elim_neg() {
-        check_defs("
-def neg_ (x : Bool): Bool :=
-  elim x into (y : Bool) : Bool
-  | true => false
-  | false => true
-  end.
-  
-def neg_true : neg_ true = false := refl false.
-  ");
+  .
+")
     }
 
     #[test]
     fn bool_elim_neg_involutive() {
         check_defs("
-def neg_ (x : Bool): Bool :=
-  elim x into (y : Bool) : Bool
+bool_ind neg_ (x : Bool) : Bool
   | true => false
   | false => true
-  end.
+  .
 
-def r (x : Bool) : x = neg_ (neg_ x) :=
-  elim x into (y : Bool) : y = neg_ (neg_ y)
+bool_ind r (x : Bool) : x = neg_ (neg_ x)
   | true =>
       let
         def _0 : false = neg_ true := refl false.
@@ -863,17 +838,22 @@ def r (x : Bool) : x = neg_ (neg_ x) :=
         def _1 : true = neg_ false := refl true.
       in
         (refl false : false = neg_ (neg_ false))
-  end.")
+  .
+")
     }
 
     #[test]
     fn and_table() {
         check_defs("
 def and (x: Bool) (y: Bool) : Bool :=
-  elim x into (z: Bool) : Bool
-  | true => y
-  | false => false
-  end.
+  let
+    bool_ind elim (z : Bool) : Bool
+    | true => y
+    | false => false
+    .
+  in
+    elim x
+  .
 
 def true_true : Bool := and true true.
 def r0 : true_true = true := refl true.
@@ -890,20 +870,27 @@ def r3 : false_false = false := refl false.
     fn de_morgan() {
         check_defs("
 def and (x: Bool) (y: Bool) : Bool :=
-  elim x into (z: Bool) : Bool
-  | true => y
-  | false => false
-  end.
+  let
+    bool_ind elim (z : Bool) : Bool
+      | true => y
+      | false => false
+      .
+  in
+    elim x
+  .
 def or (x: Bool) (y: Bool) : Bool :=
-  elim x into (z: Bool) : Bool
-  | true => true
-  | false => y
-  end.
-def neg_ (x : Bool): Bool :=
-  elim x into (y : Bool) : Bool
+  let
+    bool_ind elim (z : Bool) : Bool
+      | true => true
+      | false => y
+      .
+  in
+    elim x
+  .
+bool_ind neg_ (x : Bool) : Bool
   | true => false
   | false => true
-  end.
+  .
 
 
 def _0 : neg_ false = true := refl true.
@@ -914,18 +901,28 @@ def _4 : and false true = false := refl false.
 def _5 : and false false = false := refl false.
 
 def r (x: Bool) (y : Bool) : neg_ (and x y) = or (neg_ x) (neg_ y) :=
-  elim x into (x0 : Bool) : neg_ (and x0 y) = or (neg_ x0) (neg_ y)
-  | true =>
-      ((elim y into (y0 : Bool) : neg_ (and true y0) = or (neg_ true) (neg_ y0)
-      | true => refl false
-      | false => refl true
-      end) : neg_ (and true y) = or (neg_ true) (neg_ y))
-  | false =>
-      ((elim y into (y0 : Bool) : neg_ (and false y0) = or (neg_ false) (neg_ y0)
-      | true => refl true
-      | false => refl true
-      end) : neg_ (and false y) = or (neg_ false) (neg_ y))
-  end.
+  let 
+    bool_ind elim_x (x0 : Bool) : neg_ (and x0 y) = or (neg_ x0) (neg_ y)
+      | true =>
+          let
+            bool_ind elim_y (y0 : Bool) : neg_ (and true y0) = or (neg_ true) (neg_ y0)
+              | true => refl false
+              | false => refl true
+              .
+          in
+            (elim_y y : neg_ (and true y) = or (neg_ true) (neg_ y))
+      | false =>
+          let
+            bool_ind elim_y (y0 : Bool) : neg_ (and false y0) = or (neg_ false) (neg_ y0)
+              | true => refl true
+              | false => refl true
+              .
+          in
+            (elim_y y : neg_ (and false y) = or (neg_ false) (neg_ y))
+      .
+  in
+    elim_x x
+  .
 ")
     }
 
@@ -942,10 +939,10 @@ def r : two = two_ := refl (S (S Z)).
     #[test]
     fn nat_ind_succ() {
         check_defs("
-ind succ (m : Nat) : Nat
+nat_ind succ (m : Nat) : Nat
   | Z => S Z
   | (S pred : Nat) (hyp : Nat) => S hyp
-  end.
+  .
 
 def r0 : succ 0 = 1 := refl 1.
 def r1 : succ 1 = 2 := refl 2.
@@ -955,10 +952,10 @@ def r2 : succ 2 = 3 := refl 3.
     #[test]
     fn nat_ind_double() {
         check_defs("
-ind double (m : Nat) : Nat
+nat_ind double (m : Nat) : Nat
   | Z => Z
   | (S pred : Nat) (hyp : Nat) => S (S hyp)
-  end.
+  .
 
 def r0 : double 0 = 0 := refl 0.
 def r1 : double 1 = 2 := refl 2.
@@ -969,10 +966,10 @@ def r3 : double 3 = 6 := refl 6.
     #[test] #[should_panic]
     fn nat_ind_double_wrong() {
         check_defs("
-ind double (m : Nat) : Nat
+nat_ind double (m : Nat) : Nat
   | Z => Z
   | (S pred : Nat) (hyp : Nat) => S (S hyp)
-  end.
+  .
 
 def r2 : double 2 = 5 := refl 5.
 ")
