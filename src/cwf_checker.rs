@@ -360,7 +360,7 @@ pub fn add_type(
             adjoin_op(cwf, tracing, CwfRelation::Bool, vec![current_ctx(scope)])
         },
         ast::Ty::Nat => {
-            panic!("Not implemented")
+            adjoin_op(cwf, tracing, CwfRelation::Nat, vec![current_ctx(scope)])
         },
         ast::Ty::Eq(lhs, rhs) => {
             let lhs_el = add_term(cwf, scope, tracing, should_check, lhs);
@@ -558,8 +558,23 @@ pub fn add_term(
 
             adjoin_op(cwf, tracing, CwfRelation::SubstTm, vec![subst_discriminee_el, elim_el])
         },
-        ast::Tm::Z => panic!("Not implemented"),
-        ast::Tm::S(pred) => panic!("Not implemented"),
+        ast::Tm::Z => {
+            adjoin_op(cwf, tracing, CwfRelation::Z, vec![current_ctx(scope)])
+        },
+        ast::Tm::S(arg) => {
+            let arg_el = add_term(cwf, scope, tracing, should_check, arg);
+            let arg_ty = tm_ty(cwf, tracing, arg_el);
+            let nat_ty = adjoin_op(cwf, tracing, CwfRelation::Nat, vec![current_ctx(scope)]);
+            if should_check == EqChecking::Yes {
+                close_cwf(cwf, tracing);
+                assert!(
+                    els_are_equal(cwf, arg_ty, nat_ty),
+                    "Term {:?} does not have type Nat", arg,
+                );
+            }
+
+            adjoin_op(cwf, tracing, CwfRelation::S, vec![arg_el])
+        },
         ast::Tm::Ind{
             discriminee,
             into_var,
@@ -781,6 +796,17 @@ def r (x: Bool) (y : Bool) : neg_ (and x y) = or (neg_ x) (neg_ y) :=
       | false => refl true
       end) : neg_ (and false y) = or (neg_ false) (neg_ y))
   end.
+")
+    }
+
+    #[test]
+    fn nat_constants() {
+        check_defs("
+def zero : Nat := Z.
+def one : Nat := S zero.
+def two : Nat := S one.
+def two_ : Nat := 2.
+def r : two = two_ := refl (S (S Z)).
 ")
     }
 }
