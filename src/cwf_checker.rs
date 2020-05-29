@@ -935,6 +935,32 @@ ind succ (m : Nat) : Nat
 
 def r0 : succ 0 = 1 := refl 1.
 def r1 : succ 1 = 2 := refl 2.
+def r2 : succ 2 = 3 := refl 3.
+")
+    }
+    #[test]
+    fn nat_ind_double() {
+        check_defs("
+ind double (m : Nat) : Nat
+  | Z => Z
+  | (S pred : Nat) (hyp : Nat) => S (S hyp)
+  end.
+
+def r0 : double 0 = 0 := refl 0.
+def r1 : double 1 = 2 := refl 2.
+def r2 : double 2 = 4 := refl 4.
+def r3 : double 3 = 6 := refl 6.
+")
+    }
+    #[test] #[should_panic]
+    fn nat_ind_double_wrong() {
+        check_defs("
+ind double (m : Nat) : Nat
+  | Z => Z
+  | (S pred : Nat) (hyp : Nat) => S (S hyp)
+  end.
+
+def r2 : double 2 = 5 := refl 5.
 ")
     }
 }
