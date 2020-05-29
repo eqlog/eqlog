@@ -51,6 +51,13 @@ pub fn close_cwf(cwf: &mut Cwf, _tracing: Tracing) {
         CWF_THEORY.functionalities.iter().map(|(_, sp)| sp)
         .chain(CWF_THEORY.axioms.iter().map(|(_, sp)| sp));
     close_structure(sp_iter, cwf);
+    for ctx in cwf.sort_elements(CwfSort::Ctx) {
+        assert_eq!(
+            cwf.representative_const(ctx), ctx,
+            "Contexts equated",
+        );
+    }
+
 }
 
 impl Scope {
