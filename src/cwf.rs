@@ -35,7 +35,13 @@ arities!{
         True: Ctx -> Tm,
         False: Ctx -> Tm,
         Neg: Tm -> Tm,
-        BoolElim: Ty x Tm x Tm -> Tm, // BoolElim(sigma, true_case, false_case)
+        BoolElim: Ty x Tm x Tm x Ctx -> Tm, // BoolElim(sigma, true_case, false_case, result_ctx)
+        // If BoolElim(sigma, true_case, false_case, result_ctx) = elim, then we must have
+        // - TmTy(sigma) is of the form G.(b : Bool(G))
+        // - result_ctx is of the form G.(b' : Bool(G))
+        // - TmTy(elim) = sigma[b := b']
+        // - true_case: <id_G, true>(sigma)
+        // - false_case: <id_g, false>(sigma)
 
         Nat: Ctx -> Ty,
         Z: Ctx -> Tm,
@@ -141,28 +147,26 @@ lazy_static! { pub static ref CWF_AXIOMS: Vec<Sequent> = vec![
     sequent!(Neg(False(G)) ~> True(G)),
 
     // type of bool elimination
-    sequent!(TmTy(BoolElim(sigma, _, _)) ~> sigma),
+    // TODO: this is currently explicitly added in cwf_checker
+
     // substituting true and false into bool elimination
     sequent!(
-        TyCtx(sigma) = Gbool
-        =>
-        SubstTm(MorExt(Gbool, f, True(Cod(f))), BoolElim(sigma, true_case, _))
+        SubstTm(MorExt(Gbool, f, True(Cod(f))), BoolElim(_, true_case, _, Gbool))
         ~> SubstTm(f, true_case)
     ),
     sequent!(
-        TyCtx(sigma) = Gbool
-        =>
-        SubstTm(MorExt(Gbool, f, False(Cod(f))), BoolElim(sigma, _, false_case))
+        SubstTm(MorExt(Gbool, f, False(Cod(f))), BoolElim(_, _, false_case, Gbool))
         ~> SubstTm(f, false_case)
     ),
     // Uniqueness of bool elimination
-    sequent!(
-        ExtCtx(G, Gbool) & ExtTy(Gbool) = Bool(G) & TyCtx(sigma) = Gbool & TmTy(s) = sigma &
-        SubstTm(MorExt(Gbool, id, True(G)), s) = s_true &
-        SubstTm(MorExt(Gbool, id, False(G)), s) = s_false
-        =>
-        s = BoolElim(sigma, s_true, s_false)
-    ),
+    // TODO: fix this; doesn't seem necessary atm
+    // sequent!(
+    //     ExtCtx(G, Gbool) & ExtTy(Gbool) = Bool(G) & TyCtx(sigma) = Gbool & TmTy(s) = sigma &
+    //     SubstTm(MorExt(Gbool, id, True(G)), s) = s_true &
+    //     SubstTm(MorExt(Gbool, id, False(G)), s) = s_false
+    //     =>
+    //     s = BoolElim(sigma, s_true, s_false)
+    // ),
     // TODO: is substitution stability of bool elimination necessary or will this follow from
     // uniqueness?
 
