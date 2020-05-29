@@ -36,8 +36,11 @@ arities!{
         False: Ctx -> Tm,
         Neg: Tm -> Tm,
         BoolElim: Ty x Tm x Tm -> Tm, // BoolElim(sigma, true_case, false_case)
-        // If BoolElim(sigma, true_case, false_case), then we should have TmTy(sigma) = G.Bool(G)
-        // for some G and true_case: <id, true>(sigma), false_case: <id, false>(sigma)
+
+        Nat: Ctx -> Ty,
+        Z: Ctx -> Tm,
+        S: Tm -> Tm,
+        Ind: Ty x Tm x Tm -> Tm,
 
         Eq: Tm x Tm -> Ty,
         Refl: Tm -> Tm,
@@ -162,6 +165,45 @@ lazy_static! { pub static ref CWF_AXIOMS: Vec<Sequent> = vec![
     ),
     // TODO: is substitution stability of bool elimination necessary or will this follow from
     // uniqueness?
+
+    // context and types of Nat and its terms
+    sequent!(TyCtx(Nat(G)) ~> G),
+    sequent!(TmTy(Z(G)) ~> Nat(G)),
+    sequent!(TmTy(S(s)) ~> TmTy(s)),
+
+    // substitution stability of Nat and its terms
+    sequent!(SubstTy(f, Nat(Dom(f))) ~> Nat(Cod(f))),
+    sequent!(SubstTm(f, Z(Dom(f))) ~> Z(Cod(f))),
+    sequent!(SubstTm(f, S(t)) ~> S(SubstTm(f, t))),
+
+    // type of Ind
+    sequent!(TmTy(Ind(sigma, _, _)) ~> sigma),
+    // substituting Z into bool elimination
+    sequent!(
+        TyCtx(sigma) = Gnat
+        =>
+        SubstTm(MorExt(Gnat, f, Z(Cod(f))), Ind(sigma, z0, _))
+        ~>
+        SubstTm(f, z0)
+    ),
+    // substituting S(s) into bool elimination
+    sequent!(
+        // D = _.(n : N)
+        // D |- ind = Ind(sigma, _, s0) : sigma
+        // E = D.sigma
+        // E |- s0: sigma[n := S(n)]
+        ind = Ind(sigma, _, s0) & TyCtx(sigma) = D & TyCtx(TmTy(s0)) = E
+        =>
+        // <f, S(k)>(i) for some Dom(f) |- k : N
+        SubstTm(MorExt(D, f, S(k)), ind)
+        ~>
+        // <<f, k>, <f, k>(i)>(s_0)
+        SubstTm(
+            MorExt(E, MorExt(D0, f, k), SubstTm(MorExt(D, f, k), ind)),
+            s0
+        )
+    ),
+    // TODO: uniqueness of Ind
 
     // context of equality types
     sequent!(TyCtx(Eq(s, _)) ~> TyCtx(TmTy(s))),
