@@ -10,6 +10,7 @@ pub Def: Def = {
     "def" <DefBody> "." => <>,
     "nat_ind" <NatIndBody> "." => <>,
     "bool_ind" <BoolIndBody> "." => <>,
+    "dump" "." => Def::Dump,
 }
 
 pub DefBody: Def =

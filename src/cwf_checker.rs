@@ -64,6 +64,7 @@ impl Scope {
     pub fn new(cwf: &mut Cwf, tracing: Tracing) -> Self {
         let empty_ctx = adjoin_element(cwf, tracing, CwfSort::Ctx);
         adjoin_op(cwf, tracing, CwfRelation::Id, vec![empty_ctx]);
+        adjoin_row(cwf, tracing, CwfRelation::IterExtCtx, vec![empty_ctx, empty_ctx]);
         Scope {
             defs: HashMap::new(),
             current_extension: vec![empty_ctx],
@@ -116,9 +117,9 @@ pub fn extend_ctx_unchecked(
     let ty_el = add_type(cwf, scope, tracing, EqChecking::No, ty);
     let ext_ctx_el = adjoin_element(cwf, tracing, CwfSort::Ctx);
     adjoin_row(cwf, tracing, CwfRelation::ExtCtx, vec![current_ctx(scope), ext_ctx_el]);
+    adjoin_row(cwf, tracing, CwfRelation::IterExtCtx, vec![ext_ctx_el, ext_ctx_el]);
     adjoin_op(cwf, tracing, CwfRelation::Id, vec![ext_ctx_el]);
     adjoin_op(cwf, tracing, CwfRelation::Wkn, vec![ext_ctx_el]);
-    adjoin_row(cwf, tracing, CwfRelation::IterExtCtx, vec![current_ctx(scope), ext_ctx_el]);
     adjoin_row(cwf, tracing, CwfRelation::ExtTy, vec![ext_ctx_el, ty_el]);
     let var_el = adjoin_op(cwf, tracing, CwfRelation::Var, vec![ext_ctx_el]);
 
@@ -172,6 +173,13 @@ pub fn add_definition(
     def: &ast::Def,
 ) {
     match def {
+        ast::Def::Dump => {
+            close_cwf(cwf, tracing);
+            println!("{}", format_cwf(cwf));
+        },
+        ast::Def::Trace(defs) => {
+            panic!("Not implemented");
+        },
         ast::Def::Def{name, args, ty, tm} => {
             let (def_tm, def_extension) = with_args(
                 cwf, scope, tracing, should_check, args.as_slice(),
@@ -972,6 +980,26 @@ nat_ind double (m : Nat) : Nat
   .
 
 def r2 : double 2 = 5 := refl 5.
+")
+    }
+
+    #[test]
+    fn nat_ind_sum() {
+        check_defs("
+def add (m : Nat) (n : Nat): Nat :=
+  let
+    nat_ind elim_m (m0 : Nat) : Nat
+      | Z => n
+      | (S pred : Nat) (hyp : Nat) => S hyp
+      .
+  in
+    elim_m m
+  .
+
+def r_0_5 : add 0 5 = 5 := refl 5.
+def v_1_5 : Nat := add 1 5.
+dump.
+def r_1_5 : add 1 5 = 6 := refl 6.
 ")
     }
 }
