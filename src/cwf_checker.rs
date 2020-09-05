@@ -177,7 +177,7 @@ pub fn add_definition(
             close_cwf(cwf, tracing);
             println!("{}", format_cwf(cwf));
         },
-        ast::Def::Trace(defs) => {
+        ast::Def::Trace(_) => {
             panic!("Not implemented");
         },
         ast::Def::Def{name, args, ty, tm} => {
@@ -425,7 +425,7 @@ pub struct MorphismWithSignature {
 fn adjoin_post_compositions_step(
     cwf: &mut Cwf,
     tracing: Tracing,
-    dom_root_ctx: Element,
+    _dom_root_ctx: Element,
     after_morphisms: impl IntoIterator<Item = MorphismWithSignature> + Clone,
 ) -> Vec<MorphismWithSignature> {
 
