@@ -231,6 +231,46 @@ impl<Sig: RelationalSignature> Extend<(Sig::Relation, Row)> for RelationalStruct
     }
 }
 
+pub fn check_is_extension<Sig: RelationalSignature>(
+    domain: &RelationalStructure<Sig>,
+    codomain: &RelationalStructure<Sig>,
+) {
+    // TODO: debug_assert_eq!(domain.signature(), codomain.signature());
+    let sig = domain.signature();
+
+    // Every element el of the domain must be a valid element of the codomain and must have the
+    // same sort in domain and codomain.
+    for (el, s) in domain.elements() {
+        assert_eq!(codomain.element_sort(el), s);
+    }
+
+    // If el0 == el1 hold in the domain, then we must also have el0 == el1 in the codomain.  It
+    // suffices to check for every el with representative el0 in the domain that el and el0
+    // have the same representative in the codomain.
+    for (el, s) in domain.elements() {
+        assert_eq!(codomain.element_sort(el), s);
+        let el0 = domain.representative_const(el);
+        assert_eq!(codomain.representative_const(el), codomain.representative_const(el0));
+    }
+
+    // Check whether two rows of potentially non-canonical elements represent the same row in the
+    // codomain.
+    let row_eq_cod = |r0 : &[Element], r1 : &[Element]| { 
+        assert_eq!(r0.len(), r1.len());
+        r0.iter().zip(r1).all(|(&e0, &e1)| {
+            codomain.representative_const(e0) == codomain.representative_const(e1)
+        })
+    };
+    // If elements are related in the domain, then they must also be related in the codomain.
+    for &r in sig.relations() {
+        for row in domain.rows(r) {
+            codomain.rows(r).find(|&row_cod| row_eq_cod(row_cod, row)).unwrap_or_else(|| {
+                panic!("Domain row {:?} is not in codomain", row);
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
