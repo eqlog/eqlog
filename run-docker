@@ -1,19 +1,25 @@
 #!/bin/sh
-
+#
 # Examples:
-# ./run-docker cargo build
-# ./run-docker bash
+# > ./run-docker bash
+#
+# > export RUSTFLAGS="-A dead_code -A unused_variables -A unused_imports -A dead_code -A unused_variables -A unused_imports"
+# > ./run-docker cargo build
+#
+# This assumes that you built the docker image in the repo root:
+# > docker build -t exp-epa .
 
 repo_root="$(dirname "$(realpath $0)")"
+pwd_rel="$(realpath --relative-to "$repo_root" "$(pwd)")"
 
 docker run \
 	--interactive \
 	--tty \
 	--user $(id --user):$(id --group) \
 	--volume "$repo_root":/exp-epa \
-	--workdir "/exp-epa" \
+	--workdir "/exp-epa/$pwd_rel" \
 	--env "RUSTFLAGS=$RUSTFLAGS" \
 	--env "RUST_BACKTRACE=$RUST_BACKTRACE" \
 	--env "CARGO_HOME=/exp-epa/.cargo" \
-	rust:latest \
+	exp-epa \
 	$@
