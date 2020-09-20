@@ -25,8 +25,9 @@ pub Term: Term = {
     <var: Id> => Term::Variable(var),
     "_" => Term::Wildcard(None),
     <function: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
-        Term::Application(
-            function, head_arg.into_iter().chain(tail_args).collect()),
+        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
+        Term::Application(function, args)
+    },
 }
 
 pub Atom: Atom = {
