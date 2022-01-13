@@ -24,7 +24,7 @@ pub Term: Term = {
         let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
         Term::Application(function, args)
     },
-    //<t: Term> ":" <sort: Id> => Term::Typed(Box::new(t), sort),
+    <t: Term> ":" <sort: Id> => Term::Sorted(Box::new(t), sort),
 }
 
 Atom: Atom = {
@@ -42,7 +42,7 @@ Formula: Formula = {
 
 pub Sequent: Sequent = {
     <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
-    // <premise: Formula> "=!>" <conclusion: Formula> => Sequent::Introduction(premise, conclusion),
+    <premise: Formula> "=!>" <conclusion: Formula> => Sequent::NonSurjectiveImplication(premise, conclusion),
     <s: Term> "~>" <t: Term> => Sequent::Reduction(s, t),
     <premise: Formula> "=>" <s: Term> "~>" <t: Term> => Sequent::ConditionalReduction(premise, s, t),
 }

@@ -1,22 +1,9 @@
-//#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-//pub struct PredicateArity {  
-//    pub name: String,
-//    pub arity: Vec<String>,
-//}
-//
-//#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-//pub struct FunctionArity {
-//    pub name: String,
-//    pub domain: Vec<String>,
-//    pub codomain: String,
-//}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Term {
     Variable(String),
     Wildcard(Option<usize>),
     Application(String, Vec<Term>),
-    // Typed(Box<Term>, String),
+    Sorted(Box<Term>, String),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -32,7 +19,7 @@ pub struct Formula(pub Vec<Atom>);
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Sequent {
     Implication(Formula, Formula),
-    //Introduction(Formula, Term),
+    NonSurjectiveImplication(Formula, Formula),
     Reduction(Term, Term),
     ConditionalReduction(Formula, Term, Term),
 }
@@ -60,6 +47,7 @@ fn for_each_subterm_term_impl<'a, F: FnMut(&'a Term)>(tm: &'a Term, fun: &mut F)
                 for_each_subterm_term_impl(arg, fun);
             }
         }
+        Sorted(tm, _) => for_each_subterm_term_impl(tm, fun),
     }
     fun(tm);
 }
@@ -73,7 +61,8 @@ fn for_each_subterm_mut_term_impl<F: for<'a> FnMut(&'a mut Term)>(tm: &mut Term,
             for arg in args {
                 for_each_subterm_mut_term_impl(arg, fun);
             }
-        }
+        },
+        Sorted(tm, _) => for_each_subterm_mut_term_impl(tm, fun),
     }
     fun(tm);
 }
@@ -145,10 +134,10 @@ impl Ast for Sequent {
                 prem.for_each_subterm(&mut fun);
                 conc.for_each_subterm(&mut fun);
             },
-            //Introduction(prem, conc) => {
-            //    prem.for_each_subterm(&mut fun);
-            //    conc.for_each_subterm(&mut fun);
-            //},
+            NonSurjectiveImplication(prem, conc) => {
+                prem.for_each_subterm(&mut fun);
+                conc.for_each_subterm(&mut fun);
+            },
             Reduction(from, to) => {
                 from.for_each_subterm(&mut fun);
                 to.for_each_subterm(&mut fun);
@@ -167,10 +156,10 @@ impl Ast for Sequent {
                 prem.for_each_subterm_mut(&mut fun);
                 conc.for_each_subterm_mut(&mut fun);
             },
-            //Introduction(prem, conc) => {
-            //    prem.for_each_subterm_mut(&mut fun);
-            //    conc.for_each_subterm_mut(&mut fun);
-            //},
+            NonSurjectiveImplication(prem, conc) => {
+                prem.for_each_subterm_mut(&mut fun);
+                conc.for_each_subterm_mut(&mut fun);
+            },
             Reduction(from, to) => {
                 from.for_each_subterm_mut(&mut fun);
                 to.for_each_subterm_mut(&mut fun);
