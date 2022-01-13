@@ -3,22 +3,18 @@ use std::iter::once;
 
 grammar;
 
-pub Unit: Vec<Declaration> = { Declaration* => <>, }
+pub Theory: Vec<Declaration> = { Declaration* => <>, }
 
-pub Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
+Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
 
-pub PredicateSignature: PredicateSignature = {
+pub PredicateArity: (String, Vec<String>) = {
     <name: Id> ":" <head: Id> <tail: ("*" <Id>)*>
-        => PredicateSignature { name, arity: once(head).chain(tail).collect() },
+        => (name, once(head).chain(tail).collect()),
 }
 
-pub FunctionSignature: FunctionSignature = {
-    <name: Id> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <codomain: Id>
-        => FunctionSignature {
-            name,
-            domain: head_dom.into_iter().chain(tail_dom).collect(),
-            codomain,
-        },
+pub FunctionArity: (String, Vec<String>, String) = {
+    <name: Id> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id>
+        => (name, head_dom.into_iter().chain(tail_dom).collect(), cod),
 }
 
 pub Term: Term = {
@@ -28,30 +24,38 @@ pub Term: Term = {
         let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
         Term::Application(function, args)
     },
+    //<t: Term> ":" <sort: Id> => Term::Typed(Box::new(t), sort),
 }
 
-pub Atom: Atom = {
+Atom: Atom = {
     <lhs: Term> "=" <rhs: Term> => Atom::Equal(lhs, rhs),
-    "!" <t: Term> => Atom::Defined(t),
+    "!" <t: Term> => Atom::Defined(t, None),
+    "!" "(" <t: Term> ":" <s: Id> ")" => Atom::Defined(t, Some(s)),
     <pred: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")"
         => Atom::Predicate(pred, head_arg.into_iter().chain(tail_args).collect()),
 }
 
-pub Formula: Formula = {
+Formula: Formula = {
     <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> =>
         Formula(head_atom.into_iter().chain(tail_atoms).collect()),
 }
 
 pub Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => Sequent::SurjectiveImplication(premise, conclusion),
-    <premise: Formula> "=>!" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
+    <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
+    // <premise: Formula> "=!>" <conclusion: Formula> => Sequent::Introduction(premise, conclusion),
     <s: Term> "~>" <t: Term> => Sequent::Reduction(s, t),
     <premise: Formula> "=>" <s: Term> "~>" <t: Term> => Sequent::ConditionalReduction(premise, s, t),
 }
 
-pub Declaration: Declaration = {
+Declaration: Declaration = {
     "Sort" <sort: Id> ";" => Declaration::Sort(sort),
-    <pred_sig: PredicateSignature> ";" => Declaration::Predicate(pred_sig),
-    <func_sig: FunctionSignature> ";" => Declaration::Function(func_sig),
-    <seq: Sequent> ";" => Declaration::Axiom(seq),
+    "Pred" <pred: PredicateArity> ";" => {
+        let (name, arity) = pred;
+        Declaration::Predicate { name, arity }
+    },
+    "Func" <func: FunctionArity> ";" => {
+        let (name, dom, cod) = func;
+        Declaration::Function { name, dom, cod }
+    },
+    "Axiom" <seq: Sequent> ";" => Declaration::Axiom(seq),
 }

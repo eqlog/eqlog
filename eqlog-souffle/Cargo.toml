@@ -7,6 +7,9 @@ edition = "2018"
 [dependencies]
 lalrpop-util = "0.19.0"
 regex = "1"
+ena = "0.14"
+maplit = "1"
+itertools = "0.9"
 
 [build-dependencies]
 lalrpop = { version = "0.19.0", features = [ "lexer" ] }
