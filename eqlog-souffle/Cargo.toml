@@ -5,11 +5,11 @@ authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>"]
 edition = "2018"
 
 [dependencies]
-lalrpop-util = "0.19.0"
+lalrpop-util = "0"
 regex = "1"
-ena = "0.14"
 maplit = "1"
-itertools = "0.9"
+itertools = "0"
+bimap = "0"
 
 [build-dependencies]
-lalrpop = { version = "0.19.0", features = [ "lexer" ] }
+lalrpop = { version = "0", features = [ "lexer" ] }
