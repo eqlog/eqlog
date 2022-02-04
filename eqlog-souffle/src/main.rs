@@ -1,20 +1,9 @@
 #[macro_use] extern crate lalrpop_util;
 lalrpop_mod!(grammar);
-extern crate ena;
 #[cfg(test)] #[macro_use]
 extern crate maplit;
-mod error;
-mod ast;
-mod signature;
-// mod sort_inference;
-// mod theory_check;
-// mod emit;
-// mod union_map;
 
-// use grammar::*;
-// use sort_inference::infer_sorts;
-//use emit::*;
-// use theory_check::check_theory;
+mod ast;
 
 static DUMMY_THEORY: &str = "\
 Sort obj;
