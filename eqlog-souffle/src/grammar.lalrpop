@@ -1,30 +1,36 @@
 use crate::ast::*;
+use crate::theory::Theory;
 use std::iter::once;
 
 grammar;
 
-pub Theory: Vec<Declaration> = { Declaration* => <>, }
-
 Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
 
-pub PredicateArity: (String, Vec<String>) = {
-    <name: Id> ":" <head: Id> <tail: ("*" <Id>)*>
-        => (name, once(head).chain(tail).collect()),
+Sort: Sort = { <name: Id> => Sort(name) }
+
+Predicate: Predicate = {
+    <name: Id> ":" <head: Id> <tail: ("*" <Id>)*> => {
+        Predicate{name, arity: once(head).chain(tail).collect()}
+    },
 }
 
-pub FunctionArity: (String, Vec<String>, String) = {
-    <name: Id> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id>
-        => (name, head_dom.into_iter().chain(tail_dom).collect(), cod),
+Function: Function = {
+    <name: Id> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> => {
+        Function {
+            name,
+            dom: head_dom.into_iter().chain(tail_dom).collect(),
+            cod,
+        }
+    },
 }
 
-pub Term: Term = {
+Term: Term = {
     <var: Id> => Term::Variable(var),
     "_" => Term::Wildcard(None),
     <function: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
         let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
         Term::Application(function, args)
     },
-    <t: Term> ":" <sort: Id> => Term::Sorted(Box::new(t), sort),
 }
 
 Atom: Atom = {
@@ -40,22 +46,18 @@ Formula: Formula = {
         Formula(head_atom.into_iter().chain(tail_atoms).collect()),
 }
 
-pub Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
-    <premise: Formula> "=!>" <conclusion: Formula> => Sequent::NonSurjectiveImplication(premise, conclusion),
+Sequent: Sequent = {
+    <premise: Formula> "=>" <conclusion: Formula> => Sequent::SurjectiveImplication(premise, conclusion),
+    <premise: Formula> "=!>" <conclusion: Formula> => Sequent::GeneralImplication(premise, conclusion),
     <s: Term> "~>" <t: Term> => Sequent::Reduction(s, t),
     <premise: Formula> "=>" <s: Term> "~>" <t: Term> => Sequent::ConditionalReduction(premise, s, t),
 }
 
-Declaration: Declaration = {
-    "Sort" <sort: Id> ";" => Declaration::Sort(sort),
-    "Pred" <pred: PredicateArity> ";" => {
-        let (name, arity) = pred;
-        Declaration::Predicate { name, arity }
-    },
-    "Func" <func: FunctionArity> ";" => {
-        let (name, dom, cod) = func;
-        Declaration::Function { name, dom, cod }
-    },
-    "Axiom" <seq: Sequent> ";" => Declaration::Axiom(seq),
+pub Theory: Theory = {
+    <mut th: Theory> "Sort" <sort: Sort> ";" => { th.add_sort(sort); th },
+    <mut th: Theory> "Pred" <pred: Predicate> ";" => { th.add_predicate(pred); th },
+    <mut th: Theory> "Func" <func: Function> ";" => { th.add_function(func); th },
+    <mut th: Theory> "Axiom" <seq: Sequent> ";" => { th.add_axiom(seq); th },
+    () => Theory::new(),
 }
+

@@ -10,6 +10,11 @@ regex = "1"
 maplit = "1"
 itertools = "0"
 bimap = "0"
+ena = "0"
+
+[dev-dependencies]
+indoc = "1"
 
 [build-dependencies]
 lalrpop = { version = "0", features = [ "lexer" ] }
+
