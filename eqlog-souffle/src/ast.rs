@@ -1,9 +1,24 @@
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Sort(pub String);
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Predicate {
+    pub name: String,
+    pub arity: Vec<String>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Function {
+    pub name: String,
+    pub dom: Vec<String>,
+    pub cod: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Term {
     Variable(String),
     Wildcard(Option<usize>),
     Application(String, Vec<Term>),
-    Sorted(Box<Term>, String),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -18,18 +33,10 @@ pub struct Formula(pub Vec<Atom>);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Sequent {
-    Implication(Formula, Formula),
-    NonSurjectiveImplication(Formula, Formula),
+    SurjectiveImplication(Formula, Formula),
+    GeneralImplication(Formula, Formula),
     Reduction(Term, Term),
     ConditionalReduction(Formula, Term, Term),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Declaration {
-    Sort(String),
-    Predicate { name: String, arity: Vec<String> },
-    Function { name: String, dom: Vec<String>, cod: String },
-    Axiom(Sequent),
 }
 
 pub trait Ast {
@@ -46,8 +53,7 @@ fn for_each_subterm_term_impl<'a, F: FnMut(&'a Term)>(tm: &'a Term, fun: &mut F)
             for arg in args {
                 for_each_subterm_term_impl(arg, fun);
             }
-        }
-        Sorted(tm, _) => for_each_subterm_term_impl(tm, fun),
+        },
     }
     fun(tm);
 }
@@ -62,7 +68,6 @@ fn for_each_subterm_mut_term_impl<F: for<'a> FnMut(&'a mut Term)>(tm: &mut Term,
                 for_each_subterm_mut_term_impl(arg, fun);
             }
         },
-        Sorted(tm, _) => for_each_subterm_mut_term_impl(tm, fun),
     }
     fun(tm);
 }
@@ -130,11 +135,11 @@ impl Ast for Sequent {
     fn for_each_subterm<'a, F: FnMut(&'a Term)>(&'a self, mut fun: F) {
         use Sequent::*;
         match self {
-            Implication(prem, conc) => {
+            SurjectiveImplication(prem, conc) => {
                 prem.for_each_subterm(&mut fun);
                 conc.for_each_subterm(&mut fun);
             },
-            NonSurjectiveImplication(prem, conc) => {
+            GeneralImplication(prem, conc) => {
                 prem.for_each_subterm(&mut fun);
                 conc.for_each_subterm(&mut fun);
             },
@@ -152,11 +157,11 @@ impl Ast for Sequent {
     fn for_each_subterm_mut<F: for<'a> FnMut(&'a mut Term)>(&mut self, mut fun: F) {
         use Sequent::*;
         match self {
-            Implication(prem, conc) => {
+            SurjectiveImplication(prem, conc) => {
                 prem.for_each_subterm_mut(&mut fun);
                 conc.for_each_subterm_mut(&mut fun);
             },
-            NonSurjectiveImplication(prem, conc) => {
+            GeneralImplication(prem, conc) => {
                 prem.for_each_subterm_mut(&mut fun);
                 conc.for_each_subterm_mut(&mut fun);
             },
