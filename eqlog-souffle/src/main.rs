@@ -10,5 +10,7 @@ mod ast;
 mod theory;
 #[cfg(test)]
 mod theory_test;
+mod ram;
+mod theory_to_ram;
 
 fn main() {}
