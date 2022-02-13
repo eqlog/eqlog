@@ -25,6 +25,9 @@ impl SequentInfo {
         let index = self.term_index(tm)?;
         self.index_sort(index)
     }
+    pub fn index_len(&self) -> usize {
+        self.term_sorts.len()
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
