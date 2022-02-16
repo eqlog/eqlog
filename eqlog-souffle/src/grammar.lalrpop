@@ -1,4 +1,5 @@
-use crate::ast::*;
+use crate::direct_ast::*;
+use crate::indirect_ast::direct_to_indirect;
 use crate::theory::Theory;
 use std::iter::once;
 
@@ -26,7 +27,7 @@ Function: Function = {
 
 Term: Term = {
     <var: Id> => Term::Variable(var),
-    "_" => Term::Wildcard(None),
+    "_" => Term::Wildcard,
     <function: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
         let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
         Term::Application(function, args)
@@ -53,11 +54,22 @@ Sequent: Sequent = {
     <premise: Formula> "=>" <s: Term> "~>" <t: Term> => Sequent::ConditionalReduction(premise, s, t),
 }
 
-pub Theory: Theory = {
-    <mut th: Theory> "Sort" <sort: Sort> ";" => { th.add_sort(sort); th },
-    <mut th: Theory> "Pred" <pred: Predicate> ";" => { th.add_predicate(pred); th },
-    <mut th: Theory> "Func" <func: Function> ";" => { th.add_function(func); th },
-    <mut th: Theory> "Axiom" <seq: Sequent> ";" => { th.add_axiom(seq); th },
-    () => Theory::new(),
+Declaration: Declaration = {
+    "Sort" <sort: Sort> ";" => Declaration::Sort(sort),
+    "Pred" <pred: Predicate> ";" => Declaration::Predicate(pred),
+    "Func" <func: Function> ";" => Declaration::Function(func),
+    "Axiom" <seq: Sequent> ";" => Declaration::Axiom(seq),
 }
 
+pub Theory: Theory = {
+    () => Theory::new(),
+    <mut th: Theory> <decl: Declaration> => {
+        match decl {
+            Declaration::Sort(sort) => th.add_sort(sort),
+            Declaration::Predicate(pred) => th.add_predicate(pred),
+            Declaration::Function(func) => th.add_function(func),
+            Declaration::Axiom(seq) => th.add_axiom(direct_to_indirect(&seq)),
+        };
+        th
+    },
+}

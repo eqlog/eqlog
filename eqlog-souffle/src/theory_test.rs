@@ -2,7 +2,7 @@ use super::*;
 use indoc::indoc;
 
 use crate::grammar::TheoryParser;
-use crate::ast::*;
+use crate::indirect_ast::*;
 
 #[test]
 fn good_theory() {
@@ -47,169 +47,82 @@ fn good_theory() {
         }
     );
 
-    use Sequent::*;
-    use Term::*;
-
-    assert_eq!(*th.sorts(), hashmap!{obj() => Sort(obj()), mor() => Sort(mor())});
-
+    use TermData::*;
     let f = || { Variable("f".to_string()) };
     let g = || { Variable("g".to_string()) };
     let h = || { Variable("h".to_string()) };
     let x = || { Variable("x".to_string()) };
     let y = || { Variable("y".to_string()) };
     let z = || { Variable("z".to_string()) };
-    let axiom_sequents: Vec<Sequent> =
-        th.axioms().iter()
-        .map(|si| (*si.sequent()).clone())
-        .collect();
-    assert_eq!(axiom_sequents.len(), 3);
-    assert_eq!(
-        axiom_sequents[0],
-        Reduction(
-            Application(comp(), vec![h(), Application(comp(), vec![g(), f()])]),
-            Application(comp(), vec![Application(comp(), vec![h(), g()]), f()])
-        ),
-    );
-    assert_eq!(
-        axiom_sequents[1],
-        GeneralImplication(
-            Formula(vec![
-                Atom::Predicate(signature(), vec![x(), f(), y()]),
-                Atom::Predicate(signature(), vec![y(), g(), z()])
-            ]),
-            Formula(vec![
-                Atom::Predicate(signature(), vec![x(), Application(comp(), vec![g(), f()]), z()]),
-            ])
-        ),
-    );
 
-    for seq in th.axioms().iter().map(|a| a.sequent()) {
-        seq.for_each_subterm(|tm| {
-            match tm {
-                Application(c, args) => {
-                    match c.as_str() {
-                        "comp" => assert_eq!(args.len(), 2),
-                        "id" => assert_eq!(args.len(), 1),
-                        _ => panic!(),
-                    };
-                },
-                _ => {},
-            };
-        });
+    let axioms: Vec<Sequent> = th.axioms().iter().map(|si| si.sequent.clone()).collect();
+    let (ax0, ax1, ax2) = match axioms.as_slice() {
+        [ax0, ax1, ax2] => (ax0, ax1, ax2),
+        _ => panic!("{}", axioms.len()),
+    };
+
+    {
+        let mut universe = TermUniverse::new();
+        let h0 = universe.new_term(h());
+        let g0 = universe.new_term(g());
+        let f0 = universe.new_term(f());
+        let gf = universe.new_term(Application(comp(), vec![g0, f0]));
+        let h_gf = universe.new_term(Application(comp(), vec![h0, gf]));
+
+        let h1 = universe.new_term(h());
+        let g1 = universe.new_term(g());
+        let hg = universe.new_term(Application(comp(), vec![h1, g1]));
+        let f1 = universe.new_term(f());
+        let hg_f = universe.new_term(Application(comp(), vec![hg, f1]));
+
+        let data = SequentData::Reduction(h_gf, hg_f);
+        assert_eq!(ax0, &Sequent{universe, data});
     }
 
-    let (from, to) = match th.axioms()[0].sequent() {
-        Reduction(from, to) => (from, to),
-        _ => panic!(),
-    };
-    let (h0, g0f0) = match from {
-        Application(_, args) => (&args[0], &args[1]),
-        _ => panic!(),
-    };
-    let (g0, f0) = match g0f0 {
-        Application(_, args) => (&args[0], &args[1]),
-        _ => panic!(),
-    };
-    let (h1g1, f1) = match to {
-        Application(_, args) => (&args[0], &args[1]),
-        _ => panic!(),
-    };
-    let (h1, g1) = match h1g1 {
-        Application(_, args) => (&args[0], &args[1]),
-        _ => panic!(),
-    };
+    {
+        let mut universe = TermUniverse::new();
+        let x0 = universe.new_term(x());
+        let f0 = universe.new_term(f());
+        let y0 = universe.new_term(y());
+        let sig_f = Atom::Predicate(signature(), vec![x0, f0, y0]);
 
-    let si = &th.axioms()[0];
-    assert_eq!(si.term_index(f0).unwrap(), si.term_index(f1).unwrap());
-    assert_eq!(si.term_index(g0).unwrap(), si.term_index(g1).unwrap());
-    assert_eq!(si.term_index(h0).unwrap(), si.term_index(h1).unwrap());
+        let y1 = universe.new_term(y());
+        let g0 = universe.new_term(g());
+        let z0 = universe.new_term(z());
+        let sig_g = Atom::Predicate(signature(), vec![y1, g0, z0]);
 
-    assert_eq!(si.term_sort(f0).unwrap(), mor());
-    assert_eq!(si.term_sort(g0).unwrap(), mor());
-    assert_eq!(si.term_sort(h0).unwrap(), mor());
+        let x1 = universe.new_term(x());
+        let g1 = universe.new_term(g());
+        let f1 = universe.new_term(f());
+        let gf = universe.new_term(Application(comp(), vec![g1, f1]));
+        let z1 = universe.new_term(z());
+        let sig_gf = Atom::Predicate(signature(), vec![x1, gf, z1]);
 
-    let (prem, conc) = match th.axioms()[1].sequent() {
-        GeneralImplication(Formula(prem), Formula(to)) => (prem, to),
-        _ => panic!(),
-    };
-    assert_eq!(prem.len(), 2);
-    assert_eq!(conc.len(), 1);
-    let sigf = &prem[0];
-    let sigg = &prem[1];
-    let siggf = &conc[0];
-    for atom in &[sigf, sigg, siggf] {
-        match atom {
-            Atom::Predicate(p, args) => {
-                assert_eq!(p, &signature());
-                assert_eq!(args.len(), 3);
-            },
-            _ => panic!(),
-        };
+        let data = SequentData::GeneralImplication(
+            Formula(vec![sig_f, sig_g]),
+            Formula(vec![sig_gf])
+        );
+        assert_eq!(ax1, &Sequent{universe, data});
     }
-    let (x0, f0, y0) = match sigf {
-        Atom::Predicate(_, args) => (&args[0], &args[1], &args[2]),
-        _ => panic!(),
-    };
-    let (y1, g0, z0) = match sigg {
-        Atom::Predicate(_, args) => (&args[0], &args[1], &args[2]),
-        _ => panic!(),
-    };
-    let (x1, gf, z1) = match siggf {
-        Atom::Predicate(_, args) => (&args[0], &args[1], &args[2]),
-        _ => panic!(),
-    };
-    let (g1, f1) = match gf {
-        Application(_, args) => (&args[0], &args[1]),
-        _ => panic!(),
-    };
 
-    let si = &th.axioms()[1];
-    assert_eq!(si.term_index(x0).unwrap(), si.term_index(x1).unwrap());
-    assert_eq!(si.term_index(y0).unwrap(), si.term_index(y1).unwrap());
-    assert_eq!(si.term_index(z0).unwrap(), si.term_index(z1).unwrap());
-    assert_eq!(si.term_index(f0).unwrap(), si.term_index(f1).unwrap());
-    assert_eq!(si.term_index(g0).unwrap(), si.term_index(g1).unwrap());
+    {
+        let mut universe = TermUniverse::new();
+        let g0 = universe.new_term(g());
+        let f0 = universe.new_term(f());
+        let wc = universe.new_term(Wildcard);
+        let i = universe.new_term(Application(id(), vec![wc]));
+        let fi = universe.new_term(Application(comp(), vec![f0, i]));
+        let prem_eq = Atom::Equal(g0, fi);
 
-    assert_eq!(si.term_sort(x0).unwrap(), obj());
-    assert_eq!(si.term_sort(y0).unwrap(), obj());
-    assert_eq!(si.term_sort(z0).unwrap(), obj());
-    assert_eq!(si.term_sort(f0).unwrap(), mor());
-    assert_eq!(si.term_sort(g0).unwrap(), mor());
-
-    let (prem, conc) = match th.axioms()[2].sequent() {
-        SurjectiveImplication(Formula(prem), Formula(to)) => (prem, to),
-        _ => panic!(),
-    };
-    assert_eq!(prem.len(), 1);
-    assert_eq!(conc.len(), 1);
-    let (g0, f_id) = match &prem[0] {
-        Atom::Equal(lhs, rhs) => (lhs, rhs),
-        _ => panic!(),
-    };
-    let (f0, id_wildcard) = match f_id {
-        Application(_, args) => (&args[0], &args[1]),
-        _ => panic!(),
-    };
-    let wc = match id_wildcard {
-        Application(_, args) => &args[0],
-        _ => panic!(),
-    };
-    match wc {
-        Wildcard(Some(_)) => (),
-        _ => panic!(),
-    };
-    let (f1, g1) = match &conc[0] {
-        Atom::Equal(lhs, rhs) => (lhs, rhs),
-        _ => panic!(),
-    };
-
-    let si = &th.axioms()[2];
-    assert_eq!(si.term_index(f0).unwrap(), si.term_index(f1).unwrap());
-    assert_eq!(si.term_index(g0).unwrap(), si.term_index(g1).unwrap());
-
-    assert_eq!(si.term_sort(wc).unwrap(), obj());
-    assert_eq!(si.term_sort(f0).unwrap(), mor());
-    assert_eq!(si.term_sort(g0).unwrap(), mor());
+        let f1 = universe.new_term(f());
+        let g1 = universe.new_term(g());
+        let conc_eq = Atom::Equal(f1, g1);
+        let data = SequentData::SurjectiveImplication(
+            Formula(vec![prem_eq]),
+            Formula(vec![conc_eq])
+        );
+        assert_eq!(ax2, &Sequent{universe, data});
+    }
 }
 
 #[test] #[should_panic]

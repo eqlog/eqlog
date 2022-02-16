@@ -1,16 +1,15 @@
 #[macro_use] extern crate lalrpop_util;
-lalrpop_mod!(grammar);
 #[cfg(test)] #[macro_use]
 extern crate maplit;
-extern crate ena;
 #[cfg(test)]
 extern crate indoc;
 
-mod ast;
+mod direct_ast;
+mod indirect_ast;
 mod theory;
+mod unification;
+lalrpop_mod!(grammar);
 #[cfg(test)]
 mod theory_test;
-mod ram;
-mod theory_to_ram;
 
 fn main() {}
