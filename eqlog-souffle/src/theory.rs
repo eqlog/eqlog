@@ -7,11 +7,11 @@ use std::convert::identity;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct AnalyzedSequent {
     pub sequent: Sequent,
-    premise_terms: Vec<bool>,
-    structural_equality: Vec<usize>,
-    premise_equality: Vec<usize>,
-    conclusion_equality: Vec<usize>,
-    sorts: Vec<String>,
+    pub premise_terms: Vec<bool>,
+    pub structural_equality: Vec<usize>,
+    pub premise_equality: Vec<usize>,
+    pub conclusion_equality: Vec<usize>,
+    pub sorts: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
