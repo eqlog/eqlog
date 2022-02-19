@@ -83,7 +83,7 @@ fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     (structural_equality, premise_equality, conclusion_equality)
 }
 
-fn infer_sorts(sequent: &Sequent, conclusion_equality: &[usize], signature: &Signature) -> Vec<String> {
+fn infer_sorts(signature: &Signature, sequent: &Sequent, conclusion_equality: &[usize]) -> Vec<String> {
     let conc_eq_max = conclusion_equality.iter().copied().max().unwrap();
     let mut sorts: Vec<String> = (0 .. conc_eq_max + 1).map(|_| String::new()).collect();
     let mut sort_assigned: Vec<bool> = (0 .. sorts.len()).map(|_| false).collect();
@@ -210,10 +210,10 @@ pub struct SequentAnalysis {
     pub sorts: Vec<String>,
 }
 
-pub fn analyze(sequent: &Sequent, signature: &Signature) -> SequentAnalysis {
+pub fn analyze(signature: &Signature, sequent: &Sequent) -> SequentAnalysis {
     let premise_terms = premise_terms(sequent);
     let (structural_equality, premise_equality, conclusion_equality) = term_equalities(sequent);
-    let sorts = infer_sorts(sequent, &conclusion_equality, signature);
+    let sorts = infer_sorts(signature, sequent, &conclusion_equality);
     check_epimorphism(&sequent.universe, &premise_terms);
     use SequentData::*;
     match &sequent.data {
