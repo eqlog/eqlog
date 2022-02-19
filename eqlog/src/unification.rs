@@ -1,6 +1,102 @@
 use crate::indirect_ast::*;
 use std::collections::HashMap;
+use std::ops::{Index, IndexMut};
+use std::marker::PhantomData;
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct IdValMap<Id, Val>
+where
+    Id : From<usize> + Into<usize> + Copy,
+{
+    pub table: Vec<Val>,
+    phantom: PhantomData<Id>,
+}
+
+impl<Id, Val> IdValMap<Id, Val>
+where
+    Id: From<usize> + Into<usize> + Copy,
+    Val: Clone,
+{
+    pub fn new(size: usize, initial_value: Val) -> Self {
+        let mut table = Vec::new();
+        table.resize(size, initial_value);
+        IdValMap {
+            table,
+            phantom: PhantomData,
+        }
+    }
+    pub fn from_table(table: Vec<Val>) -> Self {
+        IdValMap{
+            table,
+            phantom: PhantomData,
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
+}
+
+impl<Id, Val> Index<Id> for IdValMap<Id, Val>
+where
+    Id: From<usize> + Into<usize> + Copy,
+{
+    type Output = Val;
+    fn index(&self, i: Id) -> &Val {
+        &self.table[i.into()]
+    }
+}
+
+impl<Id, Val> IndexMut<Id> for IdValMap<Id, Val>
+where
+    Id : From<usize> + Into<usize> + Copy
+{
+    fn index_mut(&mut self, i: Id) -> &mut Val {
+        &mut self.table[i.into()]
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct IdIdMap<FromId, ToId>
+where
+    FromId: From<usize> + Into<usize> + Copy,
+    ToId: From<usize> + Into<usize> + Copy,
+{
+    pub table: Vec<ToId>,
+    range_end: usize,
+    phantom: PhantomData<FromId>,
+}
+
+impl<FromId, ToId> IdIdMap<FromId, ToId>
+where
+    FromId: From<usize> + Into<usize> + Copy,
+    ToId: From<usize> + Into<usize> + Copy,
+{
+    pub fn new(map: IdValMap<FromId, ToId>) -> Self {
+        let range_max: Option<usize> = map.table.iter().copied().map(|id| id.into()).max();
+        let range_end: usize = range_max.map(|max| max + 1).unwrap_or(0);
+        IdIdMap {
+            table: map.table,
+            phantom: PhantomData,
+            range_end
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
+}
+
+impl<FromId, ToId> Index<FromId> for IdIdMap<FromId, ToId>
+where
+    FromId: From<usize> + Into<usize> + Copy,
+    ToId: From<usize> + Into<usize> + Copy,
+{
+    type Output = ToId;
+    fn index(&self, i: FromId) -> &ToId {
+        &self.table[i.into()]
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TermUnification<'a> {
     universe: &'a TermUniverse,
     parents: Vec<usize>,
@@ -63,21 +159,23 @@ impl<'a> TermUnification<'a> {
             }
         }
     }
-    pub fn tabulate<T: From<usize> + Clone>(&mut self) -> (T, Vec<T>) {
-        let mut table = Vec::new();
-        table.resize(self.parents.len(), T::from(0));
+    pub fn tabulate<Id>(&mut self) -> IdIdMap<Term, Id>
+    where
+        Id: From<usize> + Into<usize> + Copy,
+    {
+        let mut table: IdValMap<Term, Id> = IdValMap::new(self.parents.len(), Id::from(usize::MAX));
 
         let mut next_id = 0;
         for (tm, _) in self.universe.iter_terms() {
             if tm == self.root(tm) {
-                table[tm.0] = T::from(next_id);
+                table[tm] = Id::from(next_id);
                 next_id += 1;
             }
         }
         for (tm, _) in self.universe.iter_terms() {
-            table[tm.0] = table[self.root(tm).0].clone();
+            table[tm] = table[self.root(tm)];
         }
-        (T::from(next_id), table)
+        IdIdMap::new(table)
     }
 }
 
@@ -210,6 +308,6 @@ mod tests {
         unif.union(t3, t4);
         unif.union(t4, t5);
 
-        assert_eq!(unif.tabulate(), (4, vec![0, 0, 1, 2, 2, 2, 3]));
+        assert_eq!(unif.tabulate(), IdIdMap::new(IdValMap::from_table(vec![0, 0, 1, 2, 2, 2, 3])));
     }
 }

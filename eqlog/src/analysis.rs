@@ -43,7 +43,7 @@ fn premise_terms(seq: &Sequent) -> Vec<bool> {
 fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     let mut unification = TermUnification::new(&sequent.universe);
     unification.congruence_closure();
-    let structural_equality = unification.tabulate().1;
+    let structural_equality = unification.tabulate().table;
 
     use SequentData::*;
     match &sequent.data {
@@ -60,7 +60,7 @@ fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
         Reduction(_, _) => (),
     }
     unification.congruence_closure();
-    let premise_equality = unification.tabulate().1;
+    let premise_equality = unification.tabulate().table;
 
     match &sequent.data {
         SurjectiveImplication(_, conc) | GeneralImplication(_, conc) => {
@@ -78,7 +78,7 @@ fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
         },
     }
     unification.congruence_closure();
-    let conclusion_equality = unification.tabulate().1;
+    let conclusion_equality = unification.tabulate().table;
 
     (structural_equality, premise_equality, conclusion_equality)
 }
