@@ -6,10 +6,9 @@ extern crate indoc;
 
 mod direct_ast;
 mod indirect_ast;
-mod theory;
+mod signature;
 mod unification;
 lalrpop_mod!(grammar);
-#[cfg(test)]
-mod theory_test;
+mod analysis;
 
 fn main() {}
