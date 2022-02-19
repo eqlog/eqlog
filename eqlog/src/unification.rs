@@ -8,7 +8,7 @@ pub struct IdValMap<Id, Val>
 where
     Id : From<usize> + Into<usize> + Copy,
 {
-    pub table: Vec<Val>,
+    table: Vec<Val>,
     phantom: PhantomData<Id>,
 }
 
@@ -25,14 +25,19 @@ where
             phantom: PhantomData,
         }
     }
+}
+impl<Id, Val> IdValMap<Id, Val>
+where
+    Id: From<usize> + Into<usize> + Copy,
+{
     pub fn from_table(table: Vec<Val>) -> Self {
         IdValMap{
             table,
             phantom: PhantomData,
         }
     }
-    pub fn len(&self) -> usize {
-        self.table.len()
+    pub fn iter(&self) -> impl Iterator<Item=(Id, &Val)> {
+        self.table.iter().enumerate().map(|(i, v)| (Id::from(i), v))
     }
 }
 
@@ -61,7 +66,7 @@ where
     FromId: From<usize> + Into<usize> + Copy,
     ToId: From<usize> + Into<usize> + Copy,
 {
-    pub table: Vec<ToId>,
+    table: Vec<ToId>,
     range_end: usize,
     phantom: PhantomData<FromId>,
 }
@@ -80,8 +85,8 @@ where
             range_end
         }
     }
-    pub fn len(&self) -> usize {
-        self.table.len()
+    pub fn range_end(&self) -> usize {
+        self.range_end
     }
 }
 

