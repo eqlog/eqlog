@@ -1,7 +1,8 @@
 use crate::direct_ast::*;
-use crate::indirect_ast::direct_to_indirect;
-use crate::theory::Theory;
+use crate::indirect_ast;
+use crate::signature::Signature;
 use std::iter::once;
+use crate::analysis::{SequentAnalysis, analyze};
 
 grammar;
 
@@ -61,15 +62,20 @@ Declaration: Declaration = {
     "Axiom" <seq: Sequent> ";" => Declaration::Axiom(seq),
 }
 
-pub Theory: Theory = {
-    () => Theory::new(),
-    <mut th: Theory> <decl: Declaration> => {
+pub Theory: (Signature, Vec<(indirect_ast::Sequent, SequentAnalysis)>) = {
+    () => (Signature::new(), vec![]),
+    <mut theory: Theory> <decl: Declaration> => {
+        let (sig, axioms) = &mut theory;
         match decl {
-            Declaration::Sort(sort) => th.add_sort(sort),
-            Declaration::Predicate(pred) => th.add_predicate(pred),
-            Declaration::Function(func) => th.add_function(func),
-            Declaration::Axiom(seq) => th.add_axiom(direct_to_indirect(&seq)),
+            Declaration::Sort(sort) => sig.add_sort(sort),
+            Declaration::Predicate(pred) => sig.add_predicate(pred),
+            Declaration::Function(func) => sig.add_function(func),
+            Declaration::Axiom(seq) => { 
+                let indirect_seq = indirect_ast::direct_to_indirect(&seq);
+                let analysis = analyze(&indirect_seq, &sig);
+                axioms.push((indirect_seq, analysis));
+            },
         };
-        th
+        theory
     },
 }
