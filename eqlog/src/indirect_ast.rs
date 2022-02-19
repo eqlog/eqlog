@@ -3,6 +3,16 @@ use crate::direct_ast;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Term(pub usize);
+impl From<usize> for Term {
+    fn from(n: usize) -> Term {
+        Term(n)
+    }
+}
+impl Into<usize> for Term {
+    fn into(self) -> usize {
+        self.0
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum TermData {
