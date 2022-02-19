@@ -72,7 +72,7 @@ pub Theory: (Signature, Vec<(indirect_ast::Sequent, SequentAnalysis)>) = {
             Declaration::Function(func) => sig.add_function(func),
             Declaration::Axiom(seq) => { 
                 let indirect_seq = indirect_ast::direct_to_indirect(&seq);
-                let analysis = analyze(&indirect_seq, &sig);
+                let analysis = analyze(&sig, &indirect_seq);
                 axioms.push((indirect_seq, analysis));
             },
         };
