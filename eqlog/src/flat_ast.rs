@@ -209,7 +209,7 @@ fn general_implication() {
         Func comp : mor * mor -> mor;
         Pred signature: obj * mor * obj;
 
-        Axiom signature(x, f, y) & signature(y, g, z) =!> signature(x, comp(g, f), z);
+        Axiom signature(x, f, y) & signature(y, g, z) => signature(x, comp(g, f), z);
     "};
     let (sig, axioms) = TheoryParser::new().parse(src).unwrap();
 

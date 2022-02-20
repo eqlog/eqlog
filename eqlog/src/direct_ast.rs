@@ -33,10 +33,13 @@ pub struct Formula(pub Vec<Atom>);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Sequent {
-    SurjectiveImplication(Formula, Formula),
-    GeneralImplication(Formula, Formula),
-    Reduction(Term, Term),
-    ConditionalReduction(Formula, Term, Term),
+    Implication(Formula, Formula),
+    Reduction {
+        premise: Formula,
+        from_function: String,
+        from_args: Vec<Term>,
+        to: Term,
+    },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

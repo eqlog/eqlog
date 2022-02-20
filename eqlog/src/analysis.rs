@@ -269,7 +269,7 @@ fn good_theory() {
 
         Pred signature: obj * mor * obj;
 
-        Axiom signature(x, f, y) & signature(y, g, z) =!> signature(x, comp(g, f), z);
+        Axiom signature(x, f, y) & signature(y, g, z) => signature(x, comp(g, f), z);
 
         Func id : obj -> mor; Axiom g = comp(f, id(_)) => f = g;
     "};
@@ -341,7 +341,7 @@ fn good_theory() {
         let h_gf = universe.new_term(Application(comp(), vec![h0, gf]));
         structural_equality.push(4);
 
-        let data = SequentData::Reduction(h_gf, hg_f);
+        let data = SequentData::ConditionalReduction(Formula(vec![]), h_gf, hg_f);
 
         assert_eq!(seq0.data, data);
         assert_eq!(seq0.universe, universe);
@@ -444,7 +444,7 @@ fn good_theory() {
             data: AtomData::Equal(f1, g1),
         };
 
-        let data = SequentData::SurjectiveImplication(
+        let data = SequentData::GeneralImplication(
             Formula(vec![prem_eq]),
             Formula(vec![conc_eq])
         );
@@ -521,29 +521,29 @@ fn non_epi() {
     TheoryParser::new().parse(src).unwrap();
 }
 
-#[test] #[should_panic]
-fn non_surjective0() {
-    let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Pred signature: obj * mor * obj;
-        Func id : obj -> mor;
-        Func comp : mor * mor -> mor;
-        Axiom signature(x, f, _) => comp(f, id(x)) = f;
-    "};
-    TheoryParser::new().parse(src).unwrap();
-}
-
-#[test] #[should_panic]
-fn non_surjective1() {
-    let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Func id : obj -> mor;
-        Axiom x = y => id(x) = id(y);
-    "};
-    TheoryParser::new().parse(src).unwrap();
-}
+//#[test] #[should_panic]
+//fn non_surjective0() {
+//    let src = indoc! {"
+//        Sort obj;
+//        Sort mor;
+//        Pred signature: obj * mor * obj;
+//        Func id : obj -> mor;
+//        Func comp : mor * mor -> mor;
+//        Axiom signature(x, f, _) => comp(f, id(x)) = f;
+//    "};
+//    TheoryParser::new().parse(src).unwrap();
+//}
+//
+//#[test] #[should_panic]
+//fn non_surjective1() {
+//    let src = indoc! {"
+//        Sort obj;
+//        Sort mor;
+//        Func id : obj -> mor;
+//        Axiom x = y => id(x) = id(y);
+//    "};
+//    TheoryParser::new().parse(src).unwrap();
+//}
 
 #[test] #[should_panic]
 fn no_sort_inferred() {

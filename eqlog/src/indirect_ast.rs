@@ -120,51 +120,22 @@ pub fn direct_to_indirect(seq: &direct_ast::Sequent) -> Sequent {
     let mut universe = TermUniverse::new();
     use SequentData::*;
     let (data, first_conclusion_term) = match seq {
-        direct_ast::Sequent::SurjectiveImplication(premise, conclusion) => {
-            let premise = translate_formula(premise, &mut universe);
-            let first_conclusion_term = Term(universe.len());
-            let conclusion = translate_formula(conclusion, &mut universe);
-            (SurjectiveImplication(premise, conclusion), first_conclusion_term)
-        },
-        direct_ast::Sequent::GeneralImplication(premise, conclusion) => {
+        direct_ast::Sequent::Implication(premise, conclusion) => {
             let premise = translate_formula(premise, &mut universe);
             let first_conclusion_term = Term(universe.len());
             let conclusion = translate_formula(conclusion, &mut universe);
             (GeneralImplication(premise, conclusion), first_conclusion_term)
         },
-        direct_ast::Sequent::Reduction(from, to) => {
-            use direct_ast::Term::*;
-            let from_data: Option<(String, Vec<Term>)> = match from {
-                Variable(_) | Wildcard => None,
-                Application(name, args) => {
-                    let args = args.iter().map(|arg| translate_term(arg, &mut universe)).collect();
-                    Some((name.to_string(), args))
-                },
-            };
-            let to = translate_term(to, &mut universe);
-            let first_conclusion_term = Term(universe.len());
-            let from = match from_data {
-                None => translate_term(from, &mut universe),
-                Some((name, args)) => universe.new_term(TermData::Application(name, args)),
-            };
-            (Reduction(from, to), first_conclusion_term)
-        },
-        direct_ast::Sequent::ConditionalReduction(premise, from, to) => {
+        direct_ast::Sequent::Reduction{premise, from_function, from_args, to} => {
             let premise = translate_formula(premise, &mut universe);
             use direct_ast::Term::*;
-            let from_data: Option<(String, Vec<Term>)> = match from {
-                Variable(_) | Wildcard => None,
-                Application(name, args) => {
-                    let args = args.iter().map(|arg| translate_term(arg, &mut universe)).collect();
-                    Some((name.to_string(), args))
-                },
-            };
+            let from_args =
+                from_args.iter()
+                .map(|arg| translate_term(arg, &mut universe))
+                .collect();
             let to = translate_term(to, &mut universe);
             let first_conclusion_term = Term(universe.len());
-            let from = match from_data {
-                None => translate_term(from, &mut universe),
-                Some((name, args)) => universe.new_term(TermData::Application(name, args)),
-            };
+            let from = universe.new_term(TermData::Application(from_function.to_string(), from_args));
             (ConditionalReduction(premise, from, to), first_conclusion_term)
         },
     };
