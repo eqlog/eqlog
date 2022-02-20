@@ -26,21 +26,24 @@ Function: Function = {
     },
 }
 
+Application: (String, Vec<Term>) = {
+    <operator: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
+        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
+        (operator, args)
+    }
+}
+
 Term: Term = {
     <var: Id> => Term::Variable(var),
     "_" => Term::Wildcard,
-    <function: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
-        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
-        Term::Application(function, args)
-    },
+    <app: Application> => Term::Application(app.0, app.1),
 }
 
 Atom: Atom = {
     <lhs: Term> "=" <rhs: Term> => Atom::Equal(lhs, rhs),
     "!" <t: Term> => Atom::Defined(t, None),
     "!" "(" <t: Term> ":" <s: Id> ")" => Atom::Defined(t, Some(s)),
-    <pred: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")"
-        => Atom::Predicate(pred, head_arg.into_iter().chain(tail_args).collect()),
+    <app: Application> => Atom::Predicate(app.0, app.1),
 }
 
 Formula: Formula = {
