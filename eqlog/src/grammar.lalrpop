@@ -52,10 +52,19 @@ Formula: Formula = {
 }
 
 Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => Sequent::SurjectiveImplication(premise, conclusion),
-    <premise: Formula> "=!>" <conclusion: Formula> => Sequent::GeneralImplication(premise, conclusion),
-    <s: Term> "~>" <t: Term> => Sequent::Reduction(s, t),
-    <premise: Formula> "=>" <s: Term> "~>" <t: Term> => Sequent::ConditionalReduction(premise, s, t),
+    <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
+    <app: Application> "~>" <to: Term> => Sequent::Reduction {
+        premise: Formula(Vec::new()),
+        from_function: app.0,
+        from_args: app.1,
+        to,
+    },
+    <premise: Formula> "=>" <app: Application> "~>" <to: Term> => Sequent::Reduction {
+        premise,
+        from_function: app.0,
+        from_args: app.1,
+        to,
+    },
 }
 
 Declaration: Declaration = {
