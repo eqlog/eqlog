@@ -85,8 +85,14 @@ where
             range_end
         }
     }
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
     pub fn range_end(&self) -> usize {
         self.range_end
+    }
+    pub fn iter<'a>(&'a self) -> impl 'a + Iterator<Item=(FromId, ToId)> {
+        self.table.iter().copied().enumerate().map(|(i, j)| (FromId::from(i), j))
     }
 }
 

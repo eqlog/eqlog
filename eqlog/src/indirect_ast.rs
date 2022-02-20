@@ -66,6 +66,7 @@ pub enum SequentData {
 pub struct Sequent {
     pub data: SequentData,
     pub universe: TermUniverse,
+    pub first_conclusion_term: Term,
 }
 
 fn translate_term(term: &direct_ast::Term, universe: &mut TermUniverse) -> Term {
@@ -108,28 +109,54 @@ fn translate_formula(formula: &direct_ast::Formula, universe: &mut TermUniverse)
 pub fn direct_to_indirect(seq: &direct_ast::Sequent) -> Sequent {
     let mut universe = TermUniverse::new();
     use SequentData::*;
-    let data = match seq {
+    let (data, first_conclusion_term) = match seq {
         direct_ast::Sequent::SurjectiveImplication(premise, conclusion) => {
-            let translated_premise = translate_formula(premise, &mut universe);
-            let translated_conclusion = translate_formula(conclusion, &mut universe);
-            SurjectiveImplication(translated_premise, translated_conclusion)
+            let premise = translate_formula(premise, &mut universe);
+            let first_conclusion_term = Term(universe.len());
+            let conclusion = translate_formula(conclusion, &mut universe);
+            (SurjectiveImplication(premise, conclusion), first_conclusion_term)
         },
         direct_ast::Sequent::GeneralImplication(premise, conclusion) => {
-            let translated_premise = translate_formula(premise, &mut universe);
-            let translated_conclusion = translate_formula(conclusion, &mut universe);
-            GeneralImplication(translated_premise, translated_conclusion)
+            let premise = translate_formula(premise, &mut universe);
+            let first_conclusion_term = Term(universe.len());
+            let conclusion = translate_formula(conclusion, &mut universe);
+            (GeneralImplication(premise, conclusion), first_conclusion_term)
         },
         direct_ast::Sequent::Reduction(from, to) => {
-            let translated_from = translate_term(from, &mut universe);
-            let translated_to = translate_term(to, &mut universe);
-            Reduction(translated_from, translated_to)
+            use direct_ast::Term::*;
+            let from_data: Option<(String, Vec<Term>)> = match from {
+                Variable(_) | Wildcard => None,
+                Application(name, args) => {
+                    let args = args.iter().map(|arg| translate_term(arg, &mut universe)).collect();
+                    Some((name.to_string(), args))
+                },
+            };
+            let to = translate_term(to, &mut universe);
+            let first_conclusion_term = Term(universe.len());
+            let from = match from_data {
+                None => translate_term(from, &mut universe),
+                Some((name, args)) => universe.new_term(TermData::Application(name, args)),
+            };
+            (Reduction(from, to), first_conclusion_term)
         },
         direct_ast::Sequent::ConditionalReduction(premise, from, to) => {
-            let translated_premise = translate_formula(premise, &mut universe);
-            let translated_from = translate_term(from, &mut universe);
-            let translated_to = translate_term(to, &mut universe);
-            ConditionalReduction(translated_premise, translated_from, translated_to)
+            let premise = translate_formula(premise, &mut universe);
+            use direct_ast::Term::*;
+            let from_data: Option<(String, Vec<Term>)> = match from {
+                Variable(_) | Wildcard => None,
+                Application(name, args) => {
+                    let args = args.iter().map(|arg| translate_term(arg, &mut universe)).collect();
+                    Some((name.to_string(), args))
+                },
+            };
+            let to = translate_term(to, &mut universe);
+            let first_conclusion_term = Term(universe.len());
+            let from = match from_data {
+                None => translate_term(from, &mut universe),
+                Some((name, args)) => universe.new_term(TermData::Application(name, args)),
+            };
+            (ConditionalReduction(premise, from, to), first_conclusion_term)
         },
     };
-    Sequent{data, universe}
+    Sequent{data, universe, first_conclusion_term}
 }
