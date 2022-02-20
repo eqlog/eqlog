@@ -31,8 +31,8 @@ fn term_equalities(sequent: &Sequent) -> (StructuralEquality, PremiseEquality, C
     match &sequent.data {
         SurjectiveImplication(prem, _) | GeneralImplication(prem, _) | ConditionalReduction(prem, _, _) => {
             for atom in prem.0.iter() {
-                use Atom::*;
-                match atom {
+                use AtomData::*;
+                match &atom.data {
                     Equal(lhs, rhs) => unification.union(*lhs, *rhs),
                     Predicate(_, _) => (),
                     Defined(_, _) => (),
@@ -47,8 +47,8 @@ fn term_equalities(sequent: &Sequent) -> (StructuralEquality, PremiseEquality, C
     match &sequent.data {
         SurjectiveImplication(_, conc) | GeneralImplication(_, conc) => {
             for atom in conc.0.iter() {
-                use Atom::*;
-                match atom {
+                use AtomData::*;
+                match &atom.data {
                     Equal(lhs, rhs) => unification.union(*lhs, *rhs),
                     Predicate(_, _) => (),
                     Defined(_, _) => (),
@@ -92,11 +92,11 @@ fn infer_sorts(signature: &Signature, sequent: &Sequent, conclusion_equality: &C
     };
 
     for atom in prem_atoms.iter().chain(conc_atoms) {
-        match atom {
-            Atom::Equal(_, _) => (),
-            Atom::Defined(tm, Some(sort)) => assign_sort(*tm, sort),
-            Atom::Defined(_, None) => (),
-            Atom::Predicate(p, args) => {
+        match &atom.data {
+            AtomData::Equal(_, _) => (),
+            AtomData::Defined(tm, Some(sort)) => assign_sort(*tm, sort),
+            AtomData::Defined(_, None) => (),
+            AtomData::Predicate(p, args) => {
                 let arity = match signature.predicates().get(p) {
                     Some(Predicate{arity, ..}) => arity,
                     None => panic!("Undeclared predicate {}", p),
@@ -183,16 +183,38 @@ fn check_surjective(
     }
 }
 
+pub fn first_structural_occurence(
+    universe: &TermUniverse,
+    structural_equality: &StructuralEquality,
+) -> IdValMap<Term, bool> {
+    let mut has_occured: IdValMap<StructuralEqualityTerm, bool> =
+        IdValMap::new(structural_equality.len(), false);
+    let mut first_occurence: IdValMap<Term, bool> =
+        IdValMap::new(universe.len(), false);
+    for (tm, _) in universe.iter_terms() {
+        let struct_tm = structural_equality[tm];
+        if !has_occured[struct_tm] {
+            has_occured[struct_tm] = true;
+            first_occurence[tm] = true;
+        } else {
+            first_occurence[tm] = false;
+        }
+    }
+    first_occurence
+}
+
 pub struct SequentAnalysis {
     pub structural_equality: StructuralEquality,
     pub premise_equality: PremiseEquality,
     pub conclusion_equality: ConclusionEquality,
+    pub first_structural_occurence: IdValMap<Term, bool>,
     pub sorts: IdValMap<ConclusionEqualityTerm, String>,
 }
 
 pub fn analyze(signature: &Signature, sequent: &Sequent) -> SequentAnalysis {
     let (structural_equality, premise_equality, conclusion_equality) = term_equalities(sequent);
     let sorts = infer_sorts(signature, sequent, &conclusion_equality);
+    let first_structural_occurence = first_structural_occurence(&sequent.universe, &structural_equality);
     check_epimorphism(&sequent.universe, sequent.first_conclusion_term);
     use SequentData::*;
     match &sequent.data {
@@ -205,6 +227,7 @@ pub fn analyze(signature: &Signature, sequent: &Sequent) -> SequentAnalysis {
         structural_equality,
         premise_equality,
         conclusion_equality,
+        first_structural_occurence,
         sorts,
     }
 }
@@ -347,19 +370,31 @@ fn good_theory() {
         let x0 = universe.new_term(x());
         let f0 = universe.new_term(f());
         let y0 = universe.new_term(y());
-        let sig_f = Atom::Predicate(signature(), vec![x0, f0, y0]);
+        let sig_f = Atom {
+            terms_begin: x0,
+            terms_end: Term(universe.len()),
+            data: AtomData::Predicate(signature(), vec![x0, f0, y0]),
+        };
 
         let y1 = universe.new_term(y());
         let g0 = universe.new_term(g());
         let z0 = universe.new_term(z());
-        let sig_g = Atom::Predicate(signature(), vec![y1, g0, z0]);
+        let sig_g = Atom {
+            terms_begin: y1,
+            terms_end: Term(universe.len()),
+            data: AtomData::Predicate(signature(), vec![y1, g0, z0]),
+        };
 
         let x1 = universe.new_term(x());
         let g1 = universe.new_term(g());
         let f1 = universe.new_term(f());
         let gf = universe.new_term(Application(comp(), vec![g1, f1]));
         let z1 = universe.new_term(z());
-        let sig_gf = Atom::Predicate(signature(), vec![x1, gf, z1]);
+        let sig_gf = Atom {
+            terms_begin: x1,
+            terms_end: Term(universe.len()),
+            data: AtomData::Predicate(signature(), vec![x1, gf, z1]),
+        };
 
         let data = SequentData::GeneralImplication(
             Formula(vec![sig_f, sig_g]),
@@ -395,11 +430,19 @@ fn good_theory() {
         let wc = universe.new_term(Wildcard);
         let i = universe.new_term(Application(id(), vec![wc]));
         let fi = universe.new_term(Application(comp(), vec![f0, i]));
-        let prem_eq = Atom::Equal(g0, fi);
+        let prem_eq = Atom {
+            terms_begin: g0,
+            terms_end: Term(universe.len()),
+            data: AtomData::Equal(g0, fi),
+        };
 
         let f1 = universe.new_term(f());
         let g1 = universe.new_term(g());
-        let conc_eq = Atom::Equal(f1, g1);
+        let conc_eq = Atom {
+            terms_begin: f1,
+            terms_end: Term(universe.len()),
+            data: AtomData::Equal(f1, g1),
+        };
 
         let data = SequentData::SurjectiveImplication(
             Formula(vec![prem_eq]),
