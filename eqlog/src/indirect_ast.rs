@@ -45,10 +45,17 @@ impl TermUniverse {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Atom {
+pub enum AtomData {
     Equal(Term, Term),
     Defined(Term, Option<String>),
     Predicate(String, Vec<Term>),
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Atom {
+    pub data: AtomData,
+    pub terms_begin: Term,
+    pub terms_end: Term,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -85,21 +92,24 @@ fn translate_term(term: &direct_ast::Term, universe: &mut TermUniverse) -> Term 
 }
 
 fn translate_atom(atom: &direct_ast::Atom, universe: &mut TermUniverse) -> Atom {
-    match atom {
+    let terms_begin = Term(universe.len());
+    let data = match atom {
         direct_ast::Atom::Equal(lhs, rhs) => {
             let translated_lhs = translate_term(lhs, universe);
             let translated_rhs = translate_term(rhs, universe);
-            Atom::Equal(translated_lhs, translated_rhs)
+            AtomData::Equal(translated_lhs, translated_rhs)
         },
         direct_ast::Atom::Defined(tm, sort) => {
             let translated_tm = translate_term(tm, universe);
-            Atom::Defined(translated_tm, sort.clone())
+            AtomData::Defined(translated_tm, sort.clone())
         },
         direct_ast::Atom::Predicate(pred, args) => {
             let translated_args = args.iter().map(|arg| translate_term(arg, universe)).collect();
-            Atom::Predicate(pred.clone(), translated_args)
+            AtomData::Predicate(pred.clone(), translated_args)
         },
-    }
+    };
+    let terms_end = Term(universe.len());
+    Atom{data, terms_begin, terms_end}
 }
 
 fn translate_formula(formula: &direct_ast::Formula, universe: &mut TermUniverse) -> Formula {
