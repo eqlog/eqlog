@@ -10,6 +10,5 @@ mod signature;
 mod unification;
 lalrpop_mod!(grammar);
 mod analysis;
-mod flat_ast;
 
 fn main() {}
