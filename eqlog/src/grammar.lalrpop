@@ -2,7 +2,8 @@ use crate::direct_ast::*;
 use crate::indirect_ast;
 use crate::signature::Signature;
 use std::iter::once;
-use crate::analysis::{SequentAnalysis, analyze};
+use crate::analysis::check_semantically;
+use crate::unification::TermMap;
 
 grammar;
 
@@ -41,8 +42,8 @@ Term: Term = {
 
 Atom: Atom = {
     <lhs: Term> "=" <rhs: Term> => Atom::Equal(lhs, rhs),
-    "!" <t: Term> => Atom::Defined(t, None),
-    "!" "(" <t: Term> ":" <s: Id> ")" => Atom::Defined(t, Some(s)),
+    <t: Term> "!" => Atom::Defined(t, None),
+    <t: Term> "!" ":" <s: Id> => Atom::Defined(t, Some(s)),
     <app: Application> => Atom::Predicate(app.0, app.1),
 }
 
@@ -74,7 +75,7 @@ Declaration: Declaration = {
     "Axiom" <seq: Sequent> ";" => Declaration::Axiom(seq),
 }
 
-pub Theory: (Signature, Vec<(indirect_ast::Sequent, SequentAnalysis)>) = {
+pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
     () => (Signature::new(), vec![]),
     <mut theory: Theory> <decl: Declaration> => {
         let (sig, axioms) = &mut theory;
@@ -84,8 +85,8 @@ pub Theory: (Signature, Vec<(indirect_ast::Sequent, SequentAnalysis)>) = {
             Declaration::Function(func) => sig.add_function(func),
             Declaration::Axiom(seq) => { 
                 let indirect_seq = indirect_ast::Sequent::new(&seq);
-                let analysis = analyze(&sig, &indirect_seq);
-                axioms.push((indirect_seq, analysis));
+                let sorts = check_semantically(&sig, &indirect_seq);
+                axioms.push((indirect_seq, sorts));
             },
         };
         theory
