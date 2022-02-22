@@ -1,71 +1,24 @@
 use crate::indirect_ast::*;
 use crate::signature::Signature;
-use crate::unification::{IdValMap, IdIdMap, TermUnification};
-use std::convert::identity;
+use crate::unification::{TermUnification, TermMap};
 use std::collections::HashSet;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct StructuralEqualityTerm(pub usize);
-impl From<usize> for StructuralEqualityTerm { fn from(n: usize) -> Self { StructuralEqualityTerm(n) } }
-impl Into<usize> for StructuralEqualityTerm { fn into(self) -> usize { self.0 } }
-pub type StructuralEquality = IdIdMap<Term, StructuralEqualityTerm>;
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct PremiseEqualityTerm(pub usize);
-impl From<usize> for PremiseEqualityTerm { fn from(n: usize) -> Self { PremiseEqualityTerm(n) } }
-impl Into<usize> for PremiseEqualityTerm { fn into(self) -> usize { self.0 } }
-pub type PremiseEquality = IdIdMap<Term, PremiseEqualityTerm>;
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct ConclusionEqualityTerm(pub usize);
-impl From<usize> for ConclusionEqualityTerm { fn from(n: usize) -> Self { ConclusionEqualityTerm(n) } }
-impl Into<usize> for ConclusionEqualityTerm { fn into(self) -> usize { self.0 } }
-pub type ConclusionEquality = IdIdMap<Term, ConclusionEqualityTerm>;
-
-fn term_equalities(sequent: &Sequent) -> (StructuralEquality, PremiseEquality, ConclusionEquality) {
-    let mut unification = TermUnification::new(&sequent.universe);
-    unification.congruence_closure();
-    let structural_equality = unification.tabulate();
-
-    for atom in &sequent.premise.atoms {
-        use AtomData::*;
-        match &atom.data {
-            Equal(lhs, rhs) => unification.union(*lhs, *rhs),
-            Predicate(_, _) | Defined(_, _) => (),
-        }
-    }
-    unification.congruence_closure();
-    let premise_equality = unification.tabulate();
-
-    for atom in &sequent.conclusion.atoms {
-        use AtomData::*;
-        match &atom.data {
-            Equal(lhs, rhs) => unification.union(*lhs, *rhs),
-            Predicate(_, _) | Defined(_, _) => (),
-        }
-    }
-    unification.congruence_closure();
-    let conclusion_equality = unification.tabulate();
-
-    (structural_equality, premise_equality, conclusion_equality)
-}
-
-fn infer_sorts(
+pub fn infer_sorts(
     signature: &Signature,
     sequent: &Sequent,
-    conclusion_equality: &ConclusionEquality,
-) -> IdValMap<ConclusionEqualityTerm, String> {
-    let mut sorts = IdValMap::new(conclusion_equality.range_end(), String::new());
-    let mut sort_assigned: IdValMap<ConclusionEqualityTerm, bool> = IdValMap::new(conclusion_equality.range_end(), false);
-    let mut assign_sort = |tm: Term, sort: &str| {
-        let index = conclusion_equality[tm];
-        if sort_assigned[index] && sorts[index] != sort {
-            panic!("Conflicting sorts inferred for term: {} and {}", sort, sorts[index]);
-        } else {
-            sort_assigned[index] = true;
-            sorts[index] = sort.to_string();
-        }
+) -> TermMap<String> {
+    let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
+        lhs.extend(rhs);
+        lhs
     };
+
+    let mut unification = TermUnification::new(
+        &sequent.universe,
+        vec![HashSet::new(); sequent.universe.len()],
+        unify_sorts,
+    );
+    // Merge variables of the same name.
+    unification.congruence_closure();
 
     // Assign sorts based on application of functions.
     for (tm, data) in sequent.universe.iter_terms() {
@@ -77,9 +30,9 @@ fn infer_sorts(
                             panic!("Wrong argument number for function {}", f)
                         }
                         for (arg, sort) in args.iter().copied().zip(dom) {
-                            assign_sort(arg, sort);
+                            unification[arg].insert(sort.clone());
                         }
-                        assign_sort(tm, cod);
+                        unification[tm].insert(cod.clone());
                     },
                     None => panic!("Undeclared function {}", f),
                 }
@@ -88,12 +41,13 @@ fn infer_sorts(
         }
     }
 
-
     // Assign sorts based on atoms.
     for atom in sequent.premise.atoms.iter().chain(sequent.conclusion.atoms.iter()) {
         match &atom.data {
-            AtomData::Equal(_, _) => (),
-            AtomData::Defined(tm, Some(sort)) => assign_sort(*tm, sort),
+            AtomData::Equal(lhs, rhs) => {
+                unification.union(*lhs, *rhs);
+            },
+            AtomData::Defined(tm, Some(sort)) => { unification[*tm].insert(sort.clone()); },
             AtomData::Defined(_, None) => (),
             AtomData::Predicate(p, args) => {
                 let arity = match signature.predicates().get(p) {
@@ -104,89 +58,106 @@ fn infer_sorts(
                     panic!("Wrong argument number for predicate {}", p)
                 }
                 for (arg, sort) in args.iter().copied().zip(arity) {
-                    assign_sort(arg, sort);
+                    unification[arg].insert(sort.clone());
                 }
             },
         }
     }
 
-    // Check that all terms have an assigned sort.
+    // Check that all terms have precisely one assigned sort.
     for (tm, _) in sequent.universe.iter_terms() {
-        if !sort_assigned[conclusion_equality[tm]] {
-            panic!("No sort inferred for term");
+        match unification[tm].len() {
+            0 => panic!("No sort inferred for term"),
+            1 => (),
+            _ => panic!("Conflicting sorts inferred for term"),
         }
     }
 
-    sorts
+    unification.freeze().map(|sorts| sorts.into_iter().next().unwrap())
 }
 
-fn check_epimorphism(sequent: &Sequent) {
+pub fn check_epimorphism(sequent: &Sequent) {
     let universe = &sequent.universe;
-    let is_premise_term = |tm: Term| -> bool { tm.0 < sequent.premise.terms_end.0 };
-    let mut premise_vars: HashSet<&str> = HashSet::new();
-    for (tm, data) in universe.iter_terms() {
-        if is_premise_term(tm) {
-            match data {
-                TermData::Variable(s) => { premise_vars.insert(s); },
-                TermData::Wildcard | TermData::Application(_, _) => (),
-            }
+    let mut has_occurred = TermUnification::new(
+        universe,
+        vec![false; universe.len()],
+        |lhs_occured, rhs_occured| lhs_occured || rhs_occured,
+    );
+
+    // Set all premise terms to have occurred.
+    for tm in (0 .. sequent.premise.terms_end.0).map(Term) {
+        has_occurred[tm] = true;
+    }
+
+    // Unify terms occuring in equalities in premise.
+    for atom in &sequent.premise.atoms {
+        use AtomData::*;
+        match &atom.data {
+            Equal(lhs, rhs) => { has_occurred.union(*lhs, *rhs); },
+            Defined(_, _) | Predicate(_, _) => (),
         }
     }
-    for (tm, data) in universe.iter_terms() {
-        if !is_premise_term(tm) {
-            match data {
-                TermData::Variable(s) => {
-                    if !premise_vars.contains(s.as_str()) {
-                        panic!("Variable {} in conclusion does not appear in premise", s)
+
+    has_occurred.congruence_closure();
+
+    // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
+    // premise.
+    for tm in (sequent.conclusion.terms_begin.0 .. sequent.conclusion.terms_end.0).map(Term) {
+        match universe.data(tm) {
+            TermData::Variable(_) => { 
+                assert!(has_occurred[tm], "Variable in conclusion that does not occur in premise")
+            },
+            TermData::Wildcard => panic!("Wildcard in conclusion"),
+            TermData::Application(_, _) => (),
+        }
+    }
+
+    for atom in &sequent.conclusion.atoms {
+        use AtomData::*;
+        match &atom.data {
+            Equal(lhs, rhs) => {
+                let lhs = *lhs;
+                let rhs = *rhs;
+                assert!(has_occurred[lhs] || has_occurred[rhs],
+                        "Both terms in equality in conclusion are not used earlier");
+
+                if !has_occurred[lhs] || !has_occurred[rhs] {
+                    let new = if has_occurred[lhs] { rhs } else { lhs };
+                    use TermData::*;
+                    match universe.data(new) {
+                        Variable(_) =>
+                            panic!("Variable in conclusion that does not occur in premise"),
+                        Wildcard => panic!("Wildcard in conclusion"),
+                        Application(_, args) => {
+                            for arg in args.iter().copied() {
+                                assert!(has_occurred[arg],
+                                        "Argument of new term in conclusion is not used earlier");
+                            }
+                        },
                     }
-                },
-                TermData::Wildcard => panic!("Wildcard in conclusion"),
-                TermData::Application(_, _) => (),
-            }
+                }
+
+                has_occurred.union(lhs, rhs);
+                has_occurred.congruence_closure();
+            },
+            Defined(_, _) => (),
+            Predicate(_, args) => {
+                for arg in args {
+                    assert!(has_occurred[*arg],
+                        "Argument of predicate in conclusion is not used earlier");
+                }
+            },
+        }
+        for tm in (atom.terms_begin.0 .. atom.terms_end.0).map(Term) {
+            has_occurred[tm] = true;
         }
     }
 }
 
-pub fn first_structural_occurence(
-    universe: &TermUniverse,
-    structural_equality: &StructuralEquality,
-) -> IdValMap<Term, bool> {
-    let mut has_occured: IdValMap<StructuralEqualityTerm, bool> =
-        IdValMap::new(structural_equality.len(), false);
-    let mut first_occurence: IdValMap<Term, bool> =
-        IdValMap::new(universe.len(), false);
-    for (tm, _) in universe.iter_terms() {
-        let struct_tm = structural_equality[tm];
-        if !has_occured[struct_tm] {
-            has_occured[struct_tm] = true;
-            first_occurence[tm] = true;
-        } else {
-            first_occurence[tm] = false;
-        }
-    }
-    first_occurence
-}
-
-pub struct SequentAnalysis {
-    pub structural_equality: StructuralEquality,
-    pub premise_equality: PremiseEquality,
-    pub conclusion_equality: ConclusionEquality,
-    pub first_structural_occurence: IdValMap<Term, bool>,
-    pub sorts: IdValMap<ConclusionEqualityTerm, String>,
-}
-
-pub fn analyze(signature: &Signature, sequent: &Sequent) -> SequentAnalysis {
-    let (structural_equality, premise_equality, conclusion_equality) = term_equalities(sequent);
-    let sorts = infer_sorts(signature, sequent, &conclusion_equality);
-    let first_structural_occurence = first_structural_occurence(&sequent.universe, &structural_equality);
+pub fn check_semantically(signature: &Signature, sequent: &Sequent) -> TermMap<String> {
+    let sorts = infer_sorts(signature, sequent);
     check_epimorphism(sequent);
-    SequentAnalysis {
-        structural_equality,
-        premise_equality,
-        conclusion_equality,
-        first_structural_occurence,
-        sorts,
-    }
+    sorts
 }
 
 #[cfg(test)]
@@ -196,24 +167,6 @@ use indoc::indoc;
 
 use crate::grammar::TheoryParser;
 use crate::indirect_ast::*;
-use crate::unification::{IdValMap, IdIdMap};
-
-fn check_permutation<I1, I2>(m1: &IdIdMap<Term, I1>, m2: &IdIdMap<Term, I2>)
-where
-    I1: From<usize> + Into<usize> + Copy + PartialEq + std::fmt::Debug,
-    I2: From<usize> + Into<usize> + Copy + PartialEq + std::fmt::Debug,
-{
-    assert_eq!(m1.len(), m2.len());
-    assert_eq!(m1.range_end(), m2.range_end());
-    let range_end = m1.range_end();
-    let mut n: IdValMap<I1, Option<I2>> = IdValMap::new(range_end, None);
-    for (tm, i) in m1.iter() {
-        if let Some(j) = n[i] {
-            assert_eq!(j, m2[tm]);
-        }
-        n[i] = Some(m2[tm]);
-    }
-}
 
 #[test]
 fn good_theory() {
@@ -226,7 +179,7 @@ fn good_theory() {
 
         Pred signature: obj * mor * obj;
 
-        Axiom signature(x, f, y) & signature(y, g, z) => signature(x, comp(g, f), z);
+        Axiom signature(x, f, y) & signature(y, g, z) => comp(g, f)! & signature(x, comp(g, f), z);
 
         Func id : obj -> mor; Axiom g = comp(f, id(_)) => f = g;
     "};
@@ -266,13 +219,13 @@ fn good_theory() {
     let y = || { Variable("y".to_string()) };
     let z = || { Variable("z".to_string()) };
 
-    let ((seq0, ana0), (seq1, ana1), (seq2, ana2)) = match axioms.as_slice() {
+    let (ax0, ax1, ax2) = match axioms.as_slice() {
         [ax0, ax1, ax2] => (ax0, ax1, ax2),
-        _ => panic!("{}", axioms.len()),
+        _ => { assert_eq!(axioms.len(), 3); panic!() },
     };
 
     {
-        //Axiom comp(h, comp(g, f)) ~> comp(comp(h, g), f);
+        let (seq, sorts) = ax0;
         let mut universe = TermUniverse::new();
 
         // h
@@ -306,30 +259,21 @@ fn good_theory() {
         ];
         let conclusion = Formula{atoms: conclusion_atoms, terms_begin: h_gf, terms_end};
 
-        assert_eq!(seq0.universe, universe);
-        assert_eq!(seq0.premise.atoms[0], premise.atoms[0]);
-        assert_eq!(seq0.premise.atoms[1], premise.atoms[1]);
-        assert_eq!(seq0.premise.atoms[2], premise.atoms[2]);
-        assert_eq!(seq0.premise, premise);
-        assert_eq!(seq0.conclusion, conclusion);
+        assert_eq!(seq.universe, universe);
+        assert_eq!(seq.premise, premise);
+        assert_eq!(seq.conclusion, conclusion);
 
-        assert_eq!(ana0.structural_equality[f0], ana0.structural_equality[f1]);
-        assert_eq!(ana0.structural_equality[g0], ana0.structural_equality[g1]);
-        assert_eq!(ana0.structural_equality[h0], ana0.structural_equality[h1]);
-
-        check_permutation(&ana0.premise_equality, &ana0.structural_equality);
-        assert_eq!(ana0.conclusion_equality[h_gf], ana0.conclusion_equality[hg_f]);
-
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[f0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[g0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[h0]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[hg]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[gf]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[h_gf]], mor());
-        assert_eq!(ana0.sorts[ana0.conclusion_equality[hg_f]], mor());
+        assert_eq!(sorts[f0], mor());
+        assert_eq!(sorts[g0], mor());
+        assert_eq!(sorts[h0], mor());
+        assert_eq!(sorts[hg], mor());
+        assert_eq!(sorts[gf], mor());
+        assert_eq!(sorts[h_gf], mor());
+        assert_eq!(sorts[hg_f], mor());
     }
 
     {
+        let (seq, sorts) = ax1;
         let mut universe = TermUniverse::new();
 
         let x0 = universe.new_term(x());
@@ -340,47 +284,52 @@ fn good_theory() {
         let g0 = universe.new_term(g());
         let z0 = universe.new_term(z());
 
-        let x1 = universe.new_term(x());
         let g1 = universe.new_term(g());
         let f1 = universe.new_term(f());
-        let gf = universe.new_term(Application(comp(), vec![g1, f1]));
+        let gf0 = universe.new_term(Application(comp(), vec![g1, f1]));
+
+        let x1 = universe.new_term(x());
+        let g2 = universe.new_term(g());
+        let f2 = universe.new_term(f());
+        let gf1 = universe.new_term(Application(comp(), vec![g2, f2]));
         let z1 = universe.new_term(z());
 
         let terms_end = Term(universe.len());
 
         let premise_atoms = vec![
             Atom{data: AtomData::Predicate(signature(), vec![x0, f0, y0]), terms_begin: x0, terms_end: y1},
-            Atom{data: AtomData::Predicate(signature(), vec![y1, g0, z0]), terms_begin: y1, terms_end: x1},
+            Atom{data: AtomData::Predicate(signature(), vec![y1, g0, z0]), terms_begin: y1, terms_end: g1},
         ];
-        let premise = Formula{atoms: premise_atoms, terms_begin: x0, terms_end: x1};
+        let premise = Formula{atoms: premise_atoms, terms_begin: x0, terms_end: g1};
 
         let conclusion_atoms = vec![
-            Atom{data: AtomData::Predicate(signature(), vec![x1, gf, z1]), terms_begin: x1, terms_end},
+            Atom{data: AtomData::Defined(gf0, None), terms_begin: g1, terms_end: x1},
+            Atom{data: AtomData::Predicate(signature(), vec![x1, gf1, z1]), terms_begin: x1, terms_end},
         ];
-        let conclusion = Formula{atoms: conclusion_atoms, terms_begin: x1, terms_end};
+        let conclusion = Formula{atoms: conclusion_atoms, terms_begin: g1, terms_end};
 
-        assert_eq!(seq1.universe, universe);
-        assert_eq!(seq1.premise, premise);
-        assert_eq!(seq1.conclusion, conclusion);
+        assert_eq!(seq.universe, universe);
+        assert_eq!(seq.premise, premise);
+        assert_eq!(seq.conclusion, conclusion);
 
-        assert_eq!(ana1.structural_equality[f0], ana1.structural_equality[f1]);
-        assert_eq!(ana1.structural_equality[g0], ana1.structural_equality[g1]);
-        assert_eq!(ana1.structural_equality[x0], ana1.structural_equality[x1]);
-        assert_eq!(ana1.structural_equality[y0], ana1.structural_equality[y1]);
-        assert_eq!(ana1.structural_equality[z0], ana1.structural_equality[z1]);
-
-        check_permutation(&ana1.structural_equality, &ana1.premise_equality);
-        check_permutation(&ana1.structural_equality, &ana1.conclusion_equality);
-
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[x0]], obj());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[y0]], obj());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[z0]], obj());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[f0]], mor());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[g0]], mor());
-        assert_eq!(ana1.sorts[ana1.conclusion_equality[gf]], mor());
+        assert_eq!(sorts[x0], obj());
+        assert_eq!(sorts[x1], obj());
+        assert_eq!(sorts[y0], obj());
+        assert_eq!(sorts[y1], obj());
+        assert_eq!(sorts[z0], obj());
+        assert_eq!(sorts[z1], obj());
+        assert_eq!(sorts[f0], mor());
+        assert_eq!(sorts[f1], mor());
+        assert_eq!(sorts[f2], mor());
+        assert_eq!(sorts[g0], mor());
+        assert_eq!(sorts[g1], mor());
+        assert_eq!(sorts[g2], mor());
+        assert_eq!(sorts[gf0], mor());
+        assert_eq!(sorts[gf1], mor());
     }
 
     {
+        let (seq, sorts) = ax2;
         let mut universe = TermUniverse::new();
 
         let g0 = universe.new_term(g());
@@ -407,20 +356,16 @@ fn good_theory() {
         let premise = Formula{atoms: vec![prem_eq], terms_begin: g0, terms_end: f1};
         let conclusion = Formula{atoms: vec![conc_eq], terms_begin: f1, terms_end};
 
-        assert_eq!(seq2.universe, universe);
-        assert_eq!(seq2.premise, premise);
-        assert_eq!(seq2.conclusion, conclusion);
+        assert_eq!(seq.universe, universe);
+        assert_eq!(seq.premise, premise);
+        assert_eq!(seq.conclusion, conclusion);
 
-        assert_eq!(ana2.structural_equality[f0], ana2.structural_equality[f1]);
-        assert_eq!(ana2.structural_equality[g0], ana2.structural_equality[g1]);
-        assert_eq!(ana2.premise_equality[g0], ana2.premise_equality[fi]);
-        assert_ne!(ana2.premise_equality[f1], ana2.premise_equality[g1]);
-        assert_eq!(ana2.conclusion_equality[f1], ana2.conclusion_equality[g1]);
-
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[f0]], mor());
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[g0]], mor());
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[i]], mor());
-        assert_eq!(ana2.sorts[ana2.conclusion_equality[fi]], mor());
+        assert_eq!(sorts[f0], mor());
+        assert_eq!(sorts[f1], mor());
+        assert_eq!(sorts[g0], mor());
+        assert_eq!(sorts[g1], mor());
+        assert_eq!(sorts[i], mor());
+        assert_eq!(sorts[fi], mor());
     }
 }
 
@@ -478,29 +423,42 @@ fn non_epi() {
     TheoryParser::new().parse(src).unwrap();
 }
 
-//#[test] #[should_panic]
-//fn non_surjective0() {
-//    let src = indoc! {"
-//        Sort obj;
-//        Sort mor;
-//        Pred signature: obj * mor * obj;
-//        Func id : obj -> mor;
-//        Func comp : mor * mor -> mor;
-//        Axiom signature(x, f, _) => comp(f, id(x)) = f;
-//    "};
-//    TheoryParser::new().parse(src).unwrap();
-//}
-//
-//#[test] #[should_panic]
-//fn non_surjective1() {
-//    let src = indoc! {"
-//        Sort obj;
-//        Sort mor;
-//        Func id : obj -> mor;
-//        Axiom x = y => id(x) = id(y);
-//    "};
-//    TheoryParser::new().parse(src).unwrap();
-//}
+#[test] #[should_panic]
+fn non_surjective0() {
+    let src = indoc! {"
+        Sort obj;
+        Sort mor;
+        Pred signature: obj * mor * obj;
+        Func id : obj -> mor;
+        Func comp : mor * mor -> mor;
+        Axiom signature(x, f, _) => comp(f, id(x)) = f;
+    "};
+    TheoryParser::new().parse(src).unwrap();
+}
+
+#[test] #[should_panic]
+fn non_surjective1() {
+    let src = indoc! {"
+        Sort obj;
+        Sort mor;
+        Pred signature: obj * mor * obj;
+        Func id : obj -> mor;
+        Func comp : mor * mor -> mor;
+        Axiom signature(x, f, _) => f = comp(f, id(x));
+    "};
+    TheoryParser::new().parse(src).unwrap();
+}
+
+#[test] #[should_panic]
+fn non_surjective2() {
+    let src = indoc! {"
+        Sort obj;
+        Sort mor;
+        Func id : obj -> mor;
+        Axiom x = y => id(x) = id(y);
+    "};
+    TheoryParser::new().parse(src).unwrap();
+}
 
 #[test] #[should_panic]
 fn no_sort_inferred() {
