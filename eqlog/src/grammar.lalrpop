@@ -52,7 +52,7 @@ Formula: Formula = {
         Formula(head_atom.into_iter().chain(tail_atoms).collect()),
 }
 
-Sequent: Sequent = {
+pub Sequent: Sequent = {
     <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
     <app: Application> "~>" <to: Term> => Sequent::Reduction {
         premise: Formula(Vec::new()),
