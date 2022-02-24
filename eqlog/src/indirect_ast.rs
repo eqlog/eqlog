@@ -161,6 +161,8 @@ impl Sequent {
                 let terms_begin = Term(universe.len());
                 let from = universe.new_term(TermData::Application(from_function.to_string(), from_args));
                 let terms_end = Term(universe.len());
+                // TODO: Think about terms_begin and terms_end here. Shouldn't this encompass all
+                // arg terms and descendants?
                 let eq = Atom{terms_begin, terms_end, data: AtomData::Equal(from, to)};
                 let conclusion = Formula{terms_begin, terms_end, atoms: vec![eq]};
 
