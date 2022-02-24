@@ -11,5 +11,6 @@ mod unification;
 lalrpop_mod!(grammar);
 mod analysis;
 mod flat_ast;
+mod index_selection;
 
 fn main() {}

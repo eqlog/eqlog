@@ -4,7 +4,7 @@ use std::iter::once;
 use std::mem::swap;
 use std::collections::HashSet;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatTerm(pub usize);
 
 #[derive(Clone, PartialEq, Eq, Debug)]
