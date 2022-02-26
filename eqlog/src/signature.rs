@@ -20,6 +20,24 @@ impl Signature {
     pub fn sorts(&self) -> &HashMap<String, Sort> { &self.sorts }
     pub fn predicates(&self) -> &HashMap<String, Predicate> { &self.predicates }
     pub fn functions(&self) -> &HashMap<String, Function> { &self.functions }
+    pub fn relations(&self) -> impl Iterator<Item=(&str, Vec<&str>)> {
+        let pred_rels =
+            self.predicates().values().map(|pred| {
+                let name = pred.name.as_str();
+                let arity: Vec<&str> = pred.arity.iter().map(|s| s.as_str()).collect();
+                (name, arity)
+            });
+        let func_rels = 
+            self.functions().values().map(|func| {
+                let name = func.name.as_str();
+                let arity: Vec<&str> =
+                    func.dom.iter().chain(once(&func.cod))
+                    .map(|s| s.as_str())
+                    .collect();
+                (name, arity)
+            });
+        pred_rels.chain(func_rels)
+    }
 
     pub fn add_sort(&mut self, sort: Sort) {
         match self.sorts.insert(sort.0.clone(), sort) {
