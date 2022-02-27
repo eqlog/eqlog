@@ -17,5 +17,6 @@ docker run \
 	--env "RUSTFLAGS=$RUSTFLAGS" \
 	--env "RUST_BACKTRACE=$RUST_BACKTRACE" \
 	--env "CARGO_HOME=$repo_root/.cargo" \
+	--rm \
 	rust:1.58 \
 	$@
