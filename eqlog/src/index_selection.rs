@@ -3,7 +3,7 @@ use crate::flat_ast::*;
 use crate::indirect_ast::*;
 use itertools::Itertools;
 use std::cmp::Ordering;
-use std::iter::once;
+use std::iter::{repeat, once};
 use crate::signature::Signature;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -131,7 +131,10 @@ fn query_specs_for_premise<'a>(premise: &'a [FlatAtom]) -> impl 'a + Iterator<It
     premise.iter().map(spec_for_atom).flatten()
 }
 
-fn index_specs(signature: &Signature, axioms: &[FlatSequent]) -> HashMap<String, Vec<IndexSpec>> {
+// Maps relation name and query spec to an index for the relation that can serve the query.
+type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
+
+fn select_indices(signature: &Signature, axioms: &[FlatSequent]) -> IndexSelection {
     let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> =
         signature.relations()
         .map(|(rel, arity)| (rel.to_string(), (arity.len(), HashSet::new())))
@@ -155,11 +158,13 @@ fn index_specs(signature: &Signature, axioms: &[FlatSequent]) -> HashMap<String,
     query_specs.into_iter()
         .map(|(rel, (arity_len, query_specs))| {
             let chains = query_spec_chains(query_specs);
-            let index_specs: Vec<IndexSpec> = 
-                chains.iter()
-                .map(|chain| IndexSpec::from_query_spec_chain(arity_len, chain))
-                .collect();
-            (rel, index_specs)
+            let query_index_map: HashMap<QuerySpec, IndexSpec> = 
+                chains.into_iter()
+                .flat_map(|queries| {
+                    let index = IndexSpec::from_query_spec_chain(arity_len, &queries);
+                    queries.into_iter().zip(repeat(index))
+                }).collect();
+            (rel, query_index_map)
         })
         .collect() 
 }
@@ -242,12 +247,36 @@ fn category_signature() -> Signature {
     sig
 }
 
-fn category_relations() -> HashSet<String> {
-    hashset!{comp(), id(), signature()}
-}
+fn check_well_formed_index_selection(signature: &Signature, index_selection: &IndexSelection) {
+    let sig_rels: HashSet<&str> =
+        signature.relations()
+        .map(|(name, _)| name)
+        .collect();
+    let sel_rels: HashSet<&str> =
+        index_selection.keys()
+        .map(|s| s.as_str())
+        .collect();
+    assert_eq!(sel_rels, sig_rels);
 
-fn can_serve<'a>(indices: impl IntoIterator<Item=&'a IndexSpec>, query: &QuerySpec) -> bool {
-    indices.into_iter().find(|index| index.can_serve(query)).is_some()
+    for (rel, arity) in signature.relations() {
+        for (query, index) in index_selection.get(rel).unwrap().iter() {
+            // `index.order` is a permutation of [0, arity.len()).
+            assert_eq!(index.order.len(), arity.len());
+            for i in 0 .. arity.len() {
+                assert!(index.order.iter().find(|j| i == **j).is_some());
+            }
+
+            // Diagonals contain values less than `arity.len()` only.
+            for diagonal in &index.diagonals {
+                assert!(diagonal.len() > 1);
+                for i in diagonal {
+                    assert!(*i < arity.len());
+                }
+            }
+
+            assert!(index.can_serve(query));
+        }
+    }
 }
 
 #[test]
@@ -276,39 +305,38 @@ fn simple_reduction() {
     ];
     let axioms = vec![FlatSequent{premise, conclusion}];
 
-    let index_specs = index_specs(&sig, &axioms);
+    let index_selection = select_indices(&sig, &axioms);
 
-    let rels: HashSet<String> = index_specs.keys().map(|s| s.to_string()).collect();
-    assert_eq!(rels, category_relations());
+    check_well_formed_index_selection(&sig, &index_selection);
 
-    let comp_specs = index_specs.get(&comp()).unwrap();
-    let id_specs = index_specs.get(&id()).unwrap();
-    let signature_specs = index_specs.get(&signature()).unwrap();
+    let comp_specs = index_selection.get(&comp()).unwrap();
+    let id_specs = index_selection.get(&id()).unwrap();
+    let signature_specs = index_selection.get(&signature()).unwrap();
 
     // Second atom.
-    assert!(can_serve(
-            comp_specs.iter(),
-            &QuerySpec{projections: btreeset!{1}, diagonals: btreeset!{}}
-    ));
+    assert!(comp_specs.contains_key(&QuerySpec {
+        projections: btreeset!{1},
+        diagonals: btreeset!{},
+    }));
     // Third atom.
-    assert!(can_serve(
-            comp_specs.iter(),
-            &QuerySpec{projections: btreeset!{0, 1}, diagonals: btreeset!{}}
-    ));
+    assert!(comp_specs.contains_key(&QuerySpec {
+        projections: btreeset!{0, 1},
+        diagonals: btreeset!{},
+    }));
     // Functionality.
-    assert!(can_serve(
-            comp_specs.iter(),
-            &QuerySpec{projections: btreeset!{0, 1}, diagonals: btreeset!{}}
-    ));
+    assert!(comp_specs.contains_key(&QuerySpec {
+        projections: btreeset!{0, 1},
+        diagonals: btreeset!{},
+    }));
     // Functionality.
-    assert!(can_serve(
-            id_specs.iter(),
-            &QuerySpec{projections: btreeset!{0}, diagonals: btreeset!{}}
-    ));
+    assert!(id_specs.contains_key(&QuerySpec {
+        projections: btreeset!{0},
+        diagonals: btreeset!{},
+    }));
 
-    assert_eq!(comp_specs.len(), 1);
-    assert_eq!(id_specs.len(), 1);
-    assert_eq!(signature_specs.len(), 0);
+    assert_eq!(comp_specs.values().unique().count(), 1);
+    assert_eq!(id_specs.values().unique().count(), 1);
+    assert_eq!(signature_specs.values().unique().count(), 0);
 }
 
 #[test]
@@ -333,24 +361,23 @@ fn non_surjective_implication() {
     ];
     let axioms = vec![FlatSequent{premise, conclusion}];
 
-    let index_specs = index_specs(&sig, &axioms);
+    let index_selection = select_indices(&sig, &axioms);
 
-    let rels: HashSet<String> = index_specs.keys().map(|s| s.to_string()).collect();
-    assert_eq!(rels, category_relations());
+    check_well_formed_index_selection(&sig, &index_selection);
 
-    let signature_specs = index_specs.get(&signature()).unwrap();
-    let id_specs = index_specs.get(&id()).unwrap();
-    let comp_specs = index_specs.get(&comp()).unwrap();
+    let comp_specs = index_selection.get(&comp()).unwrap();
+    let id_specs = index_selection.get(&id()).unwrap();
+    let signature_specs = index_selection.get(&signature()).unwrap();
 
     // Second atom.
-    assert!(can_serve(
-            signature_specs.iter(),
-            &QuerySpec{projections: btreeset!{0}, diagonals: btreeset!{}}
-    ));
-    assert_eq!(signature_specs.len(), 1);
-    // Functionality only.
-    assert_eq!(id_specs.len(), 1);
-    assert_eq!(comp_specs.len(), 1);
+    assert!(signature_specs.contains_key(&QuerySpec {
+        projections: btreeset!{0},
+        diagonals: btreeset!{},
+    }));
+
+    assert_eq!(comp_specs.values().unique().count(), 1);
+    assert_eq!(id_specs.values().unique().count(), 1);
+    assert_eq!(signature_specs.values().unique().count(), 1);
 }
 
 #[test]
@@ -376,33 +403,33 @@ fn simultaneous_projection_and_diagonal() {
     ];
     let axioms = vec![FlatSequent{premise, conclusion}];
 
-    let index_specs = index_specs(&sig, &axioms);
+    let index_selection = select_indices(&sig, &axioms);
 
-    let rels: HashSet<String> = index_specs.keys().map(|s| s.to_string()).collect();
-    assert_eq!(rels, category_relations());
+    check_well_formed_index_selection(&sig, &index_selection);
 
-    let signature_specs = index_specs.get(&signature()).unwrap();
-    let id_specs = index_specs.get(&id()).unwrap();
-    let comp_specs = index_specs.get(&comp()).unwrap();
+    let comp_specs = index_selection.get(&comp()).unwrap();
+    let id_specs = index_selection.get(&id()).unwrap();
+    let signature_specs = index_selection.get(&signature()).unwrap();
 
     // Second atom.
-    assert!(can_serve(
-            signature_specs.iter(),
-            &QuerySpec{projections: btreeset!{1}, diagonals: btreeset!{btreeset!{0, 2}}}
-    ));
+    assert!(signature_specs.contains_key(&QuerySpec {
+        projections: btreeset!{1},
+        diagonals: btreeset!{btreeset!{0, 2}},
+    }));
     // Third atom.
-    assert!(can_serve(
-            signature_specs.iter(),
-            &QuerySpec{projections: btreeset!{0, 2}, diagonals: btreeset!{btreeset!{0, 2}}}
-    ));
-    assert_eq!(signature_specs.len(), 2);
+    assert!(signature_specs.contains_key(&QuerySpec {
+        projections: btreeset!{0, 2},
+        diagonals: btreeset!{btreeset!{0, 2}},
+    }));
     // Fourth atom.
-    assert!(can_serve(
-            id_specs.iter(),
-            &QuerySpec{projections: btreeset!{0}, diagonals: btreeset!{}}
-    ));
-    assert_eq!(id_specs.len(), 1);
-    assert_eq!(comp_specs.len(), 1);
+    assert!(id_specs.contains_key(&QuerySpec {
+        projections: btreeset!{0},
+        diagonals: btreeset!{},
+    }));
+
+    assert_eq!(comp_specs.values().unique().count(), 1);
+    assert_eq!(id_specs.values().unique().count(), 1);
+    assert_eq!(signature_specs.values().unique().count(), 2);
 }
 
 }
