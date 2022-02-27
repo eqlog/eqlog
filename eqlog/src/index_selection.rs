@@ -7,9 +7,9 @@ use std::iter::{repeat, once};
 use crate::signature::Signature;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-struct QuerySpec {
-    projections: BTreeSet<usize>,
-    diagonals: BTreeSet<BTreeSet<usize>>,
+pub struct QuerySpec {
+    pub projections: BTreeSet<usize>,
+    pub diagonals: BTreeSet<BTreeSet<usize>>,
 }
 
 impl PartialOrd<QuerySpec> for QuerySpec {
@@ -45,9 +45,9 @@ fn query_spec_chains(indices: HashSet<QuerySpec>)-> Vec<Vec<QuerySpec>> {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-struct IndexSpec {
-    order: Vec<usize>,
-    diagonals: BTreeSet<BTreeSet<usize>>,
+pub struct IndexSpec {
+    pub order: Vec<usize>,
+    pub diagonals: BTreeSet<BTreeSet<usize>>,
 }
 
 fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
@@ -132,9 +132,9 @@ fn query_specs_for_premise<'a>(premise: &'a [FlatAtom]) -> impl 'a + Iterator<It
 }
 
 // Maps relation name and query spec to an index for the relation that can serve the query.
-type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
+pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
-fn select_indices(signature: &Signature, axioms: &[FlatSequent]) -> IndexSelection {
+pub fn select_indices(signature: &Signature, axioms: &[FlatSequent]) -> IndexSelection {
     let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> =
         signature.relations()
         .map(|(rel, arity)| (rel.to_string(), (arity.len(), HashSet::new())))

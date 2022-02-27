@@ -12,6 +12,6 @@ lalrpop_mod!(grammar);
 mod analysis;
 mod flat_ast;
 mod index_selection;
-//mod rust_gen;
+mod rust_gen;
 
 fn main() {}
