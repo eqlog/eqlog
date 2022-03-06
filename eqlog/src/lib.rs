@@ -14,5 +14,6 @@ mod flat_ast;
 mod query_action;
 mod index_selection;
 mod rust_gen;
+mod build;
 
-fn main() {}
+pub use crate::build::process_root;
