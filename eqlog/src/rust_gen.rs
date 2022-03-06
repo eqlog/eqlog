@@ -4,6 +4,9 @@ use crate::signature::Signature;
 use crate::index_selection::*;
 use std::fmt::{self, Formatter, Display};
 use crate::flat_ast::*;
+use crate::query_action::*;
+use std::iter::{once, repeat};
+use std::collections::BTreeSet;
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct SortName(pub u32);
@@ -39,17 +42,18 @@ fn write_sort_fields(
     name: &str,
 ) -> io::Result<()> {
     write!(out, "  {}: Unification<{}>,\n", name, name)?;
-    write!(out, "  {}_clean_until: {},\n", name, name)?;
+    write!(out, "  {}_dirty: {},\n", name, name)?;
     Ok(())
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-enum TupleAge{Old, New}
+enum TupleAge{All, Dirty}
+
 impl Display for TupleAge {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            TupleAge::Old => write!(f, "old"),
-            TupleAge::New => write!(f, "new"),
+            TupleAge::All => write!(f, "all"),
+            TupleAge::Dirty => write!(f, "dirty"),
         }
     }
 }
@@ -74,13 +78,26 @@ fn write_relation_field(
     Ok(())
 }
 
-fn write_query_name(
+fn write_is_dirty_impl(
+    out: &mut impl Write,
+    signature: &Signature,
+) -> io::Result<()> {
+    write!(out, "  fn is_dirty(&self) -> bool {{\n")?;
+    write!(out, "    false\n")?;
+    for (relation, _) in signature.relations() {
+        write!(out, "      || !self.{}_dirty.is_empty()\n", relation)?;
+    }
+    write!(out, "  }}\n")?;
+    Ok(())
+}
+
+fn write_iter_name(
     out: &mut impl Write,
     relation: &str,
     query: &QuerySpec,
     age: TupleAge,
 ) -> io::Result<()> {
-    write!(out, "{}_query_{}", relation, age)?;
+    write!(out, "iter_{}_{}", relation, age)?;
     for p in query.projections.iter() {
         write!(out, "_{}", p)?;
     }
@@ -93,7 +110,7 @@ fn write_query_name(
     Ok(())
 }
 
-fn write_query_impl(
+fn write_iter_impl(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
@@ -101,7 +118,7 @@ fn write_query_impl(
     age: TupleAge,
 ) -> io::Result<()> {
     write!(out, "  fn ")?;
-    write_query_name(out, relation, query, age)?;
+    write_iter_name(out, relation, query, age)?;
     write!(out, "(")?;
     for i in query.projections.iter().copied() {
         write!(out, "arg{}: {}, ", i, arity[i])?;
@@ -136,10 +153,197 @@ fn write_query_impl(
     Ok(())
 }
 
+fn write_query_loop_headers<'a>(
+    out: &mut impl Write,
+    signature: &Signature,
+    query_ages: impl Iterator<Item=(&'a Query, TupleAge)>,
+) -> io::Result<()> {
+    let mut indent = 3;
+    for (query, age) in query_ages {
+        for _ in 0 .. indent {
+            write!(out, "  ")?;
+        }
+        indent += 1;
+
+        use Query::*;
+        match query {
+            Relation{relation, diagonals, projections, results} => {
+                let arity_len =
+                    signature.relations()
+                    .find(|(rel, _)| rel == relation)
+                    .unwrap().1.len();
+                let query_spec = QuerySpec {
+                    diagonals: diagonals.clone(),
+                    projections: projections.keys().copied().collect(),
+                };
+                write!(out, "for {}(", relation)?;
+                for i in 0 .. arity_len {
+                    if let Some(tm) = results.get(&i) {
+                        if let Some(diag) = diagonals.iter().find(|diag| diag.contains(&i)) {
+                            if *diag.iter().next().unwrap() == i {
+                                write!(out, "tm{}", tm.0)?;
+                            } else {
+                                write!(out, "_")?;
+                            }
+                        } else {
+                            write!(out, "tm{}", tm.0)?;
+                        }
+                    } else {
+                        write!(out, "_")?;
+                    }
+                    write!(out, ", ")?;
+                }
+                write!(out, ") in self.")?;
+                write_iter_name(out, relation, &query_spec, age)?;
+                write!(out, "(")?;
+                for tm in projections.values().copied() {
+                    write!(out, "tm{}, ", tm.0)?;
+                }
+                write!(out, ") {{\n")?;
+            },
+            Sort{..} => {
+                panic!("Not implemented")
+            },
+        }
+    }
+    Ok(())
+}
+
+fn write_query_loop_footers(
+    out: &mut impl Write,
+    query_len: usize,
+) -> io::Result<()> {
+    let mut indent = 2 + query_len;
+    while indent > 2 {
+        for _ in 0 .. indent {
+            write!(out, "  ")?;
+        }
+        indent -= 1;
+        write!(out, "}}\n")?;
+    }
+    Ok(())
+}
+
+fn write_action(
+    out: &mut impl Write,
+    signature: &Signature,
+    action: &Action,
+    indent: usize,
+) -> io::Result<()> {
+    use Action::*;
+    match action {
+        AddTerm{function, args, result} => {
+            let Function{dom, cod, ..} = signature.functions().get(function).unwrap();
+            let query_spec = QuerySpec {
+                projections: (0 .. dom.len()).collect(),
+                diagonals: BTreeSet::new(),
+            };
+
+            for _ in 0 .. indent { write!(out, "  ")?; }
+            write!(out, "let tm{} = match self.", result.0)?;
+            write_iter_name(out, function, &query_spec, TupleAge::All)?;
+            write!(out, "(")?;
+            for arg in args {
+                write!(out, "tm{}, ", arg.0)?;
+            }
+            write!(out, ").next() {{\n")?;
+
+            for _ in 0 .. indent + 1 { write!(out, "  ")?; }
+            write!(out, "Some(result) => result,\n")?;
+
+            for _ in 0 .. indent + 1 { write!(out, "  ")?; }
+            write!(out, "None => self.{}.new(),\n", cod)?;
+
+            for _ in 0 .. indent { write!(out, "  ")?; }
+            write!(out, "}}\n")?;
+
+            for _ in 0 .. indent { write!(out, "  ")?; }
+            write!(out, "{}_new.push({}(", function, function)?;
+            for tm in args.iter().chain(once(result)) {
+                write!(out, "tm{}, ", tm.0)?;
+            }
+            write!(out, "));\n")?;
+        },
+        AddTuple{relation, args} => {
+            for _ in 0 .. indent {
+                write!(out, "  ")?;
+            }
+            write!(out, "{}_new.push({}(", relation, relation)?;
+            for tm in args {
+                write!(out, "tm{}, ", tm.0)?;
+            }
+            write!(out, "));\n")?;
+        },
+        Equate{sort, lhs, rhs} => {
+            for _ in 0 .. indent {
+                write!(out, "  ")?;
+            }
+            write!(out, "{}_new_eqs.push((tm{}, tm{}));\n", sort, lhs.0, rhs.0)?;
+        },
+    }
+    Ok(())
+}
+
+fn write_closure(
+    out: &mut impl Write,
+    signature: &Signature,
+    query_actions: &[QueryAction],
+) -> io::Result<()> {
+    write!(out, "  pub fn close(&mut self) {{\n")?;
+    for (relation, _) in signature.relations() {
+        write!(out, "    let {}_new: Vec<{}> = Vec::new();\n", relation, relation)?;
+    }
+    write!(out, "\n")?;
+    for (sort, _) in signature.sorts() {
+        write!(out, "    let {}_new_eqs: Vec<({}, {})> = Vec::new();\n", sort, sort, sort)?;
+    }
+    write!(out, "\n")?;
+
+    write!(out, "    while self.is_dirty() {{\n")?;
+    for query_action in query_actions {
+        let queries_len = query_action.queries.len();
+        for new_index in 0 .. queries_len {
+            let ages =
+                repeat(TupleAge::All).take(new_index)
+                .chain(once(TupleAge::Dirty))
+                .chain(repeat(TupleAge::All).take(queries_len - new_index - 1));
+            let query_ages = query_action.queries.iter().zip(ages);
+            write_query_loop_headers(out, signature, query_ages)?;
+            for action in query_action.actions.iter() {
+                write_action(out, signature, action, queries_len + 3)?;
+            }
+            write_query_loop_footers(out, queries_len)?;
+        }
+        write!(out, "\n")?;
+    }
+
+    for (relation, _) in signature.relations() {
+        write!(out, "      self.{}_dirty.clear();\n", relation)?;
+        write!(out, "      for t in {}_new.drain(..) {{\n", relation)?;
+        write!(out, "        if self.{}_all.insert(t) {{\n", relation)?;
+        write!(out, "          self.{}_dirty.insert(t); \n", relation)?;
+        write!(out, "        }}\n")?;
+        write!(out, "      }}\n")?;
+        write!(out, "\n")?;
+    }
+
+    for (sort, _) in signature.sorts() {
+        write!(out, "      if !{}_new_eqs.is_empty() {{\n", sort)?;
+        write!(out, "        panic!(\"Equalities not implemented\");\n")?;
+        write!(out, "      }}\n")?;
+    }
+
+    write!(out, "    }}\n")?;
+
+    write!(out, "  }}\n")?;
+    Ok(())
+}
+
 fn write_theory(
     out: &mut impl Write,
     name: &str,
     signature: &Signature,
+    query_actions: &[QueryAction],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     for sort in signature.sorts().values() {
@@ -159,15 +363,21 @@ fn write_theory(
     }
 
     for (rel, arity) in signature.relations() {
-        write_relation_field(out, rel, TupleAge::New)?;
-        write_relation_field(out, rel, TupleAge::Old)?;
+        write_relation_field(out, rel, TupleAge::All)?;
+        write_relation_field(out, rel, TupleAge::Dirty)?;
         let query_index_map = index_selection.get(rel).unwrap();
         for query in query_index_map.keys() {
-            write_query_impl(out, rel, &arity, query, TupleAge::Old)?;
-            write_query_impl(out, rel, &arity, query, TupleAge::New)?;
+            write_iter_impl(out, rel, &arity, query, TupleAge::All)?;
+            write_iter_impl(out, rel, &arity, query, TupleAge::Dirty)?;
         }
         write!(out, "\n")?;
     }
+
+    write_is_dirty_impl(out, signature)?;
+    write!(out, "\n")?;
+
+    write_closure(out, signature, query_actions)?;
+
     write!(out, "}}\n")?;
 
     Ok(())
@@ -185,17 +395,20 @@ fn asdf() {
         Pred Signature: Obj * Mor * Obj;
         Func Id : Obj -> Mor;
         
-        Axiom Signature(x, f, x) & Signature(y, f, y) => x = y;
+        Axiom Signature(x, f, y) & Signature(y, g, z) => Comp(g, f)! & Signature(x, Comp(g, f), z);
     "};
+        //Axiom Signature(x, f, x) & Signature(y, f, y) => x = y;
+        //Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
     let (sig, axioms) = TheoryParser::new().parse(src).unwrap();
-    let flat_axioms: Vec<FlatSequent> =
+    let query_actions: Vec<QueryAction> =
         axioms.iter()
-        .map(|(seq, sorts)| flatten_sequent(seq, sorts))
+        .map(|(seq, sorts)| QueryAction::new(&sig, &flatten_sequent(seq, sorts)))
         .collect();
-    let index_selection = select_indices(&sig, &flat_axioms);
+
+    let index_selection = select_indices(&sig, &query_actions);
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
-    write_theory(&mut handle, "Cat", &sig, &index_selection).unwrap();
+    write_theory(&mut handle, "Cat", &sig, &query_actions, &index_selection).unwrap();
     panic!()
 }

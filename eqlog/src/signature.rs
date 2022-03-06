@@ -38,6 +38,17 @@ impl Signature {
             });
         pred_rels.chain(func_rels)
     }
+    
+    pub fn arity(&self, relation: &str) -> Option<Vec<&str>> {
+        if let Some(Predicate{arity, ..}) = self.predicates.get(relation) {
+            return Some(arity.iter().map(|s| s.as_str()).collect());
+        }
+        if let Some(Function{dom, cod, ..}) = self.functions.get(relation) {
+            return Some(dom.iter().chain(once(cod)).map(|s| s.as_str()).collect());
+        }
+
+        None
+    }
 
     pub fn add_sort(&mut self, sort: Sort) {
         match self.sorts.insert(sort.0.clone(), sort) {

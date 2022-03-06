@@ -1,10 +1,8 @@
 use std::collections::{BTreeSet, HashSet, HashMap};
-use crate::flat_ast::*;
-use crate::indirect_ast::*;
-use itertools::Itertools;
 use std::cmp::Ordering;
 use std::iter::{repeat, once};
 use crate::signature::Signature;
+use crate::query_action::*;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub struct QuerySpec {
@@ -77,64 +75,11 @@ impl IndexSpec {
     }
 }
 
-fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
-    let mut enumerated_args: Vec<(usize, FlatTerm)> =
-        args.iter().copied().enumerate().collect();
-    enumerated_args.sort_by_key(|(_, tm)| *tm);
-
-    enumerated_args.iter()
-        .group_by(|(_, tm)| tm).into_iter()
-        .map(|(_, group)| -> BTreeSet<usize> { group.map(|(i, _)| *i).collect() })
-        .filter(|diagonal| diagonal.len() > 1)
-        .collect()
-}
-
-fn projections(fixed_terms: &HashSet<FlatTerm>, args: &[FlatTerm]) -> BTreeSet<usize> {
-    args.iter().copied()
-        .enumerate()
-        .filter(|(_, tm)| fixed_terms.contains(tm))
-        .map(|(i, _)| i)
-        .collect()
-}
-
-fn query_specs_for_premise<'a>(premise: &'a [FlatAtom]) -> impl 'a + Iterator<Item=(&'a str, QuerySpec)> {
-    let mut fixed_terms: HashSet<FlatTerm> = HashSet::new();
-    let spec_for_atom = move |atom: &'a FlatAtom| -> Option<(&'a str, QuerySpec)> {
-        use FlatAtom::*;
-        match atom {
-            Equal(lhs, rhs) => {
-                fixed_terms.insert(*lhs);
-                fixed_terms.insert(*rhs);
-                None
-            },
-            Relation(rel, args) => {
-                let projections = projections(&fixed_terms, args);
-                let diagonals = diagonals(args);
-
-                for arg in args.iter().copied() {
-                    fixed_terms.insert(arg);
-                }
-
-                if !projections.is_empty() || !diagonals.is_empty() {
-                    Some((rel.as_str(), QuerySpec{projections, diagonals}))
-                } else {
-                    None
-                }
-            },
-            Unconstrained(tm, _) => {
-                fixed_terms.insert(*tm);
-                None
-            },
-        }
-    };
-
-    premise.iter().map(spec_for_atom).flatten()
-}
-
 // Maps relation name and query spec to an index for the relation that can serve the query.
 pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
-pub fn select_indices(signature: &Signature, axioms: &[FlatSequent]) -> IndexSelection {
+pub fn select_indices(signature: &Signature, query_actions: &[QueryAction]) -> IndexSelection {
+    // Maps relations to tuple of arity.len() and set of collected query specs.
     let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> =
         signature.relations()
         .map(|(rel, arity)| (rel.to_string(), (arity.len(), HashSet::new())))
@@ -150,9 +95,19 @@ pub fn select_indices(signature: &Signature, axioms: &[FlatSequent]) -> IndexSel
     }
 
     // Add indices for axioms.
-    let rel_specs = axioms.iter().flat_map(|sequent| query_specs_for_premise(&sequent.premise));
-    for (rel, query_spec) in rel_specs {
-        query_specs.get_mut(rel).unwrap().1.insert(query_spec);
+    for query_action in query_actions.iter() {
+        for query in query_action.queries.iter() {
+            use Query::*;
+            match query {
+                Relation{relation, diagonals, projections, ..} => {
+                    query_specs.get_mut(relation).unwrap().1.insert(QuerySpec {
+                        diagonals: diagonals.clone(),
+                        projections: projections.keys().copied().collect(),
+                    });
+                },
+                Sort{..} => (),
+            }
+        }
     }
 
     query_specs.into_iter()
@@ -173,6 +128,9 @@ pub fn select_indices(signature: &Signature, axioms: &[FlatSequent]) -> IndexSel
 mod tests {
 
 use super::*;
+use crate::flat_ast::*;
+use crate::indirect_ast::*;
+use itertools::Itertools;
 
 #[test]
 fn test_can_serve() {
@@ -303,7 +261,7 @@ fn simple_reduction() {
         // comp(h, comp(g, f)) = comp(comp(h, g), f)
         Relation(comp(), vec![h, gf, h_gf])
     ];
-    let axioms = vec![FlatSequent{premise, conclusion}];
+    let axioms = vec![QueryAction::new(&sig, &FlatSequent{premise, conclusion})];
 
     let index_selection = select_indices(&sig, &axioms);
 
@@ -359,7 +317,7 @@ fn non_surjective_implication() {
         Relation(comp(), vec![g, f, gf]),
         Relation(signature(), vec![x, gf, z]),
     ];
-    let axioms = vec![FlatSequent{premise, conclusion}];
+    let axioms = vec![QueryAction::new(&sig, &FlatSequent{premise, conclusion})];
 
     let index_selection = select_indices(&sig, &axioms);
 
@@ -401,7 +359,7 @@ fn simultaneous_projection_and_diagonal() {
         Equal(x, y),
         Equal(j, i),
     ];
-    let axioms = vec![FlatSequent{premise, conclusion}];
+    let axioms = vec![QueryAction::new(&sig, &FlatSequent{premise, conclusion})];
 
     let index_selection = select_indices(&sig, &axioms);
 

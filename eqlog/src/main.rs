@@ -11,6 +11,7 @@ mod unification;
 lalrpop_mod!(grammar);
 mod analysis;
 mod flat_ast;
+mod query_action;
 mod index_selection;
 mod rust_gen;
 
