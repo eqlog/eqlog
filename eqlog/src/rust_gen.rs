@@ -3,7 +3,6 @@ use crate::direct_ast::*;
 use crate::signature::Signature;
 use crate::index_selection::*;
 use std::fmt::{self, Formatter, Display};
-use crate::flat_ast::*;
 use crate::query_action::*;
 use std::iter::{once, repeat};
 use std::collections::BTreeSet;
@@ -339,7 +338,7 @@ fn write_closure(
     Ok(())
 }
 
-fn write_theory(
+pub fn write_theory(
     out: &mut impl Write,
     name: &str,
     signature: &Signature,
@@ -383,6 +382,12 @@ fn write_theory(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+
+use crate::flat_ast::*;
+use super::*;
+
 #[test]
 fn asdf() {
     use indoc::indoc;
@@ -410,5 +415,7 @@ fn asdf() {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
     write_theory(&mut handle, "Cat", &sig, &query_actions, &index_selection).unwrap();
-    panic!()
+    //panic!()
+}
+
 }
