@@ -1,0 +1,10 @@
+[package]
+name = "eqlog-test"
+build = "build.rs"
+version = "0.1.0"
+
+[dependencies.eqlog-util]
+path = "../eqlog-util"
+
+[build-dependencies.eqlog]
+path = "../eqlog"

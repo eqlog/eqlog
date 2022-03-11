@@ -7,6 +7,15 @@ use crate::query_action::*;
 use std::iter::{once, repeat};
 use std::collections::BTreeSet;
 
+fn write_imports(out: &mut impl Write) -> io::Result<()> {
+    write!(out, 
+    "#[allow(non_snake_case, non_camel_case_types, unused_mut, unused_variables, unused_imports, unused_parens, clippy::all)]\n"
+    )?;
+    write!(out, "use std::collections::BTreeSet;\n")?;
+    write!(out, "use eqlog_util::Unification;\n")?;
+    Ok(())
+}
+
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct SortName(pub u32);
 fn write_sort_type(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
@@ -73,7 +82,7 @@ fn write_relation_field(
 ) -> io::Result<()> {
     write!(out, "  ")?;
     write_relation_field_name(out, name, age)?;
-    write!(out, ": BTreeMap<{}>,\n", name)?;
+    write!(out, ": BTreeSet<{}>,\n", name)?;
     Ok(())
 }
 
@@ -118,14 +127,14 @@ fn write_iter_impl(
 ) -> io::Result<()> {
     write!(out, "  fn ")?;
     write_iter_name(out, relation, query, age)?;
-    write!(out, "(")?;
+    write!(out, "(&self")?;
     for i in query.projections.iter().copied() {
-        write!(out, "arg{}: {}, ", i, arity[i])?;
+        write!(out, ", arg{}: {}", i, arity[i])?;
     }
     write!(out, ") -> impl Iterator<Item=&{}> {{\n", relation)?;
-    write!(out, "    ")?;
+    write!(out, "    self.")?;
     write_relation_field_name(out, relation, age)?;
-    write!(out, ".iter().filter(|t| {{\n")?;
+    write!(out, ".iter().filter(move |t| {{\n")?;
 
     write!(out, "      let proj_matches = true")?;
     for i in query.projections.iter().copied() {
@@ -290,11 +299,11 @@ fn write_closure(
 ) -> io::Result<()> {
     write!(out, "  pub fn close(&mut self) {{\n")?;
     for (relation, _) in signature.relations() {
-        write!(out, "    let {}_new: Vec<{}> = Vec::new();\n", relation, relation)?;
+        write!(out, "    let mut {}_new: Vec<{}> = Vec::new();\n", relation, relation)?;
     }
     write!(out, "\n")?;
     for (sort, _) in signature.sorts() {
-        write!(out, "    let {}_new_eqs: Vec<({}, {})> = Vec::new();\n", sort, sort, sort)?;
+        write!(out, "    let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n", sort, sort, sort)?;
     }
     write!(out, "\n")?;
 
@@ -338,32 +347,35 @@ fn write_closure(
     Ok(())
 }
 
-pub fn write_theory(
+fn write_theory_struct(
     out: &mut impl Write,
     name: &str,
     signature: &Signature,
-    query_actions: &[QueryAction],
-    index_selection: &IndexSelection,
 ) -> io::Result<()> {
-    for sort in signature.sorts().values() {
-        write_sort_type(out, sort)?;
-    }
-
-    write!(out, "\n")?;
-    for (rel, arity) in signature.relations() {
-        write_tuple_type(out, rel, &arity)?;
-    }
-    write!(out, "\n")?;
-
     write!(out, "pub struct {} {{\n", name)?;
     for sort in signature.sorts().keys() {
         write_sort_fields(out, sort.as_str())?;
         write!(out, "\n")?;
     }
 
-    for (rel, arity) in signature.relations() {
+    for (rel, _) in signature.relations() {
         write_relation_field(out, rel, TupleAge::All)?;
         write_relation_field(out, rel, TupleAge::Dirty)?;
+        write!(out, "\n")?;
+    }
+    write!(out, "}}\n")?;
+    Ok(())
+}
+
+fn write_theory_impl(
+    out: &mut impl Write,
+    name: &str,
+    signature: &Signature,
+    query_actions: &[QueryAction],
+    index_selection: &IndexSelection,
+) -> io::Result<()> {
+    write!(out, "impl {} {{\n", name)?;
+    for (rel, arity) in signature.relations() {
         let query_index_map = index_selection.get(rel).unwrap();
         for query in query_index_map.keys() {
             write_iter_impl(out, rel, &arity, query, TupleAge::All)?;
@@ -378,6 +390,31 @@ pub fn write_theory(
     write_closure(out, signature, query_actions)?;
 
     write!(out, "}}\n")?;
+    Ok(())
+}
+
+pub fn write_theory(
+    out: &mut impl Write,
+    name: &str,
+    signature: &Signature,
+    query_actions: &[QueryAction],
+    index_selection: &IndexSelection,
+) -> io::Result<()> {
+    write_imports(out)?;
+
+    write!(out, "\n")?;
+    for sort in signature.sorts().values() {
+        write_sort_type(out, sort)?;
+    }
+
+    write!(out, "\n")?;
+    for (rel, arity) in signature.relations() {
+        write_tuple_type(out, rel, &arity)?;
+    }
+    write!(out, "\n")?;
+
+    write_theory_struct(out, name, signature)?;
+    write_theory_impl(out, name, signature, query_actions, index_selection)?;
 
     Ok(())
 }
@@ -414,6 +451,7 @@ fn asdf() {
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
+    write_imports(&mut handle)?;
     write_theory(&mut handle, "Cat", &sig, &query_actions, &index_selection).unwrap();
     //panic!()
 }
