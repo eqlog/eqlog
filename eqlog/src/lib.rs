@@ -8,6 +8,7 @@ mod direct_ast;
 mod indirect_ast;
 mod signature;
 mod unification;
+#[allow(dead_code)]
 lalrpop_mod!(grammar);
 mod analysis;
 mod flat_ast;

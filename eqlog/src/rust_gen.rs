@@ -451,7 +451,6 @@ fn asdf() {
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
-    write_imports(&mut handle)?;
     write_theory(&mut handle, "Cat", &sig, &query_actions, &index_selection).unwrap();
     //panic!()
 }

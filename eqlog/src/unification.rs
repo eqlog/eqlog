@@ -25,6 +25,7 @@ impl<Value> IndexMut<Term> for TermMap<Value> {
 }
 
 impl<Value> TermMap<Value> {
+    #[cfg(test)]
     pub fn new(values: Vec<Value>) -> TermMap<Value> {
         TermMap {
             ids: (0 .. values.len()).collect(),
