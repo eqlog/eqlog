@@ -1,0 +1,5 @@
+Sort Obj;
+Sort Mor;
+
+Pred Signature : Obj * Mor * Obj;
+Func Comp : Mor * Mor -> Mor;

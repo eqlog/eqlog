@@ -1,5 +1,5 @@
 [package]
-name = "eqlog-souffle"
+name = "eqlog"
 version = "0.1.0"
 authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>"]
 edition = "2018"

@@ -66,7 +66,7 @@ pub fn process_root() -> io::Result<()> {
         let out_file =
             out_dir
             .join(in_file.strip_prefix(&in_dir).unwrap())
-            .with_extension(".rs");
+            .with_extension("rs");
         println!("Output file: {:?}", &out_file);
         process_file(in_file, out_file)?;
     }
