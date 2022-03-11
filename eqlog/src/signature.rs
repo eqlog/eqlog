@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::direct_ast::*;
+use std::collections::HashMap;
 use std::iter::once;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -17,33 +17,39 @@ impl Signature {
             functions: HashMap::new(),
         }
     }
-    pub fn sorts(&self) -> &HashMap<String, Sort> { &self.sorts }
-    pub fn predicates(&self) -> &HashMap<String, Predicate> { &self.predicates }
-    pub fn functions(&self) -> &HashMap<String, Function> { &self.functions }
-    pub fn relations(&self) -> impl Iterator<Item=(&str, Vec<&str>)> {
-        let pred_rels =
-            self.predicates().values().map(|pred| {
-                let name = pred.name.as_str();
-                let arity: Vec<&str> = pred.arity.iter().map(|s| s.as_str()).collect();
-                (name, arity)
-            });
-        let func_rels = 
-            self.functions().values().map(|func| {
-                let name = func.name.as_str();
-                let arity: Vec<&str> =
-                    func.dom.iter().chain(once(&func.cod))
-                    .map(|s| s.as_str())
-                    .collect();
-                (name, arity)
-            });
+    pub fn sorts(&self) -> &HashMap<String, Sort> {
+        &self.sorts
+    }
+    pub fn predicates(&self) -> &HashMap<String, Predicate> {
+        &self.predicates
+    }
+    pub fn functions(&self) -> &HashMap<String, Function> {
+        &self.functions
+    }
+    pub fn relations(&self) -> impl Iterator<Item = (&str, Vec<&str>)> {
+        let pred_rels = self.predicates().values().map(|pred| {
+            let name = pred.name.as_str();
+            let arity: Vec<&str> = pred.arity.iter().map(|s| s.as_str()).collect();
+            (name, arity)
+        });
+        let func_rels = self.functions().values().map(|func| {
+            let name = func.name.as_str();
+            let arity: Vec<&str> = func
+                .dom
+                .iter()
+                .chain(once(&func.cod))
+                .map(|s| s.as_str())
+                .collect();
+            (name, arity)
+        });
         pred_rels.chain(func_rels)
     }
-    
+
     pub fn arity(&self, relation: &str) -> Option<Vec<&str>> {
-        if let Some(Predicate{arity, ..}) = self.predicates.get(relation) {
+        if let Some(Predicate { arity, .. }) = self.predicates.get(relation) {
             return Some(arity.iter().map(|s| s.as_str()).collect());
         }
-        if let Some(Function{dom, cod, ..}) = self.functions.get(relation) {
+        if let Some(Function { dom, cod, .. }) = self.functions.get(relation) {
             return Some(dom.iter().chain(once(cod)).map(|s| s.as_str()).collect());
         }
 
@@ -53,7 +59,7 @@ impl Signature {
     pub fn add_sort(&mut self, sort: Sort) {
         match self.sorts.insert(sort.0.clone(), sort) {
             None => (),
-            Some(prev_sort) => panic!("Duplicate declaration of sort {}", prev_sort.0)
+            Some(prev_sort) => panic!("Duplicate declaration of sort {}", prev_sort.0),
         }
     }
     pub fn add_predicate(&mut self, pred: Predicate) {
@@ -96,14 +102,29 @@ mod tests {
         th.add_sort(Sort(s()));
         th.add_sort(Sort(t()));
 
-        th.add_predicate(Predicate{name: "Q".to_string(), arity: vec![s(), t()]});
-        th.add_predicate(Predicate{name: "P".to_string(), arity: vec![s(), s(), s()]});
+        th.add_predicate(Predicate {
+            name: "Q".to_string(),
+            arity: vec![s(), t()],
+        });
+        th.add_predicate(Predicate {
+            name: "P".to_string(),
+            arity: vec![s(), s(), s()],
+        });
 
-        th.add_function(Function{name: "F".to_string(), dom: vec![s(), t()], cod: t()});
-        th.add_function(Function{name: "G".to_string(), dom: vec![t(), s()], cod: t()});
+        th.add_function(Function {
+            name: "F".to_string(),
+            dom: vec![s(), t()],
+            cod: t(),
+        });
+        th.add_function(Function {
+            name: "G".to_string(),
+            dom: vec![t(), s()],
+            cod: t(),
+        });
     }
 
-    #[test] #[should_panic]
+    #[test]
+    #[should_panic]
     fn test_duplicate_sort() {
         let mut th = Signature::new();
         let s = || "S".to_string();
@@ -113,7 +134,8 @@ mod tests {
         th.add_sort(Sort(s()));
     }
 
-    #[test] #[should_panic]
+    #[test]
+    #[should_panic]
     fn test_duplicate_predicate() {
         let mut th = Signature::new();
         let s = || "S".to_string();
@@ -121,12 +143,22 @@ mod tests {
         th.add_sort(Sort(s()));
         th.add_sort(Sort(t()));
 
-        th.add_predicate(Predicate{name: "Q".to_string(), arity: vec![s(), t()]});
-        th.add_predicate(Predicate{name: "P".to_string(), arity: vec![s(), s(), s()]});
-        th.add_predicate(Predicate{name: "Q".to_string(), arity: vec![t(), s()]});
+        th.add_predicate(Predicate {
+            name: "Q".to_string(),
+            arity: vec![s(), t()],
+        });
+        th.add_predicate(Predicate {
+            name: "P".to_string(),
+            arity: vec![s(), s(), s()],
+        });
+        th.add_predicate(Predicate {
+            name: "Q".to_string(),
+            arity: vec![t(), s()],
+        });
     }
 
-    #[test] #[should_panic]
+    #[test]
+    #[should_panic]
     fn test_duplicate_function() {
         let mut th = Signature::new();
         let s = || "S".to_string();
@@ -134,38 +166,64 @@ mod tests {
         th.add_sort(Sort(s()));
         th.add_sort(Sort(t()));
 
-        th.add_function(Function{name: "F".to_string(), dom: vec![s(), t()], cod: t()});
-        th.add_function(Function{name: "G".to_string(), dom: vec![t(), s()], cod: t()});
-        th.add_function(Function{name: "F".to_string(), dom: vec![s(), t()], cod: t()});
+        th.add_function(Function {
+            name: "F".to_string(),
+            dom: vec![s(), t()],
+            cod: t(),
+        });
+        th.add_function(Function {
+            name: "G".to_string(),
+            dom: vec![t(), s()],
+            cod: t(),
+        });
+        th.add_function(Function {
+            name: "F".to_string(),
+            dom: vec![s(), t()],
+            cod: t(),
+        });
     }
 
-    #[test] #[should_panic]
+    #[test]
+    #[should_panic]
     fn test_predicate_bad_arity() {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
         th.add_sort(Sort(s()));
 
-        th.add_predicate(Predicate{name: "Q".to_string(), arity: vec![s(), t()]});
+        th.add_predicate(Predicate {
+            name: "Q".to_string(),
+            arity: vec![s(), t()],
+        });
     }
 
-    #[test] #[should_panic]
+    #[test]
+    #[should_panic]
     fn test_function_bad_dom() {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
         th.add_sort(Sort(s()));
 
-        th.add_function(Function{name: "F".to_string(), dom: vec![s(), s()], cod: t()});
+        th.add_function(Function {
+            name: "F".to_string(),
+            dom: vec![s(), s()],
+            cod: t(),
+        });
     }
 
-    #[test] #[should_panic]
+    #[test]
+    #[should_panic]
     fn test_function_bad_cod() {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
         th.add_sort(Sort(s()));
 
-        th.add_function(Function{name: "F".to_string(), dom: vec![s(), t(), s()], cod: s()});
+        th.add_function(Function {
+            name: "F".to_string(),
+            dom: vec![s(), t(), s()],
+            cod: s(),
+        });
     }
 }

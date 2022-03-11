@@ -1,12 +1,12 @@
+use crate::flat_ast::*;
+use crate::grammar::*;
+use crate::index_selection::*;
+use crate::query_action::*;
+use crate::rust_gen::*;
+use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::env;
-use crate::grammar::*;
-use crate::flat_ast::*;
-use crate::query_action::*;
-use crate::index_selection::*;
-use crate::rust_gen::*;
 
 fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     let mut result = Vec::new();
@@ -42,17 +42,23 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
 fn process_file(in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
     let src: String = fs::read_to_string(in_file)?;
     let (sig, axioms) = TheoryParser::new().parse(&src).unwrap();
-    let query_actions: Vec<QueryAction> =
-        axioms.iter()
+    let query_actions: Vec<QueryAction> = axioms
+        .iter()
         .map(|(sequent, term_sorts)| {
             let flat_sequent = flatten_sequent(sequent, term_sorts);
             QueryAction::new(&sig, &flat_sequent)
         })
         .collect();
     let index_selection = select_indices(&sig, &query_actions);
-    
+
     let mut result: Vec<u8> = Vec::new();
-    write_theory(&mut result, "Theory", &sig, &query_actions, &index_selection)?;
+    write_theory(
+        &mut result,
+        "Theory",
+        &sig,
+        &query_actions,
+        &index_selection,
+    )?;
     fs::write(out_file, &result)?;
     Ok(())
 }
@@ -63,8 +69,7 @@ pub fn process_root() -> io::Result<()> {
 
     for in_file in eqlog_files(&in_dir)? {
         println!("Processing file {:?}", &in_file);
-        let out_file =
-            out_dir
+        let out_file = out_dir
             .join(in_file.strip_prefix(&in_dir).unwrap())
             .with_extension("rs");
         println!("Output file: {:?}", &out_file);
