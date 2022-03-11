@@ -2,10 +2,13 @@ use crate::direct_ast::*;
 use crate::index_selection::*;
 use crate::query_action::*;
 use crate::signature::Signature;
+use convert_case::{Case, Casing};
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 use std::iter::{once, repeat};
+
+use Case::Snake;
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     write!(out, "use std::collections::BTreeSet;\n")?;
@@ -47,8 +50,8 @@ fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io:
 }
 
 fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
-    write!(out, "  {}: Unification<{}>,\n", name, name)?;
-    write!(out, "  {}_dirty: {},\n", name, name)?;
+    write!(out, "  {}: Unification<{}>,\n", name.to_case(Snake), name)?;
+    write!(out, "  {}_dirty: {},\n", name.to_case(Snake), name)?;
     Ok(())
 }
 
@@ -68,7 +71,7 @@ impl Display for TupleAge {
 }
 
 fn write_relation_field_name(out: &mut impl Write, name: &str, age: TupleAge) -> io::Result<()> {
-    write!(out, "{}_{}", name, age)?;
+    write!(out, "{}_{}", name.to_case(Snake), age)?;
     Ok(())
 }
 
@@ -83,7 +86,11 @@ fn write_is_dirty_impl(out: &mut impl Write, signature: &Signature) -> io::Resul
     write!(out, "  fn is_dirty(&self) -> bool {{\n")?;
     write!(out, "    false\n")?;
     for (relation, _) in signature.relations() {
-        write!(out, "      || !self.{}_dirty.is_empty()\n", relation)?;
+        write!(
+            out,
+            "      || !self.{}_dirty.is_empty()\n",
+            relation.to_case(Snake)
+        )?;
     }
     write!(out, "  }}\n")?;
     Ok(())
@@ -95,7 +102,7 @@ fn write_iter_name(
     query: &QuerySpec,
     age: TupleAge,
 ) -> io::Result<()> {
-    write!(out, "iter_{}_{}", relation, age)?;
+    write!(out, "iter_{}_{}", relation.to_case(Snake), age)?;
     for p in query.projections.iter() {
         write!(out, "_{}", p)?;
     }
@@ -300,6 +307,27 @@ fn write_action(
     Ok(())
 }
 
+fn write_query_action_step(
+    out: &mut impl Write,
+    signature: &Signature,
+    query_action: &QueryAction,
+) -> io::Result<()> {
+    let queries_len = query_action.queries.len();
+    for new_index in 0..queries_len {
+        let ages = repeat(TupleAge::All)
+            .take(new_index)
+            .chain(once(TupleAge::Dirty))
+            .chain(repeat(TupleAge::All).take(queries_len - new_index - 1));
+        let query_ages = query_action.queries.iter().zip(ages);
+        write_query_loop_headers(out, signature, query_ages)?;
+        for action in query_action.actions.iter() {
+            write_action(out, signature, action, queries_len + 3)?;
+        }
+        write_query_loop_footers(out, queries_len)?;
+    }
+    Ok(())
+}
+
 fn write_closure(
     out: &mut impl Write,
     signature: &Signature,
@@ -311,7 +339,8 @@ fn write_closure(
         write!(
             out,
             "    let mut {}_new: Vec<{}> = Vec::new();\n",
-            relation, relation
+            relation.to_case(Snake),
+            relation
         )?;
     }
     write!(out, "\n")?;
@@ -319,43 +348,54 @@ fn write_closure(
         write!(
             out,
             "    let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n",
-            sort, sort, sort
+            sort.to_case(Snake),
+            sort,
+            sort
         )?;
     }
     write!(out, "\n")?;
 
     write!(out, "    while self.is_dirty() {{\n")?;
     for query_action in query_actions {
-        let queries_len = query_action.queries.len();
-        for new_index in 0..queries_len {
-            let ages = repeat(TupleAge::All)
-                .take(new_index)
-                .chain(once(TupleAge::Dirty))
-                .chain(repeat(TupleAge::All).take(queries_len - new_index - 1));
-            let query_ages = query_action.queries.iter().zip(ages);
-            write_query_loop_headers(out, signature, query_ages)?;
-            for action in query_action.actions.iter() {
-                write_action(out, signature, action, queries_len + 3)?;
-            }
-            write_query_loop_footers(out, queries_len)?;
-        }
+        write_query_action_step(out, signature, query_action)?;
         write!(out, "\n")?;
     }
 
     for (relation, _) in signature.relations() {
-        write!(out, "      self.{}_dirty.clear();\n", relation)?;
-        write!(out, "      for t in {}_new.drain(..) {{\n", relation)?;
-        write!(out, "        if self.{}_all.insert(t) {{\n", relation)?;
-        write!(out, "          self.{}_dirty.insert(t); \n", relation)?;
+        write!(
+            out,
+            "      self.{}_dirty.clear();\n",
+            relation.to_case(Snake)
+        )?;
+        write!(
+            out,
+            "      for t in {}_new.drain(..) {{\n",
+            relation.to_case(Snake)
+        )?;
+        write!(
+            out,
+            "        if self.{}_all.insert(t) {{\n",
+            relation.to_case(Snake)
+        )?;
+        write!(
+            out,
+            "          self.{}_dirty.insert(t); \n",
+            relation.to_case(Snake)
+        )?;
         write!(out, "        }}\n")?;
         write!(out, "      }}\n")?;
         write!(out, "\n")?;
     }
 
     for (sort, _) in signature.sorts() {
-        write!(out, "      if !{}_new_eqs.is_empty() {{\n", sort)?;
+        write!(
+            out,
+            "      if !{}_new_eqs.is_empty() {{\n",
+            sort.to_case(Snake)
+        )?;
         write!(out, "        panic!(\"Equalities not implemented\");\n")?;
         write!(out, "      }}\n")?;
+        write!(out, "      {}_new_eqs.clear();\n", sort.to_case(Snake))?;
     }
 
     write!(out, "    }}\n")?;
