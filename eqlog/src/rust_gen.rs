@@ -1,8 +1,10 @@
 use crate::direct_ast::*;
+use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::query_action::*;
 use crate::signature::Signature;
 use convert_case::{Case, Casing};
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
@@ -128,21 +130,21 @@ fn write_iter_impl(
     for i in query.projections.iter().copied() {
         write!(out, ", arg{}: {}", i, arity[i])?;
     }
-    write!(out, ") -> impl Iterator<Item=&{}> {{\n", relation)?;
+    write!(out, ") -> impl '_ + Iterator<Item={}> {{\n", relation)?;
     write!(out, "    self.")?;
     write_relation_field_name(out, relation, age)?;
-    write!(out, ".iter().filter(move |t| {{\n")?;
+    write!(out, ".iter().filter(move |_t| {{\n")?;
 
     write!(out, "      let proj_matches = true")?;
     for i in query.projections.iter().copied() {
-        write!(out, " && t.{} == arg{}", i, i)?;
+        write!(out, " && _t.{} == arg{}", i, i)?;
     }
     write!(out, ";\n")?;
 
     for (k, diagonal) in query.diagonals.iter().enumerate() {
         write!(out, "      let diag{}_matches = true", k)?;
         for (prev, next) in diagonal.iter().zip(diagonal.iter().skip(1)) {
-            write!(out, " && t.{} == t.{}", prev, next)?;
+            write!(out, " && _t.{} == _t.{}", prev, next)?;
         }
         write!(out, ";\n")?;
     }
@@ -153,7 +155,7 @@ fn write_iter_impl(
     }
     write!(out, "\n")?;
 
-    write!(out, "    }})\n")?;
+    write!(out, "    }}).copied()\n")?;
     write!(out, "  }}\n")?;
     Ok(())
 }
@@ -301,7 +303,13 @@ fn write_action(
             for _ in 0..indent {
                 write!(out, "  ")?;
             }
-            write!(out, "{}_new_eqs.push((tm{}, tm{}));\n", sort, lhs.0, rhs.0)?;
+            write!(
+                out,
+                "{}_new_eqs.push((tm{}, tm{}));\n",
+                sort.to_case(Snake),
+                lhs.0,
+                rhs.0
+            )?;
         }
     }
     Ok(())
@@ -325,6 +333,43 @@ fn write_query_action_step(
         }
         write_query_loop_footers(out, queries_len)?;
     }
+    Ok(())
+}
+
+fn write_functionality_step(
+    out: &mut impl Write,
+    signature: &Signature,
+    function: &Function,
+) -> io::Result<()> {
+    let Function { name, dom, cod } = function;
+
+    let new_result = FlatTerm(dom.len());
+    let old_result = FlatTerm(dom.len() + 1);
+
+    let dirty_query = Query::Relation {
+        relation: name.clone(),
+        diagonals: BTreeSet::new(),
+        projections: BTreeMap::new(),
+        results: (0..dom.len() + 1).map(|i| (i, FlatTerm(i))).collect(),
+    };
+
+    let old_query = Query::Relation {
+        relation: name.clone(),
+        diagonals: BTreeSet::new(),
+        projections: (0..dom.len()).map(|i| (i, FlatTerm(i))).collect(),
+        results: once((dom.len(), old_result)).collect(),
+    };
+    let query_ages = [(&dirty_query, TupleAge::Dirty), (&old_query, TupleAge::All)];
+
+    let action = Action::Equate {
+        sort: cod.clone(),
+        lhs: new_result,
+        rhs: old_result,
+    };
+
+    write_query_loop_headers(out, signature, query_ages.iter().copied())?;
+    write_action(out, signature, &action, query_ages.len() + 3)?;
+    write_query_loop_footers(out, query_ages.len())?;
     Ok(())
 }
 
@@ -358,6 +403,11 @@ fn write_closure(
     write!(out, "    while self.is_dirty() {{\n")?;
     for query_action in query_actions {
         write_query_action_step(out, signature, query_action)?;
+        write!(out, "\n")?;
+    }
+
+    for function in signature.functions().values() {
+        write_functionality_step(out, signature, function)?;
         write!(out, "\n")?;
     }
 
@@ -430,7 +480,7 @@ fn write_theory_impl(
     write!(out, "impl {} {{\n", name)?;
     for (rel, arity) in signature.relations() {
         let query_index_map = index_selection.get(rel).unwrap();
-        for query in query_index_map.keys() {
+        for query in query_index_map.keys().chain(once(&QuerySpec::new())) {
             write_iter_impl(out, rel, &arity, query, TupleAge::All)?;
             write_iter_impl(out, rel, &arity, query, TupleAge::Dirty)?;
         }

@@ -10,6 +10,15 @@ pub struct QuerySpec {
     pub diagonals: BTreeSet<BTreeSet<usize>>,
 }
 
+impl QuerySpec {
+    pub fn new() -> QuerySpec {
+        QuerySpec {
+            projections: BTreeSet::new(),
+            diagonals: BTreeSet::new(),
+        }
+    }
+}
+
 impl PartialOrd<QuerySpec> for QuerySpec {
     fn partial_cmp(&self, rhs: &QuerySpec) -> Option<Ordering> {
         use Ordering::*;
