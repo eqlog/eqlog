@@ -9,6 +9,7 @@ lalrpop-util = "0"
 regex = "1"
 maplit = "1"
 itertools = "0"
+convert_case = "0"
 
 [dev-dependencies]
 indoc = "1"
