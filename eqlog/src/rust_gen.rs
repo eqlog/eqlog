@@ -16,6 +16,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct SortName(pub u32);
 fn write_sort_type(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
+    write!(out, "#[allow(dead_code)]\n")?;
     write!(
         out,
         "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n"
@@ -27,6 +28,7 @@ fn write_sort_type(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
 fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
+    write!(out, "#[allow(dead_code)]\n")?;
     write!(
         out,
         "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n"
@@ -303,6 +305,7 @@ fn write_closure(
     signature: &Signature,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
+    write!(out, "  #[allow(dead_code)]\n")?;
     write!(out, "  pub fn close(&mut self) {{\n")?;
     for (relation, _) in signature.relations() {
         write!(

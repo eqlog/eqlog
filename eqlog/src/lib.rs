@@ -3,6 +3,7 @@ extern crate lalrpop_util;
 #[cfg(test)]
 #[macro_use]
 extern crate maplit;
+extern crate convert_case;
 #[cfg(test)]
 extern crate indoc;
 

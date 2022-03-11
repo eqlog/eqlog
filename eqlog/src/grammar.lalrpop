@@ -4,21 +4,36 @@ use crate::signature::Signature;
 use std::iter::once;
 use crate::analysis::check_semantically;
 use crate::unification::TermMap;
+use convert_case::{Case, Casing};
 
 grammar;
 
 Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
 
-Sort: Sort = { <name: Id> => Sort(name) }
+SnakeCaseId: String = {
+    <id: Id> => { 
+        assert_eq!(id.to_case(Case::Snake), id, "Expected identifier in snake_case");
+        id
+    },
+}
+
+CamelCaseId: String = {
+    <id: Id> => { 
+        assert_eq!(id.to_case(Case::UpperCamel), id, "Expected identifier in CamelCase");
+        id
+    },
+}
+
+Sort: Sort = { <name: CamelCaseId> => Sort(name) }
 
 Predicate: Predicate = {
-    <name: Id> ":" <head: Id> <tail: ("*" <Id>)*> => {
+    <name: CamelCaseId> ":" <head: Id> <tail: ("*" <Id>)*> => {
         Predicate{name, arity: once(head).chain(tail).collect()}
     },
 }
 
 Function: Function = {
-    <name: Id> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> => {
+    <name: CamelCaseId> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> => {
         Function {
             name,
             dom: head_dom.into_iter().chain(tail_dom).collect(),
@@ -35,7 +50,7 @@ Application: (String, Vec<Term>) = {
 }
 
 Term: Term = {
-    <var: Id> => Term::Variable(var),
+    <var: SnakeCaseId> => Term::Variable(var),
     "_" => Term::Wildcard,
     <app: Application> => Term::Application(app.0, app.1),
 }

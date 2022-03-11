@@ -187,24 +187,24 @@ mod tests {
     #[test]
     fn good_theory() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
+        Sort Obj;
+        Sort Mor;
 
-        Func comp : mor * mor -> mor;
-        Axiom comp(h, comp(g, f)) ~> comp(comp(h, g), f);
+        Func Comp : Mor * Mor -> Mor;
+        Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
 
-        Pred signature: obj * mor * obj;
+        Pred Signature: Obj * Mor * Obj;
 
-        Axiom signature(x, f, y) & signature(y, g, z) => comp(g, f)! & signature(x, comp(g, f), z);
+        Axiom Signature(x, f, y) & Signature(y, g, z) => Comp(g, f)! & Signature(x, Comp(g, f), z);
 
-        Func id : obj -> mor; Axiom g = comp(f, id(_)) => f = g;
+        Func Id : Obj -> Mor; Axiom g = Comp(f, Id(_)) => f = g;
     "};
         let (sig, axioms) = TheoryParser::new().parse(src).unwrap();
-        let obj = || "obj".to_string();
-        let mor = || "mor".to_string();
-        let comp = || "comp".to_string();
-        let id = || "id".to_string();
-        let signature = || "signature".to_string();
+        let obj = || "Obj".to_string();
+        let mor = || "Mor".to_string();
+        let comp = || "Comp".to_string();
+        let id = || "Id".to_string();
+        let signature = || "Signature".to_string();
 
         assert_eq!(
             *sig.sorts(),
@@ -250,19 +250,19 @@ mod tests {
             // h
             let h0 = universe.new_term(h());
 
-            // comp(g, f)
+            // Comp(g, f)
             let g0 = universe.new_term(g());
             let f0 = universe.new_term(f());
             let gf = universe.new_term(Application(comp(), vec![g0, f0]));
 
-            // comp(comp(h, g), f)
+            // Comp(Comp(h, g), f)
             let h1 = universe.new_term(h());
             let g1 = universe.new_term(g());
             let hg = universe.new_term(Application(comp(), vec![h1, g1]));
             let f1 = universe.new_term(f());
             let hg_f = universe.new_term(Application(comp(), vec![hg, f1]));
 
-            // comp(h, comp(g, f))
+            // Comp(h, Comp(g, f))
             let h_gf = universe.new_term(Application(comp(), vec![h0, gf]));
             let terms_end = Term(universe.len());
 
@@ -446,9 +446,9 @@ mod tests {
     #[should_panic]
     fn wrong_function_argument_number() {
         let src = indoc! {"
-        Sort mor;
-        Func comp : mor * mor -> mor;
-        Axiom comp(g, f, h) ~> g;
+        Sort Mor;
+        Func Comp : Mor * Mor -> Mor;
+        Axiom Comp(g, f, h) ~> g;
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -457,10 +457,10 @@ mod tests {
     #[should_panic]
     fn conflicting_sorts_equality() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Func id : obj -> mor;
-        Axiom id(x) = f => x = f;
+        Sort Obj;
+        Sort Mor;
+        Func Id : Obj -> Mor;
+        Axiom Id(x) = f => x = f;
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -469,10 +469,10 @@ mod tests {
     #[should_panic]
     fn conflicting_sorts_reduction() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Func id : obj -> mor;
-        Axiom id(x) ~> x;
+        Sort Obj;
+        Sort Mor;
+        Func Id : Obj -> Mor;
+        Axiom Id(x) ~> x;
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -481,10 +481,10 @@ mod tests {
     #[should_panic]
     fn conflicting_sorts_predicate() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Pred is_id : mor * obj;
-        Axiom is_id(f, x) => is_id(x, f);
+        Sort Obj;
+        Sort Mor;
+        Pred IsId : Mor * Obj;
+        Axiom IsId(f, x) => IsId(x, f);
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -493,10 +493,10 @@ mod tests {
     #[should_panic]
     fn non_epi() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Func id : obj -> mor;
-        Axiom id(x) = f =!> f = g;
+        Sort Obj;
+        Sort Mor;
+        Func Id : Obj -> Mor;
+        Axiom Id(x) = f =!> f = g;
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -505,12 +505,12 @@ mod tests {
     #[should_panic]
     fn non_surjective0() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Pred signature: obj * mor * obj;
-        Func id : obj -> mor;
-        Func comp : mor * mor -> mor;
-        Axiom signature(x, f, _) => comp(f, id(x)) = f;
+        Sort Obj;
+        Sort Mor;
+        Pred Signature: Obj * Mor * Obj;
+        Func Id : Obj -> Mor;
+        Func Comp : Mor * Mor -> Mor;
+        Axiom Signature(x, f, _) => Comp(f, Id(x)) = f;
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -519,12 +519,12 @@ mod tests {
     #[should_panic]
     fn non_surjective1() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Pred signature: obj * mor * obj;
-        Func id : obj -> mor;
-        Func comp : mor * mor -> mor;
-        Axiom signature(x, f, _) => f = comp(f, id(x));
+        Sort Obj;
+        Sort Mor;
+        Pred Signature: Obj * Mor * Obj;
+        Func Id : Obj -> Mor;
+        Func Comp : Mor * Mor -> Mor;
+        Axiom Signature(x, f, _) => f = Comp(f, Id(x));
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -533,10 +533,10 @@ mod tests {
     #[should_panic]
     fn non_surjective2() {
         let src = indoc! {"
-        Sort obj;
-        Sort mor;
-        Func id : obj -> mor;
-        Axiom x = y => id(x) = id(y);
+        Sort Obj;
+        Sort Mor;
+        Func Id : Obj -> Mor;
+        Axiom x = y => Id(x) = Id(y);
     "};
         TheoryParser::new().parse(src).unwrap();
     }
@@ -545,7 +545,7 @@ mod tests {
     #[should_panic]
     fn no_sort_inferred() {
         let src = indoc! {"
-        Sort obj;
+        Sort Obj;
         Axiom x = y => y = x;
     "};
         TheoryParser::new().parse(src).unwrap();
