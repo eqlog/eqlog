@@ -1,7 +1,7 @@
 use crate::indirect_ast::*;
 use std::collections::HashMap;
-use std::ops::{Index, IndexMut};
 use std::mem::swap;
+use std::ops::{Index, IndexMut};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TermMap<Value> {
@@ -28,14 +28,14 @@ impl<Value> TermMap<Value> {
     #[cfg(test)]
     pub fn new(values: Vec<Value>) -> TermMap<Value> {
         TermMap {
-            ids: (0 .. values.len()).collect(),
-            values
+            ids: (0..values.len()).collect(),
+            values,
         }
     }
     pub fn map<U>(self, f: impl FnMut(Value) -> U) -> TermMap<U> {
-        let TermMap{ids, values} = self;
+        let TermMap { ids, values } = self;
         let values = values.into_iter().map(f).collect();
-        TermMap{ids, values}
+        TermMap { ids, values }
     }
 }
 
@@ -51,15 +51,11 @@ impl<'a, Payload, UnionFunction> TermUnification<'a, Payload, UnionFunction>
 where
     UnionFunction: Fn(Payload, Payload) -> Payload,
 {
-    pub fn new(
-        universe: &'a TermUniverse,
-        payloads: Vec<Payload>,
-        union: UnionFunction,
-    ) -> Self {
+    pub fn new(universe: &'a TermUniverse, payloads: Vec<Payload>, union: UnionFunction) -> Self {
         assert_eq!(universe.len(), payloads.len());
         TermUnification {
             universe: universe,
-            parents: (0 .. universe.len()).collect(),
+            parents: (0..universe.len()).collect(),
             payloads: payloads.into_iter().map(Some).collect(),
             union,
         }
@@ -149,7 +145,7 @@ where
         let mut values = Vec::new();
         let mut next_id = 0;
 
-        for tm in 0 .. self.universe.len() {
+        for tm in 0..self.universe.len() {
             if self.parents[tm] == tm {
                 let mut val = None;
                 swap(&mut val, &mut self.payloads[tm]);
@@ -161,16 +157,15 @@ where
             }
         }
 
-        for tm in 0 .. self.universe.len() {
+        for tm in 0..self.universe.len() {
             ids[tm] = ids[self.root(Term(tm)).0];
         }
 
-        TermMap{ids, values}
+        TermMap { ids, values }
     }
 }
 
-impl<'a, Payload, UnionFunction>
-Index<Term> for TermUnification<'a, Payload, UnionFunction>
+impl<'a, Payload, UnionFunction> Index<Term> for TermUnification<'a, Payload, UnionFunction>
 where
     UnionFunction: Fn(Payload, Payload) -> Payload,
 {
@@ -181,8 +176,7 @@ where
     }
 }
 
-impl<'a, Payload, UnionFunction>
-IndexMut<Term> for TermUnification<'a, Payload, UnionFunction>
+impl<'a, Payload, UnionFunction> IndexMut<Term> for TermUnification<'a, Payload, UnionFunction>
 where
     UnionFunction: Fn(Payload, Payload) -> Payload,
 {
@@ -210,7 +204,7 @@ mod tests {
         let mut unif = TermUnification::new(
             &univ,
             vec![true, false, true, false, true, false],
-            |lhs, rhs| { !(lhs && rhs) },
+            |lhs, rhs| !(lhs && rhs),
         );
         assert_eq!(unif.root(t0), t0);
         assert_eq!(unif[t0], true);
@@ -226,13 +220,13 @@ mod tests {
         assert_eq!(unif[t5], false);
     }
 
-    fn new_unification<'a>
-    (universe: &'a TermUniverse) ->
-    TermUnification<'a, bool, impl Fn(bool, bool) -> bool> {
+    fn new_unification<'a>(
+        universe: &'a TermUniverse,
+    ) -> TermUnification<'a, bool, impl Fn(bool, bool) -> bool> {
         TermUnification::new(
             &universe,
-            (0 .. universe.len()).map(|i| i % 2 == 0).collect(),
-            |lhs, rhs| { !(lhs && rhs) },
+            (0..universe.len()).map(|i| i % 2 == 0).collect(),
+            |lhs, rhs| !(lhs && rhs),
         )
     }
 

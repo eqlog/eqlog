@@ -1,11 +1,11 @@
-use std::io::{self, Write};
 use crate::direct_ast::*;
-use crate::signature::Signature;
 use crate::index_selection::*;
-use std::fmt::{self, Formatter, Display};
 use crate::query_action::*;
-use std::iter::{once, repeat};
+use crate::signature::Signature;
 use std::collections::BTreeSet;
+use std::fmt::{self, Display, Formatter};
+use std::io::{self, Write};
+use std::iter::{once, repeat};
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     write!(out, "use std::collections::BTreeSet;\n")?;
@@ -16,24 +16,26 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct SortName(pub u32);
 fn write_sort_type(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
-    write!(out, "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n")?;
+    write!(
+        out,
+        "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n"
+    )?;
     write!(out, "pub struct {}(pub u32);\n", sort.0)?;
     Ok(())
 }
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
-fn write_tuple_type(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-) -> io::Result<()> {
-    write!(out, "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n")?;
+fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
+    write!(
+        out,
+        "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n"
+    )?;
     write!(out, "pub struct {}(", relation)?;
     if arity.is_empty() {
         write!(out, ")")?;
     } else {
-        for arg_sort in arity[0 .. arity.len() - 1].iter() {
+        for arg_sort in arity[0..arity.len() - 1].iter() {
             write!(out, "pub {}, ", arg_sort)?;
         }
         write!(out, "pub {})", arity.last().unwrap())?;
@@ -42,17 +44,17 @@ fn write_tuple_type(
     Ok(())
 }
 
-fn write_sort_fields(
-    out: &mut impl Write,
-    name: &str,
-) -> io::Result<()> {
+fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
     write!(out, "  {}: Unification<{}>,\n", name, name)?;
     write!(out, "  {}_dirty: {},\n", name, name)?;
     Ok(())
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-enum TupleAge{All, Dirty}
+enum TupleAge {
+    All,
+    Dirty,
+}
 
 impl Display for TupleAge {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -63,30 +65,19 @@ impl Display for TupleAge {
     }
 }
 
-fn write_relation_field_name(
-    out: &mut impl Write,
-    name: &str,
-    age: TupleAge,
-) -> io::Result<()> {
+fn write_relation_field_name(out: &mut impl Write, name: &str, age: TupleAge) -> io::Result<()> {
     write!(out, "{}_{}", name, age)?;
     Ok(())
 }
 
-fn write_relation_field(
-    out: &mut impl Write,
-    name: &str,
-    age: TupleAge,
-) -> io::Result<()> {
+fn write_relation_field(out: &mut impl Write, name: &str, age: TupleAge) -> io::Result<()> {
     write!(out, "  ")?;
     write_relation_field_name(out, name, age)?;
     write!(out, ": BTreeSet<{}>,\n", name)?;
     Ok(())
 }
 
-fn write_is_dirty_impl(
-    out: &mut impl Write,
-    signature: &Signature,
-) -> io::Result<()> {
+fn write_is_dirty_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
     write!(out, "  fn is_dirty(&self) -> bool {{\n")?;
     write!(out, "    false\n")?;
     for (relation, _) in signature.relations() {
@@ -148,7 +139,7 @@ fn write_iter_impl(
     }
 
     write!(out, "      proj_matches")?;
-    for k in 0 .. query.diagonals.len() {
+    for k in 0..query.diagonals.len() {
         write!(out, " && diag{}_matches", k)?;
     }
     write!(out, "\n")?;
@@ -161,28 +152,35 @@ fn write_iter_impl(
 fn write_query_loop_headers<'a>(
     out: &mut impl Write,
     signature: &Signature,
-    query_ages: impl Iterator<Item=(&'a Query, TupleAge)>,
+    query_ages: impl Iterator<Item = (&'a Query, TupleAge)>,
 ) -> io::Result<()> {
     let mut indent = 3;
     for (query, age) in query_ages {
-        for _ in 0 .. indent {
+        for _ in 0..indent {
             write!(out, "  ")?;
         }
         indent += 1;
 
         use Query::*;
         match query {
-            Relation{relation, diagonals, projections, results} => {
-                let arity_len =
-                    signature.relations()
+            Relation {
+                relation,
+                diagonals,
+                projections,
+                results,
+            } => {
+                let arity_len = signature
+                    .relations()
                     .find(|(rel, _)| rel == relation)
-                    .unwrap().1.len();
+                    .unwrap()
+                    .1
+                    .len();
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
                     projections: projections.keys().copied().collect(),
                 };
                 write!(out, "for {}(", relation)?;
-                for i in 0 .. arity_len {
+                for i in 0..arity_len {
                     if let Some(tm) = results.get(&i) {
                         if let Some(diag) = diagonals.iter().find(|diag| diag.contains(&i)) {
                             if *diag.iter().next().unwrap() == i {
@@ -205,22 +203,19 @@ fn write_query_loop_headers<'a>(
                     write!(out, "tm{}, ", tm.0)?;
                 }
                 write!(out, ") {{\n")?;
-            },
-            Sort{..} => {
+            }
+            Sort { .. } => {
                 panic!("Not implemented")
-            },
+            }
         }
     }
     Ok(())
 }
 
-fn write_query_loop_footers(
-    out: &mut impl Write,
-    query_len: usize,
-) -> io::Result<()> {
+fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Result<()> {
     let mut indent = 2 + query_len;
     while indent > 2 {
-        for _ in 0 .. indent {
+        for _ in 0..indent {
             write!(out, "  ")?;
         }
         indent -= 1;
@@ -237,14 +232,20 @@ fn write_action(
 ) -> io::Result<()> {
     use Action::*;
     match action {
-        AddTerm{function, args, result} => {
-            let Function{dom, cod, ..} = signature.functions().get(function).unwrap();
+        AddTerm {
+            function,
+            args,
+            result,
+        } => {
+            let Function { dom, cod, .. } = signature.functions().get(function).unwrap();
             let query_spec = QuerySpec {
-                projections: (0 .. dom.len()).collect(),
+                projections: (0..dom.len()).collect(),
                 diagonals: BTreeSet::new(),
             };
 
-            for _ in 0 .. indent { write!(out, "  ")?; }
+            for _ in 0..indent {
+                write!(out, "  ")?;
+            }
             write!(out, "let tm{} = match self.", result.0)?;
             write_iter_name(out, function, &query_spec, TupleAge::All)?;
             write!(out, "(")?;
@@ -253,24 +254,32 @@ fn write_action(
             }
             write!(out, ").next() {{\n")?;
 
-            for _ in 0 .. indent + 1 { write!(out, "  ")?; }
+            for _ in 0..indent + 1 {
+                write!(out, "  ")?;
+            }
             write!(out, "Some(result) => result,\n")?;
 
-            for _ in 0 .. indent + 1 { write!(out, "  ")?; }
+            for _ in 0..indent + 1 {
+                write!(out, "  ")?;
+            }
             write!(out, "None => self.{}.new(),\n", cod)?;
 
-            for _ in 0 .. indent { write!(out, "  ")?; }
+            for _ in 0..indent {
+                write!(out, "  ")?;
+            }
             write!(out, "}}\n")?;
 
-            for _ in 0 .. indent { write!(out, "  ")?; }
+            for _ in 0..indent {
+                write!(out, "  ")?;
+            }
             write!(out, "{}_new.push({}(", function, function)?;
             for tm in args.iter().chain(once(result)) {
                 write!(out, "tm{}, ", tm.0)?;
             }
             write!(out, "));\n")?;
-        },
-        AddTuple{relation, args} => {
-            for _ in 0 .. indent {
+        }
+        AddTuple { relation, args } => {
+            for _ in 0..indent {
                 write!(out, "  ")?;
             }
             write!(out, "{}_new.push({}(", relation, relation)?;
@@ -278,13 +287,13 @@ fn write_action(
                 write!(out, "tm{}, ", tm.0)?;
             }
             write!(out, "));\n")?;
-        },
-        Equate{sort, lhs, rhs} => {
-            for _ in 0 .. indent {
+        }
+        Equate { sort, lhs, rhs } => {
+            for _ in 0..indent {
                 write!(out, "  ")?;
             }
             write!(out, "{}_new_eqs.push((tm{}, tm{}));\n", sort, lhs.0, rhs.0)?;
-        },
+        }
     }
     Ok(())
 }
@@ -296,20 +305,28 @@ fn write_closure(
 ) -> io::Result<()> {
     write!(out, "  pub fn close(&mut self) {{\n")?;
     for (relation, _) in signature.relations() {
-        write!(out, "    let mut {}_new: Vec<{}> = Vec::new();\n", relation, relation)?;
+        write!(
+            out,
+            "    let mut {}_new: Vec<{}> = Vec::new();\n",
+            relation, relation
+        )?;
     }
     write!(out, "\n")?;
     for (sort, _) in signature.sorts() {
-        write!(out, "    let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n", sort, sort, sort)?;
+        write!(
+            out,
+            "    let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n",
+            sort, sort, sort
+        )?;
     }
     write!(out, "\n")?;
 
     write!(out, "    while self.is_dirty() {{\n")?;
     for query_action in query_actions {
         let queries_len = query_action.queries.len();
-        for new_index in 0 .. queries_len {
-            let ages =
-                repeat(TupleAge::All).take(new_index)
+        for new_index in 0..queries_len {
+            let ages = repeat(TupleAge::All)
+                .take(new_index)
                 .chain(once(TupleAge::Dirty))
                 .chain(repeat(TupleAge::All).take(queries_len - new_index - 1));
             let query_ages = query_action.queries.iter().zip(ages);
@@ -344,11 +361,7 @@ fn write_closure(
     Ok(())
 }
 
-fn write_theory_struct(
-    out: &mut impl Write,
-    name: &str,
-    signature: &Signature,
-) -> io::Result<()> {
+fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
     write!(out, "pub struct {} {{\n", name)?;
     for sort in signature.sorts().keys() {
         write_sort_fields(out, sort.as_str())?;

@@ -1,5 +1,5 @@
-pub use crate::direct_ast::{Sort, Predicate, Function};
 use crate::direct_ast;
+pub use crate::direct_ast::{Function, Predicate, Sort};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Term(pub usize);
@@ -39,7 +39,7 @@ impl TermUniverse {
     pub fn len(&self) -> usize {
         self.0.len()
     }
-    pub fn iter_terms(&self) -> impl Iterator<Item=(Term, &TermData)> {
+    pub fn iter_terms(&self) -> impl Iterator<Item = (Term, &TermData)> {
         self.0.iter().enumerate().map(|(i, data)| (Term(i), data))
     }
 }
@@ -74,16 +74,15 @@ pub struct Sequent {
 
 fn translate_term(term: &direct_ast::Term, universe: &mut TermUniverse) -> Term {
     match term {
-        direct_ast::Term::Variable(name) => {
-            universe.new_term(TermData::Variable(name.clone()))
-        },
-        direct_ast::Term::Wildcard => {
-            universe.new_term(TermData::Wildcard)
-        },
+        direct_ast::Term::Variable(name) => universe.new_term(TermData::Variable(name.clone())),
+        direct_ast::Term::Wildcard => universe.new_term(TermData::Wildcard),
         direct_ast::Term::Application(f, args) => {
-            let translated_args = args.iter().map(|arg| translate_term(arg, universe)).collect();
+            let translated_args = args
+                .iter()
+                .map(|arg| translate_term(arg, universe))
+                .collect();
             universe.new_term(TermData::Application(f.clone(), translated_args))
-        },
+        }
     }
 }
 
@@ -94,25 +93,39 @@ fn translate_atom(atom: &direct_ast::Atom, universe: &mut TermUniverse) -> Atom 
             let translated_lhs = translate_term(lhs, universe);
             let translated_rhs = translate_term(rhs, universe);
             AtomData::Equal(translated_lhs, translated_rhs)
-        },
+        }
         direct_ast::Atom::Defined(tm, sort) => {
             let translated_tm = translate_term(tm, universe);
             AtomData::Defined(translated_tm, sort.clone())
-        },
+        }
         direct_ast::Atom::Predicate(pred, args) => {
-            let translated_args = args.iter().map(|arg| translate_term(arg, universe)).collect();
+            let translated_args = args
+                .iter()
+                .map(|arg| translate_term(arg, universe))
+                .collect();
             AtomData::Predicate(pred.clone(), translated_args)
-        },
+        }
     };
     let terms_end = Term(universe.len());
-    Atom{data, terms_begin, terms_end}
+    Atom {
+        data,
+        terms_begin,
+        terms_end,
+    }
 }
 
 fn translate_formula(universe: &mut TermUniverse, formula_atoms: &[direct_ast::Atom]) -> Formula {
     let terms_begin = Term(universe.len());
-    let atoms = formula_atoms.iter().map(|atom| translate_atom(atom, universe)).collect();
+    let atoms = formula_atoms
+        .iter()
+        .map(|atom| translate_atom(atom, universe))
+        .collect();
     let terms_end = Term(universe.len());
-    Formula{atoms, terms_begin, terms_end}
+    Formula {
+        atoms,
+        terms_begin,
+        terms_end,
+    }
 }
 
 impl Sequent {
@@ -124,23 +137,32 @@ impl Sequent {
             Implication(premise, conclusion) => Sequent {
                 premise: translate_formula(&mut universe, &premise.0),
                 conclusion: translate_formula(&mut universe, &conclusion.0),
-                universe
+                universe,
             },
-            Reduction{premise, from_function, from_args, to} => {
+            Reduction {
+                premise,
+                from_function,
+                from_args,
+                to,
+            } => {
                 // Translate premise atoms.
                 let mut premise = translate_formula(&mut universe, &premise.0);
 
                 // Add
                 //     !from_arg[0] & !from_arg[1] & ...
                 // to premise.
-                let from_args: Vec<Term> =
-                    from_args.iter()
+                let from_args: Vec<Term> = from_args
+                    .iter()
                     .map(|arg| {
                         let terms_begin = Term(universe.len());
                         let arg = translate_term(arg, &mut universe);
                         let terms_end = Term(universe.len());
                         let data = AtomData::Defined(arg, None);
-                        premise.atoms.push(Atom{terms_begin, terms_end, data});
+                        premise.atoms.push(Atom {
+                            terms_begin,
+                            terms_end,
+                            data,
+                        });
                         arg
                     })
                     .collect();
@@ -152,22 +174,39 @@ impl Sequent {
                 let to = translate_term(to, &mut universe);
                 let terms_end = Term(universe.len());
                 let data = AtomData::Defined(to, None);
-                premise.atoms.push(Atom{terms_begin, terms_end, data});
+                premise.atoms.push(Atom {
+                    terms_begin,
+                    terms_end,
+                    data,
+                });
 
                 // Update terms_end of premise.
                 premise.terms_end = terms_end;
 
                 // Build conclusion: from = to. Only "from" is not yet defined.
                 let terms_begin = Term(universe.len());
-                let from = universe.new_term(TermData::Application(from_function.to_string(), from_args));
+                let from =
+                    universe.new_term(TermData::Application(from_function.to_string(), from_args));
                 let terms_end = Term(universe.len());
                 // TODO: Think about terms_begin and terms_end here. Shouldn't this encompass all
                 // arg terms and descendants?
-                let eq = Atom{terms_begin, terms_end, data: AtomData::Equal(from, to)};
-                let conclusion = Formula{terms_begin, terms_end, atoms: vec![eq]};
+                let eq = Atom {
+                    terms_begin,
+                    terms_end,
+                    data: AtomData::Equal(from, to),
+                };
+                let conclusion = Formula {
+                    terms_begin,
+                    terms_end,
+                    atoms: vec![eq],
+                };
 
-                Sequent{premise, conclusion, universe}
-            },
+                Sequent {
+                    premise,
+                    conclusion,
+                    universe,
+                }
+            }
         }
     }
 }
