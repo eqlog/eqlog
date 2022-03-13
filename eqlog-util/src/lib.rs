@@ -1,6 +1,6 @@
 mod unification;
 
-pub use crate::unification::*;
+pub use crate::unification::Unification;
 
 #[macro_export]
 macro_rules! eqlog_mod {

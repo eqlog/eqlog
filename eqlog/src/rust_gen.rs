@@ -30,6 +30,24 @@ fn write_sort_type(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
     Ok(())
 }
 
+fn write_sort_from_u32_impl(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
+    write!(
+        out,
+        "impl Into<u32> for {} {{ fn into(self) -> u32 {{ self.0 }} }}\n",
+        sort.0
+    )?;
+    Ok(())
+}
+
+fn write_sort_into_u32_impl(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
+    write!(
+        out,
+        "impl From<u32> for {} {{ fn from(x: u32) -> Self {{ {}(x) }} }}\n",
+        sort.0, sort.0
+    )?;
+    Ok(())
+}
+
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
 fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
@@ -52,7 +70,12 @@ fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io:
 }
 
 fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
-    write!(out, "  {}: Unification<{}>,\n", name.to_case(Snake), name)?;
+    write!(
+        out,
+        "  {}_equalities: Unification<{}>,\n",
+        name.to_case(Snake),
+        name
+    )?;
     write!(out, "  {}_dirty: {},\n", name.to_case(Snake), name)?;
     Ok(())
 }
@@ -268,22 +291,48 @@ fn write_action(
             for _ in 0..indent + 1 {
                 write!(out, "  ")?;
             }
-            write!(out, "Some(result) => result,\n")?;
+            write!(out, "Some(result) => result.{},\n", dom.len())?;
 
             for _ in 0..indent + 1 {
                 write!(out, "  ")?;
             }
-            write!(out, "None => self.{}.new(),\n", cod)?;
+            write!(out, "None => {{\n")?;
+
+            for _ in 0..indent + 2 {
+                write!(out, "  ")?;
+            }
+            write!(
+                out,
+                "let new_el = {}((self.{}_equalities.len() + {}_new_el_num) as u32);\n",
+                cod,
+                cod.to_case(Snake),
+                cod.to_case(Snake)
+            )?;
+
+            for _ in 0..indent + 2 {
+                write!(out, "  ")?;
+            }
+            write!(out, "{}_new_el_num += 1;\n", cod.to_case(Snake))?;
+
+            for _ in 0..indent + 2 {
+                write!(out, "  ")?;
+            }
+            write!(out, "new_el\n")?;
+
+            for _ in 0..indent + 1 {
+                write!(out, "  ")?;
+            }
+            write!(out, "}},\n")?;
 
             for _ in 0..indent {
                 write!(out, "  ")?;
             }
-            write!(out, "}}\n")?;
+            write!(out, "}};\n")?;
 
             for _ in 0..indent {
                 write!(out, "  ")?;
             }
-            write!(out, "{}_new.push({}(", function, function)?;
+            write!(out, "{}_new.push({}(", function.to_case(Snake), function)?;
             for tm in args.iter().chain(once(result)) {
                 write!(out, "tm{}, ", tm.0)?;
             }
@@ -293,7 +342,7 @@ fn write_action(
             for _ in 0..indent {
                 write!(out, "  ")?;
             }
-            write!(out, "{}_new.push({}(", relation, relation)?;
+            write!(out, "{}_new.push({}(", relation.to_case(Snake), relation)?;
             for tm in args {
                 write!(out, "tm{}, ", tm.0)?;
             }
@@ -373,6 +422,37 @@ fn write_functionality_step(
     Ok(())
 }
 
+fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    write!(
+        out,
+        "      for _ in 0 .. {}_new_el_num {{\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "        self.{}_equalities.new_element();\n",
+        sort.to_case(Snake)
+    )?;
+    write!(out, "      }}\n")?;
+    write!(out, "      {}_new_el_num = 0;\n", sort.to_case(Snake))?;
+    Ok(())
+}
+
+fn write_add_new_equalities(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    write!(
+        out,
+        "      for (lhs, rhs) in {}_new_eqs.drain(..) {{\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "        self.{}_equalities.union(lhs, rhs); \n",
+        sort.to_case(Snake)
+    )?;
+    write!(out, "      }}\n")?;
+    Ok(())
+}
+
 fn write_closure(
     out: &mut impl Write,
     signature: &Signature,
@@ -390,6 +470,11 @@ fn write_closure(
     }
     write!(out, "\n")?;
     for (sort, _) in signature.sorts() {
+        write!(
+            out,
+            "    let mut {}_new_el_num: usize = 0;\n",
+            sort.to_case(Snake),
+        )?;
         write!(
             out,
             "    let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n",
@@ -438,14 +523,9 @@ fn write_closure(
     }
 
     for (sort, _) in signature.sorts() {
-        write!(
-            out,
-            "      if !{}_new_eqs.is_empty() {{\n",
-            sort.to_case(Snake)
-        )?;
-        write!(out, "        panic!(\"Equalities not implemented\");\n")?;
-        write!(out, "      }}\n")?;
-        write!(out, "      {}_new_eqs.clear();\n", sort.to_case(Snake))?;
+        write_add_new_elements(out, sort)?;
+        write_add_new_equalities(out, sort)?;
+        write!(out, "\n")?;
     }
 
     write!(out, "    }}\n")?;
@@ -480,10 +560,15 @@ fn write_theory_impl(
     write!(out, "impl {} {{\n", name)?;
     for (rel, arity) in signature.relations() {
         let query_index_map = index_selection.get(rel).unwrap();
-        for query in query_index_map.keys().chain(once(&QuerySpec::new())) {
+        for query in query_index_map.keys() {
             write_iter_impl(out, rel, &arity, query, TupleAge::All)?;
             write_iter_impl(out, rel, &arity, query, TupleAge::Dirty)?;
         }
+        let unrestrained_query = QuerySpec::new();
+        if let None = query_index_map.get(&unrestrained_query) {
+            write_iter_impl(out, rel, &arity, &unrestrained_query, TupleAge::All)?;
+            write_iter_impl(out, rel, &arity, &unrestrained_query, TupleAge::Dirty)?;
+        };
         write!(out, "\n")?;
     }
 
@@ -508,6 +593,8 @@ pub fn write_theory(
     write!(out, "\n")?;
     for sort in signature.sorts().values() {
         write_sort_type(out, sort)?;
+        write_sort_from_u32_impl(out, sort)?;
+        write_sort_into_u32_impl(out, sort)?;
     }
 
     write!(out, "\n")?;
