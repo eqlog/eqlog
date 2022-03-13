@@ -7,6 +7,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     let mut result = Vec::new();
@@ -59,7 +60,11 @@ fn process_file(in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
         &query_actions,
         &index_selection,
     )?;
-    fs::write(out_file, &result)?;
+    fs::write(&out_file, &result)?;
+    Command::new("rustfmt")
+        .arg(&out_file)
+        .status()
+        .expect("Failed to format eqlog output");
     Ok(())
 }
 
