@@ -76,7 +76,6 @@ fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
         name.to_case(Snake),
         name
     )?;
-    write!(out, "  {}_dirty: {},\n", name.to_case(Snake), name)?;
     Ok(())
 }
 
@@ -317,6 +316,15 @@ fn write_action(
             for _ in 0..indent + 2 {
                 write!(out, "  ")?;
             }
+            write!(out, "{}_new.push({}(", function.to_case(Snake), function)?;
+            for tm in args.iter() {
+                write!(out, "tm{}, ", tm.0)?;
+            }
+            write!(out, "new_el));\n")?;
+
+            for _ in 0..indent + 2 {
+                write!(out, "  ")?;
+            }
             write!(out, "new_el\n")?;
 
             for _ in 0..indent + 1 {
@@ -328,15 +336,6 @@ fn write_action(
                 write!(out, "  ")?;
             }
             write!(out, "}};\n")?;
-
-            for _ in 0..indent {
-                write!(out, "  ")?;
-            }
-            write!(out, "{}_new.push({}(", function.to_case(Snake), function)?;
-            for tm in args.iter().chain(once(result)) {
-                write!(out, "tm{}, ", tm.0)?;
-            }
-            write!(out, "));\n")?;
         }
         AddTuple { relation, args } => {
             for _ in 0..indent {
