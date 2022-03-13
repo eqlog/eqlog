@@ -72,7 +72,7 @@ fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io:
 fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
     write!(
         out,
-        "  {}_equalities: Unification<{}>,\n",
+        "{}_equalities: Unification<{}>,\n",
         name.to_case(Snake),
         name
     )?;
@@ -100,23 +100,22 @@ fn write_relation_field_name(out: &mut impl Write, name: &str, age: TupleAge) ->
 }
 
 fn write_relation_field(out: &mut impl Write, name: &str, age: TupleAge) -> io::Result<()> {
-    write!(out, "  ")?;
     write_relation_field_name(out, name, age)?;
-    write!(out, ": BTreeSet<{}>,\n", name)?;
+    write!(out, " : BTreeSet<{}>,\n", name)?;
     Ok(())
 }
 
 fn write_is_dirty_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
-    write!(out, "  fn is_dirty(&self) -> bool {{\n")?;
-    write!(out, "    false\n")?;
+    write!(out, "fn is_dirty(&self) -> bool {{\n")?;
+    write!(out, "false")?;
     for (relation, _) in signature.relations() {
         write!(
             out,
-            "      || !self.{}_dirty.is_empty()\n",
+            " || !self.{}_dirty.is_empty()",
             relation.to_case(Snake)
         )?;
     }
-    write!(out, "  }}\n")?;
+    write!(out, "}}\n")?;
     Ok(())
 }
 
@@ -146,39 +145,39 @@ fn write_iter_impl(
     query: &QuerySpec,
     age: TupleAge,
 ) -> io::Result<()> {
-    write!(out, "  fn ")?;
+    write!(out, "fn ")?;
     write_iter_name(out, relation, query, age)?;
     write!(out, "(&self")?;
     for i in query.projections.iter().copied() {
         write!(out, ", arg{}: {}", i, arity[i])?;
     }
     write!(out, ") -> impl '_ + Iterator<Item={}> {{\n", relation)?;
-    write!(out, "    self.")?;
+    write!(out, "self.")?;
     write_relation_field_name(out, relation, age)?;
     write!(out, ".iter().filter(move |_t| {{\n")?;
 
-    write!(out, "      let proj_matches = true")?;
+    write!(out, "let proj_matches = true")?;
     for i in query.projections.iter().copied() {
         write!(out, " && _t.{} == arg{}", i, i)?;
     }
     write!(out, ";\n")?;
 
     for (k, diagonal) in query.diagonals.iter().enumerate() {
-        write!(out, "      let diag{}_matches = true", k)?;
+        write!(out, "let diag{}_matches = true", k)?;
         for (prev, next) in diagonal.iter().zip(diagonal.iter().skip(1)) {
             write!(out, " && _t.{} == _t.{}", prev, next)?;
         }
         write!(out, ";\n")?;
     }
 
-    write!(out, "      proj_matches")?;
+    write!(out, "proj_matches")?;
     for k in 0..query.diagonals.len() {
         write!(out, " && diag{}_matches", k)?;
     }
     write!(out, "\n")?;
 
-    write!(out, "    }}).copied()\n")?;
-    write!(out, "  }}\n")?;
+    write!(out, "}}).copied()\n")?;
+    write!(out, "}}\n")?;
     Ok(())
 }
 
@@ -187,13 +186,7 @@ fn write_query_loop_headers<'a>(
     signature: &Signature,
     query_ages: impl Iterator<Item = (&'a Query, TupleAge)>,
 ) -> io::Result<()> {
-    let mut indent = 3;
     for (query, age) in query_ages {
-        for _ in 0..indent {
-            write!(out, "  ")?;
-        }
-        indent += 1;
-
         use Query::*;
         match query {
             Relation {
@@ -246,23 +239,13 @@ fn write_query_loop_headers<'a>(
 }
 
 fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Result<()> {
-    let mut indent = 2 + query_len;
-    while indent > 2 {
-        for _ in 0..indent {
-            write!(out, "  ")?;
-        }
-        indent -= 1;
+    for _ in 0..query_len {
         write!(out, "}}\n")?;
     }
     Ok(())
 }
 
-fn write_action(
-    out: &mut impl Write,
-    signature: &Signature,
-    action: &Action,
-    indent: usize,
-) -> io::Result<()> {
+fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) -> io::Result<()> {
     use Action::*;
     match action {
         AddTerm {
@@ -276,9 +259,6 @@ fn write_action(
                 diagonals: BTreeSet::new(),
             };
 
-            for _ in 0..indent {
-                write!(out, "  ")?;
-            }
             write!(out, "let tm{} = match self.", result.0)?;
             write_iter_name(out, function, &query_spec, TupleAge::All)?;
             write!(out, "(")?;
@@ -287,19 +267,10 @@ fn write_action(
             }
             write!(out, ").next() {{\n")?;
 
-            for _ in 0..indent + 1 {
-                write!(out, "  ")?;
-            }
             write!(out, "Some(result) => result.{},\n", dom.len())?;
 
-            for _ in 0..indent + 1 {
-                write!(out, "  ")?;
-            }
             write!(out, "None => {{\n")?;
 
-            for _ in 0..indent + 2 {
-                write!(out, "  ")?;
-            }
             write!(
                 out,
                 "let new_el = {}((self.{}_equalities.len() + {}_new_el_num) as u32);\n",
@@ -308,39 +279,21 @@ fn write_action(
                 cod.to_case(Snake)
             )?;
 
-            for _ in 0..indent + 2 {
-                write!(out, "  ")?;
-            }
             write!(out, "{}_new_el_num += 1;\n", cod.to_case(Snake))?;
 
-            for _ in 0..indent + 2 {
-                write!(out, "  ")?;
-            }
             write!(out, "{}_new.push({}(", function.to_case(Snake), function)?;
             for tm in args.iter() {
                 write!(out, "tm{}, ", tm.0)?;
             }
             write!(out, "new_el));\n")?;
 
-            for _ in 0..indent + 2 {
-                write!(out, "  ")?;
-            }
             write!(out, "new_el\n")?;
 
-            for _ in 0..indent + 1 {
-                write!(out, "  ")?;
-            }
             write!(out, "}},\n")?;
 
-            for _ in 0..indent {
-                write!(out, "  ")?;
-            }
             write!(out, "}};\n")?;
         }
         AddTuple { relation, args } => {
-            for _ in 0..indent {
-                write!(out, "  ")?;
-            }
             write!(out, "{}_new.push({}(", relation.to_case(Snake), relation)?;
             for tm in args {
                 write!(out, "tm{}, ", tm.0)?;
@@ -348,9 +301,6 @@ fn write_action(
             write!(out, "));\n")?;
         }
         Equate { sort, lhs, rhs } => {
-            for _ in 0..indent {
-                write!(out, "  ")?;
-            }
             write!(
                 out,
                 "{}_new_eqs.push((tm{}, tm{}));\n",
@@ -377,7 +327,7 @@ fn write_query_action_step(
         let query_ages = query_action.queries.iter().zip(ages);
         write_query_loop_headers(out, signature, query_ages)?;
         for action in query_action.actions.iter() {
-            write_action(out, signature, action, queries_len + 3)?;
+            write_action(out, signature, action)?;
         }
         write_query_loop_footers(out, queries_len)?;
     }
@@ -416,39 +366,35 @@ fn write_functionality_step(
     };
 
     write_query_loop_headers(out, signature, query_ages.iter().copied())?;
-    write_action(out, signature, &action, query_ages.len() + 3)?;
+    write_action(out, signature, &action)?;
     write_query_loop_footers(out, query_ages.len())?;
     Ok(())
 }
 
 fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    write!(out, "for _ in 0 .. {}_new_el_num {{\n", sort.to_case(Snake))?;
     write!(
         out,
-        "      for _ in 0 .. {}_new_el_num {{\n",
+        "self.{}_equalities.new_element();\n",
         sort.to_case(Snake)
     )?;
-    write!(
-        out,
-        "        self.{}_equalities.new_element();\n",
-        sort.to_case(Snake)
-    )?;
-    write!(out, "      }}\n")?;
-    write!(out, "      {}_new_el_num = 0;\n", sort.to_case(Snake))?;
+    write!(out, "}}\n")?;
+    write!(out, "{}_new_el_num = 0;\n", sort.to_case(Snake))?;
     Ok(())
 }
 
 fn write_add_new_equalities(out: &mut impl Write, sort: &str) -> io::Result<()> {
     write!(
         out,
-        "      for (lhs, rhs) in {}_new_eqs.drain(..) {{\n",
+        "for (lhs, rhs) in {}_new_eqs.drain(..) {{\n",
         sort.to_case(Snake)
     )?;
     write!(
         out,
-        "        self.{}_equalities.union(lhs, rhs); \n",
+        "self.{}_equalities.union(lhs, rhs); \n",
         sort.to_case(Snake)
     )?;
-    write!(out, "      }}\n")?;
+    write!(out, "}}\n")?;
     Ok(())
 }
 
@@ -457,12 +403,12 @@ fn write_closure(
     signature: &Signature,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
-    write!(out, "  #[allow(dead_code)]\n")?;
-    write!(out, "  pub fn close(&mut self) {{\n")?;
+    write!(out, "#[allow(dead_code)]\n")?;
+    write!(out, "pub fn close(&mut self) {{\n")?;
     for (relation, _) in signature.relations() {
         write!(
             out,
-            "    let mut {}_new: Vec<{}> = Vec::new();\n",
+            "let mut {}_new: Vec<{}> = Vec::new();\n",
             relation.to_case(Snake),
             relation
         )?;
@@ -471,12 +417,12 @@ fn write_closure(
     for (sort, _) in signature.sorts() {
         write!(
             out,
-            "    let mut {}_new_el_num: usize = 0;\n",
+            "let mut {}_new_el_num: usize = 0;\n",
             sort.to_case(Snake),
         )?;
         write!(
             out,
-            "    let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n",
+            "let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n",
             sort.to_case(Snake),
             sort,
             sort
@@ -484,7 +430,7 @@ fn write_closure(
     }
     write!(out, "\n")?;
 
-    write!(out, "    while self.is_dirty() {{\n")?;
+    write!(out, "while self.is_dirty() {{\n")?;
     for query_action in query_actions {
         write_query_action_step(out, signature, query_action)?;
         write!(out, "\n")?;
@@ -496,28 +442,20 @@ fn write_closure(
     }
 
     for (relation, _) in signature.relations() {
+        write!(out, "self.{}_dirty.clear();\n", relation.to_case(Snake))?;
         write!(
             out,
-            "      self.{}_dirty.clear();\n",
+            "for t in {}_new.drain(..) {{\n",
             relation.to_case(Snake)
         )?;
         write!(
             out,
-            "      for t in {}_new.drain(..) {{\n",
+            "if self.{}_all.insert(t) {{\n",
             relation.to_case(Snake)
         )?;
-        write!(
-            out,
-            "        if self.{}_all.insert(t) {{\n",
-            relation.to_case(Snake)
-        )?;
-        write!(
-            out,
-            "          self.{}_dirty.insert(t); \n",
-            relation.to_case(Snake)
-        )?;
-        write!(out, "        }}\n")?;
-        write!(out, "      }}\n")?;
+        write!(out, "self.{}_dirty.insert(t); \n", relation.to_case(Snake))?;
+        write!(out, "}}\n")?;
+        write!(out, "}}\n")?;
         write!(out, "\n")?;
     }
 
@@ -527,9 +465,9 @@ fn write_closure(
         write!(out, "\n")?;
     }
 
-    write!(out, "    }}\n")?;
+    write!(out, "}}\n")?;
 
-    write!(out, "  }}\n")?;
+    write!(out, "}}\n")?;
     Ok(())
 }
 
