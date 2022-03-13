@@ -372,19 +372,21 @@ fn write_functionality_step(
 }
 
 fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    write!(out, "for _ in 0 .. {}_new_el_num {{\n", sort.to_case(Snake))?;
     write!(
         out,
         "self.{}_equalities.increase_size({}_new_el_num);\n",
         sort.to_case(Snake),
         sort.to_case(Snake)
     )?;
-    write!(out, "}}\n")?;
     write!(out, "{}_new_el_num = 0;\n", sort.to_case(Snake))?;
     Ok(())
 }
 
-fn write_add_new_equalities(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_add_new_equalities(
+    out: &mut impl Write,
+    signature: &Signature,
+    sort: &str,
+) -> io::Result<()> {
     write!(
         out,
         "for (lhs, rhs) in {}_new_eqs.drain(..) {{\n",
@@ -395,6 +397,39 @@ fn write_add_new_equalities(out: &mut impl Write, sort: &str) -> io::Result<()> 
         "self.{}_equalities.union_into(lhs, rhs); \n",
         sort.to_case(Snake)
     )?;
+    for (relation, arity) in signature.relations() {
+        if let None = arity.iter().find(|s| **s == sort) {
+            continue;
+        }
+        write!(
+            out,
+            "let {}_contains_lhs = |t : &&{}| {{ false \n",
+            relation.to_case(Snake),
+            relation
+        )?;
+        for (i, arg_sort) in arity.iter().enumerate() {
+            if *arg_sort == sort {
+                write!(out, " || t.{} == lhs", i)?;
+            }
+        }
+        write!(out, " }};\n")?;
+
+        write!(out, "{}_new.extend(self.", relation.to_case(Snake))?;
+        write_relation_field_name(out, relation, TupleAge::All)?;
+        write!(
+            out,
+            ".iter().filter({}_contains_lhs));\n",
+            relation.to_case(Snake)
+        )?;
+
+        write!(
+            out,
+            "self.{}_all.retain(|t| !{}_contains_lhs(&t));",
+            relation.to_case(Snake),
+            relation.to_case(Snake)
+        )?;
+        write!(out, "\n")?;
+    }
     write!(out, "}}\n")?;
     Ok(())
 }
@@ -442,27 +477,37 @@ fn write_closure(
         write!(out, "\n")?;
     }
 
-    for (relation, _) in signature.relations() {
+    for (sort, _) in signature.sorts() {
+        write_add_new_elements(out, sort)?;
+        write_add_new_equalities(out, signature, sort)?;
+        write!(out, "\n")?;
+    }
+
+    for (relation, arity) in signature.relations() {
         write!(out, "self.{}_dirty.clear();\n", relation.to_case(Snake))?;
         write!(
             out,
             "for t in {}_new.drain(..) {{\n",
             relation.to_case(Snake)
         )?;
+        write!(out, "let u = {}(", relation)?;
+        for (i, sort) in arity.iter().enumerate() {
+            write!(
+                out,
+                "self.{}_equalities.root(t.{}), ",
+                sort.to_case(Snake),
+                i
+            )?;
+        }
+        write!(out, ");\n")?;
         write!(
             out,
-            "if self.{}_all.insert(t) {{\n",
+            "if self.{}_all.insert(u) {{\n",
             relation.to_case(Snake)
         )?;
-        write!(out, "self.{}_dirty.insert(t); \n", relation.to_case(Snake))?;
+        write!(out, "self.{}_dirty.insert(u); \n", relation.to_case(Snake))?;
         write!(out, "}}\n")?;
         write!(out, "}}\n")?;
-        write!(out, "\n")?;
-    }
-
-    for (sort, _) in signature.sorts() {
-        write_add_new_elements(out, sort)?;
-        write_add_new_equalities(out, sort)?;
         write!(out, "\n")?;
     }
 
