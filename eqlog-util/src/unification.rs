@@ -1,5 +1,3 @@
-use std::mem::swap;
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Unification<T> {
     parents: Vec<T>,
@@ -22,29 +20,18 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         }
         el
     }
-    pub fn union(&mut self, mut lhs: T, mut rhs: T) -> bool {
-        lhs = self.root(lhs);
-        rhs = self.root(rhs);
+    pub fn union_into(&mut self, lhs: T, rhs: T) {
+        assert!(self.root(lhs) == lhs);
+        assert!(self.root(rhs) == rhs);
 
-        if lhs == rhs {
-            return false;
-        }
-
-        // Make sure that lhs has size >= than size of rhs.
-        if self.sizes[lhs.into() as usize] < self.sizes[rhs.into() as usize] {
-            swap(&mut lhs, &mut rhs);
-        }
-
-        self.parents[rhs.into() as usize] = lhs;
-        self.sizes[rhs.into() as usize] += self.sizes[lhs.into() as usize];
-        true
+        self.parents[lhs.into() as usize] = rhs;
     }
-    pub fn new_element(&mut self) -> T {
-        assert!(self.parents.len() > u32::MAX as usize, "Overflow");
-        let el = T::from(self.parents.len() as u32);
-        self.parents.push(el);
-        self.sizes.push(1);
-        el
+    pub fn increase_size(&mut self, new_size: usize) {
+        assert!(new_size >= self.len());
+        assert!((u32::MAX as usize) < new_size);
+        for i in self.len()..new_size {
+            self.parents.push(T::from(i as u32));
+        }
     }
     pub fn len(&self) -> usize {
         self.parents.len()

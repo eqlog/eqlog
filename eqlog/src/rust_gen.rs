@@ -375,7 +375,8 @@ fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
     write!(out, "for _ in 0 .. {}_new_el_num {{\n", sort.to_case(Snake))?;
     write!(
         out,
-        "self.{}_equalities.new_element();\n",
+        "self.{}_equalities.increase_size({}_new_el_num);\n",
+        sort.to_case(Snake),
         sort.to_case(Snake)
     )?;
     write!(out, "}}\n")?;
@@ -391,7 +392,7 @@ fn write_add_new_equalities(out: &mut impl Write, sort: &str) -> io::Result<()> 
     )?;
     write!(
         out,
-        "self.{}_equalities.union(lhs, rhs); \n",
+        "self.{}_equalities.union_into(lhs, rhs); \n",
         sort.to_case(Snake)
     )?;
     write!(out, "}}\n")?;
