@@ -3,5 +3,7 @@ Sort Mor;
 
 Pred Signature : Obj * Mor * Obj;
 Func Comp : Mor * Mor -> Mor;
+Func Id : Obj -> Mor;
 
 Axiom Signature(x, f, y) & Signature(y, g, z) => Comp(g, f)! & Signature(x, Comp(g, f), z);
+Axiom x! : Obj & y! : Obj => Id(x)! & Id(y)!;

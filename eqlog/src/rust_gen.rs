@@ -14,6 +14,7 @@ use Case::Snake;
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     write!(out, "use std::collections::BTreeSet;\n")?;
+    write!(out, "use std::collections::HashSet;\n")?;
     write!(out, "use eqlog_util::Unification;\n")?;
     Ok(())
 }
@@ -76,6 +77,8 @@ fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
         name.to_case(Snake),
         name
     )?;
+    write!(out, "{}_all: HashSet<{}>,\n", name.to_case(Snake), name)?;
+    write!(out, "{}_dirty: HashSet<{}>,\n", name.to_case(Snake), name)?;
     Ok(())
 }
 
@@ -230,8 +233,14 @@ fn write_query_loop_headers<'a>(
                 }
                 write!(out, ") {{\n")?;
             }
-            Sort { .. } => {
-                panic!("Not implemented")
+            Sort { sort, result } => {
+                write!(
+                    out,
+                    "for tm{} in self.{}_{}.iter().copied() {{\n",
+                    result.0,
+                    sort.to_case(Snake),
+                    age
+                )?;
             }
         }
     }
@@ -372,12 +381,25 @@ fn write_functionality_step(
 }
 
 fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    write!(out, "self.{}_dirty.clear();\n", sort.to_case(Snake))?;
     write!(
         out,
-        "self.{}_equalities.increase_size({}_new_el_num);\n",
+        "for new_id in self.{}_equalities.len() .. self.{}_equalities.len() + {}_new_el_num {{\n",
+        sort.to_case(Snake),
         sort.to_case(Snake),
         sort.to_case(Snake)
     )?;
+    write!(out, "let tm = {}(new_id as u32);\n", sort)?;
+    write!(
+        out,
+        "if tm == self.{}_equalities.root(tm) {{\n",
+        sort.to_case(Snake)
+    )?;
+
+    write!(out, "self.{}_dirty.insert(tm);\n", sort.to_case(Snake),)?;
+    write!(out, "self.{}_all.insert(tm);\n", sort.to_case(Snake),)?;
+    write!(out, "}}\n")?;
+    write!(out, "}}\n")?;
     write!(out, "{}_new_el_num = 0;\n", sort.to_case(Snake))?;
     Ok(())
 }
@@ -389,27 +411,82 @@ fn write_add_new_equalities(
 ) -> io::Result<()> {
     write!(
         out,
+        "let {}_equalities_old_len = self.{}_equalities.len();\n",
+        sort.to_case(Snake),
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "self.{}_equalities.increase_size(self.{}_equalities.len() + {}_new_el_num);\n",
+        sort.to_case(Snake),
+        sort.to_case(Snake),
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
         "for (lhs, rhs) in {}_new_eqs.drain(..) {{\n",
         sort.to_case(Snake)
     )?;
     write!(
         out,
-        "self.{}_equalities.union_into(lhs, rhs); \n",
+        "let lhs = self.{}_equalities.root(lhs);\n",
         sort.to_case(Snake)
     )?;
+    write!(
+        out,
+        "let rhs = self.{}_equalities.root(rhs);\n",
+        sort.to_case(Snake)
+    )?;
+    write!(out, "if lhs == rhs {{ continue; }}\n")?;
+    write!(
+        out,
+        "let lhs_is_old = (lhs.0 as usize) < {}_equalities_old_len;\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "let rhs_is_old = (rhs.0 as usize) < {}_equalities_old_len;\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "let old_removed_term = match (lhs_is_old, rhs_is_old) {{\n"
+    )?;
+    write!(
+        out,
+        "  (false, false) => {{ self.{}_equalities.union_into(lhs, rhs); None }}\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "  (true, false) => {{ self.{}_equalities.union_into(rhs, lhs); None }}\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "  (false, true) => {{ self.{}_equalities.union_into(lhs, rhs); None }}\n",
+        sort.to_case(Snake)
+    )?;
+    write!(
+        out,
+        "  (true, true) => {{ self.{}_equalities.union_into(lhs, rhs); Some(lhs) }}\n",
+        sort.to_case(Snake)
+    )?;
+    write!(out, "}};\n")?;
+    write!(out, "if let Some(tm) = old_removed_term {{\n")?;
     for (relation, arity) in signature.relations() {
         if let None = arity.iter().find(|s| **s == sort) {
             continue;
         }
         write!(
             out,
-            "let {}_contains_lhs = |t : &&{}| {{ false \n",
+            "let {}_contains_tm = |t : &&{}| {{ false \n",
             relation.to_case(Snake),
             relation
         )?;
         for (i, arg_sort) in arity.iter().enumerate() {
             if *arg_sort == sort {
-                write!(out, " || t.{} == lhs", i)?;
+                write!(out, " || t.{} == tm", i)?;
             }
         }
         write!(out, " }};\n")?;
@@ -418,18 +495,19 @@ fn write_add_new_equalities(
         write_relation_field_name(out, relation, TupleAge::All)?;
         write!(
             out,
-            ".iter().filter({}_contains_lhs));\n",
+            ".iter().filter({}_contains_tm));\n",
             relation.to_case(Snake)
         )?;
 
         write!(
             out,
-            "self.{}_all.retain(|t| !{}_contains_lhs(&t));",
+            "self.{}_all.retain(|t| !{}_contains_tm(&t));",
             relation.to_case(Snake),
             relation.to_case(Snake)
         )?;
         write!(out, "\n")?;
     }
+    write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }
@@ -478,8 +556,8 @@ fn write_closure(
     }
 
     for (sort, _) in signature.sorts() {
-        write_add_new_elements(out, sort)?;
         write_add_new_equalities(out, signature, sort)?;
+        write_add_new_elements(out, sort)?;
         write!(out, "\n")?;
     }
 
@@ -513,6 +591,28 @@ fn write_closure(
 
     write!(out, "}}\n")?;
 
+    write!(out, "}}\n")?;
+    Ok(())
+}
+
+fn write_new_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
+    write!(out, "#[allow(dead_code)]\n")?;
+    write!(out, "pub fn new() -> Self {{\n")?;
+    write!(out, "Self {{\n")?;
+    for sort in signature.sorts().keys() {
+        write!(
+            out,
+            "{}_equalities: Unification::new(),\n",
+            sort.to_case(Snake)
+        )?;
+        write!(out, "{}_dirty: HashSet::new(),\n", sort.to_case(Snake))?;
+        write!(out, "{}_all: HashSet::new(),\n", sort.to_case(Snake))?;
+    }
+    for (relation, _) in signature.relations() {
+        write!(out, "{}_all: BTreeSet::new(),\n", relation.to_case(Snake))?;
+        write!(out, "{}_dirty: BTreeSet::new(),\n", relation.to_case(Snake))?;
+    }
+    write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }
@@ -554,6 +654,9 @@ fn write_theory_impl(
         };
         write!(out, "\n")?;
     }
+
+    write_new_impl(out, signature)?;
+    write!(out, "\n")?;
 
     write_is_dirty_impl(out, signature)?;
     write!(out, "\n")?;
