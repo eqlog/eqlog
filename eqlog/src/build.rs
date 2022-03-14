@@ -3,6 +3,7 @@ use crate::grammar::*;
 use crate::index_selection::*;
 use crate::query_action::*;
 use crate::rust_gen::*;
+use convert_case::{Case, Casing};
 use std::env;
 use std::fs;
 use std::io;
@@ -40,7 +41,7 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-fn process_file(in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
+fn process_file(name: &str, in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
     let src: String = fs::read_to_string(in_file)?;
     let (sig, axioms) = TheoryParser::new().parse(&src).unwrap();
     let query_actions: Vec<QueryAction> = axioms
@@ -53,13 +54,7 @@ fn process_file(in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
     let index_selection = select_indices(&sig, &query_actions);
 
     let mut result: Vec<u8> = Vec::new();
-    write_theory(
-        &mut result,
-        "Theory",
-        &sig,
-        &query_actions,
-        &index_selection,
-    )?;
+    write_theory(&mut result, name, &sig, &query_actions, &index_selection)?;
     fs::write(&out_file, &result)?;
     Command::new("rustfmt")
         .arg(&out_file)
@@ -74,11 +69,10 @@ pub fn process_root() -> io::Result<()> {
 
     for in_file in eqlog_files(&in_dir)? {
         println!("Processing file {:?}", &in_file);
-        let out_file = out_dir
-            .join(in_file.strip_prefix(&in_dir).unwrap())
-            .with_extension("rs");
+        let stem = in_file.file_stem().unwrap().to_str().unwrap();
+        let out_file = out_dir.join(stem).with_extension("rs");
         println!("Output file: {:?}", &out_file);
-        process_file(in_file, out_file)?;
+        process_file(&stem.to_case(Case::UpperCamel), in_file, out_file)?;
     }
     Ok(())
 }
