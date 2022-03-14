@@ -1,0 +1,9 @@
+Sort G;
+Func I : -> G;
+Func M : G * G -> G;
+
+Axiom => I()!;
+Axiom M(x, I()) ~> x;
+Axiom M(I(), x) ~> x;
+Axiom M(M(a, b), c) ~> M(a, M(b, c));
+Axiom M(a, M(b, c)) ~> M(M(a, b), c);
