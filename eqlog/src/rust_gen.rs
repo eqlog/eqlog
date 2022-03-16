@@ -473,8 +473,7 @@ fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
     write!(out, "self.{}_dirty.clear();\n", sort.to_case(Snake))?;
     write!(
         out,
-        "for new_id in self.{}_equalities.len() .. self.{}_equalities.len() + {}_new_el_num {{\n",
-        sort.to_case(Snake),
+        "for new_id in {}_equalities_old_len .. self.{}_equalities.len() {{\n",
         sort.to_case(Snake),
         sort.to_case(Snake)
     )?;
