@@ -472,27 +472,6 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
     Ok(())
 }
 
-fn write_query_action_step(
-    out: &mut impl Write,
-    signature: &Signature,
-    query_action: &QueryAction,
-) -> io::Result<()> {
-    let queries_len = query_action.queries.len();
-    for new_index in 0..queries_len {
-        let ages = repeat(TupleAge::All)
-            .take(new_index)
-            .chain(once(TupleAge::Dirty))
-            .chain(repeat(TupleAge::All).take(queries_len - new_index - 1));
-        let query_ages = query_action.queries.iter().zip(ages);
-        write_query_loop_headers(out, signature, query_ages)?;
-        for action in query_action.actions.iter() {
-            write_action(out, signature, action)?;
-        }
-        write_query_loop_footers(out, queries_len)?;
-    }
-    Ok(())
-}
-
 fn write_functionality_step(
     out: &mut impl Write,
     signature: &Signature,
@@ -665,6 +644,41 @@ fn write_add_new_equalities(
     Ok(())
 }
 
+fn write_axiom_step_fn(
+    out: &mut impl Write,
+    signature: &Signature,
+    query_action: &QueryAction,
+    axiom_index: usize,
+) -> io::Result<()> {
+    let queries = &query_action.queries;
+    let actions = &query_action.actions;
+
+    writedoc! {out, "
+        fn axiom_{axiom_index}_step(&self, data: &mut CloseData) {{
+    "}?;
+
+    for new_index in 0..queries.len() {
+        write!(out, "// Query {new_index} is for dirty data.\n")?;
+        let query_ages = queries.iter().enumerate().map(|(i, query)| {
+            let age = if i == new_index {
+                TupleAge::Dirty
+            } else {
+                TupleAge::All
+            };
+            (query, age)
+        });
+        write_query_loop_headers(out, signature, query_ages)?;
+        for action in actions.iter() {
+            write_action(out, signature, action)?;
+        }
+        write_query_loop_footers(out, queries.len())?;
+    }
+
+    writedoc! {out, "
+        }}
+    "}
+}
+
 fn write_closure(
     out: &mut impl Write,
     signature: &Signature,
@@ -676,9 +690,8 @@ fn write_closure(
     write!(out, "\n")?;
 
     write!(out, "while self.is_dirty() {{\n")?;
-    for query_action in query_actions {
-        write_query_action_step(out, signature, query_action)?;
-        write!(out, "\n")?;
+    for i in 0..query_actions.len() {
+        write!(out, "self.axiom_{i}_step(&mut data);\n")?;
     }
 
     for function in signature.functions().values() {
@@ -798,6 +811,10 @@ fn write_theory_impl(
 
     write_is_dirty_impl(out, signature)?;
     write!(out, "\n")?;
+
+    for (i, query_action) in query_actions.iter().enumerate() {
+        write_axiom_step_fn(out, signature, query_action, i)?;
+    }
 
     write_closure(out, signature, query_actions)?;
 
