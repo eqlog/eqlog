@@ -232,19 +232,18 @@ fn write_pub_insert_relation(
     arity: &[&str],
 ) -> io::Result<()> {
     let relation_snake = relation.to_case(Snake);
+    let assign_roots = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "  t.{i} = self.{sort_snake}_equalities.root(t.{i});"
+        ))
+    });
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn insert_{relation_snake}(&mut self, mut t : {relation}) {{
-    "}?;
-    for (i, sort) in arity.iter().enumerate() {
-        let sort_snake = sort.to_case(Snake);
-        writedoc! {out, "
-            t.{i} = self.{sort_snake}_equalities.root(t.{i});
-        "}?;
-    }
-    writedoc! {out, "
-        self.{relation_snake}_all.insert(t);
-        self.{relation_snake}_dirty.insert(t);
+        pub fn insert_{relation_snake}(&mut self, mut t: {relation}) {{
+            self.{relation_snake}_all.insert(t);
+            {assign_roots}
+            self.{relation_snake}_dirty.insert(t);
         }}
     "}
 }
@@ -270,6 +269,52 @@ fn write_pub_iter_sort(out: &mut impl Write, sort: &str) -> io::Result<()> {
         #[allow(dead_code)]
         pub fn iter_{sort_snake}(&mut self) -> impl '_ + Iterator<Item={sort}> {{
             self.{sort_snake}_all.iter().copied()
+        }}
+    "}
+}
+
+fn write_close_data_struct(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
+    let new_tuples = signature.relations().format_with("\n", |(relation, _), f| {
+        let relation_snake = relation.to_case(Snake);
+        f(&format_args!("  {relation_snake}_new: Vec<{relation}>,"))
+    });
+    let new_els = signature.sorts().keys().format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!("  {sort_snake}_new_el_num: usize,"))
+    });
+    let new_eqs = signature.sorts().keys().format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "  {sort_snake}_new_eqs: Vec<({sort}, {sort})>,"
+        ))
+    });
+    writedoc! {out, "
+        struct CloseData {{
+            {new_tuples}
+            {new_els}
+            {new_eqs}
+        }}
+    "}
+}
+
+fn write_close_data_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
+    let new_tuples = signature.relations().format_with("", |(relation, _), f| {
+        let relation_snake = relation.to_case(Snake);
+        f(&format_args!("  {relation_snake}_new: Vec::new(),"))
+    });
+    let new_els = signature.sorts().keys().format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!("  {sort_snake}_new_el_num: 0,"))
+    });
+    let new_eqs = signature.sorts().keys().format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!("  {sort_snake}_new_eqs: Vec::new(),"))
+    });
+    writedoc! {out, "
+        impl CloseData {{
+            fn new() -> CloseData {{
+                CloseData{{ {new_tuples} {new_els} {new_eqs} }}
+            }}
         }}
     "}
 }
@@ -377,15 +422,20 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
 
             write!(
                 out,
-                "let new_el = {}((self.{}_equalities.len() + {}_new_el_num) as u32);\n",
+                "let new_el = {}((self.{}_equalities.len() + data.{}_new_el_num) as u32);\n",
                 cod,
                 cod.to_case(Snake),
                 cod.to_case(Snake)
             )?;
 
-            write!(out, "{}_new_el_num += 1;\n", cod.to_case(Snake))?;
+            write!(out, "data.{}_new_el_num += 1;\n", cod.to_case(Snake))?;
 
-            write!(out, "{}_new.push({}(", function.to_case(Snake), function)?;
+            write!(
+                out,
+                "data.{}_new.push({}(",
+                function.to_case(Snake),
+                function
+            )?;
             for tm in args.iter() {
                 write!(out, "tm{}, ", tm.0)?;
             }
@@ -398,7 +448,12 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             write!(out, "}};\n")?;
         }
         AddTuple { relation, args } => {
-            write!(out, "{}_new.push({}(", relation.to_case(Snake), relation)?;
+            write!(
+                out,
+                "data.{}_new.push({}(",
+                relation.to_case(Snake),
+                relation
+            )?;
             for tm in args {
                 write!(out, "tm{}, ", tm.0)?;
             }
@@ -407,7 +462,7 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
         Equate { sort, lhs, rhs } => {
             write!(
                 out,
-                "{}_new_eqs.push((tm{}, tm{}));\n",
+                "data.{}_new_eqs.push((tm{}, tm{}));\n",
                 sort.to_case(Snake),
                 lhs.0,
                 rhs.0
@@ -494,7 +549,7 @@ fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
     write!(out, "self.{}_all.insert(tm);\n", sort.to_case(Snake),)?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
-    write!(out, "{}_new_el_num = 0;\n", sort.to_case(Snake))?;
+    write!(out, "data.{}_new_el_num = 0;\n", sort.to_case(Snake))?;
     Ok(())
 }
 
@@ -511,14 +566,14 @@ fn write_add_new_equalities(
     )?;
     write!(
         out,
-        "self.{}_equalities.increase_size(self.{}_equalities.len() + {}_new_el_num);\n",
+        "self.{}_equalities.increase_size(self.{}_equalities.len() + data.{}_new_el_num);\n",
         sort.to_case(Snake),
         sort.to_case(Snake),
         sort.to_case(Snake)
     )?;
     write!(
         out,
-        "for (lhs, rhs) in {}_new_eqs.drain(..) {{\n",
+        "for (lhs, rhs) in data.{}_new_eqs.drain(..) {{\n",
         sort.to_case(Snake)
     )?;
     write!(
@@ -588,7 +643,7 @@ fn write_add_new_equalities(
         let relation_snake = relation.to_case(Snake);
         write!(
             out,
-            "{}_new.extend(self.{relation_snake}_all",
+            "data.{}_new.extend(self.{relation_snake}_all",
             relation.to_case(Snake)
         )?;
         write!(
@@ -617,29 +672,7 @@ fn write_closure(
 ) -> io::Result<()> {
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn close(&mut self) {{\n")?;
-    for (relation, _) in signature.relations() {
-        write!(
-            out,
-            "let mut {}_new: Vec<{}> = Vec::new();\n",
-            relation.to_case(Snake),
-            relation
-        )?;
-    }
-    write!(out, "\n")?;
-    for (sort, _) in signature.sorts() {
-        write!(
-            out,
-            "let mut {}_new_el_num: usize = 0;\n",
-            sort.to_case(Snake),
-        )?;
-        write!(
-            out,
-            "let mut {}_new_eqs: Vec<({}, {})> = Vec::new();\n",
-            sort.to_case(Snake),
-            sort,
-            sort
-        )?;
-    }
+    write!(out, "let mut data = CloseData::new();\n")?;
     write!(out, "\n")?;
 
     write!(out, "while self.is_dirty() {{\n")?;
@@ -663,7 +696,7 @@ fn write_closure(
         write!(out, "self.{}_dirty.clear();\n", relation.to_case(Snake))?;
         write!(
             out,
-            "for t in {}_new.drain(..) {{\n",
+            "for t in data.{}_new.drain(..) {{\n",
             relation.to_case(Snake)
         )?;
         write!(out, "let u = {}(", relation)?;
@@ -792,6 +825,10 @@ pub fn write_theory(
     for (rel, arity) in signature.relations() {
         write_tuple_type(out, rel, &arity)?;
     }
+    write!(out, "\n")?;
+
+    write_close_data_struct(out, signature)?;
+    write_close_data_impl(out, signature)?;
     write!(out, "\n")?;
 
     write_theory_struct(out, name, signature)?;
