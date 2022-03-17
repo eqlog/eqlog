@@ -12,14 +12,11 @@ use std::io::{self, Write};
 use Case::Snake;
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
-    writedoc!(
-        out,
-        "
+    writedoc! { out, "
         use std::collections::BTreeSet;
         use std::collections::HashSet;
         use eqlog_util::Unification;
-    "
-    )
+    "}
 }
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
