@@ -5,6 +5,7 @@ use crate::query_action::*;
 use crate::signature::Signature;
 use convert_case::{Case, Casing};
 use indoc::writedoc;
+use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
@@ -14,73 +15,86 @@ use std::iter::{once, repeat};
 use Case::Snake;
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
-    write!(out, "use std::collections::BTreeSet;\n")?;
-    write!(out, "use std::collections::HashSet;\n")?;
-    write!(out, "use eqlog_util::Unification;\n")?;
-    Ok(())
+    writedoc!(
+        out,
+        "
+        use std::collections::BTreeSet;
+        use std::collections::HashSet;
+        use eqlog_util::Unification;
+    "
+    )
 }
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct SortName(pub u32);
-fn write_sort_type(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
-    write!(out, "#[allow(dead_code)]\n")?;
-    write!(
-        out,
-        "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n"
-    )?;
-    write!(out, "pub struct {}(pub u32);\n", sort.0)?;
-    Ok(())
+fn write_sort_type(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    writedoc! {out, "
+        #[allow(dead_code)]
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+        pub struct {sort}(pub u32);
+    "}
 }
 
-fn write_sort_from_u32_impl(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
-    write!(
-        out,
-        "impl Into<u32> for {} {{ fn into(self) -> u32 {{ self.0 }} }}\n",
-        sort.0
-    )?;
-    Ok(())
+fn write_sort_from_u32_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    writedoc! {out, "
+        impl Into<u32> for {sort} {{ fn into(self) -> u32 {{ self.0 }} }}
+    "}
 }
 
-fn write_sort_into_u32_impl(out: &mut impl Write, sort: &Sort) -> io::Result<()> {
-    write!(
-        out,
-        "impl From<u32> for {} {{ fn from(x: u32) -> Self {{ {}(x) }} }}\n",
-        sort.0, sort.0
-    )?;
-    Ok(())
+fn write_sort_into_u32_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    writedoc! {out, "
+        impl From<u32> for {sort} {{ fn from(x: u32) -> Self {{ {sort}(x) }} }}
+    "}
+}
+
+struct IntersperseDisplay<T, I, F>(T, I, F)
+where
+    T: Display,
+    I: IntoIterator + Clone,
+    F: for<'a> Fn(&mut Formatter<'a>, I::Item) -> fmt::Result;
+
+impl<T, I, F> Display for IntersperseDisplay<T, I, F>
+where
+    T: Display,
+    I: IntoIterator + Clone,
+    F: for<'a> Fn(&mut Formatter<'a>, I::Item) -> fmt::Result,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let sep = &self.0;
+        let mut it = self.1.clone().into_iter();
+        let fun = &self.2;
+        if let Some(first) = it.next() {
+            fun(f, first)?;
+            for item in it {
+                write!(f, "{sep}")?;
+                fun(f, item)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
 fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
-    write!(out, "#[allow(dead_code)]\n")?;
-    write!(
-        out,
-        "#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]\n"
-    )?;
-    write!(out, "pub struct {}(", relation)?;
-    if arity.is_empty() {
-        write!(out, ")")?;
-    } else {
-        for arg_sort in arity[0..arity.len() - 1].iter() {
-            write!(out, "pub {}, ", arg_sort)?;
-        }
-        write!(out, "pub {})", arity.last().unwrap())?;
-    }
-    write!(out, ";\n")?;
-    Ok(())
+    let args = arity
+        .iter()
+        .copied()
+        .format_with(", ", |sort, f| f(&format_args!("pub {sort}")));
+    writedoc! {out, "
+        #[allow(dead_code)]
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+        pub struct {relation}({args});
+    "}
 }
 
-fn write_sort_fields(out: &mut impl Write, name: &str) -> io::Result<()> {
-    write!(
-        out,
-        "{}_equalities: Unification<{}>,\n",
-        name.to_case(Snake),
-        name
-    )?;
-    write!(out, "{}_all: HashSet<{}>,\n", name.to_case(Snake), name)?;
-    write!(out, "{}_dirty: HashSet<{}>,\n", name.to_case(Snake), name)?;
-    Ok(())
+fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    let sort_snake = sort.to_case(Snake);
+    writedoc! {out, "
+        {sort_snake}_equalities: Unification<{sort}>,
+        {sort_snake}_all: HashSet<{sort}>,
+        {sort_snake}_dirty: HashSet<{sort}>,
+    "}
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -98,52 +112,52 @@ impl Display for TupleAge {
     }
 }
 
-fn write_relation_field_name(out: &mut impl Write, name: &str, age: TupleAge) -> io::Result<()> {
-    write!(out, "{}_{}", name.to_case(Snake), age)?;
-    Ok(())
-}
-
-fn write_relation_field(out: &mut impl Write, name: &str, age: TupleAge) -> io::Result<()> {
-    write_relation_field_name(out, name, age)?;
-    write!(out, " : BTreeSet<{}>,\n", name)?;
-    Ok(())
+fn write_relation_field(out: &mut impl Write, relation: &str, age: TupleAge) -> io::Result<()> {
+    let relation_snake = relation.to_case(Snake);
+    writedoc! {out, "
+        {relation_snake}_{age} : BTreeSet<{relation}>,
+    "}
 }
 
 fn write_is_dirty_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
-    write!(out, "fn is_dirty(&self) -> bool {{\n")?;
-    write!(out, "false")?;
-    for (relation, _) in signature.relations() {
-        write!(
-            out,
-            " || !self.{}_dirty.is_empty()",
-            relation.to_case(Snake)
-        )?;
-    }
-    for sort in signature.sorts().keys() {
+    let rels_dirty = signature
+        .relations()
+        .format_with(" || ", |(relation, _), f| {
+            let relation_snake = relation.to_case(Snake);
+            f(&format_args!("!self.{relation_snake}_dirty.is_empty()"))
+        });
+
+    let sorts_dirty = signature.sorts().keys().format_with(" || ", |sort, f| {
         let sort_snake = sort.to_case(Snake);
-        writedoc!(out, " || !self.{sort_snake}_dirty.is_empty()")?;
-    }
-    write!(out, "}}\n")?;
-    Ok(())
+        f(&format_args!("!self.{sort_snake}_dirty.is_empty()"))
+    });
+
+    writedoc! {out, "
+        fn is_dirty(&self) -> bool {{
+            {rels_dirty} || {sorts_dirty}
+        }}
+    "}
 }
 
-fn write_iter_name(
-    out: &mut impl Write,
-    relation: &str,
-    query: &QuerySpec,
-    age: TupleAge,
-) -> io::Result<()> {
-    write!(out, "iter_{}_{}", relation.to_case(Snake), age)?;
-    for p in query.projections.iter() {
-        write!(out, "_{}", p)?;
-    }
-    for diag in query.diagonals.iter() {
-        write!(out, "_diagonal")?;
-        for d in diag.iter() {
-            write!(out, "_{}", d)?;
+struct IterName<'a>(&'a str, TupleAge, &'a QuerySpec);
+
+impl<'a> Display for IterName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let relation_snake = self.0.to_case(Snake);
+        let age = self.1;
+        let query_spec = self.2;
+        write!(f, "iter_{relation_snake}_{age}")?;
+        for p in query_spec.projections.iter() {
+            write!(f, "_{p}")?;
         }
+        for diag in query_spec.diagonals.iter() {
+            write!(f, "_diagonal")?;
+            for d in diag.iter() {
+                write!(f, "_{d}")?;
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn write_iter_impl(
@@ -153,55 +167,63 @@ fn write_iter_impl(
     query: &QuerySpec,
     age: TupleAge,
 ) -> io::Result<()> {
-    write!(out, "#[allow(dead_code)]\n")?;
-    write!(out, "fn ")?;
-    write_iter_name(out, relation, query, age)?;
-    write!(out, "(&self")?;
-    for i in query.projections.iter().copied() {
-        write!(out, ", arg{}: {}", i, arity[i])?;
-    }
-    write!(out, ") -> impl '_ + Iterator<Item={}> {{\n", relation)?;
-    write!(out, "self.")?;
-    write_relation_field_name(out, relation, age)?;
-    write!(out, ".iter().filter(move |_t| {{\n")?;
+    let relation_snake = relation.to_case(Snake);
+    let iter_name = IterName(relation, age, query);
 
-    write!(out, "let proj_matches = true")?;
-    for i in query.projections.iter().copied() {
-        write!(out, " && _t.{} == arg{}", i, i)?;
-    }
-    write!(out, ";\n")?;
+    // (arg3: Mor, arg5: Obj, ...)
+    let args = query.projections.iter().copied().format_with(", ", |i, f| {
+        let sort = arity[i];
+        f(&format_args!("arg{i}: {sort}"))
+    });
 
-    for (k, diagonal) in query.diagonals.iter().enumerate() {
-        write!(out, "let diag{}_matches = true", k)?;
-        for (prev, next) in diagonal.iter().zip(diagonal.iter().skip(1)) {
-            write!(out, " && _t.{} == _t.{}", prev, next)?;
-        }
-        write!(out, ";\n")?;
-    }
+    // && _t.3 == arg3 && _t.5 == arg5 ...
+    let projs_match = query
+        .projections
+        .iter()
+        .copied()
+        .format_with("", |i, f| f(&format_args!(" && _t.{i} == arg{i}")));
 
-    write!(out, "proj_matches")?;
-    for k in 0..query.diagonals.len() {
-        write!(out, " && diag{}_matches", k)?;
-    }
-    write!(out, "\n")?;
+    // let diag0_matches = _t.1 == _t.2 && _t.2 == _t.4 && ...;
+    // let diag1_matches = _t.3 == _t.8;
+    // ...
+    let diags_match_decls = query
+        .diagonals
+        .iter()
+        .enumerate()
+        .format_with("\n", |(d, diag), f| {
+            let clauses = diag
+                .iter()
+                .zip(diag.iter().skip(1))
+                .format_with(" && ", |(prev, next), f| {
+                    f(&format_args!("_t.{prev} == _t.{next}"))
+                });
+            f(&format_args!("let diag{d}_matches = {clauses};"))
+        });
 
-    write!(out, "}}).copied()\n")?;
-    write!(out, "}}\n")?;
-    Ok(())
+    // && diag0_matches && diag_1_matches ...
+    let diags_match =
+        (0..query.diagonals.len()).format_with("", |d, f| f(&format_args!(" && diag{d}_matches")));
+
+    writedoc! {out, "
+        #[allow(dead_code)]
+        fn {iter_name}(&self, {args}) -> impl '_ + Iterator<Item={relation}> {{
+            self.{relation_snake}_{age}.iter().filter(move |_t| {{
+                let proj_matches = true {projs_match};
+                {diags_match_decls}
+                proj_matches {diags_match}
+            }}).copied()
+        }}
+    "}
 }
 
 fn write_pub_iter(out: &mut impl Write, relation: &str) -> io::Result<()> {
     let rel_snake = relation.to_case(Snake);
-    writedoc!(
-        out,
-        "
+    writedoc! {out, "
         #[allow(dead_code)]
         pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={relation}> {{
             self.iter_{rel_snake}_all()
         }}
-    "
-    )?;
-    Ok(())
+    "}
 }
 
 fn write_pub_insert_relation(
@@ -210,38 +232,26 @@ fn write_pub_insert_relation(
     arity: &[&str],
 ) -> io::Result<()> {
     let relation_snake = relation.to_case(Snake);
-    writedoc!(
-        out,
-        "
+    writedoc! {out, "
         #[allow(dead_code)]
         pub fn insert_{relation_snake}(&mut self, mut t : {relation}) {{
-    "
-    )?;
+    "}?;
     for (i, sort) in arity.iter().enumerate() {
         let sort_snake = sort.to_case(Snake);
-        writedoc!(
-            out,
-            "
+        writedoc! {out, "
             t.{i} = self.{sort_snake}_equalities.root(t.{i});
-        "
-        )?;
+        "}?;
     }
-    writedoc!(
-        out,
-        "
+    writedoc! {out, "
         self.{relation_snake}_all.insert(t);
         self.{relation_snake}_dirty.insert(t);
         }}
-    "
-    )?;
-    Ok(())
+    "}
 }
 
 fn write_pub_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
-    writedoc!(
-        out,
-        "
+    writedoc! {out, "
         #[allow(dead_code)]
         pub fn new_{sort_snake}(&mut self) -> {sort} {{
             let size = self.{sort_snake}_equalities.len();
@@ -251,23 +261,17 @@ fn write_pub_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
             self.{sort_snake}_all.insert(el);
             el
         }}
-    "
-    )?;
-    Ok(())
+    "}
 }
 
 fn write_pub_iter_sort(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
-    writedoc!(
-        out,
-        "
+    writedoc! {out, "
         #[allow(dead_code)]
         pub fn iter_{sort_snake}(&mut self) -> impl '_ + Iterator<Item={sort}> {{
             self.{sort_snake}_all.iter().copied()
         }}
-    "
-    )?;
-    Ok(())
+    "}
 }
 
 fn write_query_loop_headers<'a>(
@@ -313,7 +317,8 @@ fn write_query_loop_headers<'a>(
                     write!(out, ", ")?;
                 }
                 write!(out, ") in self.")?;
-                write_iter_name(out, relation, &query_spec, age)?;
+                let iter_name = IterName(relation, age, &query_spec);
+                write!(out, "{iter_name}")?;
                 write!(out, "(")?;
                 for tm in projections.values().copied() {
                     write!(out, "tm{}, ", tm.0)?;
@@ -358,7 +363,8 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
 
             write!(out, "#[allow(unused_variables)]\n")?;
             write!(out, "let tm{} = match self.", result.0)?;
-            write_iter_name(out, function, &query_spec, TupleAge::All)?;
+            let iter_name = IterName(function, TupleAge::All, &query_spec);
+            write!(out, "{iter_name}")?;
             write!(out, "(")?;
             for arg in args {
                 write!(out, "tm{}, ", arg.0)?;
@@ -579,8 +585,12 @@ fn write_add_new_equalities(
         }
         write!(out, " }};\n")?;
 
-        write!(out, "{}_new.extend(self.", relation.to_case(Snake))?;
-        write_relation_field_name(out, relation, TupleAge::All)?;
+        let relation_snake = relation.to_case(Snake);
+        write!(
+            out,
+            "{}_new.extend(self.{relation_snake}_all",
+            relation.to_case(Snake)
+        )?;
         write!(
             out,
             ".iter().filter({}_contains_tm));\n",
@@ -772,7 +782,7 @@ pub fn write_theory(
     write_imports(out)?;
 
     write!(out, "\n")?;
-    for sort in signature.sorts().values() {
+    for sort in signature.sorts().keys() {
         write_sort_type(out, sort)?;
         write_sort_from_u32_impl(out, sort)?;
         write_sort_into_u32_impl(out, sort)?;
