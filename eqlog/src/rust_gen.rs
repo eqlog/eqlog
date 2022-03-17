@@ -1,16 +1,13 @@
 use crate::direct_ast::*;
-use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::query_action::*;
 use crate::signature::Signature;
 use convert_case::{Case, Casing};
 use indoc::writedoc;
 use itertools::Itertools;
-use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
-use std::iter::{once, repeat};
 
 use Case::Snake;
 
@@ -472,43 +469,6 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
     Ok(())
 }
 
-fn write_functionality_step(
-    out: &mut impl Write,
-    signature: &Signature,
-    function: &Function,
-) -> io::Result<()> {
-    let Function { name, dom, cod } = function;
-
-    let new_result = FlatTerm(dom.len());
-    let old_result = FlatTerm(dom.len() + 1);
-
-    let dirty_query = Query::Relation {
-        relation: name.clone(),
-        diagonals: BTreeSet::new(),
-        projections: BTreeMap::new(),
-        results: (0..dom.len() + 1).map(|i| (i, FlatTerm(i))).collect(),
-    };
-
-    let old_query = Query::Relation {
-        relation: name.clone(),
-        diagonals: BTreeSet::new(),
-        projections: (0..dom.len()).map(|i| (i, FlatTerm(i))).collect(),
-        results: once((dom.len(), old_result)).collect(),
-    };
-    let query_ages = [(&dirty_query, TupleAge::Dirty), (&old_query, TupleAge::All)];
-
-    let action = Action::Equate {
-        sort: cod.clone(),
-        lhs: new_result,
-        rhs: old_result,
-    };
-
-    write_query_loop_headers(out, signature, query_ages.iter().copied())?;
-    write_action(out, signature, &action)?;
-    write_query_loop_footers(out, query_ages.len())?;
-    Ok(())
-}
-
 fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
     write!(out, "self.{}_dirty.clear();\n", sort.to_case(Snake))?;
     write!(
@@ -679,6 +639,44 @@ fn write_axiom_step_fn(
     "}
 }
 
+fn write_functionality_step_fn(out: &mut impl Write, function: &Function) -> io::Result<()> {
+    let Function { name, dom, cod } = function;
+    let cod_snake = cod.to_case(Snake);
+    let name_snake = name.to_case(Snake);
+
+    let dirty_query = QuerySpec::new();
+    let dirty_iter = IterName(name, TupleAge::Dirty, &dirty_query);
+
+    let all_query = QuerySpec {
+        projections: (0..dom.len()).collect(),
+        diagonals: BTreeSet::new(),
+    };
+    let all_iter = IterName(name, TupleAge::All, &all_query);
+
+    let dirty_result = dom.len();
+    let all_result = dom.len() + 1;
+
+    let dirty_vars = (0..dom.len() + 1).format_with(", ", |i, f| f(&format_args!("tm{i}")));
+    let all_vars = (0..dom.len() + 1).format_with(", ", |i, f| {
+        if i < dom.len() {
+            f(&format_args!("_"))
+        } else {
+            f(&format_args!("tm{all_result}"))
+        }
+    });
+    let old_args = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("tm{i}")));
+
+    writedoc! {out, "
+        fn functionality_{name_snake}_step(&mut self, data: &mut CloseData) {{
+            for {name}({dirty_vars}) in self.{dirty_iter}() {{
+                for {name}({all_vars}) in self.{all_iter}({old_args}) {{
+                    data.{cod_snake}_new_eqs.push((tm{dirty_result}, tm{all_result}));
+                }}
+            }}
+        }}
+    "}
+}
+
 fn write_closure(
     out: &mut impl Write,
     signature: &Signature,
@@ -694,9 +692,12 @@ fn write_closure(
         write!(out, "self.axiom_{i}_step(&mut data);\n")?;
     }
 
-    for function in signature.functions().values() {
-        write_functionality_step(out, signature, function)?;
-        write!(out, "\n")?;
+    for function in signature.functions().keys() {
+        let function_snake = function.to_case(Snake);
+        write!(
+            out,
+            "self.functionality_{function_snake}_step(&mut data);\n"
+        )?;
     }
 
     for (sort, _) in signature.sorts() {
@@ -814,6 +815,9 @@ fn write_theory_impl(
 
     for (i, query_action) in query_actions.iter().enumerate() {
         write_axiom_step_fn(out, signature, query_action, i)?;
+    }
+    for function in signature.functions().values() {
+        write_functionality_step_fn(out, function)?;
     }
 
     write_closure(out, signature, query_actions)?;
