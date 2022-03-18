@@ -498,6 +498,7 @@ fn write_process_sort_close_data_fn(
                     }}
                     (true, true) => {{
                         self.{sort_snake}_equalities.union_into(lhs, rhs);
+                        self.{sort_snake}_all.remove(&lhs);
     "}?;
     for (relation, arity) in signature.relations() {
         if let None = arity.iter().find(|s| **s == sort) {
