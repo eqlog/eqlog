@@ -707,6 +707,16 @@ fn write_new_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()>
     Ok(())
 }
 
+fn write_sort_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    let sort_snake = sort.to_case(Snake);
+    writedoc! {out, "
+        #[allow(dead_code)]
+        pub fn {sort_snake}_root(&mut self, el: {sort}) -> {sort} {{
+            self.{sort_snake}_equalities.root(el)
+        }}
+    "}
+}
+
 fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
     write!(out, "#[derive(Debug)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
@@ -738,6 +748,7 @@ fn write_theory_impl(
         write_process_sort_close_data_fn(out, signature, sort)?;
         write_pub_new_element(out, sort)?;
         write_pub_iter_sort(out, sort)?;
+        write_sort_root_fn(out, sort)?;
         write!(out, "\n")?;
     }
     for (rel, arity) in signature.relations() {
