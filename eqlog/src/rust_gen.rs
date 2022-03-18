@@ -533,6 +533,31 @@ fn write_process_sort_close_data_fn(
     "}
 }
 
+fn write_process_relation_close_data_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+) -> io::Result<()> {
+    let relation_snake = relation.to_case(Snake);
+    let normalize = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "        t.{i} = self.{sort_snake}_equalities.root(t.{i});"
+        ))
+    });
+    writedoc! {out, "
+        fn process_{relation_snake}_close_data(&mut self, data: &mut CloseData) {{
+            self.{relation_snake}_dirty.clear();
+            for mut t in data.{relation_snake}_new.drain(..) {{
+                {normalize}
+                if self.{relation_snake}_all.insert(t) {{
+                    self.{relation_snake}_dirty.insert(t);
+                }}
+            }}
+        }}
+    "}
+}
+
 fn write_axiom_step_fn(
     out: &mut impl Write,
     signature: &Signature,
@@ -634,32 +659,12 @@ fn write_closure(
         write!(out, "self.process_{sort_snake}_close_data(&mut data);\n")?;
     }
 
-    for (relation, arity) in signature.relations() {
-        write!(out, "self.{}_dirty.clear();\n", relation.to_case(Snake))?;
+    for (relation, _) in signature.relations() {
+        let relation_snake = relation.to_case(Snake);
         write!(
             out,
-            "for t in data.{}_new.drain(..) {{\n",
-            relation.to_case(Snake)
+            "self.process_{relation_snake}_close_data(&mut data);\n"
         )?;
-        write!(out, "let u = {}(", relation)?;
-        for (i, sort) in arity.iter().enumerate() {
-            write!(
-                out,
-                "self.{}_equalities.root(t.{}), ",
-                sort.to_case(Snake),
-                i
-            )?;
-        }
-        write!(out, ");\n")?;
-        write!(
-            out,
-            "if self.{}_all.insert(u) {{\n",
-            relation.to_case(Snake)
-        )?;
-        write!(out, "self.{}_dirty.insert(u); \n", relation.to_case(Snake))?;
-        write!(out, "}}\n")?;
-        write!(out, "}}\n")?;
-        write!(out, "\n")?;
     }
 
     write!(out, "}}\n")?;
@@ -731,6 +736,7 @@ fn write_theory_impl(
             write_iter_impl(out, rel, &arity, &unrestrained_query, TupleAge::All)?;
             write_iter_impl(out, rel, &arity, &unrestrained_query, TupleAge::Dirty)?;
         };
+        write_process_relation_close_data_fn(out, rel, &arity)?;
         write_pub_iter(out, rel)?;
         write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
