@@ -248,7 +248,7 @@ fn write_pub_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
         #[allow(dead_code)]
         pub fn new_{sort_snake}(&mut self) -> {sort} {{
             let size = self.{sort_snake}_equalities.len();
-            self.{sort_snake}_equalities.increase_size(size + 1);
+            self.{sort_snake}_equalities.increase_size_to(size + 1);
             let el = {sort}::from(size as u32);
             self.{sort_snake}_dirty.insert(el);
             self.{sort_snake}_all.insert(el);
@@ -476,6 +476,8 @@ fn write_process_sort_close_data_fn(
     writedoc! {out, "
         fn process_{sort_snake}_close_data(&mut self, data: &mut CloseData) {{
             let equalities_old_len = self.{sort_snake}_equalities.len();
+            let equalities_new_len = equalities_old_len + data.{sort_snake}_new_el_num;
+            self.{sort_snake}_equalities.increase_size_to(equalities_new_len);
             for (lhs, rhs) in data.{sort_snake}_new_eqs.drain(..) {{
                 let lhs = self.{sort_snake}_equalities.root(lhs);
                 let rhs = self.{sort_snake}_equalities.root(rhs);
@@ -521,7 +523,7 @@ fn write_process_sort_close_data_fn(
                 }}
             }}
             self.{sort_snake}_dirty.clear();
-            for new_id in equalities_old_len..self.{sort_snake}_equalities.len() {{
+            for new_id in equalities_old_len..equalities_new_len {{
                 let tm = {sort}(new_id as u32);
                 if tm == self.{sort_snake}_equalities.root(tm) {{
                     self.{sort_snake}_dirty.insert(tm);
