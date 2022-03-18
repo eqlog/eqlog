@@ -631,46 +631,45 @@ fn write_functionality_step_fn(out: &mut impl Write, function: &Function) -> io:
     "}
 }
 
-fn write_closure(
+fn write_close_fn(
     out: &mut impl Write,
     signature: &Signature,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
-    write!(out, "#[allow(dead_code)]\n")?;
-    write!(out, "pub fn close(&mut self) {{\n")?;
-    write!(out, "let mut data = CloseData::new();\n")?;
-    write!(out, "\n")?;
-
-    write!(out, "while self.is_dirty() {{\n")?;
-    for i in 0..query_actions.len() {
-        write!(out, "self.axiom_{i}_step(&mut data);\n")?;
-    }
-
-    for function in signature.functions().keys() {
-        let function_snake = function.to_case(Snake);
-        write!(
-            out,
-            "self.functionality_{function_snake}_step(&mut data);\n"
-        )?;
-    }
-
-    for (sort, _) in signature.sorts() {
+    let axiom_steps = (0..query_actions.len()).format_with("\n", |i, f| {
+        f(&format_args!("        self.axiom_{i}_step(&mut data);"))
+    });
+    let functionality_steps = signature.functions().keys().format_with("\n", |func, f| {
+        let func_snake = func.to_case(Snake);
+        f(&format_args!(
+            "        self.functionality_{func_snake}_step(&mut data);"
+        ))
+    });
+    let process_sorts = signature.sorts().keys().format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
-        write!(out, "self.process_{sort_snake}_close_data(&mut data);\n")?;
-    }
-
-    for (relation, _) in signature.relations() {
+        f(&format_args!(
+            "        self.process_{sort_snake}_close_data(&mut data);"
+        ))
+    });
+    let process_relations = signature.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
-        write!(
-            out,
-            "self.process_{relation_snake}_close_data(&mut data);\n"
-        )?;
-    }
+        f(&format_args!(
+            "        self.process_{relation_snake}_close_data(&mut data);"
+        ))
+    });
+    writedoc! {out, "
+        #[allow(dead_code)]
+        pub fn close(&mut self) {{
+            let mut data = CloseData::new();
+            while self.is_dirty() {{
+                {functionality_steps}
+                {axiom_steps}
 
-    write!(out, "}}\n")?;
-
-    write!(out, "}}\n")?;
-    Ok(())
+                {process_sorts}
+                {process_relations}
+            }}
+        }}
+    "}
 }
 
 fn write_new_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
@@ -755,7 +754,7 @@ fn write_theory_impl(
         write_functionality_step_fn(out, function)?;
     }
 
-    write_closure(out, signature, query_actions)?;
+    write_close_fn(out, signature, query_actions)?;
 
     write!(out, "}}\n")?;
     Ok(())
