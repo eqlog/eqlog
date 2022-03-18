@@ -128,7 +128,7 @@ fn write_is_dirty_impl(out: &mut impl Write, signature: &Signature) -> io::Resul
 
     writedoc! {out, "
         fn is_dirty(&self) -> bool {{
-            {rels_dirty} || {sorts_dirty}
+            !self.was_closed_before || {rels_dirty} || {sorts_dirty}
         }}
     "}
 }
@@ -283,6 +283,7 @@ fn write_close_data_struct(out: &mut impl Write, signature: &Signature) -> io::R
         ))
     });
     writedoc! {out, "
+        #[derive(Debug)]
         struct CloseData {{
             {new_tuples}
             {new_els}
@@ -666,6 +667,7 @@ fn write_close_fn(
             "        self.process_{relation_snake}_close_data(&mut data);"
         ))
     });
+
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
@@ -676,6 +678,7 @@ fn write_close_fn(
 
                 {process_sorts}
                 {process_relations}
+                self.was_closed_before = true;
             }}
         }}
     "}
@@ -698,12 +701,14 @@ fn write_new_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()>
         write!(out, "{}_all: BTreeSet::new(),\n", relation.to_case(Snake))?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", relation.to_case(Snake))?;
     }
+    write!(out, "was_closed_before: false,\n")?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }
 
 fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
+    write!(out, "#[derive(Debug)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
     for sort in signature.sorts().keys() {
         write_sort_fields(out, sort.as_str())?;
@@ -715,6 +720,8 @@ fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) 
         write_relation_field(out, rel, TupleAge::Dirty)?;
         write!(out, "\n")?;
     }
+
+    write!(out, "was_closed_before: bool,\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }

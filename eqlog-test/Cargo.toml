@@ -8,3 +8,6 @@ path = "../eqlog-util"
 
 [build-dependencies.eqlog]
 path = "../eqlog"
+
+[dependencies]
+maplit = "1"

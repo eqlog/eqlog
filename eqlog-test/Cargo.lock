@@ -137,6 +137,7 @@ version = "0.1.0"
 dependencies = [
  "eqlog",
  "eqlog-util",
+ "maplit",
 ]
 
 [[package]]
