@@ -466,139 +466,71 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
     Ok(())
 }
 
-fn write_add_new_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    write!(out, "self.{}_dirty.clear();\n", sort.to_case(Snake))?;
-    write!(
-        out,
-        "for new_id in {}_equalities_old_len .. self.{}_equalities.len() {{\n",
-        sort.to_case(Snake),
-        sort.to_case(Snake)
-    )?;
-    write!(out, "let tm = {}(new_id as u32);\n", sort)?;
-    write!(
-        out,
-        "if tm == self.{}_equalities.root(tm) {{\n",
-        sort.to_case(Snake)
-    )?;
-
-    write!(out, "self.{}_dirty.insert(tm);\n", sort.to_case(Snake),)?;
-    write!(out, "self.{}_all.insert(tm);\n", sort.to_case(Snake),)?;
-    write!(out, "}}\n")?;
-    write!(out, "}}\n")?;
-    write!(out, "data.{}_new_el_num = 0;\n", sort.to_case(Snake))?;
-    Ok(())
-}
-
-fn write_add_new_equalities(
+fn write_process_sort_close_data_fn(
     out: &mut impl Write,
     signature: &Signature,
     sort: &str,
 ) -> io::Result<()> {
-    write!(
-        out,
-        "let {}_equalities_old_len = self.{}_equalities.len();\n",
-        sort.to_case(Snake),
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "self.{}_equalities.increase_size(self.{}_equalities.len() + data.{}_new_el_num);\n",
-        sort.to_case(Snake),
-        sort.to_case(Snake),
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "for (lhs, rhs) in data.{}_new_eqs.drain(..) {{\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "let lhs = self.{}_equalities.root(lhs);\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "let rhs = self.{}_equalities.root(rhs);\n",
-        sort.to_case(Snake)
-    )?;
-    write!(out, "if lhs == rhs {{ continue; }}\n")?;
-    write!(
-        out,
-        "let lhs_is_old = (lhs.0 as usize) < {}_equalities_old_len;\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "let rhs_is_old = (rhs.0 as usize) < {}_equalities_old_len;\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "let old_removed_term = match (lhs_is_old, rhs_is_old) {{\n"
-    )?;
-    write!(
-        out,
-        "  (false, false) => {{ self.{}_equalities.union_into(lhs, rhs); None }}\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "  (true, false) => {{ self.{}_equalities.union_into(rhs, lhs); None }}\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "  (false, true) => {{ self.{}_equalities.union_into(lhs, rhs); None }}\n",
-        sort.to_case(Snake)
-    )?;
-    write!(
-        out,
-        "  (true, true) => {{ self.{}_equalities.union_into(lhs, rhs); Some(lhs) }}\n",
-        sort.to_case(Snake)
-    )?;
-    write!(out, "}};\n")?;
-    write!(out, "if let Some(tm) = old_removed_term {{\n")?;
+    let sort_snake = sort.to_case(Snake);
+
+    writedoc! {out, "
+        fn process_{sort_snake}_close_data(&mut self, data: &mut CloseData) {{
+            let equalities_old_len = self.{sort_snake}_equalities.len();
+            for (lhs, rhs) in data.{sort_snake}_new_eqs.drain(..) {{
+                let lhs = self.{sort_snake}_equalities.root(lhs);
+                let rhs = self.{sort_snake}_equalities.root(rhs);
+                if lhs == rhs {{
+                    continue;
+                }}
+                let lhs_is_old = (lhs.0 as usize) < equalities_old_len;
+                let rhs_is_old = (rhs.0 as usize) < equalities_old_len;
+                match (lhs_is_old, rhs_is_old) {{
+                    (false, false) => {{
+                        self.{sort_snake}_equalities.union_into(lhs, rhs);
+                    }}
+                    (true, false) => {{
+                        self.{sort_snake}_equalities.union_into(rhs, lhs);
+                    }}
+                    (false, true) => {{
+                        self.{sort_snake}_equalities.union_into(lhs, rhs);
+                    }}
+                    (true, true) => {{
+                        self.{sort_snake}_equalities.union_into(lhs, rhs);
+    "}?;
     for (relation, arity) in signature.relations() {
         if let None = arity.iter().find(|s| **s == sort) {
             continue;
         }
-        write!(
-            out,
-            "let {}_contains_tm = |t : &&{}| {{ false \n",
-            relation.to_case(Snake),
-            relation
-        )?;
-        for (i, arg_sort) in arity.iter().enumerate() {
-            if *arg_sort == sort {
-                write!(out, " || t.{} == tm", i)?;
-            }
-        }
-        write!(out, " }};\n")?;
-
         let relation_snake = relation.to_case(Snake);
-        write!(
-            out,
-            "data.{}_new.extend(self.{relation_snake}_all",
-            relation.to_case(Snake)
-        )?;
-        write!(
-            out,
-            ".iter().filter({}_contains_tm));\n",
-            relation.to_case(Snake)
-        )?;
-
-        write!(
-            out,
-            "self.{}_all.retain(|t| !{}_contains_tm(&t));",
-            relation.to_case(Snake),
-            relation.to_case(Snake)
-        )?;
-        write!(out, "\n")?;
+        let clauses = arity
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| **s == sort)
+            .format_with(" && ", |(i, _), f| f(&format_args!("t.{i} == lhs")));
+        writedoc! {out, "
+            let {relation_snake}_contains_lhs = |t: &&{relation}| {clauses};
+            data.{relation_snake}_new.extend(
+                self.{relation_snake}_all.iter().filter({relation_snake}_contains_lhs)
+            );
+            self.{relation_snake}_all.retain(|t| !{relation_snake}_contains_lhs(&t));
+        "}?;
     }
-    write!(out, "}}\n")?;
-    write!(out, "}}\n")?;
-    Ok(())
+
+    writedoc! {out, "
+                    }}
+                }}
+            }}
+            self.{sort_snake}_dirty.clear();
+            for new_id in equalities_old_len..self.{sort_snake}_equalities.len() {{
+                let tm = {sort}(new_id as u32);
+                if tm == self.{sort_snake}_equalities.root(tm) {{
+                    self.{sort_snake}_dirty.insert(tm);
+                    self.{sort_snake}_all.insert(tm);
+                }}
+            }}
+            data.{sort_snake}_new_el_num = 0;
+        }}
+    "}
 }
 
 fn write_axiom_step_fn(
@@ -698,9 +630,8 @@ fn write_closure(
     }
 
     for (sort, _) in signature.sorts() {
-        write_add_new_equalities(out, signature, sort)?;
-        write_add_new_elements(out, sort)?;
-        write!(out, "\n")?;
+        let sort_snake = sort.to_case(Snake);
+        write!(out, "self.process_{sort_snake}_close_data(&mut data);\n")?;
     }
 
     for (relation, arity) in signature.relations() {
@@ -784,6 +715,7 @@ fn write_theory_impl(
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
     for sort in signature.sorts().keys() {
+        write_process_sort_close_data_fn(out, signature, sort)?;
         write_pub_new_element(out, sort)?;
         write_pub_iter_sort(out, sort)?;
         write!(out, "\n")?;
