@@ -574,21 +574,27 @@ fn write_axiom_step_fn(
         fn axiom_{axiom_index}_step(&self, data: &mut CloseData) {{
     "}?;
 
-    for new_index in 0..queries.len() {
-        write!(out, "// Query {new_index} is for dirty data.\n")?;
-        let query_ages = queries.iter().enumerate().map(|(i, query)| {
-            let age = if i == new_index {
-                TupleAge::Dirty
-            } else {
-                TupleAge::All
-            };
-            (query, age)
-        });
-        write_query_loop_headers(out, signature, query_ages)?;
+    if queries.is_empty() {
         for action in actions.iter() {
             write_action(out, signature, action)?;
         }
-        write_query_loop_footers(out, queries.len())?;
+    } else {
+        for new_index in 0..queries.len() {
+            write!(out, "// Query {new_index} is for dirty data.\n")?;
+            let query_ages = queries.iter().enumerate().map(|(i, query)| {
+                let age = if i == new_index {
+                    TupleAge::Dirty
+                } else {
+                    TupleAge::All
+                };
+                (query, age)
+            });
+            write_query_loop_headers(out, signature, query_ages)?;
+            for action in actions.iter() {
+                write_action(out, signature, action)?;
+            }
+            write_query_loop_footers(out, queries.len())?;
+        }
     }
 
     writedoc! {out, "
