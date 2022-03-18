@@ -509,7 +509,7 @@ fn write_process_sort_close_data_fn(
             .iter()
             .enumerate()
             .filter(|(_, s)| **s == sort)
-            .format_with(" && ", |(i, _), f| f(&format_args!("t.{i} == lhs")));
+            .format_with(" || ", |(i, _), f| f(&format_args!("t.{i} == lhs")));
         writedoc! {out, "
             let {relation_snake}_contains_lhs = |t: &&{relation}| {clauses};
             data.{relation_snake}_new.extend(
