@@ -26,7 +26,7 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
 
         self.parents[lhs.into() as usize] = rhs;
     }
-    pub fn increase_size(&mut self, new_size: usize) {
+    pub fn increase_size_to(&mut self, new_size: usize) {
         assert!(new_size >= self.len());
         assert!((u32::MAX as usize) > new_size);
         for i in self.len()..new_size {
