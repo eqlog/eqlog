@@ -2,7 +2,8 @@ Sort M;
 Func E : -> M;
 Func Mul : M * M -> M;
 
-Axiom Mul(x, E()) ~> x;
-Axiom Mul(E(), x) ~> x;
-Axiom Mul(Mul(a, b), c) ~> Mul(a, Mul(b, c));
-Axiom Mul(a, Mul(b, c)) ~> Mul(Mul(a, b), c);
+Axiom => E()!;
+Axiom x! & y! => Mul(x, y)!;
+Axiom y = Mul(x, E()) => x = y;
+Axiom y = Mul(E(), x) => x = y;
+Axiom d = Mul(Mul(a, b), c) & e = Mul(a, Mul(b, c)) => d = e;

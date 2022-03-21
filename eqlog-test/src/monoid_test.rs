@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod test {
-    use crate::monoid::*;
 
     #[test]
-    fn test_cyclic_no_neutral() {
+    fn test_equational_cyclic_no_neutral() {
+        use crate::equational_monoid::*;
+
         // Cyclic monoid with 5 non-trivial elements, with neutral element not defined.
-        let mut mon = Monoid::new();
+        let mut mon = EquationalMonoid::new();
         let a1 = mon.new_m();
         let a2 = mon.new_m();
         let a3 = mon.new_m();
