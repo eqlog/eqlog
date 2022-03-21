@@ -1,6 +1,0 @@
-
-
-
-"Dom(x)" => Sort("x") = Mor & Sort("Dom(x)") = Obj
-
-"t = s" => Sort("t") = Sort("s")
