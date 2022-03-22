@@ -562,23 +562,63 @@ fn write_process_relation_close_data_fn(
     "}
 }
 
+//fn write_query_match_struct(
+//    out: &mut impl Write,
+//    signature: &Signature,
+//    query_action: &QueryAction,
+//    axiom_index: usize,
+//) -> io::Result<()> {
+//    let terms = query_action.query_terms_used_in_actions(signature);
+//    let term_decls = terms.into_iter().format_with("\n", |(term, sort), f| {
+//        let tm = term.0;
+//        f(&format_args!("  tm{tm}: {sort},"))
+//    });
+//
+//    writedoc! {out, "
+//        struct QueryMatch{axiom_index} {{
+//        {term_decls}
+//        }}
+//    "}
+//}
+
+fn write_action_fn(
+    out: &mut impl Write,
+    signature: &Signature,
+    query_action: &QueryAction,
+    axiom_index: usize,
+) -> io::Result<()> {
+    let query_terms = query_action.query_terms_used_in_actions(signature);
+    let arg_terms = query_terms.into_iter().format_with(", ", |(tm, sort), f| {
+        let tm = tm.0;
+        f(&format_args!("tm{tm}: {sort}"))
+    });
+
+    writedoc! {out, "
+        fn apply_actions_{axiom_index}(&self, data: &mut CloseData, {arg_terms}) {{
+    "}?;
+
+    for action in query_action.actions.iter() {
+        write_action(out, signature, action)?;
+    }
+
+    writedoc! {out, "
+        }}
+    "}
+}
+
 fn write_axiom_step_fn(
     out: &mut impl Write,
     signature: &Signature,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
-    let queries = &query_action.queries;
-    let actions = &query_action.actions;
-
     writedoc! {out, "
         fn axiom_{axiom_index}_step(&self, data: &mut CloseData) {{
     "}?;
 
+    let queries = &query_action.queries;
     if queries.is_empty() {
-        for action in actions.iter() {
-            write_action(out, signature, action)?;
-        }
+        write!(out, "  self.apply_actions_{axiom_index}(data);\n")?;
     } else {
         for new_index in 0..queries.len() {
             write!(out, "// Query {new_index} is for dirty data.\n")?;
@@ -591,9 +631,15 @@ fn write_axiom_step_fn(
                 (query, age)
             });
             write_query_loop_headers(out, signature, query_ages)?;
-            for action in actions.iter() {
-                write_action(out, signature, action)?;
-            }
+            let query_terms = query_action.query_terms_used_in_actions(signature);
+            let action_args = query_terms.keys().copied().format_with(", ", |tm, f| {
+                let tm = tm.0;
+                f(&format_args!("tm{tm}"))
+            });
+            write!(
+                out,
+                "self.apply_actions_{axiom_index}(data, {action_args});\n"
+            )?;
             write_query_loop_footers(out, queries.len())?;
         }
     }
@@ -775,6 +821,7 @@ fn write_theory_impl(
     write!(out, "\n")?;
 
     for (i, query_action) in query_actions.iter().enumerate() {
+        write_action_fn(out, signature, query_action, i)?;
         write_axiom_step_fn(out, signature, query_action, i)?;
     }
     for function in signature.functions().values() {
@@ -795,19 +842,28 @@ pub fn write_theory(
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
-
     write!(out, "\n")?;
+
     for sort in signature.sorts().keys() {
         write_sort_type(out, sort)?;
         write_sort_from_u32_impl(out, sort)?;
         write_sort_into_u32_impl(out, sort)?;
     }
-
     write!(out, "\n")?;
+
     for (rel, arity) in signature.relations() {
         write_tuple_type(out, rel, &arity)?;
     }
     write!(out, "\n")?;
+
+    //for (i, qa) in query_actions
+    //    .iter()
+    //    .enumerate()
+    //    .filter(|(_, qa)| !qa.is_surjective())
+    //{
+    //    write_query_match_struct(out, signature, qa, i)?;
+    //}
+    //write!(out, "\n")?;
 
     write_close_data_struct(out, signature)?;
     write_close_data_impl(out, signature)?;

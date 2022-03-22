@@ -180,4 +180,70 @@ impl QueryAction {
         let actions = translate_conclusion(signature, fixed_terms, &sequent.conclusion);
         QueryAction { queries, actions }
     }
+    pub fn query_terms_used_in_actions<'a>(
+        &'a self,
+        sig: &'a Signature,
+    ) -> BTreeMap<FlatTerm, &'a str> {
+        let mut new_terms = BTreeSet::new();
+        let mut query_terms = BTreeMap::new();
+        for query in self.actions.iter() {
+            use Action::*;
+            match query {
+                AddTerm {
+                    function,
+                    args,
+                    result,
+                } => {
+                    new_terms.insert(*result);
+                    let dom = &sig.functions().get(function).unwrap().dom;
+                    query_terms.extend(args.iter().copied().enumerate().filter_map(|(i, tm)| {
+                        if new_terms.contains(&tm) {
+                            None
+                        } else {
+                            Some((tm, dom[i].as_str()))
+                        }
+                    }));
+                }
+                AddTuple { relation, args } => {
+                    let arity = sig
+                        .relations()
+                        .find_map(
+                            |(rel, arity)| {
+                                if rel == relation {
+                                    Some(arity)
+                                } else {
+                                    None
+                                }
+                            },
+                        )
+                        .unwrap();
+                    query_terms.extend(args.iter().copied().enumerate().filter_map(|(i, tm)| {
+                        if new_terms.contains(&tm) {
+                            None
+                        } else {
+                            Some((tm, arity[i]))
+                        }
+                    }));
+                }
+                Equate { lhs, rhs, sort } => {
+                    if !new_terms.contains(lhs) {
+                        query_terms.insert(*lhs, sort);
+                    }
+                    if !new_terms.contains(rhs) {
+                        query_terms.insert(*rhs, sort);
+                    }
+                }
+            }
+        }
+        query_terms
+    }
+    //pub fn is_surjective(&self) -> bool {
+    //    use Action::*;
+    //    for action in self.actions.iter() {
+    //        if let AddTerm { .. } = action {
+    //            return false;
+    //        }
+    //    }
+    //    true
+    //}
 }
