@@ -16,7 +16,6 @@ use Case::Snake;
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
         use std::collections::BTreeSet;
-        use std::collections::HashSet;
         use eqlog_util::Unification;
     "}
 }
@@ -56,8 +55,8 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         {sort_snake}_equalities: Unification<{sort}>,
-        {sort_snake}_all: HashSet<{sort}>,
-        {sort_snake}_dirty: HashSet<{sort}>,
+        {sort_snake}_all: BTreeSet<{sort}>,
+        {sort_snake}_dirty: BTreeSet<{sort}>,
     "}
 }
 
@@ -750,8 +749,8 @@ fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
             "{}_equalities: Unification::new(),\n",
             sort.to_case(Snake)
         )?;
-        write!(out, "{}_dirty: HashSet::new(),\n", sort.to_case(Snake))?;
-        write!(out, "{}_all: HashSet::new(),\n", sort.to_case(Snake))?;
+        write!(out, "{}_dirty: BTreeSet::new(),\n", sort.to_case(Snake))?;
+        write!(out, "{}_all: BTreeSet::new(),\n", sort.to_case(Snake))?;
     }
     for (relation, _) in signature.relations() {
         write!(out, "{}_all: BTreeSet::new(),\n", relation.to_case(Snake))?;
