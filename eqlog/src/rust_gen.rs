@@ -124,7 +124,8 @@ fn write_is_dirty_fn(out: &mut impl Write, signature: &Signature) -> io::Result<
     });
 
     writedoc! {out, "
-        fn is_dirty(&self) -> bool {{
+        #[allow(dead_code)]
+        pub fn is_dirty(&self) -> bool {{
             self.empty_join_is_dirty ||{rels_dirty} || {sorts_dirty}
         }}
     "}
