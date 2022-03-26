@@ -38,33 +38,6 @@ fn write_sort_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-struct IntersperseDisplay<T, I, F>(T, I, F)
-where
-    T: Display,
-    I: IntoIterator + Clone,
-    F: for<'a> Fn(&mut Formatter<'a>, I::Item) -> fmt::Result;
-
-impl<T, I, F> Display for IntersperseDisplay<T, I, F>
-where
-    T: Display,
-    I: IntoIterator + Clone,
-    F: for<'a> Fn(&mut Formatter<'a>, I::Item) -> fmt::Result,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let sep = &self.0;
-        let mut it = self.1.clone().into_iter();
-        let fun = &self.2;
-        if let Some(first) = it.next() {
-            fun(f, first)?;
-            for item in it {
-                write!(f, "{sep}")?;
-                fun(f, item)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
 fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
