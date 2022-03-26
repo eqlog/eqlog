@@ -23,7 +23,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct SortName(pub u32);
-fn write_sort_type(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_sort_struct(out: &mut impl Write, sort: &str) -> io::Result<()> {
     writedoc! {out, "
         #[allow(dead_code)]
         #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -31,14 +31,9 @@ fn write_sort_type(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_sort_from_u32_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_sort_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
     writedoc! {out, "
         impl Into<u32> for {sort} {{ fn into(self) -> u32 {{ self.0 }} }}
-    "}
-}
-
-fn write_sort_into_u32_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    writedoc! {out, "
         impl From<u32> for {sort} {{ fn from(x: u32) -> Self {{ {sort}(x) }} }}
     "}
 }
@@ -72,7 +67,7 @@ where
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
-fn write_tuple_type(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
+fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
     let args = arity
         .iter()
         .copied()
@@ -115,7 +110,7 @@ fn write_relation_field(out: &mut impl Write, relation: &str, age: TupleAge) -> 
     "}
 }
 
-fn write_is_dirty_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
+fn write_is_dirty_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
     let rels_dirty = signature
         .relations()
         .format_with(" || ", |(relation, _), f| {
@@ -156,7 +151,7 @@ impl<'a> Display for IterName<'a> {
     }
 }
 
-fn write_iter_impl(
+fn write_iter_fn(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
@@ -212,7 +207,7 @@ fn write_iter_impl(
     "}
 }
 
-fn write_pub_iter(out: &mut impl Write, relation: &str) -> io::Result<()> {
+fn write_pub_iter_fn(out: &mut impl Write, relation: &str) -> io::Result<()> {
     let rel_snake = relation.to_case(Snake);
     writedoc! {out, "
         #[allow(dead_code)]
@@ -245,7 +240,7 @@ fn write_pub_insert_relation(
     "}
 }
 
-fn write_pub_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         #[allow(dead_code)]
@@ -270,7 +265,7 @@ fn write_sort_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_pub_iter_sort(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         #[allow(dead_code)]
@@ -742,7 +737,7 @@ fn write_close_fn(
     "}
 }
 
-fn write_new_impl(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
+fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn new() -> Self {{\n")?;
     write!(out, "Self {{\n")?;
@@ -793,31 +788,31 @@ fn write_theory_impl(
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
     for sort in signature.sorts().keys() {
-        write_pub_new_element(out, sort)?;
-        write_pub_iter_sort(out, sort)?;
+        write_new_element(out, sort)?;
+        write_iter_sort_fn(out, sort)?;
         write_sort_root_fn(out, sort)?;
         write!(out, "\n")?;
     }
     for (rel, arity) in signature.relations() {
         let query_index_map = index_selection.get(rel).unwrap();
         for query in query_index_map.keys() {
-            write_iter_impl(out, rel, &arity, query, TupleAge::All)?;
-            write_iter_impl(out, rel, &arity, query, TupleAge::Dirty)?;
+            write_iter_fn(out, rel, &arity, query, TupleAge::All)?;
+            write_iter_fn(out, rel, &arity, query, TupleAge::Dirty)?;
         }
         let unrestrained_query = QuerySpec::new();
         if let None = query_index_map.get(&unrestrained_query) {
-            write_iter_impl(out, rel, &arity, &unrestrained_query, TupleAge::All)?;
-            write_iter_impl(out, rel, &arity, &unrestrained_query, TupleAge::Dirty)?;
+            write_iter_fn(out, rel, &arity, &unrestrained_query, TupleAge::All)?;
+            write_iter_fn(out, rel, &arity, &unrestrained_query, TupleAge::Dirty)?;
         };
-        write_pub_iter(out, rel)?;
+        write_pub_iter_fn(out, rel)?;
         write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
     }
 
-    write_new_impl(out, signature)?;
+    write_new_fn(out, signature)?;
     write!(out, "\n")?;
 
-    write_is_dirty_impl(out, signature)?;
+    write_is_dirty_fn(out, signature)?;
     write!(out, "\n")?;
 
     for (i, query_action) in query_actions.iter().enumerate() {
@@ -837,7 +832,7 @@ fn write_theory_impl(
     Ok(())
 }
 
-pub fn write_theory(
+pub fn write_module(
     out: &mut impl Write,
     name: &str,
     signature: &Signature,
@@ -848,14 +843,13 @@ pub fn write_theory(
     write!(out, "\n")?;
 
     for sort in signature.sorts().keys() {
-        write_sort_type(out, sort)?;
-        write_sort_from_u32_impl(out, sort)?;
-        write_sort_into_u32_impl(out, sort)?;
+        write_sort_struct(out, sort)?;
+        write_sort_impl(out, sort)?;
     }
     write!(out, "\n")?;
 
     for (rel, arity) in signature.relations() {
-        write_tuple_type(out, rel, &arity)?;
+        write_relation_struct(out, rel, &arity)?;
     }
     write!(out, "\n")?;
 

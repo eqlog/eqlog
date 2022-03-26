@@ -54,7 +54,7 @@ fn process_file(name: &str, in_file: PathBuf, out_file: PathBuf) -> io::Result<(
     let index_selection = select_indices(&sig, &query_actions);
 
     let mut result: Vec<u8> = Vec::new();
-    write_theory(&mut result, name, &sig, &query_actions, &index_selection)?;
+    write_module(&mut result, name, &sig, &query_actions, &index_selection)?;
     fs::write(&out_file, &result)?;
     Command::new("rustfmt")
         .arg(&out_file)
