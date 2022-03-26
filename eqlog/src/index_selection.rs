@@ -1,5 +1,6 @@
 use crate::query_action::*;
 use crate::signature::Signature;
+use maplit::hashset;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter::{once, repeat};
@@ -95,7 +96,7 @@ pub fn select_indices(signature: &Signature, query_actions: &[QueryAction]) -> I
     // Maps relations to tuple of arity.len() and set of collected query specs.
     let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> = signature
         .relations()
-        .map(|(rel, arity)| (rel.to_string(), (arity.len(), HashSet::new())))
+        .map(|(rel, arity)| (rel.to_string(), (arity.len(), hashset! {QuerySpec::new()})))
         .collect();
 
     // Add indices for (implicit) functionality axioms.

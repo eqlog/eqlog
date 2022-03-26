@@ -801,11 +801,6 @@ fn write_theory_impl(
             write_iter_fn(out, rel, &arity, query, TupleAge::All)?;
             write_iter_fn(out, rel, &arity, query, TupleAge::Dirty)?;
         }
-        let unrestrained_query = QuerySpec::new();
-        if let None = query_index_map.get(&unrestrained_query) {
-            write_iter_fn(out, rel, &arity, &unrestrained_query, TupleAge::All)?;
-            write_iter_fn(out, rel, &arity, &unrestrained_query, TupleAge::Dirty)?;
-        };
         write_pub_iter_fn(out, rel)?;
         write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
