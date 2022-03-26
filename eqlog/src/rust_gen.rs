@@ -530,6 +530,14 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             let function_snake = function.to_case(Snake);
             let Function { dom, cod, .. } = signature.functions().get(function).unwrap();
             let cod_snake = cod.to_case(Snake);
+            let canonicalize_iter_args =
+                args.iter().zip(dom).format_with("\n", |(arg, sort), f| {
+                    let arg = arg.0;
+                    let sort_snake = sort.to_case(Snake);
+                    f(&format_args!(
+                        "let tm{arg} = self.{sort_snake}_equalities.root(tm{arg});"
+                    ))
+                });
             let query_spec = QuerySpec {
                 projections: (0..dom.len()).collect(),
                 diagonals: BTreeSet::new(),
@@ -546,13 +554,14 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             let result = result.0;
             let dom_len = dom.len();
             writedoc! {out, "
+                {canonicalize_iter_args}
                 let existing_row = self.{iter_name}({iter_args}).next();
                 #[allow(unused_variables)]
                 let tm{result} = match existing_row {{
                     Some(t) => t.{dom_len},
                     None => {{
                         let tm{result} = self.new_{cod_snake}();
-                        data.{function_snake}_new.push({function}({tuple_args}));
+                        self.insert_{function_snake}({function}({tuple_args}));
                         tm{result}
                     }},
                 }};
@@ -596,7 +605,10 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
                     ))
                 });
             writedoc! {out, "
-                if self.{sort_snake}_equalities.union_into(tm{lhs}, tm{rhs}) {{;
+                let tm{lhs} = self.{sort_snake}_equalities.root(tm{lhs});
+                let tm{rhs} = self.{sort_snake}_equalities.root(tm{rhs});
+                if tm{lhs} != tm{rhs} {{
+                    self.{sort_snake}_equalities.union_roots_into(tm{lhs}, tm{rhs});
                     self.{sort_snake}_all.remove(&tm{lhs});
                     self.{sort_snake}_dirty.remove(&tm{lhs});
                     {clean_rels}
@@ -696,26 +708,36 @@ fn write_close_fn(
 ) -> io::Result<()> {
     let collect_query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!(
-            "        self.collect_query_matches_{i}(&mut data);"
+            "            self.collect_query_matches_{i}(&mut data);"
         ))
     });
     let collect_functionality_matches =
         signature.functions().keys().format_with("\n", |func, f| {
             let func_snake = func.to_case(Snake);
             f(&format_args!(
-                "        self.collect_functionality_matches_{func_snake}(&mut data);"
+                "            self.collect_functionality_matches_{func_snake}(&mut data);"
             ))
         });
-    let apply_actions = (0..query_actions.len()).format_with("\n", |i, f| {
-        f(&format_args!("        self.apply_actions_{i}(&mut data);"))
-    });
+    let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
+    let apply_surjective_axiom_actions = (0..query_actions.len())
+        .filter(is_surjective_axiom)
+        .format_with("\n", |i, f| {
+            f(&format_args!(
+                "            self.apply_actions_{i}(&mut data);"
+            ))
+        });
+    let apply_non_surjective_axiom_actions = (0..query_actions.len())
+        .filter(|i| !is_surjective_axiom(i))
+        .format_with("\n", |i, f| {
+            f(&format_args!("        self.apply_actions_{i}(&mut data);"))
+        });
     let apply_functionality = signature
         .functions()
         .keys()
         .format_with("\n", |function, f| {
             let function_snake = function.to_case(Snake);
             f(&format_args!(
-                "        self.apply_functionality_{function_snake}(&mut data);"
+                "            self.apply_functionality_{function_snake}(&mut data);"
             ))
         });
     writedoc! {out, "
@@ -723,14 +745,21 @@ fn write_close_fn(
         pub fn close(&mut self) {{
             let mut data = CloseData::new();
             while self.is_dirty() {{
+                loop {{
         {collect_query_matches}
         {collect_functionality_matches}
             
-                self.forget_dirt();
+                    self.forget_dirt();
 
-        {apply_actions}
+        {apply_surjective_axiom_actions}
         {apply_functionality}
-            
+
+                    self.insert_new_tuples(&mut data);
+                    if !self.is_dirty() {{
+                        break;
+                    }}
+                }}
+        {apply_non_surjective_axiom_actions}
                 self.insert_new_tuples(&mut data);
             }}
         }}

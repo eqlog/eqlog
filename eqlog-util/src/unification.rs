@@ -20,12 +20,10 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         }
         el
     }
-    pub fn union_into(&mut self, mut lhs: T, mut rhs: T) -> bool {
-        lhs = self.root(lhs);
-        rhs = self.root(rhs);
-        let non_trivial = lhs != rhs;
+    pub fn union_roots_into(&mut self, lhs: T, rhs: T) {
+        assert!(lhs == self.root(lhs));
+        assert!(rhs == self.root(rhs));
         self.parents[lhs.into() as usize] = rhs;
-        non_trivial
     }
     pub fn increase_size_to(&mut self, new_size: usize) {
         assert!(new_size >= self.len());

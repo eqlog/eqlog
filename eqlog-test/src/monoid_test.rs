@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod test {
+    use maplit::btreeset;
+    use std::collections::BTreeSet;
 
     #[test]
     fn test_equational_cyclic_no_neutral() {
@@ -82,5 +84,74 @@ mod test {
                 Mul(a5, a5, a4),
             ]
         );
+    }
+
+    #[test]
+    fn cyclic_two_elements() {
+        use crate::monoid::*;
+
+        let mut mon = Monoid::new();
+
+        // Neutral element.
+        let a0 = mon.new_m();
+        mon.insert_e(E(a0));
+
+        // Generator.
+        let a1 = mon.new_m();
+
+        // a1 * a1 = a0
+        mon.insert_mul(Mul(a1, a1, a0));
+
+        mon.close();
+
+        let a0 = mon.m_root(a0);
+        let a1 = mon.m_root(a1);
+        let els: BTreeSet<M> = mon.iter_m().collect();
+        assert_eq!(els, btreeset! {a0, a1});
+
+        let e: BTreeSet<E> = mon.iter_e().collect();
+        assert_eq!(e, btreeset! {E(a0)});
+
+        let mul: BTreeSet<Mul> = mon.iter_mul().collect();
+        assert_eq!(
+            mul,
+            btreeset! {
+                Mul(a0, a0, a0),
+                Mul(a0, a1, a1),
+                Mul(a1, a0, a1),
+                Mul(a1, a1, a0),
+            }
+        );
+    }
+
+    #[test]
+    fn cyclic_five_elements() {
+        use crate::monoid::*;
+
+        let mut mon = Monoid::new();
+
+        // Neutral element.
+        let a0 = mon.new_m();
+        mon.insert_e(E(a0));
+
+        // Generator.
+        let a1 = mon.new_m();
+
+        // a1 * a1 = a2
+        let a2 = mon.new_m();
+        mon.insert_mul(Mul(a1, a1, a2));
+
+        // a2 * a2 = a4
+        let a4 = mon.new_m();
+        mon.insert_mul(Mul(a2, a2, a4));
+
+        // a4 * a1 = a0
+        mon.insert_mul(Mul(a4, a1, a0));
+
+        mon.close();
+
+        assert_eq!(mon.iter_m().count(), 5);
+        assert_eq!(mon.iter_e().count(), 1);
+        assert_eq!(mon.iter_mul().count(), 5 * 5);
     }
 }
