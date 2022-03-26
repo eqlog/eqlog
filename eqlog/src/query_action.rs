@@ -239,11 +239,8 @@ impl QueryAction {
     }
     //pub fn is_surjective(&self) -> bool {
     //    use Action::*;
-    //    for action in self.actions.iter() {
-    //        if let AddTerm { .. } = action {
-    //            return false;
-    //        }
-    //    }
-    //    true
+    //    self.actions.iter().find(|action| {
+    //        if let AddTerm { .. } = action { true } else { false }
+    //    }).is_none()
     //}
 }
