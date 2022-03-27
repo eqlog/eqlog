@@ -230,7 +230,6 @@ fn write_table_insert_fn(
         .format_with("\n", |(index, age), f| {
             let index_name = IndexName(age, index);
             let order = OrderName(&index.order);
-            // TODO: Diags!
             if index.diagonals.is_empty() {
                 f(&format_args!(
                     "self.index_{index_name}.insert(Self::permute{order}(t));"
