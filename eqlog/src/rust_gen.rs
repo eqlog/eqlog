@@ -121,16 +121,14 @@ fn write_table_struct(
         struct {relation}Table {{
     "}?;
     for index in indices.iter().copied() {
-        {
-            for age in [TupleAge::All, TupleAge::Dirty] {
-                let index_name = IndexName(age, index);
-                let tuple_type_args =
-                    (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
-                write!(
-                    out,
-                    "  index_{index_name}: BTreeSet<({tuple_type_args})>,\n"
-                )?;
-            }
+        for age in [TupleAge::All, TupleAge::Dirty] {
+            let index_name = IndexName(age, index);
+            let tuple_type_args =
+                (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
+            write!(
+                out,
+                "  index_{index_name}: BTreeSet<({tuple_type_args})>,\n"
+            )?;
         }
     }
     writedoc! {out, "
