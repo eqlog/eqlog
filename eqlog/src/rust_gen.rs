@@ -15,7 +15,7 @@ use Case::Snake;
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
-        use std::collections::BTreeSet;
+        use std::collections::{{BTreeSet, BTreeMap}};
         use eqlog_util::Unification;
         use std::ops::Bound;
     "}
@@ -130,20 +130,31 @@ fn write_table_struct(
             ))
         });
 
+    let sorts: BTreeSet<&str> = arity.iter().copied().collect();
+    let element_index_fields = sorts.iter().copied().format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "    element_index_{sort_snake}: BTreeMap<{sort}, Vec<{relation}>>,"
+        ))
+    });
+
     writedoc! {out, "
         #[derive(Clone, Hash, Debug)]
         struct {relation}Table {{
         {index_fields}
+
+        {element_index_fields}
         }}
     "}
 }
 
 fn write_table_new_fn(
     out: &mut impl Write,
+    arity: &[&str],
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let inits = indices
+    let index_inits = indices
         .iter()
         .cartesian_product([TupleAge::All, TupleAge::Dirty])
         .format_with("\n", |(index, age), f| {
@@ -152,10 +163,19 @@ fn write_table_new_fn(
                 "        index_{index_name}: BTreeSet::new(),"
             ))
         });
+
+    let sorts: BTreeSet<&str> = arity.iter().copied().collect();
+    let element_index_inits = sorts.iter().copied().format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "    element_index_{sort_snake}: BTreeMap::new(),"
+        ))
+    });
     writedoc! {out, "
         fn new() -> Self {{
             Self {{
-        {inits}
+        {index_inits}
+        {element_index_inits}
             }}
         }}
     "}
@@ -218,6 +238,7 @@ impl<'a> Display for DiagonalCheck<'a> {
 fn write_table_insert_fn(
     out: &mut impl Write,
     relation: &str,
+    arity: &[&str],
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let master_index = index_selection.get(&QuerySpec::new()).unwrap();
@@ -246,10 +267,26 @@ fn write_table_insert_fn(
             }
         });
 
+    let element_inserts = arity
+        .iter()
+        .copied()
+        .enumerate()
+        .format_with("\n", |(i, sort), f| {
+            let sort_snake = sort.to_case(Snake);
+            // TODO: Use try_insert here once it stabilizes.
+            f(&format_args! {"
+            match self.element_index_{sort_snake}.get_mut(&t.{i}) {{
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {{ self.element_index_{sort_snake}.insert(t.{i}, vec![t]); }},
+            }};
+        "})
+        });
+
     writedoc! {out, "
         fn insert(&mut self, t: {relation}) -> bool {{
             if self.index_{master}.insert(Self::permute{master_order}(t)) {{
         {slave_inserts}
+        {element_inserts}
                 true
             }} else {{
                 false
@@ -363,39 +400,35 @@ fn write_table_clear_dirt_fn(
 fn write_table_drain_with_element(
     out: &mut impl Write,
     relation: &str,
-    arity: &[&str],
     index_selection: &HashMap<QuerySpec, IndexSpec>,
     sort: &str,
 ) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let clauses = arity
-        .iter()
-        .copied()
-        .enumerate()
-        .filter(|(_, s)| *s == sort)
-        .format_with(" || ", |(i, _), f| f(&format_args!("t.{i} == tm")));
-    let retains = indices
+    let removes = indices
         .into_iter()
         .cartesian_product([TupleAge::All, TupleAge::Dirty])
         .format_with("\n", |(index, age), f| {
             let index_name = IndexName(age, index);
             let order_name = OrderName(&index.order);
-            f(&format_args! {"
-                self.index_{index_name}.retain(|t| {{
-                    !contains_tm(&Self::permute_inverse{order_name}(*t))
-                }});
-            "})
+            f(&format_args!(
+                "    self.index_{index_name}.remove(&Self::permute{order_name}(*t));"
+            ))
         });
 
+    // TODO: We can remove duplicates and non-canonical tuples from `ts` by deleting tuples which
+    // we can't find in the master index. We try to find all t in ts in the master index to remove
+    // them anyway.
     writedoc! {out, "
         #[allow(dead_code)]
         fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation}> {{
-            let contains_tm = |t: &{relation}| -> bool {{ {clauses} }};
-            let ts: Vec<{relation}> = self.iter_all().filter(contains_tm).collect();
-
-            {retains}
-
+            let ts = match self.element_index_{sort_snake}.remove(&tm) {{
+                None => Vec::new(),
+                Some(tuples) => tuples,
+            }};
+            for t in ts.iter() {{
+        {removes}
+            }}
             ts.into_iter()
         }}
     "}
@@ -411,8 +444,8 @@ fn write_table_impl(
     writedoc! {out, "
         impl {relation}Table {{
     "}?;
-    write_table_new_fn(out, index_selection)?;
-    write_table_insert_fn(out, relation, index_selection)?;
+    write_table_new_fn(out, arity, index_selection)?;
+    write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_clear_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
@@ -426,7 +459,7 @@ fn write_table_impl(
         }
     }
     for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
-        write_table_drain_with_element(out, relation, arity, index_selection, sort)?;
+        write_table_drain_with_element(out, relation, index_selection, sort)?;
     }
     writedoc! {out, "
         }}
