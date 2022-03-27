@@ -6,7 +6,7 @@ use crate::signature::Signature;
 use convert_case::{Case, Casing};
 use indoc::writedoc;
 use itertools::Itertools;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 use std::iter::once;
@@ -17,6 +17,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
         use std::collections::BTreeSet;
         use eqlog_util::Unification;
+        use std::ops::Bound;
     "}
 }
 
@@ -75,10 +76,361 @@ impl Display for TupleAge {
     }
 }
 
-fn write_relation_field(out: &mut impl Write, relation: &str, age: TupleAge) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
+struct OrderName<'a>(&'a [usize]);
+impl<'a> Display for OrderName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .format_with("", |i, f| f(&format_args!("_{i}")))
+        )
+    }
+}
+
+struct IndexName<'a>(TupleAge, &'a IndexSpec);
+
+impl<'a> Display for IndexName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let age = self.0;
+        let index = self.1;
+        write!(f, "{age}")?;
+        for i in index.order.iter() {
+            write!(f, "_{i}")?;
+        }
+        for diag in index.diagonals.iter() {
+            write!(f, "_diagonal")?;
+            for d in diag.iter() {
+                write!(f, "_{d}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn write_table_struct(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     writedoc! {out, "
-        {relation_snake}_{age} : BTreeSet<{relation}>,
+        #[derive(Clone, Hash, Debug)]
+        struct {relation}Table {{
+    "}?;
+    for index in indices.iter().copied() {
+        {
+            for age in [TupleAge::All, TupleAge::Dirty] {
+                let index_name = IndexName(age, index);
+                let tuple_type_args =
+                    (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
+                write!(
+                    out,
+                    "  index_{index_name}: BTreeSet<({tuple_type_args})>,\n"
+                )?;
+            }
+        }
+    }
+    writedoc! {out, "
+        }}
+    "}
+}
+
+fn write_table_new_fn(
+    out: &mut impl Write,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let inits = indices
+        .iter()
+        .cartesian_product([TupleAge::All, TupleAge::Dirty])
+        .format_with("\n", |(index, age), f| {
+            let index_name = IndexName(age, index);
+            f(&format_args!(
+                "        index_{index_name}: BTreeSet::new(),"
+            ))
+        });
+    writedoc! {out, "
+        fn new() -> Self {{
+            Self {{
+        {inits}
+            }}
+        }}
+    "}
+}
+
+fn write_table_permute_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    order: &[usize],
+) -> io::Result<()> {
+    let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
+    let order_name = OrderName(order);
+    let tuple_args = order
+        .iter()
+        .format_with("", |i, f| f(&format_args!("t.{i}.into(), ")));
+    writedoc! {out, "
+        fn permute{order_name}(t: {relation}) -> ({tuple_type_args}) {{
+            ({tuple_args})
+        }}
+    "}
+}
+
+fn write_table_permute_inverse_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    order: &[usize],
+) -> io::Result<()> {
+    let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
+    let order_name = OrderName(order);
+    let rel_args = order.iter().copied().format_with(", ", |i, f| {
+        let sort = arity[i];
+        f(&format_args!("{sort}::from(t.{i})"))
+    });
+    writedoc! {out, "
+        fn permute_inverse{order_name}(t: ({tuple_type_args})) -> {relation} {{
+            {relation}({rel_args})
+        }}
+    "}
+}
+
+struct DiagonalCheck<'a>(&'a BTreeSet<BTreeSet<usize>>);
+impl<'a> Display for DiagonalCheck<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let diags = &self.0;
+        let all_clauses = diags.iter().format_with(" && ", |diag, f| {
+            let diag_clauses = diag
+                .iter()
+                .zip(diag.iter().skip(1))
+                .format_with(" && ", |(prev, next), f| {
+                    f(&format_args!("t.{prev} == t.{next}"))
+                });
+            f(&format_args!("{diag_clauses}"))
+        });
+        write!(f, "{all_clauses}")
+    }
+}
+
+fn write_table_insert_fn(
+    out: &mut impl Write,
+    relation: &str,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let master_index = index_selection.get(&QuerySpec::new()).unwrap();
+    let master = IndexName(TupleAge::All, &master_index);
+    let master_order = OrderName(&master_index.order);
+
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let slave_inserts = indices
+        .into_iter()
+        .cartesian_product([TupleAge::All, TupleAge::Dirty])
+        .filter(|(index, age)| (*index, *age) != (master_index, TupleAge::All))
+        .format_with("\n", |(index, age), f| {
+            let index_name = IndexName(age, index);
+            let order = OrderName(&index.order);
+            // TODO: Diags!
+            if index.diagonals.is_empty() {
+                f(&format_args!(
+                    "self.index_{index_name}.insert(Self::permute{order}(t));"
+                ))
+            } else {
+                let check = DiagonalCheck(&index.diagonals);
+                f(&format_args! {"
+                    if {check} {{
+                        self.index_{index_name}.insert(Self::permute{order}(t));
+                    }}
+                "})
+            }
+        });
+
+    writedoc! {out, "
+        fn insert(&mut self, t: {relation}) -> bool {{
+            if self.index_{master}.insert(Self::permute{master_order}(t)) {{
+        {slave_inserts}
+                true
+            }} else {{
+                false
+            }}
+        }}
+    "}
+}
+
+struct QueryName<'a>(TupleAge, &'a QuerySpec);
+
+impl<'a> Display for QueryName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let age = self.0;
+        let query = self.1;
+        write!(f, "{age}")?;
+        for i in query.projections.iter() {
+            write!(f, "_{i}")?;
+        }
+        for diag in query.diagonals.iter() {
+            write!(f, "_diagonal")?;
+            for d in diag.iter() {
+                write!(f, "_{d}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn write_table_iter_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    query: &QuerySpec,
+    age: TupleAge,
+    index: &IndexSpec,
+) -> io::Result<()> {
+    assert!(index.can_serve(query));
+    let query_name = QueryName(age, query);
+    let index_name = IndexName(age, index);
+    let order_name = OrderName(&index.order);
+
+    // (arg3: Mor, arg5: Obj, ...)
+    let fn_args = query.projections.iter().copied().format_with(", ", |i, f| {
+        let sort = arity[i];
+        f(&format_args!("arg{i}: {sort}"))
+    });
+
+    let unalias_args = query
+        .projections
+        .iter()
+        .copied()
+        .format_with("\n", |i, f| f(&format_args!("    let arg{i} = arg{i}.0;")));
+
+    let fixed_arg_len = query.projections.len();
+    let open_arg_len = arity.len() - query.projections.len();
+
+    let fixed_args = || {
+        index.order[..fixed_arg_len]
+            .iter()
+            .format_with("", |i, f| f(&format_args!("arg{i}, ")))
+    };
+    let fixed_args_min = fixed_args();
+    let fixed_args_max = fixed_args();
+
+    let open_args_min = (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MIN, ")));
+    let open_args_max = (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MAX, ")));
+
+    writedoc! {out, "
+        #[allow(dead_code)]
+        fn iter_{query_name}(&self, {fn_args}) -> impl '_ + Iterator<Item = {relation}> {{
+        {unalias_args}
+            let min = ({fixed_args_min}{open_args_min});
+            let max = ({fixed_args_max}{open_args_max});
+            self.index_{index_name}
+                .range((Bound::Included(&min), Bound::Included(&max)))
+                .copied()
+                .map(Self::permute_inverse{order_name})
+        }}
+    "}
+}
+
+fn write_table_is_dirty_fn(
+    out: &mut impl Write,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let master_index = index_selection.get(&QuerySpec::new()).unwrap();
+    let master = IndexName(TupleAge::Dirty, master_index);
+    writedoc! {out, "
+        fn is_dirty(&self) -> bool {{
+            !self.index_{master}.is_empty()
+        }}
+    "}
+}
+
+fn write_table_clear_dirt_fn(
+    out: &mut impl Write,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let clears = indices.iter().copied().format_with("\n", |index, f| {
+        let index_name = IndexName(TupleAge::Dirty, index);
+        f(&format_args!("    self.index_{index_name}.clear();"))
+    });
+    writedoc! {out, "
+        fn drop_dirt(&mut self) {{
+            {clears}
+        }}
+    "}
+}
+
+fn write_table_drain_with_element(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    sort: &str,
+) -> io::Result<()> {
+    let sort_snake = sort.to_case(Snake);
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let clauses = arity
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, s)| *s == sort)
+        .format_with(" || ", |(i, _), f| f(&format_args!("t.{i} == tm")));
+    let retains = indices
+        .into_iter()
+        .cartesian_product([TupleAge::All, TupleAge::Dirty])
+        .format_with("\n", |(index, age), f| {
+            let index_name = IndexName(age, index);
+            let order_name = OrderName(&index.order);
+            f(&format_args! {"
+                self.index_{index_name}.retain(|t| {{
+                    !contains_tm(&Self::permute_inverse{order_name}(*t))
+                }});
+            "})
+        });
+
+    writedoc! {out, "
+        #[allow(dead_code)]
+        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation}> {{
+            let contains_tm = |t: &{relation}| -> bool {{ {clauses} }};
+            let ts: Vec<{relation}> = self.iter_all().filter(contains_tm).collect();
+
+            {retains}
+
+            ts.into_iter()
+        }}
+    "}
+}
+
+fn write_table_impl(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    writedoc! {out, "
+        impl {relation}Table {{
+    "}?;
+    write_table_new_fn(out, index_selection)?;
+    write_table_insert_fn(out, relation, index_selection)?;
+    write_table_clear_dirt_fn(out, index_selection)?;
+    write_table_is_dirty_fn(out, index_selection)?;
+
+    for index in indices.iter() {
+        write_table_permute_fn(out, relation, arity, &index.order)?;
+        write_table_permute_inverse_fn(out, relation, arity, &index.order)?;
+    }
+    for (query, index) in index_selection.iter() {
+        for age in [TupleAge::All, TupleAge::Dirty] {
+            write_table_iter_fn(out, relation, arity, query, age, index)?;
+        }
+    }
+    for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
+        write_table_drain_with_element(out, relation, arity, index_selection, sort)?;
+    }
+    writedoc! {out, "
+        }}
     "}
 }
 
@@ -87,7 +439,7 @@ fn write_is_dirty_fn(out: &mut impl Write, signature: &Signature) -> io::Result<
         .relations()
         .format_with(" || ", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
-            f(&format_args!("!self.{relation_snake}_dirty.is_empty()"))
+            f(&format_args!("self.{relation_snake}.is_dirty()"))
         });
 
     let sorts_dirty = signature.sorts().keys().format_with(" || ", |sort, f| {
@@ -96,7 +448,6 @@ fn write_is_dirty_fn(out: &mut impl Write, signature: &Signature) -> io::Result<
     });
 
     writedoc! {out, "
-        #[allow(dead_code)]
         pub fn is_dirty(&self) -> bool {{
             self.empty_join_is_dirty ||{rels_dirty} || {sorts_dirty}
         }}
@@ -110,7 +461,7 @@ impl<'a> Display for IterName<'a> {
         let relation_snake = self.0.to_case(Snake);
         let age = self.1;
         let query_spec = self.2;
-        write!(f, "iter_{relation_snake}_{age}")?;
+        write!(f, "{relation_snake}.iter_{age}")?;
         for p in query_spec.projections.iter() {
             write!(f, "_{p}")?;
         }
@@ -124,68 +475,12 @@ impl<'a> Display for IterName<'a> {
     }
 }
 
-fn write_iter_fn(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-    query: &QuerySpec,
-    age: TupleAge,
-) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
-    let iter_name = IterName(relation, age, query);
-
-    // (arg3: Mor, arg5: Obj, ...)
-    let args = query.projections.iter().copied().format_with(", ", |i, f| {
-        let sort = arity[i];
-        f(&format_args!("arg{i}: {sort}"))
-    });
-
-    // && _t.3 == arg3 && _t.5 == arg5 ...
-    let projs_match = query
-        .projections
-        .iter()
-        .copied()
-        .format_with("", |i, f| f(&format_args!(" && _t.{i} == arg{i}")));
-
-    // let diag0_matches = _t.1 == _t.2 && _t.2 == _t.4 && ...;
-    // let diag1_matches = _t.3 == _t.8;
-    // ...
-    let diags_match_decls = query
-        .diagonals
-        .iter()
-        .enumerate()
-        .format_with("\n", |(d, diag), f| {
-            let clauses = diag
-                .iter()
-                .zip(diag.iter().skip(1))
-                .format_with(" && ", |(prev, next), f| {
-                    f(&format_args!("_t.{prev} == _t.{next}"))
-                });
-            f(&format_args!("let diag{d}_matches = {clauses};"))
-        });
-
-    // && diag0_matches && diag_1_matches ...
-    let diags_match =
-        (0..query.diagonals.len()).format_with("", |d, f| f(&format_args!(" && diag{d}_matches")));
-
-    writedoc! {out, "
-        #[allow(dead_code)]
-        fn {iter_name}(&self, {args}) -> impl '_ + Iterator<Item={relation}> {{
-            self.{relation_snake}_{age}.iter().filter(move |_t| {{
-                let proj_matches = true {projs_match};
-                {diags_match_decls}
-                proj_matches {diags_match}
-            }}).copied()
-        }}
-    "}
-}
-
 fn write_pub_iter_fn(out: &mut impl Write, relation: &str) -> io::Result<()> {
     let rel_snake = relation.to_case(Snake);
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={relation}> {{
-            self.iter_{rel_snake}_all()
+            self.{rel_snake}.iter_all()
         }}
     "}
 }
@@ -206,9 +501,7 @@ fn write_pub_insert_relation(
         #[allow(dead_code)]
         pub fn insert_{relation_snake}(&mut self, mut t: {relation}) {{
             {assign_roots}
-            if self.{relation_snake}_all.insert(t) {{
-                self.{relation_snake}_dirty.insert(t);
-            }}
+            self.{relation_snake}.insert(t);
         }}
     "}
 }
@@ -534,7 +827,7 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
                     Some(t) => t.{dom_len},
                     None => {{
                         let tm{result} = self.new_{cod_snake}();
-                        self.insert_{function_snake}({function}({tuple_args}));
+                        self.{function_snake}.insert({function}({tuple_args}));
                         tm{result}
                     }},
                 }};
@@ -559,23 +852,13 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             let clean_rels = signature
                 .relations()
                 .filter(|(_, arity)| arity_contains_sort(arity))
-                .format_with("\n", |(relation, arity), f| {
+                .format_with("\n", |(relation, _), f| {
                     let relation_snake = relation.to_case(Snake);
-                    let clauses = arity
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, s)| **s == sort)
-                        .format_with(" || ", |(i, _), f| f(&format_args!("t.{i} == tm{lhs}")));
-                    f(&format_args!(
-                        "
-                        let {relation_snake}_contains_lhs = |t: &{relation}| {clauses};
+                    f(&format_args! {"
                         data.{relation_snake}_new.extend(
-                            self.iter_{relation_snake}()
-                            .filter({relation_snake}_contains_lhs)
+                            self.{relation_snake}.drain_with_element_{sort_snake}(tm{lhs})
                         );
-                        self.{relation_snake}_all.retain(|t| !{relation_snake}_contains_lhs(t));
-                    "
-                    ))
+                    "})
                 });
             writedoc! {out, "
                 let tm{lhs} = self.{sort_snake}_equalities.root(tm{lhs});
@@ -641,7 +924,7 @@ fn write_apply_functionality_fn(
 fn write_forget_dirt_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
     let relations = signature.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
-        f(&format_args!("self.{relation_snake}_dirty.clear();"))
+        f(&format_args!("self.{relation_snake}.drop_dirt();"))
     });
     let sorts = signature.sorts().keys().format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
@@ -753,8 +1036,8 @@ fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
         write!(out, "{}_all: BTreeSet::new(),\n", sort.to_case(Snake))?;
     }
     for (relation, _) in signature.relations() {
-        write!(out, "{}_all: BTreeSet::new(),\n", relation.to_case(Snake))?;
-        write!(out, "{}_dirty: BTreeSet::new(),\n", relation.to_case(Snake))?;
+        let relation_snake = relation.to_case(Snake);
+        write!(out, "{relation_snake}: {relation}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
     write!(out, "}}\n")?;
@@ -770,10 +1053,9 @@ fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) 
         write!(out, "\n")?;
     }
 
-    for (rel, _) in signature.relations() {
-        write_relation_field(out, rel, TupleAge::All)?;
-        write_relation_field(out, rel, TupleAge::Dirty)?;
-        write!(out, "\n")?;
+    for (relation, _) in signature.relations() {
+        let relation_snake = relation.to_case(Snake);
+        write!(out, "  {relation_snake}: {relation}Table,")?;
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
@@ -786,7 +1068,6 @@ fn write_theory_impl(
     name: &str,
     signature: &Signature,
     query_actions: &[QueryAction],
-    index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
     for sort in signature.sorts().keys() {
@@ -796,11 +1077,6 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
     for (rel, arity) in signature.relations() {
-        let query_index_map = index_selection.get(rel).unwrap();
-        for query in query_index_map.keys() {
-            write_iter_fn(out, rel, &arity, query, TupleAge::All)?;
-            write_iter_fn(out, rel, &arity, query, TupleAge::Dirty)?;
-        }
         write_pub_iter_fn(out, rel)?;
         write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
@@ -847,6 +1123,9 @@ pub fn write_module(
 
     for (rel, arity) in signature.relations() {
         write_relation_struct(out, rel, &arity)?;
+        let index = index_selection.get(rel).unwrap();
+        write_table_struct(out, rel, &arity, index)?;
+        write_table_impl(out, rel, &arity, index)?;
     }
     write!(out, "\n")?;
 
@@ -860,7 +1139,7 @@ pub fn write_module(
     write!(out, "\n")?;
 
     write_theory_struct(out, name, signature)?;
-    write_theory_impl(out, name, signature, query_actions, index_selection)?;
+    write_theory_impl(out, name, signature, query_actions)?;
 
     Ok(())
 }
