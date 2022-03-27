@@ -54,20 +54,18 @@ fn query_spec_chains(indices: HashSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
     chains
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IndexSpec {
     pub order: Vec<usize>,
     pub diagonals: BTreeSet<BTreeSet<usize>>,
 }
 
-#[cfg(test)]
 fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
     let count = order.iter().take_while(|el| prefix.contains(el)).count();
     count == prefix.len()
 }
 
 impl IndexSpec {
-    #[cfg(test)]
     pub fn can_serve(&self, query: &QuerySpec) -> bool {
         query.diagonals == self.diagonals && is_prefix(&query.projections, &self.order)
     }
