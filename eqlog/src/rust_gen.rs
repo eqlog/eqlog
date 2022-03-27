@@ -116,22 +116,24 @@ fn write_table_struct(
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    writedoc! {out, "
-        #[derive(Clone, Hash, Debug)]
-        struct {relation}Table {{
-    "}?;
-    for index in indices.iter().copied() {
-        for age in [TupleAge::All, TupleAge::Dirty] {
+
+    let index_fields = indices
+        .iter()
+        .copied()
+        .cartesian_product([TupleAge::All, TupleAge::Dirty])
+        .format_with("\n", |(index, age), f| {
             let index_name = IndexName(age, index);
             let tuple_type_args =
                 (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
-            write!(
-                out,
-                "  index_{index_name}: BTreeSet<({tuple_type_args})>,\n"
-            )?;
-        }
-    }
+            f(&format_args!(
+                "    index_{index_name}: BTreeSet<({tuple_type_args})>,"
+            ))
+        });
+
     writedoc! {out, "
+        #[derive(Clone, Hash, Debug)]
+        struct {relation}Table {{
+        {index_fields}
         }}
     "}
 }
