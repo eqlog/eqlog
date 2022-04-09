@@ -57,9 +57,9 @@ impl Signature {
     }
 
     pub fn add_sort(&mut self, sort: Sort) {
-        match self.sorts.insert(sort.0.clone(), sort) {
+        match self.sorts.insert(sort.name.clone(), sort) {
             None => (),
-            Some(prev_sort) => panic!("Duplicate declaration of sort {}", prev_sort.0),
+            Some(prev_sort) => panic!("Duplicate declaration of sort {}", prev_sort.name),
         }
     }
     pub fn add_predicate(&mut self, pred: Predicate) {
@@ -99,28 +99,14 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
-        th.add_sort(Sort(t()));
+        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(t()));
 
-        th.add_predicate(Predicate {
-            name: "Q".to_string(),
-            arity: vec![s(), t()],
-        });
-        th.add_predicate(Predicate {
-            name: "P".to_string(),
-            arity: vec![s(), s(), s()],
-        });
+        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]));
+        th.add_predicate(Predicate::new("P".to_string(), vec![s(), s(), s()]));
 
-        th.add_function(Function {
-            name: "F".to_string(),
-            dom: vec![s(), t()],
-            cod: t(),
-        });
-        th.add_function(Function {
-            name: "G".to_string(),
-            dom: vec![t(), s()],
-            cod: t(),
-        });
+        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()));
+        th.add_function(Function::new("G".to_string(), vec![t(), s()], t()));
     }
 
     #[test]
@@ -129,9 +115,9 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
-        th.add_sort(Sort(t()));
-        th.add_sort(Sort(s()));
+        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(t()));
+        th.add_sort(Sort::new(s()));
     }
 
     #[test]
@@ -140,21 +126,12 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
-        th.add_sort(Sort(t()));
+        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(t()));
 
-        th.add_predicate(Predicate {
-            name: "Q".to_string(),
-            arity: vec![s(), t()],
-        });
-        th.add_predicate(Predicate {
-            name: "P".to_string(),
-            arity: vec![s(), s(), s()],
-        });
-        th.add_predicate(Predicate {
-            name: "Q".to_string(),
-            arity: vec![t(), s()],
-        });
+        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]));
+        th.add_predicate(Predicate::new("P".to_string(), vec![s(), s(), s()]));
+        th.add_predicate(Predicate::new("Q".to_string(), vec![t(), s()]));
     }
 
     #[test]
@@ -163,24 +140,12 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
-        th.add_sort(Sort(t()));
+        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(t()));
 
-        th.add_function(Function {
-            name: "F".to_string(),
-            dom: vec![s(), t()],
-            cod: t(),
-        });
-        th.add_function(Function {
-            name: "G".to_string(),
-            dom: vec![t(), s()],
-            cod: t(),
-        });
-        th.add_function(Function {
-            name: "F".to_string(),
-            dom: vec![s(), t()],
-            cod: t(),
-        });
+        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()));
+        th.add_function(Function::new("G".to_string(), vec![t(), s()], t()));
+        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()));
     }
 
     #[test]
@@ -189,12 +154,9 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
+        th.add_sort(Sort::new(s()));
 
-        th.add_predicate(Predicate {
-            name: "Q".to_string(),
-            arity: vec![s(), t()],
-        });
+        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]));
     }
 
     #[test]
@@ -203,13 +165,9 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
+        th.add_sort(Sort::new(s()));
 
-        th.add_function(Function {
-            name: "F".to_string(),
-            dom: vec![s(), s()],
-            cod: t(),
-        });
+        th.add_function(Function::new("F".to_string(), vec![s(), s()], t()));
     }
 
     #[test]
@@ -218,12 +176,8 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort(s()));
+        th.add_sort(Sort::new(s()));
 
-        th.add_function(Function {
-            name: "F".to_string(),
-            dom: vec![s(), t(), s()],
-            cod: s(),
-        });
+        th.add_function(Function::new("F".to_string(), vec![s(), t(), s()], s()));
     }
 }

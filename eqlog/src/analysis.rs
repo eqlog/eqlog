@@ -183,22 +183,23 @@ mod tests {
 
     use crate::grammar::TheoryParser;
     use crate::indirect_ast::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn good_theory() {
         let src = indoc! {"
-        Sort Obj;
-        Sort Mor;
+            Sort Obj;
+            Sort Mor;
 
-        Func Comp : Mor * Mor -> Mor;
-        Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
+            Func Comp : Mor * Mor -> Mor;
+            Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
 
-        Pred Signature: Obj * Mor * Obj;
+            Pred Signature: Obj * Mor * Obj;
 
-        Axiom Signature(x, f, y) & Signature(y, g, z) => Comp(g, f)! & Signature(x, Comp(g, f), z);
+            Axiom Signature(x, f, y) & Signature(y, g, z) => Comp(g, f)! & Signature(x, Comp(g, f), z);
 
-        Func Id : Obj -> Mor; Axiom g = Comp(f, Id(_)) => f = g;
-    "};
+            Func Id : Obj -> Mor; Axiom g = Comp(f, Id(_)) => f = g;
+        "};
         let (sig, axioms) = TheoryParser::new().parse(src).unwrap();
         let obj = || "Obj".to_string();
         let mor = || "Mor".to_string();
@@ -207,25 +208,58 @@ mod tests {
         let signature = || "Signature".to_string();
 
         assert_eq!(
-            *sig.sorts(),
-            hashmap! {
-                obj() => Sort(obj()),
-                mor() => Sort(mor()),
-            }
+            sig.sorts().keys().cloned().collect::<BTreeSet<String>>(),
+            btreeset! {obj(), mor()}
+        );
+        let obj_sort = sig.sorts().get(&obj()).unwrap();
+        let mor_sort = sig.sorts().get(&mor()).unwrap();
+
+        assert_eq!(
+            sig.predicates()
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<String>>(),
+            btreeset! {signature()}
+        );
+        let signature_pred = sig.predicates().get(&signature()).unwrap();
+
+        assert_eq!(
+            sig.functions()
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<String>>(),
+            btreeset! {comp(), id()}
+        );
+        let id_func = sig.functions().get(&id()).unwrap();
+        let comp_func = sig.functions().get(&comp()).unwrap();
+
+        assert_eq!(obj_sort.location.unwrap().slice(src), "Sort Obj;");
+        assert_eq!(mor_sort.location.unwrap().slice(src), "Sort Mor;");
+        assert_eq!(
+            signature_pred.location.unwrap().slice(src),
+            "Pred Signature: Obj * Mor * Obj;"
         );
         assert_eq!(
-            *sig.functions(),
-            hashmap! {
-                comp() => Function{name: comp(), dom: vec![mor(), mor()], cod: mor()},
-                id() => Function{name: id(), dom: vec![obj()], cod: mor()},
-            }
+            id_func.location.unwrap().slice(src),
+            "Func Id : Obj -> Mor;"
         );
         assert_eq!(
-            *sig.predicates(),
-            hashmap! {
-                signature() => Predicate{name: signature(), arity: vec![obj(), mor(), obj()]},
-            }
+            comp_func.location.unwrap().slice(src),
+            "Func Comp : Mor * Mor -> Mor;"
         );
+
+        assert_eq!(obj_sort.name, obj());
+        assert_eq!(mor_sort.name, mor());
+
+        assert_eq!(signature_pred.name, signature());
+        assert_eq!(signature_pred.arity, vec![obj(), mor(), obj()]);
+
+        assert_eq!(id_func.name, id());
+        assert_eq!(id_func.dom, vec![obj()]);
+        assert_eq!(id_func.cod, mor());
+        assert_eq!(comp_func.name, comp());
+        assert_eq!(comp_func.dom, vec![mor(), mor()]);
+        assert_eq!(comp_func.cod, mor());
 
         use TermData::*;
         let f = || Variable("f".to_string());

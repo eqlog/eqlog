@@ -226,22 +226,11 @@ mod tests {
 
     fn category_signature() -> Signature {
         let mut sig = Signature::new();
-        sig.add_sort(Sort(obj()));
-        sig.add_sort(Sort(mor()));
-        sig.add_function(Function {
-            name: comp(),
-            dom: vec![mor(), mor()],
-            cod: mor(),
-        });
-        sig.add_function(Function {
-            name: id(),
-            dom: vec![obj()],
-            cod: mor(),
-        });
-        sig.add_predicate(Predicate {
-            name: signature(),
-            arity: vec![obj(), mor(), obj()],
-        });
+        sig.add_sort(Sort::new(obj()));
+        sig.add_sort(Sort::new(mor()));
+        sig.add_function(Function::new(comp(), vec![mor(), mor()], mor()));
+        sig.add_function(Function::new(id(), vec![obj()], mor()));
+        sig.add_predicate(Predicate::new(signature(), vec![obj(), mor(), obj()]));
         sig
     }
 
