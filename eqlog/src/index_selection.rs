@@ -334,7 +334,7 @@ mod tests {
 
         assert_eq!(comp_specs.values().unique().count(), 1);
         assert_eq!(id_specs.values().unique().count(), 1);
-        assert_eq!(signature_specs.values().unique().count(), 0);
+        assert_eq!(signature_specs.values().unique().count(), 1);
     }
 
     #[test]
@@ -436,6 +436,6 @@ mod tests {
 
         assert_eq!(comp_specs.values().unique().count(), 1);
         assert_eq!(id_specs.values().unique().count(), 1);
-        assert_eq!(signature_specs.values().unique().count(), 2);
+        assert_eq!(signature_specs.values().unique().count(), 3);
     }
 }
