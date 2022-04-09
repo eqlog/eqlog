@@ -2,6 +2,7 @@
 mod test {
     use maplit::btreeset;
     use std::collections::BTreeSet;
+    use std::iter::once;
 
     #[test]
     fn test_equational_cyclic_no_neutral() {
@@ -153,5 +154,33 @@ mod test {
         assert_eq!(mon.iter_m().count(), 5);
         assert_eq!(mon.iter_e().count(), 1);
         assert_eq!(mon.iter_mul().count(), 5 * 5);
+    }
+
+    #[test]
+    fn cyclic_many_elements() {
+        use crate::monoid::*;
+        // Cyclic group of order 2^n.
+        let n = 4;
+        let mut mon = Monoid::new();
+
+        // Neutral element.
+        let e = mon.new_m();
+        mon.insert_e(E(e));
+        let mut els = Vec::new();
+        for _ in 0..n {
+            els.push(mon.new_m());
+        }
+        for (a, b) in els
+            .iter()
+            .copied()
+            .zip(els.iter().copied().skip(1).chain(once(e)))
+        {
+            mon.insert_mul(Mul(a, a, b));
+        }
+
+        mon.close();
+        assert_eq!(mon.iter_m().count(), 1 << n);
+        assert_eq!(mon.iter_e().count(), 1);
+        assert_eq!(mon.iter_mul().count(), 1 << (2 * n));
     }
 }
