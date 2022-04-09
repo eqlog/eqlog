@@ -24,20 +24,29 @@ CamelCaseId: String = {
     },
 }
 
-SortDecl: Sort = { "Sort" <name: CamelCaseId> ";" => Sort(name) }
+SortDecl: Sort = {
+    <l: @L>  "Sort" <name: CamelCaseId> ";" <r: @R> => {
+        Sort{name, location: Some(Location(l, r))}
+    }
+}
 
 PredicateDecl: Predicate = {
-    "Pred" <name: CamelCaseId> ":" <head: Id> <tail: ("*" <Id>)*> ";" => {
-        Predicate{name, arity: once(head).chain(tail).collect()}
+    <l: @L> "Pred" <name: CamelCaseId> ":" <head: Id> <tail: ("*" <Id>)*> ";" <r: @R> => {
+        Predicate {
+            name,
+            arity: once(head).chain(tail).collect(),
+            location: Some(Location(l, r)),
+        }
     },
 }
 
 FunctionDecl: Function = {
-    "Func" <name: CamelCaseId> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> ";" => {
+    <l: @L> "Func" <name: CamelCaseId> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> ";" <r: @R> => {
         Function {
             name,
             dom: head_dom.into_iter().chain(tail_dom).collect(),
             cod,
+            location: Some(Location(l, r)),
         }
     },
 }
@@ -50,36 +59,70 @@ Application: (String, Vec<Term>) = {
 }
 
 Term: Term = {
-    <var: SnakeCaseId> => Term::Variable(var),
-    "_" => Term::Wildcard,
-    <app: Application> => Term::Application(app.0, app.1),
+    <l: @L> <var: SnakeCaseId> <r: @R> => Term {
+        data: TermData::Variable(var),
+        location: Some(Location(l, r)),
+    },
+    <l: @L> "_" <r: @R> => Term {
+        data: TermData::Wildcard,
+        location: Some(Location(l, r)),
+    },
+    <l: @L> <app: Application> <r: @R> => Term {
+        data: TermData::Application(app.0, app.1),
+        location: Some(Location(l, r)),
+    },
 }
 
 Atom: Atom = {
-    <lhs: Term> "=" <rhs: Term> => Atom::Equal(lhs, rhs),
-    <t: Term> "!" => Atom::Defined(t, None),
-    <t: Term> "!" ":" <s: Id> => Atom::Defined(t, Some(s)),
-    <app: Application> => Atom::Predicate(app.0, app.1),
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => Atom {
+        data: AtomData::Equal(lhs, rhs),
+        location: Some(Location(l, r)),
+    },
+    <l: @L> <t: Term> "!" <r: @R> => Atom {
+        data: AtomData::Defined(t, None),
+        location: Some(Location(l, r)),
+    },
+    <l: @L> <t: Term> "!" ":" <s: Id> <r: @R> => Atom {
+        data: AtomData::Defined(t, Some(s)),
+        location: Some(Location(l, r)),
+    },
+    <l: @L> <app: Application> <r: @R> => Atom {
+        data: AtomData::Predicate(app.0, app.1),
+        location: Some(Location(l, r)),
+    },
 }
 
 Formula: Formula = {
-    <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> =>
-        Formula(head_atom.into_iter().chain(tail_atoms).collect()),
+    <l: @L> <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> <r: @R> => {
+        Formula {
+            atoms: head_atom.into_iter().chain(tail_atoms).collect(),
+            location: Some(Location(l, r)),
+        }
+    }
 }
 
 pub Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
-    <app: Application> "~>" <to: Term> => Sequent::Reduction {
-        premise: Formula(Vec::new()),
-        from_function: app.0,
-        from_args: app.1,
-        to,
+    <l: @L> <premise: Formula> "=>" <conclusion: Formula> <r: @R> => Sequent {
+        data: SequentData::Implication(premise, conclusion),
+        location: Some(Location(l, r)),
     },
-    <premise: Formula> "=>" <app: Application> "~>" <to: Term> => Sequent::Reduction {
-        premise,
-        from_function: app.0,
-        from_args: app.1,
-        to,
+    <l: @L> <app: Application> "~>" <to: Term> <r: @R> => Sequent {
+        data: SequentData::Reduction {
+            premise: None,
+            from_function: app.0,
+            from_args: app.1,
+            to,
+        },
+        location: Some(Location(l, r)),
+    },
+    <l: @L> <premise: Formula> "=>" <app: Application> "~>" <to: Term> <r: @R> => Sequent {
+        data: SequentData::Reduction {
+            premise: Some(premise),
+            from_function: app.0,
+            from_args: app.1,
+            to,
+        },
+        location: Some(Location(l, r)),
     },
 }
 
@@ -90,15 +133,18 @@ AxiomDecl: Sequent = {
 pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
     () => (Signature::new(), vec![]),
     <mut theory: Theory> <sort: SortDecl> => {
-        theory.0.add_sort(sort);
+        let (ref mut sig, _) = &mut theory;
+        sig.add_sort(sort);
         theory
     },
     <mut theory: Theory> <pred: PredicateDecl> => {
-        theory.0.add_predicate(pred);
+        let (ref mut sig, _) = &mut theory;
+        sig.add_predicate(pred);
         theory
     },
     <mut theory: Theory> <func: FunctionDecl> => {
-        theory.0.add_function(func);
+        let (ref mut sig, _) = &mut theory;
+        sig.add_function(func);
         theory
     },
     <mut theory: Theory> <seq: AxiomDecl> => {

@@ -73,10 +73,10 @@ pub struct Sequent {
 }
 
 fn translate_term(term: &direct_ast::Term, universe: &mut TermUniverse) -> Term {
-    match term {
-        direct_ast::Term::Variable(name) => universe.new_term(TermData::Variable(name.clone())),
-        direct_ast::Term::Wildcard => universe.new_term(TermData::Wildcard),
-        direct_ast::Term::Application(f, args) => {
+    match &term.data {
+        direct_ast::TermData::Variable(name) => universe.new_term(TermData::Variable(name.clone())),
+        direct_ast::TermData::Wildcard => universe.new_term(TermData::Wildcard),
+        direct_ast::TermData::Application(f, args) => {
             let translated_args = args
                 .iter()
                 .map(|arg| translate_term(arg, universe))
@@ -88,17 +88,17 @@ fn translate_term(term: &direct_ast::Term, universe: &mut TermUniverse) -> Term 
 
 fn translate_atom(atom: &direct_ast::Atom, universe: &mut TermUniverse) -> Atom {
     let terms_begin = Term(universe.len());
-    let data = match atom {
-        direct_ast::Atom::Equal(lhs, rhs) => {
+    let data = match &atom.data {
+        direct_ast::AtomData::Equal(lhs, rhs) => {
             let translated_lhs = translate_term(lhs, universe);
             let translated_rhs = translate_term(rhs, universe);
             AtomData::Equal(translated_lhs, translated_rhs)
         }
-        direct_ast::Atom::Defined(tm, sort) => {
+        direct_ast::AtomData::Defined(tm, sort) => {
             let translated_tm = translate_term(tm, universe);
             AtomData::Defined(translated_tm, sort.clone())
         }
-        direct_ast::Atom::Predicate(pred, args) => {
+        direct_ast::AtomData::Predicate(pred, args) => {
             let translated_args = args
                 .iter()
                 .map(|arg| translate_term(arg, universe))
@@ -132,11 +132,11 @@ impl Sequent {
     pub fn new(sequent: &direct_ast::Sequent) -> Sequent {
         let mut universe = TermUniverse::new();
 
-        use direct_ast::Sequent::*;
-        match sequent {
+        use direct_ast::SequentData::*;
+        match &sequent.data {
             Implication(premise, conclusion) => Sequent {
-                premise: translate_formula(&mut universe, &premise.0),
-                conclusion: translate_formula(&mut universe, &conclusion.0),
+                premise: translate_formula(&mut universe, &premise.atoms),
+                conclusion: translate_formula(&mut universe, &conclusion.atoms),
                 universe,
             },
             Reduction {
@@ -146,7 +146,10 @@ impl Sequent {
                 to,
             } => {
                 // Translate premise atoms.
-                let mut premise = translate_formula(&mut universe, &premise.0);
+                let mut premise = match premise {
+                    Some(premise) => translate_formula(&mut universe, &premise.atoms),
+                    None => translate_formula(&mut universe, &[]),
+                };
 
                 // Add
                 //     !from_arg[0] & !from_arg[1] & ...
