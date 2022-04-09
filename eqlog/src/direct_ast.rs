@@ -41,11 +41,3 @@ pub enum Sequent {
         to: Term,
     },
 }
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Declaration {
-    Sort(Sort),
-    Predicate(Predicate),
-    Function(Function),
-    Axiom(Sequent),
-}
