@@ -24,16 +24,16 @@ CamelCaseId: String = {
     },
 }
 
-Sort: Sort = { <name: CamelCaseId> => Sort(name) }
+SortDecl: Sort = { "Sort" <name: CamelCaseId> ";" => Sort(name) }
 
-Predicate: Predicate = {
-    <name: CamelCaseId> ":" <head: Id> <tail: ("*" <Id>)*> => {
+PredicateDecl: Predicate = {
+    "Pred" <name: CamelCaseId> ":" <head: Id> <tail: ("*" <Id>)*> ";" => {
         Predicate{name, arity: once(head).chain(tail).collect()}
     },
 }
 
-Function: Function = {
-    <name: CamelCaseId> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> => {
+FunctionDecl: Function = {
+    "Func" <name: CamelCaseId> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> ";" => {
         Function {
             name,
             dom: head_dom.into_iter().chain(tail_dom).collect(),
@@ -83,27 +83,29 @@ pub Sequent: Sequent = {
     },
 }
 
-Declaration: Declaration = {
-    "Sort" <sort: Sort> ";" => Declaration::Sort(sort),
-    "Pred" <pred: Predicate> ";" => Declaration::Predicate(pred),
-    "Func" <func: Function> ";" => Declaration::Function(func),
-    "Axiom" <seq: Sequent> ";" => Declaration::Axiom(seq),
+AxiomDecl: Sequent = {
+    "Axiom" <seq: Sequent> ";" => seq,
 }
 
 pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
     () => (Signature::new(), vec![]),
-    <mut theory: Theory> <decl: Declaration> => {
-        let (sig, axioms) = &mut theory;
-        match decl {
-            Declaration::Sort(sort) => sig.add_sort(sort),
-            Declaration::Predicate(pred) => sig.add_predicate(pred),
-            Declaration::Function(func) => sig.add_function(func),
-            Declaration::Axiom(seq) => { 
-                let indirect_seq = indirect_ast::Sequent::new(&seq);
-                let sorts = check_semantically(&sig, &indirect_seq);
-                axioms.push((indirect_seq, sorts));
-            },
-        };
+    <mut theory: Theory> <sort: SortDecl> => {
+        theory.0.add_sort(sort);
+        theory
+    },
+    <mut theory: Theory> <pred: PredicateDecl> => {
+        theory.0.add_predicate(pred);
+        theory
+    },
+    <mut theory: Theory> <func: FunctionDecl> => {
+        theory.0.add_function(func);
+        theory
+    },
+    <mut theory: Theory> <seq: AxiomDecl> => {
+        let (ref sig, ref mut axioms) = &mut theory;
+        let indirect_seq = indirect_ast::Sequent::new(&seq);
+        let sorts = check_semantically(&sig, &indirect_seq);
+        axioms.push((indirect_seq, sorts));
         theory
     },
 }
