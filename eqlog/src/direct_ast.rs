@@ -95,18 +95,17 @@ pub struct Formula {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum SequentData {
+pub enum Sequent {
     Implication(Formula, Formula),
     Reduction {
         premise: Option<Formula>,
-        from_function: String,
-        from_args: Vec<Term>,
+        from: Term,
         to: Term,
     },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Sequent {
-    pub data: SequentData,
+pub struct Axiom {
+    pub sequent: Sequent,
     pub location: Option<Location>,
 }

@@ -102,32 +102,36 @@ Formula: Formula = {
 }
 
 pub Sequent: Sequent = {
-    <l: @L> <premise: Formula> "=>" <conclusion: Formula> <r: @R> => Sequent {
-        data: SequentData::Implication(premise, conclusion),
-        location: Some(Location(l, r)),
-    },
-    <l: @L> <app: Application> "~>" <to: Term> <r: @R> => Sequent {
-        data: SequentData::Reduction {
+    <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
+    <from_l: @L> <from: Application> <from_r: @R> "~>" <to: Term> => {
+        let from = Term {
+            data: TermData::Application(from.0, from.1),
+            location: Some(Location(from_l, from_r)),
+        };
+        Sequent::Reduction {
             premise: None,
-            from_function: app.0,
-            from_args: app.1,
+            from,
             to,
-        },
-        location: Some(Location(l, r)),
+        }
     },
-    <l: @L> <premise: Formula> "=>" <app: Application> "~>" <to: Term> <r: @R> => Sequent {
-        data: SequentData::Reduction {
+    <premise: Formula> "=>" <from_l: @L> <from: Application> <from_r: @R> "~>" <to: Term> => {
+        let from = Term {
+            data: TermData::Application(from.0, from.1),
+            location: Some(Location(from_l, from_r)),
+        };
+        Sequent::Reduction {
             premise: Some(premise),
-            from_function: app.0,
-            from_args: app.1,
+            from,
             to,
-        },
-        location: Some(Location(l, r)),
+        }
     },
 }
 
-AxiomDecl: Sequent = {
-    "Axiom" <seq: Sequent> ";" => seq,
+AxiomDecl: Axiom = {
+    <l: @L> "Axiom" <sequent: Sequent> ";" <r: @R> => Axiom {
+        sequent,
+        location: Some(Location(l, r)),
+    },
 }
 
 pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
@@ -147,9 +151,9 @@ pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
         sig.add_function(func);
         theory
     },
-    <mut theory: Theory> <seq: AxiomDecl> => {
+    <mut theory: Theory> <ax: AxiomDecl> => {
         let (ref sig, ref mut axioms) = &mut theory;
-        let indirect_seq = indirect_ast::Sequent::new(&seq);
+        let indirect_seq = indirect_ast::Sequent::new(&ax.sequent);
         let sorts = check_semantically(&sig, &indirect_seq);
         axioms.push((indirect_seq, sorts));
         theory
