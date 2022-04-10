@@ -18,8 +18,8 @@ pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> 
     unification.congruence_closure();
 
     // Assign sorts based on application of functions.
-    for (tm, data) in sequent.universe.iter_terms() {
-        match data {
+    for tm in sequent.universe.iter_terms() {
+        match sequent.universe.data(tm) {
             TermData::Application(f, args) => match signature.functions().get(f) {
                 Some(Function { dom, cod, .. }) => {
                     if args.len() != dom.len() {
@@ -67,7 +67,7 @@ pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> 
     }
 
     // Check that all terms have precisely one assigned sort.
-    for (tm, _) in sequent.universe.iter_terms() {
+    for tm in sequent.universe.iter_terms() {
         match unification[tm].len() {
             0 => panic!("No sort inferred for term"),
             1 => (),
