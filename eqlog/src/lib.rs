@@ -16,6 +16,7 @@ lalrpop_mod!(
 );
 mod analysis;
 mod build;
+mod error;
 mod flat_ast;
 mod index_selection;
 mod query_action;

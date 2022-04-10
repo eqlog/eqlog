@@ -1,9 +1,13 @@
 use crate::ast::*;
+use crate::error::*;
 use crate::signature::Signature;
 use crate::unification::{TermMap, TermUnification};
 use std::collections::HashSet;
 
-pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> {
+pub fn infer_sorts(
+    signature: &Signature,
+    sequent: &Sequent,
+) -> Result<TermMap<String>, SemanticsError> {
     let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
         lhs.extend(rhs);
         lhs
@@ -23,14 +27,24 @@ pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> 
             TermData::Application(f, args) => match signature.functions().get(f) {
                 Some(Function { dom, cod, .. }) => {
                     if args.len() != dom.len() {
-                        panic!("Wrong argument number for function {}", f)
+                        return Err(SemanticsError::FunctionArgumentNumber {
+                            function: f.clone(),
+                            expected: dom.len(),
+                            got: args.len(),
+                            location: sequent.universe.location(tm),
+                        });
                     }
                     for (arg, sort) in args.iter().copied().zip(dom) {
                         unification[arg].insert(sort.clone());
                     }
                     unification[tm].insert(cod.clone());
                 }
-                None => panic!("Undeclared function {}", f),
+                None => {
+                    return Err(SemanticsError::UndeclaredSymbol {
+                        name: f.clone(),
+                        location: sequent.universe.location(tm),
+                    })
+                }
             },
             TermData::Wildcard | TermData::Variable(_) => (),
         }
@@ -49,10 +63,20 @@ pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> 
             AtomData::Predicate(p, args) => {
                 let arity = match signature.predicates().get(p) {
                     Some(Predicate { arity, .. }) => arity,
-                    None => panic!("Undeclared predicate {}", p),
+                    None => {
+                        return Err(SemanticsError::UndeclaredSymbol {
+                            name: p.clone(),
+                            location: atom.location,
+                        })
+                    }
                 };
                 if args.len() != arity.len() {
-                    panic!("Wrong argument number for predicate {}", p)
+                    return Err(SemanticsError::PredicateArgumentNumber {
+                        predicate: p.clone(),
+                        expected: arity.len(),
+                        got: args.len(),
+                        location: atom.location,
+                    });
                 }
                 for (arg, sort) in args.iter().copied().zip(arity) {
                     unification[arg].insert(sort.clone());
@@ -64,18 +88,28 @@ pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> 
     // Check that all terms have precisely one assigned sort.
     for tm in sequent.universe.iter_terms() {
         match unification[tm].len() {
-            0 => panic!("No sort inferred for term"),
+            0 => {
+                return Err(SemanticsError::NoSort {
+                    location: sequent.universe.location(tm),
+                })
+            }
             1 => (),
-            _ => panic!("Conflicting sorts inferred for term"),
+            _ => {
+                return Err(SemanticsError::ConflictingSorts {
+                    location: sequent.universe.location(tm),
+                    sorts: unification[tm].iter().cloned().collect(),
+                })
+            }
         }
     }
 
-    unification
+    let sorts = unification
         .freeze()
-        .map(|sorts| sorts.into_iter().next().unwrap())
+        .map(|sorts| sorts.into_iter().next().unwrap());
+    Ok(sorts)
 }
 
-pub fn check_epimorphism(sequent: &Sequent) {
+pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
     let universe = &sequent.universe;
     let mut has_occurred = TermUnification::new(
         universe,
@@ -115,13 +149,18 @@ pub fn check_epimorphism(sequent: &Sequent) {
         .flatten()
     {
         match universe.data(tm) {
-            TermData::Variable(_) => {
-                assert!(
-                    has_occurred[tm],
-                    "Variable in conclusion that does not occur in premise"
-                )
+            TermData::Variable(_) if has_occurred[tm] => (),
+            TermData::Variable(var) => {
+                return Err(SemanticsError::VariableNotInPremise {
+                    var: var.clone(),
+                    location: universe.location(tm),
+                })
             }
-            TermData::Wildcard => panic!("Wildcard in conclusion"),
+            TermData::Wildcard => {
+                return Err(SemanticsError::WildcardInConclusion {
+                    location: universe.location(tm),
+                })
+            }
             TermData::Application(_, _) => (),
         }
     }
@@ -132,25 +171,25 @@ pub fn check_epimorphism(sequent: &Sequent) {
             Equal(lhs, rhs) => {
                 let lhs = *lhs;
                 let rhs = *rhs;
-                assert!(
-                    has_occurred[lhs] || has_occurred[rhs],
-                    "Both terms in equality in conclusion are not used earlier"
-                );
+                if !has_occurred[lhs] && !has_occurred[rhs] {
+                    return Err(SemanticsError::ConclusionEqualityOfNewTerms {
+                        location: atom.location,
+                    });
+                }
 
                 if !has_occurred[lhs] || !has_occurred[rhs] {
                     let new = if has_occurred[lhs] { rhs } else { lhs };
                     use TermData::*;
                     match universe.data(new) {
-                        Variable(_) => {
-                            panic!("Variable in conclusion that does not occur in premise")
+                        Variable(_) | Wildcard => {
+                            // Variables or Wildcards should've been checked earlier.
+                            debug_assert!(has_occurred[new]);
                         }
-                        Wildcard => panic!("Wildcard in conclusion"),
                         Application(_, args) => {
-                            for arg in args.iter().copied() {
-                                assert!(
-                                    has_occurred[arg],
-                                    "Argument of new term in conclusion is not used earlier"
-                                );
+                            if let Some(arg) = args.iter().find(|arg| !has_occurred[**arg]) {
+                                return Err(SemanticsError::ConclusionEqualityArgNew {
+                                    location: universe.location(*arg),
+                                });
                             }
                         }
                     }
@@ -161,11 +200,10 @@ pub fn check_epimorphism(sequent: &Sequent) {
             }
             Defined(_, _) => (),
             Predicate(_, args) => {
-                for arg in args {
-                    assert!(
-                        has_occurred[*arg],
-                        "Argument of predicate in conclusion is not used earlier"
-                    );
+                if let Some(arg) = args.iter().copied().find(|arg| !has_occurred[*arg]) {
+                    return Err(SemanticsError::ConclusionPredicateArgNew {
+                        location: universe.location(arg),
+                    });
                 }
             }
         }
@@ -173,23 +211,39 @@ pub fn check_epimorphism(sequent: &Sequent) {
             has_occurred[tm] = true;
         }
     }
+
+    Ok(())
 }
 
-pub fn check_semantically(signature: &Signature, sequent: &Sequent) -> TermMap<String> {
-    let sorts = infer_sorts(signature, sequent);
-    check_epimorphism(sequent);
-    sorts
+pub fn check_semantically(
+    signature: &Signature,
+    sequent: &Sequent,
+) -> Result<TermMap<String>, SemanticsError> {
+    let sorts = infer_sorts(signature, sequent)?;
+    check_epimorphism(sequent)?;
+    Ok(sorts)
 }
 
 #[cfg(test)]
 mod tests {
 
-    use indoc::indoc;
-
-    use crate::ast::*;
+    use super::*;
     use crate::grammar::TheoryParser;
+    use indoc::indoc;
     use regex::Regex;
     use std::collections::BTreeSet;
+
+    fn src_loc(s: &str, n: usize, src: &str) -> Location {
+        let re = Regex::new(
+            &s.replace("(", "\\(")
+                .replace(")", "\\)")
+                .replace(".", "\\.")
+                .replace("*", "\\*"),
+        )
+        .unwrap();
+        let m = re.find_iter(src).nth(n).unwrap();
+        Location(m.start(), m.end())
+    }
 
     #[test]
     fn good_theory() {
@@ -206,17 +260,7 @@ mod tests {
 
             Func Id : Obj -> Mor; Axiom g = Comp(f, Id(_)) => f = g;
         "};
-        let src_loc = |s: &str, n: usize| -> Location {
-            let re = Regex::new(
-                &s.replace("(", "\\(")
-                    .replace(")", "\\)")
-                    .replace(".", "\\.")
-                    .replace("*", "\\*"),
-            )
-            .unwrap();
-            let m = re.find_iter(src).nth(n).unwrap();
-            Location(m.start(), m.end())
-        };
+        let src_loc = |s: &str, n: usize| -> Location { src_loc(s, n, src) };
         let (sig, axioms) = TheoryParser::new()
             .parse(&mut TermUniverse::new(), src)
             .unwrap();
@@ -489,10 +533,10 @@ mod tests {
     #[should_panic]
     fn wrong_function_argument_number() {
         let src = indoc! {"
-        Sort Mor;
-        Func Comp : Mor * Mor -> Mor;
-        Axiom Comp(g, f, h) ~> g;
-    "};
+            Sort Mor;
+            Func Comp : Mor * Mor -> Mor;
+            Axiom Comp(g, f, h) ~> g;
+        "};
         TheoryParser::new()
             .parse(&mut TermUniverse::new(), src)
             .unwrap();
