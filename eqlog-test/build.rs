@@ -1,5 +1,5 @@
 extern crate eqlog;
 
 fn main() {
-    eqlog::process_root().unwrap();
+    eqlog::process_root();
 }

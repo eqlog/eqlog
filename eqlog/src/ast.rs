@@ -3,13 +3,6 @@ use std::iter::once;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Location(pub usize, pub usize);
 
-impl Location {
-    pub fn slice(self, source: &str) -> &str {
-        let Location(a, b) = self;
-        &source[a..b]
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Sort {
     pub name: String,

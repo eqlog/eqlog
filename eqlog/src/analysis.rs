@@ -7,7 +7,7 @@ use std::collections::HashSet;
 pub fn infer_sorts(
     signature: &Signature,
     sequent: &Sequent,
-) -> Result<TermMap<String>, SemanticsError> {
+) -> Result<TermMap<String>, CompileError> {
     let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
         lhs.extend(rhs);
         lhs
@@ -27,7 +27,7 @@ pub fn infer_sorts(
             TermData::Application(f, args) => match signature.functions().get(f) {
                 Some(Function { dom, cod, .. }) => {
                     if args.len() != dom.len() {
-                        return Err(SemanticsError::FunctionArgumentNumber {
+                        return Err(CompileError::FunctionArgumentNumber {
                             function: f.clone(),
                             expected: dom.len(),
                             got: args.len(),
@@ -40,7 +40,7 @@ pub fn infer_sorts(
                     unification[tm].insert(cod.clone());
                 }
                 None => {
-                    return Err(SemanticsError::UndeclaredSymbol {
+                    return Err(CompileError::UndeclaredSymbol {
                         name: f.clone(),
                         location: sequent.universe.location(tm),
                     })
@@ -64,14 +64,14 @@ pub fn infer_sorts(
                 let arity = match signature.predicates().get(p) {
                     Some(Predicate { arity, .. }) => arity,
                     None => {
-                        return Err(SemanticsError::UndeclaredSymbol {
+                        return Err(CompileError::UndeclaredSymbol {
                             name: p.clone(),
                             location: atom.location,
                         })
                     }
                 };
                 if args.len() != arity.len() {
-                    return Err(SemanticsError::PredicateArgumentNumber {
+                    return Err(CompileError::PredicateArgumentNumber {
                         predicate: p.clone(),
                         expected: arity.len(),
                         got: args.len(),
@@ -89,13 +89,13 @@ pub fn infer_sorts(
     for tm in sequent.universe.iter_terms() {
         match unification[tm].len() {
             0 => {
-                return Err(SemanticsError::NoSort {
+                return Err(CompileError::NoSort {
                     location: sequent.universe.location(tm),
                 })
             }
             1 => (),
             _ => {
-                return Err(SemanticsError::ConflictingSorts {
+                return Err(CompileError::ConflictingSorts {
                     location: sequent.universe.location(tm),
                     sorts: unification[tm].iter().cloned().collect(),
                 })
@@ -109,7 +109,7 @@ pub fn infer_sorts(
     Ok(sorts)
 }
 
-pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
+pub fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
     let universe = &sequent.universe;
     let mut has_occurred = TermUnification::new(
         universe,
@@ -151,13 +151,13 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
         match universe.data(tm) {
             TermData::Variable(_) if has_occurred[tm] => (),
             TermData::Variable(var) => {
-                return Err(SemanticsError::VariableNotInPremise {
+                return Err(CompileError::VariableNotInPremise {
                     var: var.clone(),
                     location: universe.location(tm),
                 })
             }
             TermData::Wildcard => {
-                return Err(SemanticsError::WildcardInConclusion {
+                return Err(CompileError::WildcardInConclusion {
                     location: universe.location(tm),
                 })
             }
@@ -172,7 +172,7 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
                 let lhs = *lhs;
                 let rhs = *rhs;
                 if !has_occurred[lhs] && !has_occurred[rhs] {
-                    return Err(SemanticsError::ConclusionEqualityOfNewTerms {
+                    return Err(CompileError::ConclusionEqualityOfNewTerms {
                         location: atom.location,
                     });
                 }
@@ -187,7 +187,7 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
                         }
                         Application(_, args) => {
                             if let Some(arg) = args.iter().find(|arg| !has_occurred[**arg]) {
-                                return Err(SemanticsError::ConclusionEqualityArgNew {
+                                return Err(CompileError::ConclusionEqualityArgNew {
                                     location: universe.location(*arg),
                                 });
                             }
@@ -201,7 +201,7 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
             Defined(_, _) => (),
             Predicate(_, args) => {
                 if let Some(arg) = args.iter().copied().find(|arg| !has_occurred[*arg]) {
-                    return Err(SemanticsError::ConclusionPredicateArgNew {
+                    return Err(CompileError::ConclusionPredicateArgNew {
                         location: universe.location(arg),
                     });
                 }
@@ -218,7 +218,7 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), SemanticsError> {
 pub fn check_semantically(
     signature: &Signature,
     sequent: &Sequent,
-) -> Result<TermMap<String>, SemanticsError> {
+) -> Result<TermMap<String>, CompileError> {
     let sorts = infer_sorts(signature, sequent)?;
     check_epimorphism(sequent)?;
     Ok(sorts)
@@ -339,7 +339,7 @@ mod tests {
         };
 
         {
-            let (seq, sorts) = ax0;
+            let (Axiom { sequent: seq, .. }, sorts) = ax0;
             let mut universe = TermUniverse::new();
 
             // Comp(h, Comp(g, f))
@@ -406,7 +406,7 @@ mod tests {
         }
 
         {
-            let (seq, sorts) = ax1;
+            let (Axiom { sequent: seq, .. }, sorts) = ax1;
             let mut universe = TermUniverse::new();
 
             let x0 = universe.new_term(x(), None);
@@ -488,7 +488,7 @@ mod tests {
         }
 
         {
-            let (seq, sorts) = ax2;
+            let (Axiom { sequent: seq, .. }, sorts) = ax2;
             let mut universe = TermUniverse::new();
 
             let g0 = universe.new_term(g(), None);
