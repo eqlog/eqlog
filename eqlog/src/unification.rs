@@ -1,4 +1,4 @@
-use crate::indirect_ast::*;
+use crate::ast::*;
 use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};

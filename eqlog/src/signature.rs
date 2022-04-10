@@ -1,4 +1,4 @@
-use crate::direct_ast::*;
+use crate::ast::*;
 use std::collections::HashMap;
 use std::iter::once;
 

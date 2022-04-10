@@ -1,5 +1,5 @@
+use crate::ast::*;
 use crate::flat_ast::*;
-use crate::indirect_ast::*;
 use crate::signature::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashMap};

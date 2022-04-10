@@ -1,4 +1,4 @@
-use crate::direct_ast::*;
+use crate::ast::*;
 use crate::flat_ast::FlatTerm;
 use crate::index_selection::*;
 use crate::query_action::*;
