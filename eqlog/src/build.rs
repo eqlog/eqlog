@@ -1,3 +1,4 @@
+use crate::ast::*;
 use crate::flat_ast::*;
 use crate::grammar::*;
 use crate::index_selection::*;
@@ -43,7 +44,9 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
 
 fn process_file(name: &str, in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
     let src: String = fs::read_to_string(in_file)?;
-    let (sig, axioms) = TheoryParser::new().parse(&src).unwrap();
+    let (sig, axioms) = TheoryParser::new()
+        .parse(&mut TermUniverse::new(), &src)
+        .unwrap();
     let query_actions: Vec<QueryAction> = axioms
         .iter()
         .map(|(sequent, term_sorts)| {
