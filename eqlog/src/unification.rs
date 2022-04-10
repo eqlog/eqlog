@@ -194,12 +194,12 @@ mod tests {
     fn test_initial_state() {
         use TermData::*;
         let mut univ = TermUniverse::new();
-        let t0 = univ.new_term(Wildcard);
-        let t1 = univ.new_term(Variable("123".to_string()));
-        let t2 = univ.new_term(Application("f".to_string(), vec![t0, t1]));
-        let t3 = univ.new_term(Wildcard);
-        let t4 = univ.new_term(Wildcard);
-        let t5 = univ.new_term(Wildcard);
+        let t0 = univ.new_term(Wildcard, None);
+        let t1 = univ.new_term(Variable("123".to_string()), None);
+        let t2 = univ.new_term(Application("f".to_string(), vec![t0, t1]), None);
+        let t3 = univ.new_term(Wildcard, None);
+        let t4 = univ.new_term(Wildcard, None);
+        let t5 = univ.new_term(Wildcard, None);
 
         let mut unif = TermUnification::new(
             &univ,
@@ -234,12 +234,12 @@ mod tests {
     fn test_union_root() {
         use TermData::*;
         let mut univ = TermUniverse::new();
-        let t0 = univ.new_term(Wildcard);
-        let t1 = univ.new_term(Variable("123".to_string()));
-        let t2 = univ.new_term(Application("f".to_string(), vec![t0, t1]));
-        let t3 = univ.new_term(Wildcard);
-        let t4 = univ.new_term(Wildcard);
-        let t5 = univ.new_term(Wildcard);
+        let t0 = univ.new_term(Wildcard, None);
+        let t1 = univ.new_term(Variable("123".to_string()), None);
+        let t2 = univ.new_term(Application("f".to_string(), vec![t0, t1]), None);
+        let t3 = univ.new_term(Wildcard, None);
+        let t4 = univ.new_term(Wildcard, None);
+        let t5 = univ.new_term(Wildcard, None);
 
         let mut unif = new_unification(&univ);
         unif.union(t0, t1);
@@ -284,12 +284,12 @@ mod tests {
     fn test_variable_congruence() {
         use TermData::*;
         let mut univ = TermUniverse::new();
-        let t0 = univ.new_term(Wildcard);
-        let t1 = univ.new_term(Wildcard);
-        let t2 = univ.new_term(Variable("123".to_string()));
-        let t3 = univ.new_term(Variable("abc".to_string()));
-        let t4 = univ.new_term(Variable("123".to_string()));
-        let t5 = univ.new_term(Application("123".to_string(), vec![t0, t2]));
+        let t0 = univ.new_term(Wildcard, None);
+        let t1 = univ.new_term(Wildcard, None);
+        let t2 = univ.new_term(Variable("123".to_string()), None);
+        let t3 = univ.new_term(Variable("abc".to_string()), None);
+        let t4 = univ.new_term(Variable("123".to_string()), None);
+        let t5 = univ.new_term(Application("123".to_string(), vec![t0, t2]), None);
 
         let mut unif = new_unification(&univ);
         unif.union(t0, t1);
@@ -304,17 +304,17 @@ mod tests {
     fn test_application_congruence() {
         use TermData::*;
         let mut univ = TermUniverse::new();
-        let t0 = univ.new_term(Wildcard);
-        let t1 = univ.new_term(Wildcard);
-        let t2 = univ.new_term(Variable("123".to_string()));
-        let _ = univ.new_term(Variable("abc".to_string()));
-        let t4 = univ.new_term(Variable("123".to_string()));
-        let t5 = univ.new_term(Application("123".to_string(), vec![t0, t2]));
-        let t6 = univ.new_term(Application("abc".to_string(), vec![t0, t2]));
-        let t7 = univ.new_term(Application("123".to_string(), vec![t0, t4]));
-        let t8 = univ.new_term(Application("abc".to_string(), vec![t1, t2]));
-        let t9 = univ.new_term(Application("xyz".to_string(), vec![t1, t6]));
-        let t10 = univ.new_term(Application("xyz".to_string(), vec![t1, t8]));
+        let t0 = univ.new_term(Wildcard, None);
+        let t1 = univ.new_term(Wildcard, None);
+        let t2 = univ.new_term(Variable("123".to_string()), None);
+        let _ = univ.new_term(Variable("abc".to_string()), None);
+        let t4 = univ.new_term(Variable("123".to_string()), None);
+        let t5 = univ.new_term(Application("123".to_string(), vec![t0, t2]), None);
+        let t6 = univ.new_term(Application("abc".to_string(), vec![t0, t2]), None);
+        let t7 = univ.new_term(Application("123".to_string(), vec![t0, t4]), None);
+        let t8 = univ.new_term(Application("abc".to_string(), vec![t1, t2]), None);
+        let t9 = univ.new_term(Application("xyz".to_string(), vec![t1, t6]), None);
+        let t10 = univ.new_term(Application("xyz".to_string(), vec![t1, t8]), None);
 
         let mut unif = new_unification(&univ);
         unif.union(t0, t1);
@@ -335,13 +335,13 @@ mod tests {
     fn test_freeze() {
         use TermData::*;
         let mut univ = TermUniverse::new();
-        let t0 = univ.new_term(Wildcard);
-        let t1 = univ.new_term(Variable("123".to_string()));
-        let t2 = univ.new_term(Application("f".to_string(), vec![t0, t1]));
-        let t3 = univ.new_term(Wildcard);
-        let t4 = univ.new_term(Wildcard);
-        let t5 = univ.new_term(Wildcard);
-        let _ = univ.new_term(Application("g".to_string(), vec![t0, t2]));
+        let t0 = univ.new_term(Wildcard, None);
+        let t1 = univ.new_term(Variable("123".to_string()), None);
+        let t2 = univ.new_term(Application("f".to_string(), vec![t0, t1]), None);
+        let t3 = univ.new_term(Wildcard, None);
+        let t4 = univ.new_term(Wildcard, None);
+        let t5 = univ.new_term(Wildcard, None);
+        let _ = univ.new_term(Application("g".to_string(), vec![t0, t2]), None);
 
         let mut unif = TermUnification::new(&univ, vec![1; univ.len()], |x, y| x + y);
         unif.union(t0, t1);
