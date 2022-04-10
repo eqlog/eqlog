@@ -112,80 +112,6 @@ impl TermUniverse {
     pub fn without_locations(&self) -> TermUniverse {
         TermUniverse(self.0.iter().cloned().map(|(tm, _)| (tm, None)).collect())
     }
-    fn absorb(&mut self, other: TermUniverse) -> impl '_ + Fn(Term) -> Term {
-        let offset = self.len();
-        let translate = move |tm: Term| Term(tm.0 + offset);
-        self.0.extend(other.0.into_iter().map(|(mut data, loc)| {
-            use TermData::*;
-            if let Application(_, args) = &mut data {
-                for arg in args.iter_mut() {
-                    *arg = translate(*arg);
-                }
-            }
-            (data, loc)
-        }));
-        translate
-    }
-    fn absorb_term(&mut self, tm: Term, u: TermUniverse) -> Term {
-        let translate = self.absorb(u);
-        translate(tm)
-    }
-    fn absorb_terms(&mut self, tms: Vec<(Term, TermUniverse)>) -> Vec<Term> {
-        tms.into_iter()
-            .map(|(tm, u)| {
-                let translate = self.absorb(u);
-                translate(tm)
-            })
-            .collect()
-    }
-    fn absorb_atom(&mut self, mut atom: Atom, u: TermUniverse) -> Atom {
-        let translate = self.absorb(u);
-        use AtomData::*;
-        match &mut atom.data {
-            Equal(lhs, rhs) => {
-                *lhs = translate(*lhs);
-                *rhs = translate(*rhs);
-            }
-            Defined(tm, _) => {
-                *tm = translate(*tm);
-            }
-            Predicate(_, args) => {
-                for arg in args.iter_mut() {
-                    *arg = translate(*arg)
-                }
-            }
-        }
-        atom
-    }
-    pub fn absorb_atoms(&mut self, atoms: Vec<(Atom, TermUniverse)>) -> Vec<Atom> {
-        atoms
-            .into_iter()
-            .map(|(atom, u)| self.absorb_atom(atom, u))
-            .collect()
-    }
-}
-
-impl Term {
-    pub fn new_wildcard(location: Option<Location>) -> (Term, TermUniverse) {
-        let mut u = TermUniverse::new();
-        let tm = u.new_term(TermData::Wildcard, location);
-        (tm, u)
-    }
-    pub fn new_variable(name: String, location: Option<Location>) -> (Term, TermUniverse) {
-        let mut u = TermUniverse::new();
-        let tm = u.new_term(TermData::Variable(name), location);
-        (tm, u)
-    }
-    pub fn new_application(
-        func: String,
-        args: Vec<(Term, TermUniverse)>,
-        location: Option<Location>,
-    ) -> (Term, TermUniverse) {
-        let mut u = TermUniverse::new();
-        let args = u.absorb_terms(args);
-        let tm = u.new_term(TermData::Application(func, args), location);
-        (tm, u)
-    }
 }
 
 struct SubtermIterator<'a> {
@@ -257,54 +183,6 @@ impl Atom {
         }
     }
 
-    pub fn new_equal(
-        lhs: (Term, TermUniverse),
-        rhs: (Term, TermUniverse),
-        location: Option<Location>,
-    ) -> (Atom, TermUniverse) {
-        let (lhs, mut u0) = lhs;
-        let (mut rhs, u1) = rhs;
-        {
-            let translate = u0.absorb(u1);
-            rhs = translate(rhs);
-            // Drop `translate` before we move u0.
-        }
-        (
-            Atom {
-                data: AtomData::Equal(lhs, rhs),
-                location,
-            },
-            u0,
-        )
-    }
-    pub fn new_defined(
-        tm: (Term, TermUniverse),
-        sort: Option<String>,
-        location: Option<Location>,
-    ) -> (Atom, TermUniverse) {
-        let (tm, u) = tm;
-        (
-            Atom {
-                data: AtomData::Defined(tm, sort),
-                location,
-            },
-            u,
-        )
-    }
-    pub fn new_predicate(
-        pred: String,
-        args: Vec<(Term, TermUniverse)>,
-        location: Option<Location>,
-    ) -> (Atom, TermUniverse) {
-        let mut u = TermUniverse::new();
-        let args = u.absorb_terms(args);
-        let atom = Atom {
-            data: AtomData::Predicate(pred, args),
-            location,
-        };
-        (atom, u)
-    }
-
     pub fn iter_subterms<'a>(
         &'a self,
         universe: &'a TermUniverse,
@@ -331,12 +209,10 @@ pub struct Sequent {
 
 impl Sequent {
     pub fn new_implication(
-        premise: Vec<(Atom, TermUniverse)>,
-        conclusion: Vec<(Atom, TermUniverse)>,
+        universe: TermUniverse,
+        premise: Vec<Atom>,
+        conclusion: Vec<Atom>,
     ) -> Sequent {
-        let mut universe = TermUniverse::new();
-        let premise = universe.absorb_atoms(premise);
-        let conclusion = universe.absorb_atoms(conclusion);
         Sequent {
             universe,
             premise,
@@ -344,16 +220,11 @@ impl Sequent {
         }
     }
     pub fn new_reduction(
-        premise: Vec<(Atom, TermUniverse)>,
-        from: (Term, TermUniverse),
-        to: (Term, TermUniverse),
+        universe: TermUniverse,
+        mut premise: Vec<Atom>,
+        from: Term,
+        to: Term,
     ) -> Sequent {
-        let mut universe = TermUniverse::new();
-        let mut premise = universe.absorb_atoms(premise);
-
-        let from = universe.absorb_term(from.0, from.1);
-        let to = universe.absorb_term(to.0, to.1);
-
         use TermData::*;
         let from_args = match universe.data(from) {
             Application(_, args) => args,

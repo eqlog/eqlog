@@ -4,8 +4,9 @@ use std::iter::once;
 use crate::analysis::check_semantically;
 use crate::unification::TermMap;
 use convert_case::{Case, Casing};
+use std::mem::swap;
 
-grammar;
+grammar(universe: &mut TermUniverse);
 
 Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
 
@@ -50,52 +51,64 @@ FunctionDecl: Function = {
     },
 }
 
-Application: (String, Vec<(Term, TermUniverse)>) = {
+Application: (String, Vec<Term>) = {
     <operator: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
-        let args: Vec<(Term, TermUniverse)> = head_arg.into_iter().chain(tail_args).collect();
+        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
         (operator, args)
     }
 }
 
-Term: (Term, TermUniverse) = {
+Term: Term = {
     <l: @L> <var: SnakeCaseId> <r: @R> => {
-        Term::new_variable(var, Some(Location(l, r)))
+        universe.new_term(TermData::Variable(var), Some(Location(l, r)))
     },
     <l: @L> "_" <r: @R> => {
-        Term::new_wildcard(Some(Location(l, r)))
+        universe.new_term(TermData::Wildcard, Some(Location(l, r)))
     },
     <l: @L> <app: Application> <r: @R> => {
         let (func, args) = app;
-        Term::new_application(func, args, Some(Location(l, r)))
+        universe.new_term(TermData::Application(func, args), Some(Location(l, r)))
     },
 }
 
-Atom: (Atom, TermUniverse) = {
+Atom: Atom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
-        Atom::new_equal(lhs, rhs, Some(Location(l, r)))
+        Atom { data: AtomData::Equal(lhs, rhs), location: Some(Location(l, r)) }
     },
     <l: @L> <tm: Term> "!" <r: @R> => {
-        Atom::new_defined(tm, None, Some(Location(l, r)))
+        Atom { data: AtomData::Defined(tm, None), location: Some(Location(l, r)) }
     },
     <l: @L> <tm: Term> "!" ":" <s: Id> <r: @R> => {
-        Atom::new_defined(tm, Some(s), Some(Location(l, r)))
+        Atom { data: AtomData::Defined(tm, Some(s)), location: Some(Location(l, r)) }
     },
     <l: @L> <app: Application> <r: @R> => {
         let (pred, args) = app;
-        Atom::new_predicate(pred, args, Some(Location(l, r)))
+        Atom { data: AtomData::Predicate(pred, args), location: Some(Location(l, r)) }
     },
 }
 
-Formula: Vec<(Atom, TermUniverse)> = {
+Formula: Vec<Atom> = {
     <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> => {
         head_atom.into_iter().chain(tail_atoms).collect()
     }
 }
 
 pub Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => Sequent::new_implication(premise, conclusion),
-    <from: Term> "~>" <to: Term> => Sequent::new_reduction(Vec::new(), from, to),
-    <premise: Formula> "=>" <from: Term> "~>" <to: Term> => Sequent::new_reduction(premise, from, to),
+    <premise: Formula> "=>" <conclusion: Formula> => {
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        Sequent::new_implication(u, premise, conclusion)
+    },
+    <from: Term> "~>" <to: Term> => {
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        Sequent::new_reduction(u, Vec::new(), from, to)
+    },
+    <premise: Formula> "=>" <from: Term> "~>" <to: Term> => {
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        Sequent::new_reduction(u, premise, from, to)
+    },
 }
 
 AxiomDecl: Axiom = {

@@ -259,7 +259,9 @@ mod tests {
     fn simple_reduction() {
         let src = "comp(h, comp(g, f)) ~> comp(comp(h, g), f)";
         let comp = || "comp".to_string();
-        let sequent = SequentParser::new().parse(src).unwrap();
+        let sequent = SequentParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
         let sorts = TermMap::new(vec!["mor".to_string(); sequent.universe.len()]);
 
         let flat_sequent = flatten_sequent(&sequent, &sorts);
@@ -298,7 +300,9 @@ mod tests {
         let signature = || "signature".to_string();
         let comp = || "comp".to_string();
 
-        let sequent = SequentParser::new().parse(src).unwrap();
+        let sequent = SequentParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
         let sorts = TermMap::new(vec![
             obj(), // x
             mor(), // f
@@ -347,7 +351,9 @@ mod tests {
         let id = || "id".to_string();
         let comp = || "comp".to_string();
 
-        let sequent = SequentParser::new().parse(src).unwrap();
+        let sequent = SequentParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
         let sorts = TermMap::new(vec![
             mor(), // g
             mor(), // f
@@ -385,7 +391,9 @@ mod tests {
         let id = || "id".to_string();
         let comp = || "comp".to_string();
 
-        let sequent = SequentParser::new().parse(src).unwrap();
+        let sequent = SequentParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
         let sorts = TermMap::new(vec![
             obj(), // x
             obj(), // x

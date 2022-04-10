@@ -217,7 +217,9 @@ mod tests {
             let m = re.find_iter(src).nth(n).unwrap();
             Location(m.start(), m.end())
         };
-        let (sig, axioms) = TheoryParser::new().parse(src).unwrap();
+        let (sig, axioms) = TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
         let obj = || "Obj".to_string();
         let mor = || "Mor".to_string();
         let comp = || "Comp".to_string();
@@ -491,7 +493,9 @@ mod tests {
         Func Comp : Mor * Mor -> Mor;
         Axiom Comp(g, f, h) ~> g;
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -503,7 +507,9 @@ mod tests {
         Func Id : Obj -> Mor;
         Axiom Id(x) = f => x = f;
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -515,7 +521,9 @@ mod tests {
         Func Id : Obj -> Mor;
         Axiom Id(x) ~> x;
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -527,7 +535,9 @@ mod tests {
         Pred IsId : Mor * Obj;
         Axiom IsId(f, x) => IsId(x, f);
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -539,7 +549,9 @@ mod tests {
         Func Id : Obj -> Mor;
         Axiom Id(x) = f =!> f = g;
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -553,7 +565,9 @@ mod tests {
         Func Comp : Mor * Mor -> Mor;
         Axiom Signature(x, f, _) => Comp(f, Id(x)) = f;
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -567,7 +581,9 @@ mod tests {
         Func Comp : Mor * Mor -> Mor;
         Axiom Signature(x, f, _) => f = Comp(f, Id(x));
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -579,7 +595,9 @@ mod tests {
         Func Id : Obj -> Mor;
         Axiom x = y => Id(x) = Id(y);
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 
     #[test]
@@ -589,6 +607,8 @@ mod tests {
         Sort Obj;
         Axiom x = y => y = x;
     "};
-        TheoryParser::new().parse(src).unwrap();
+        TheoryParser::new()
+            .parse(&mut TermUniverse::new(), src)
+            .unwrap();
     }
 }
