@@ -1,5 +1,4 @@
-use crate::direct_ast::*;
-use crate::indirect_ast;
+use crate::ast::*;
 use crate::signature::Signature;
 use std::iter::once;
 use crate::analysis::check_semantically;
@@ -51,80 +50,52 @@ FunctionDecl: Function = {
     },
 }
 
-Application: (String, Vec<Term>) = {
+Application: (String, Vec<(Term, TermUniverse)>) = {
     <operator: Id> "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
-        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
+        let args: Vec<(Term, TermUniverse)> = head_arg.into_iter().chain(tail_args).collect();
         (operator, args)
     }
 }
 
-Term: Term = {
-    <l: @L> <var: SnakeCaseId> <r: @R> => Term {
-        data: TermData::Variable(var),
-        location: Some(Location(l, r)),
+Term: (Term, TermUniverse) = {
+    <l: @L> <var: SnakeCaseId> <r: @R> => {
+        Term::new_variable(var, Some(Location(l, r)))
     },
-    <l: @L> "_" <r: @R> => Term {
-        data: TermData::Wildcard,
-        location: Some(Location(l, r)),
+    <l: @L> "_" <r: @R> => {
+        Term::new_wildcard(Some(Location(l, r)))
     },
-    <l: @L> <app: Application> <r: @R> => Term {
-        data: TermData::Application(app.0, app.1),
-        location: Some(Location(l, r)),
+    <l: @L> <app: Application> <r: @R> => {
+        let (func, args) = app;
+        Term::new_application(func, args, Some(Location(l, r)))
     },
 }
 
-Atom: Atom = {
-    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => Atom {
-        data: AtomData::Equal(lhs, rhs),
-        location: Some(Location(l, r)),
+Atom: (Atom, TermUniverse) = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
+        Atom::new_equal(lhs, rhs, Some(Location(l, r)))
     },
-    <l: @L> <t: Term> "!" <r: @R> => Atom {
-        data: AtomData::Defined(t, None),
-        location: Some(Location(l, r)),
+    <l: @L> <tm: Term> "!" <r: @R> => {
+        Atom::new_defined(tm, None, Some(Location(l, r)))
     },
-    <l: @L> <t: Term> "!" ":" <s: Id> <r: @R> => Atom {
-        data: AtomData::Defined(t, Some(s)),
-        location: Some(Location(l, r)),
+    <l: @L> <tm: Term> "!" ":" <s: Id> <r: @R> => {
+        Atom::new_defined(tm, Some(s), Some(Location(l, r)))
     },
-    <l: @L> <app: Application> <r: @R> => Atom {
-        data: AtomData::Predicate(app.0, app.1),
-        location: Some(Location(l, r)),
+    <l: @L> <app: Application> <r: @R> => {
+        let (pred, args) = app;
+        Atom::new_predicate(pred, args, Some(Location(l, r)))
     },
 }
 
-Formula: Formula = {
-    <l: @L> <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> <r: @R> => {
-        Formula {
-            atoms: head_atom.into_iter().chain(tail_atoms).collect(),
-            location: Some(Location(l, r)),
-        }
+Formula: Vec<(Atom, TermUniverse)> = {
+    <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> => {
+        head_atom.into_iter().chain(tail_atoms).collect()
     }
 }
 
 pub Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => Sequent::Implication(premise, conclusion),
-    <from_l: @L> <from: Application> <from_r: @R> "~>" <to: Term> => {
-        let from = Term {
-            data: TermData::Application(from.0, from.1),
-            location: Some(Location(from_l, from_r)),
-        };
-        Sequent::Reduction {
-            premise: None,
-            from,
-            to,
-        }
-    },
-    <premise: Formula> "=>" <from_l: @L> <from: Application> <from_r: @R> "~>" <to: Term> => {
-        let from = Term {
-            data: TermData::Application(from.0, from.1),
-            location: Some(Location(from_l, from_r)),
-        };
-        Sequent::Reduction {
-            premise: Some(premise),
-            from,
-            to,
-        }
-    },
+    <premise: Formula> "=>" <conclusion: Formula> => Sequent::new_implication(premise, conclusion),
+    <from: Term> "~>" <to: Term> => Sequent::new_reduction(Vec::new(), from, to),
+    <premise: Formula> "=>" <from: Term> "~>" <to: Term> => Sequent::new_reduction(premise, from, to),
 }
 
 AxiomDecl: Axiom = {
@@ -134,7 +105,7 @@ AxiomDecl: Axiom = {
     },
 }
 
-pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
+pub Theory: (Signature, Vec<(Sequent, TermMap<String>)>) = {
     () => (Signature::new(), vec![]),
     <mut theory: Theory> <sort: SortDecl> => {
         let (ref mut sig, _) = &mut theory;
@@ -153,9 +124,8 @@ pub Theory: (Signature, Vec<(indirect_ast::Sequent, TermMap<String>)>) = {
     },
     <mut theory: Theory> <ax: AxiomDecl> => {
         let (ref sig, ref mut axioms) = &mut theory;
-        let indirect_seq = indirect_ast::Sequent::new(&ax.sequent);
-        let sorts = check_semantically(&sig, &indirect_seq);
-        axioms.push((indirect_seq, sorts));
+        let sorts = check_semantically(&sig, &ax.sequent);
+        axioms.push((ax.sequent, sorts));
         theory
     },
 }

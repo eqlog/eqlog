@@ -1,4 +1,4 @@
-use crate::indirect_ast::*;
+use crate::ast::*;
 use crate::signature::Signature;
 use crate::unification::{TermMap, TermUnification};
 use std::collections::HashSet;
@@ -37,12 +37,7 @@ pub fn infer_sorts(signature: &Signature, sequent: &Sequent) -> TermMap<String> 
     }
 
     // Assign sorts based on atoms.
-    for atom in sequent
-        .premise
-        .atoms
-        .iter()
-        .chain(sequent.conclusion.atoms.iter())
-    {
+    for atom in sequent.premise.iter().chain(sequent.conclusion.iter()) {
         match &atom.data {
             AtomData::Equal(lhs, rhs) => {
                 unification.union(*lhs, *rhs);
@@ -89,12 +84,17 @@ pub fn check_epimorphism(sequent: &Sequent) {
     );
 
     // Set all premise terms to have occurred.
-    for tm in sequent.premise.iter_subterms(universe) {
+    for tm in sequent
+        .premise
+        .iter()
+        .map(|atom| atom.iter_subterms(universe))
+        .flatten()
+    {
         has_occurred[tm] = true;
     }
 
     // Unify terms occuring in equalities in premise.
-    for atom in &sequent.premise.atoms {
+    for atom in &sequent.premise {
         use AtomData::*;
         match &atom.data {
             Equal(lhs, rhs) => {
@@ -108,7 +108,12 @@ pub fn check_epimorphism(sequent: &Sequent) {
 
     // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
     // premise.
-    for tm in sequent.conclusion.iter_subterms(universe) {
+    for tm in sequent
+        .conclusion
+        .iter()
+        .map(|atom| atom.iter_subterms(universe))
+        .flatten()
+    {
         match universe.data(tm) {
             TermData::Variable(_) => {
                 assert!(
@@ -121,7 +126,7 @@ pub fn check_epimorphism(sequent: &Sequent) {
         }
     }
 
-    for atom in &sequent.conclusion.atoms {
+    for atom in &sequent.conclusion {
         use AtomData::*;
         match &atom.data {
             Equal(lhs, rhs) => {
@@ -181,8 +186,8 @@ mod tests {
 
     use indoc::indoc;
 
+    use crate::ast::*;
     use crate::grammar::TheoryParser;
-    use crate::indirect_ast::*;
     use regex::Regex;
     use std::collections::BTreeSet;
 
@@ -291,17 +296,20 @@ mod tests {
             let (seq, sorts) = ax0;
             let mut universe = TermUniverse::new();
 
-            // h
+            // Comp(h, Comp(g, f))
             let h0 = universe.new_term(h(), None);
             assert_eq!(seq.universe.location(h0), Some(src_loc("h", 0)));
-
-            // Comp(g, f)
             let g0 = universe.new_term(g(), None);
             assert_eq!(seq.universe.location(g0), Some(src_loc("g", 0)));
             let f0 = universe.new_term(f(), None);
             assert_eq!(seq.universe.location(f0), Some(src_loc("f", 0)));
             let gf = universe.new_term(Application(comp(), vec![g0, f0]), None);
             assert_eq!(seq.universe.location(gf), Some(src_loc("Comp(g, f)", 0)));
+            let h_gf = universe.new_term(Application(comp(), vec![h0, gf]), None);
+            assert_eq!(
+                seq.universe.location(h_gf),
+                Some(src_loc("Comp(h, Comp(g, f))", 0))
+            );
 
             // Comp(Comp(h, g), f)
             let h1 = universe.new_term(h(), None);
@@ -318,14 +326,7 @@ mod tests {
                 Some(src_loc("Comp(Comp(h, g), f)", 0))
             );
 
-            // Comp(h, Comp(g, f))
-            let h_gf = universe.new_term(Application(comp(), vec![h0, gf]), None);
-            assert_eq!(
-                seq.universe.location(h_gf),
-                Some(src_loc("Comp(h, Comp(g, f))", 0))
-            );
-
-            let premise_atoms = vec![
+            let premise = vec![
                 Atom {
                     data: AtomData::Defined(h0, None),
                     location: None,
@@ -339,19 +340,11 @@ mod tests {
                     location: None,
                 },
             ];
-            let premise = Formula {
-                atoms: premise_atoms,
-                location: None,
-            };
 
-            let conclusion_atoms = vec![Atom {
+            let conclusion = vec![Atom {
                 data: AtomData::Equal(h_gf, hg_f),
                 location: None,
             }];
-            let conclusion = Formula {
-                atoms: conclusion_atoms,
-                location: None,
-            };
 
             assert_eq!(seq.universe.without_locations(), universe);
             assert_eq!(seq.premise, premise);
@@ -388,7 +381,7 @@ mod tests {
             let gf1 = universe.new_term(Application(comp(), vec![g2, f2]), None);
             let z1 = universe.new_term(z(), None);
 
-            let premise_atoms = vec![
+            let premise = vec![
                 Atom {
                     data: AtomData::Predicate(signature(), vec![x0, f0, y0]),
                     location: None,
@@ -399,23 +392,15 @@ mod tests {
                 },
             ];
             assert_eq!(
-                seq.premise.atoms[0].location,
+                seq.premise[0].location,
                 Some(src_loc("Signature(x, f, y)", 0))
             );
             assert_eq!(
-                seq.premise.atoms[1].location,
+                seq.premise[1].location,
                 Some(src_loc("Signature(y, g, z)", 0))
             );
-            let premise = Formula {
-                atoms: premise_atoms,
-                location: None,
-            };
-            assert_eq!(
-                seq.premise.location,
-                Some(src_loc("Signature(x, f, y) & Signature(y, g, z)", 0))
-            );
 
-            let conclusion_atoms = vec![
+            let conclusion = vec![
                 Atom {
                     data: AtomData::Defined(gf0, None),
                     location: None,
@@ -425,26 +410,20 @@ mod tests {
                     location: None,
                 },
             ];
+            assert_eq!(seq.conclusion[0].location, Some(src_loc("Comp(g, f)!", 0)));
             assert_eq!(
-                seq.conclusion.atoms[0].location,
-                Some(src_loc("Comp(g, f)!", 0))
-            );
-            assert_eq!(
-                seq.conclusion.atoms[1].location,
+                seq.conclusion[1].location,
                 Some(src_loc("Signature(x, Comp(g, f), z)", 0))
             );
-            let conclusion = Formula {
-                atoms: conclusion_atoms,
-                location: None,
-            };
-            assert_eq!(
-                seq.conclusion.location,
-                Some(src_loc("Comp(g, f)! & Signature(x, Comp(g, f), z)", 0))
-            );
 
-            assert_eq!(seq.universe.without_locations(), universe);
-            assert_eq!(seq.premise.without_locations(), premise);
-            assert_eq!(seq.conclusion.without_locations(), conclusion);
+            assert_eq!(
+                seq.without_locations(),
+                Sequent {
+                    universe,
+                    premise,
+                    conclusion
+                }
+            );
 
             assert_eq!(sorts[x0], obj());
             assert_eq!(sorts[x1], obj());
@@ -483,18 +462,17 @@ mod tests {
                 location: None,
             };
 
-            let premise = Formula {
-                atoms: vec![prem_eq],
-                location: None,
-            };
-            let conclusion = Formula {
-                atoms: vec![conc_eq],
-                location: None,
-            };
+            let premise = vec![prem_eq];
+            let conclusion = vec![conc_eq];
 
-            assert_eq!(seq.universe.without_locations(), universe);
-            assert_eq!(seq.premise.without_locations(), premise);
-            assert_eq!(seq.conclusion.without_locations(), conclusion);
+            assert_eq!(
+                seq.without_locations(),
+                Sequent {
+                    universe,
+                    premise,
+                    conclusion
+                }
+            );
 
             assert_eq!(sorts[f0], mor());
             assert_eq!(sorts[f1], mor());

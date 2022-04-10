@@ -147,8 +147,8 @@ pub fn select_indices(signature: &Signature, query_actions: &[QueryAction]) -> I
 mod tests {
 
     use super::*;
+    use crate::ast::*;
     use crate::flat_ast::*;
-    use crate::indirect_ast::*;
     use itertools::Itertools;
 
     #[test]

@@ -7,8 +7,7 @@ extern crate convert_case;
 #[cfg(test)]
 extern crate indoc;
 
-mod direct_ast;
-mod indirect_ast;
+mod ast;
 mod signature;
 mod unification;
 lalrpop_mod!(

@@ -1,4 +1,4 @@
-use crate::indirect_ast::*;
+use crate::ast::*;
 use crate::unification::{TermMap, TermUnification};
 use std::collections::HashSet;
 use std::iter::once;
@@ -176,7 +176,12 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
     let mut unconstrained = TermUnification::new(universe, vec![true; len], |lhs, rhs| lhs && rhs);
     let mut flat_names = TermUnification::new(universe, vec![None; len], |lhs, rhs| lhs.or(rhs));
 
-    for tm in sequent.premise.iter_subterms(universe) {
+    for tm in sequent
+        .premise
+        .iter()
+        .map(|atom| atom.iter_subterms(universe))
+        .flatten()
+    {
         use TermData::*;
         match universe.data(tm) {
             Variable(_) | Wildcard => (),
@@ -189,7 +194,7 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
         }
     }
 
-    for atom in &sequent.premise.atoms {
+    for atom in &sequent.premise {
         use AtomData::*;
         match &atom.data {
             Equal(lhs, rhs) => {
@@ -224,13 +229,13 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
         flat_atoms: vec![],
     };
 
-    for atom in &sequent.premise.atoms {
+    for atom in &sequent.premise {
         emitter.emit_atom(atom);
     }
     let mut premise: Vec<FlatAtom> = Vec::new();
     swap(&mut premise, &mut emitter.flat_atoms);
 
-    for atom in &sequent.conclusion.atoms {
+    for atom in &sequent.conclusion {
         emitter.emit_atom(atom);
     }
     let conclusion = emitter.flat_atoms;
@@ -254,7 +259,7 @@ mod tests {
     fn simple_reduction() {
         let src = "comp(h, comp(g, f)) ~> comp(comp(h, g), f)";
         let comp = || "comp".to_string();
-        let sequent = Sequent::new(&SequentParser::new().parse(src).unwrap());
+        let sequent = SequentParser::new().parse(src).unwrap();
         let sorts = TermMap::new(vec!["mor".to_string(); sequent.universe.len()]);
 
         let flat_sequent = flatten_sequent(&sequent, &sorts);
@@ -293,7 +298,7 @@ mod tests {
         let signature = || "signature".to_string();
         let comp = || "comp".to_string();
 
-        let sequent = Sequent::new(&SequentParser::new().parse(src).unwrap());
+        let sequent = SequentParser::new().parse(src).unwrap();
         let sorts = TermMap::new(vec![
             obj(), // x
             mor(), // f
@@ -342,7 +347,7 @@ mod tests {
         let id = || "id".to_string();
         let comp = || "comp".to_string();
 
-        let sequent = Sequent::new(&SequentParser::new().parse(src).unwrap());
+        let sequent = SequentParser::new().parse(src).unwrap();
         let sorts = TermMap::new(vec![
             mor(), // g
             mor(), // f
@@ -380,7 +385,7 @@ mod tests {
         let id = || "id".to_string();
         let comp = || "comp".to_string();
 
-        let sequent = Sequent::new(&SequentParser::new().parse(src).unwrap());
+        let sequent = SequentParser::new().parse(src).unwrap();
         let sorts = TermMap::new(vec![
             obj(), // x
             obj(), // x
