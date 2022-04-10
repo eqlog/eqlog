@@ -110,8 +110,8 @@ where
 
     pub fn congruence_closure(&mut self) {
         let mut vars: HashMap<&str, Term> = HashMap::new();
-        for (tm, data) in self.universe.iter_terms() {
-            if let TermData::Variable(s) = data {
+        for tm in self.universe.iter_terms() {
+            if let TermData::Variable(s) = self.universe.data(tm) {
                 let prev_tm = vars.insert(s, tm);
                 if let Some(prev_tm) = prev_tm {
                     self.union(prev_tm, tm);
@@ -123,8 +123,8 @@ where
         while dirty {
             dirty = false;
             let mut apps: HashMap<(&str, Vec<Term>), Term> = HashMap::new();
-            for (tm, data) in self.universe.iter_terms() {
-                if let TermData::Application(f, args) = data {
+            for tm in self.universe.iter_terms() {
+                if let TermData::Application(f, args) = self.universe.data(tm) {
                     let arg_roots = args.iter().map(|arg| self.root(*arg)).collect();
                     let prev_tm = apps.insert((f, arg_roots), tm);
                     if let Some(prev_tm) = prev_tm {

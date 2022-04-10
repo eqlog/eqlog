@@ -42,11 +42,8 @@ impl TermUniverse {
     pub fn len(&self) -> usize {
         self.0.len()
     }
-    pub fn iter_terms(&self) -> impl Iterator<Item = (Term, &TermData)> {
-        self.0
-            .iter()
-            .enumerate()
-            .map(|(i, (data, _))| (Term(i), data))
+    pub fn iter_terms(&self) -> impl Iterator<Item = Term> {
+        (0..self.0.len()).map(Term)
     }
     #[cfg(test)]
     pub fn without_locations(&self) -> TermUniverse {
