@@ -54,6 +54,53 @@ impl TermUniverse {
     }
 }
 
+struct SubtermIterator<'a> {
+    universe: &'a TermUniverse,
+    stack: Vec<(Term, usize)>,
+}
+
+impl<'a> Iterator for SubtermIterator<'a> {
+    type Item = Term;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (tm, next_child) = match self.stack.pop() {
+            Some(top) => top,
+            None => return None,
+        };
+
+        use TermData::*;
+        let mut child = match self.universe.data(tm) {
+            Variable(_) | Wildcard => return Some(tm),
+            Application(_, args) if args.len() == next_child => return Some(tm),
+            Application(_, args) => {
+                debug_assert!(next_child < args.len());
+                args[next_child]
+            }
+        };
+
+        self.stack.push((tm, next_child + 1));
+        while let Application(_, args) = self.universe.data(child) {
+            match args.first() {
+                None => break,
+                Some(arg) => {
+                    self.stack.push((child, 1));
+                    child = *arg;
+                }
+            }
+        }
+        Some(child)
+    }
+}
+
+impl TermUniverse {
+    pub fn iter_subterms(&self, tm: Term) -> impl '_ + Iterator<Item = Term> {
+        SubtermIterator {
+            universe: self,
+            stack: vec![(tm, 0)],
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum AtomData {
     Equal(Term, Term),
@@ -64,8 +111,6 @@ pub enum AtomData {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Atom {
     pub data: AtomData,
-    pub terms_begin: Term,
-    pub terms_end: Term,
     pub location: Option<Location>,
 }
 
@@ -74,18 +119,30 @@ impl Atom {
     pub fn without_locations(&self) -> Self {
         Atom {
             data: self.data.clone(),
-            terms_begin: self.terms_begin,
-            terms_end: self.terms_end,
             location: None,
         }
+    }
+
+    pub fn iter_subterms<'a>(
+        &'a self,
+        universe: &'a TermUniverse,
+    ) -> impl 'a + Iterator<Item = Term> {
+        use AtomData::*;
+        let top_tms = match &self.data {
+            Equal(lhs, rhs) => vec![*lhs, *rhs],
+            Defined(tm, _) => vec![*tm],
+            Predicate(_, args) => args.clone(),
+        };
+        top_tms
+            .into_iter()
+            .map(move |tm| universe.iter_subterms(tm))
+            .flatten()
     }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Formula {
     pub atoms: Vec<Atom>,
-    pub terms_begin: Term,
-    pub terms_end: Term,
     pub location: Option<Location>,
 }
 
@@ -94,10 +151,18 @@ impl Formula {
     pub fn without_locations(&self) -> Self {
         Formula {
             atoms: self.atoms.iter().map(|a| a.without_locations()).collect(),
-            terms_begin: self.terms_begin,
-            terms_end: self.terms_end,
             location: None,
         }
+    }
+
+    pub fn iter_subterms<'a>(
+        &'a self,
+        universe: &'a TermUniverse,
+    ) -> impl 'a + Iterator<Item = Term> {
+        self.atoms
+            .iter()
+            .map(move |atom| atom.iter_subterms(universe))
+            .flatten()
     }
 }
 
@@ -128,7 +193,6 @@ fn translate_term(term: &direct_ast::Term, universe: &mut TermUniverse) -> Term 
 }
 
 fn translate_atom(atom: &direct_ast::Atom, universe: &mut TermUniverse) -> Atom {
-    let terms_begin = Term(universe.len());
     let data = match &atom.data {
         direct_ast::AtomData::Equal(lhs, rhs) => {
             let translated_lhs = translate_term(lhs, universe);
@@ -147,27 +211,20 @@ fn translate_atom(atom: &direct_ast::Atom, universe: &mut TermUniverse) -> Atom 
             AtomData::Predicate(pred.clone(), translated_args)
         }
     };
-    let terms_end = Term(universe.len());
     Atom {
         data,
-        terms_begin,
-        terms_end,
         location: atom.location,
     }
 }
 
 fn translate_formula(universe: &mut TermUniverse, formula: &direct_ast::Formula) -> Formula {
-    let terms_begin = Term(universe.len());
     let atoms = formula
         .atoms
         .iter()
         .map(|atom| translate_atom(atom, universe))
         .collect();
-    let terms_end = Term(universe.len());
     Formula {
         atoms,
-        terms_begin,
-        terms_end,
         location: formula.location,
     }
 }
@@ -189,8 +246,6 @@ impl Sequent {
                     Some(premise) => translate_formula(&mut universe, premise),
                     None => Formula {
                         atoms: Vec::new(),
-                        terms_begin: Term(0),
-                        terms_end: Term(0),
                         location: None,
                     },
                 };
@@ -204,13 +259,9 @@ impl Sequent {
                 let from_args: Vec<Term> = from_args
                     .iter()
                     .map(|arg| {
-                        let terms_begin = Term(universe.len());
                         let arg = translate_term(arg, &mut universe);
-                        let terms_end = Term(universe.len());
                         let data = AtomData::Defined(arg, None);
                         premise.atoms.push(Atom {
-                            terms_begin,
-                            terms_end,
                             data,
                             location: None,
                         });
@@ -219,31 +270,21 @@ impl Sequent {
                     .collect();
 
                 // Add `to!` to premise.
-                let terms_begin = Term(universe.len());
                 let to = translate_term(to, &mut universe);
-                let terms_end = Term(universe.len());
                 let data = AtomData::Defined(to, None);
                 premise.atoms.push(Atom {
-                    terms_begin,
-                    terms_end,
                     data,
                     location: None,
                 });
-
-                premise.terms_end = terms_end;
 
                 // Build conclusion: `from = to`. Only `from` is not defined yet.
                 let from_data = TermData::Application(from_func.clone(), from_args);
                 let from = universe.new_term(from_data, from.location);
                 let eq = Atom {
-                    terms_begin: Term(0),
-                    terms_end: Term(universe.len()),
                     data: AtomData::Equal(from, to),
                     location: None,
                 };
                 let conclusion = Formula {
-                    terms_begin: eq.terms_begin,
-                    terms_end: eq.terms_end,
                     atoms: vec![eq],
                     location: None,
                 };

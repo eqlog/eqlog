@@ -89,7 +89,7 @@ pub fn check_epimorphism(sequent: &Sequent) {
     );
 
     // Set all premise terms to have occurred.
-    for tm in (0..sequent.premise.terms_end.0).map(Term) {
+    for tm in sequent.premise.iter_subterms(universe) {
         has_occurred[tm] = true;
     }
 
@@ -108,7 +108,7 @@ pub fn check_epimorphism(sequent: &Sequent) {
 
     // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
     // premise.
-    for tm in (sequent.conclusion.terms_begin.0..sequent.conclusion.terms_end.0).map(Term) {
+    for tm in sequent.conclusion.iter_subterms(universe) {
         match universe.data(tm) {
             TermData::Variable(_) => {
                 assert!(
@@ -164,7 +164,7 @@ pub fn check_epimorphism(sequent: &Sequent) {
                 }
             }
         }
-        for tm in (atom.terms_begin.0..atom.terms_end.0).map(Term) {
+        for tm in atom.iter_subterms(universe) {
             has_occurred[tm] = true;
         }
     }
@@ -324,45 +324,32 @@ mod tests {
                 seq.universe.location(h_gf),
                 Some(src_loc("Comp(h, Comp(g, f))", 0))
             );
-            let terms_end = Term(universe.len());
 
             let premise_atoms = vec![
                 Atom {
                     data: AtomData::Defined(h0, None),
-                    terms_begin: h0,
-                    terms_end: g0,
                     location: None,
                 },
                 Atom {
                     data: AtomData::Defined(gf, None),
-                    terms_begin: g0,
-                    terms_end: h1,
                     location: None,
                 },
                 Atom {
                     data: AtomData::Defined(hg_f, None),
-                    terms_begin: h1,
-                    terms_end: h_gf,
                     location: None,
                 },
             ];
             let premise = Formula {
-                terms_begin: h0,
-                terms_end: h_gf,
                 atoms: premise_atoms,
                 location: None,
             };
 
             let conclusion_atoms = vec![Atom {
                 data: AtomData::Equal(h_gf, hg_f),
-                terms_begin: Term(0),
-                terms_end,
                 location: None,
             }];
             let conclusion = Formula {
                 atoms: conclusion_atoms,
-                terms_begin: Term(0),
-                terms_end,
                 location: None,
             };
 
@@ -401,19 +388,13 @@ mod tests {
             let gf1 = universe.new_term(Application(comp(), vec![g2, f2]), None);
             let z1 = universe.new_term(z(), None);
 
-            let terms_end = Term(universe.len());
-
             let premise_atoms = vec![
                 Atom {
                     data: AtomData::Predicate(signature(), vec![x0, f0, y0]),
-                    terms_begin: x0,
-                    terms_end: y1,
                     location: None,
                 },
                 Atom {
                     data: AtomData::Predicate(signature(), vec![y1, g0, z0]),
-                    terms_begin: y1,
-                    terms_end: g1,
                     location: None,
                 },
             ];
@@ -427,8 +408,6 @@ mod tests {
             );
             let premise = Formula {
                 atoms: premise_atoms,
-                terms_begin: x0,
-                terms_end: g1,
                 location: None,
             };
             assert_eq!(
@@ -439,14 +418,10 @@ mod tests {
             let conclusion_atoms = vec![
                 Atom {
                     data: AtomData::Defined(gf0, None),
-                    terms_begin: g1,
-                    terms_end: x1,
                     location: None,
                 },
                 Atom {
                     data: AtomData::Predicate(signature(), vec![x1, gf1, z1]),
-                    terms_begin: x1,
-                    terms_end,
                     location: None,
                 },
             ];
@@ -460,8 +435,6 @@ mod tests {
             );
             let conclusion = Formula {
                 atoms: conclusion_atoms,
-                terms_begin: g1,
-                terms_end,
                 location: None,
             };
             assert_eq!(
@@ -499,8 +472,6 @@ mod tests {
             let i = universe.new_term(Application(id(), vec![wc]), None);
             let fi = universe.new_term(Application(comp(), vec![f0, i]), None);
             let prem_eq = Atom {
-                terms_begin: g0,
-                terms_end: Term(universe.len()),
                 data: AtomData::Equal(g0, fi),
                 location: None,
             };
@@ -508,24 +479,16 @@ mod tests {
             let f1 = universe.new_term(f(), None);
             let g1 = universe.new_term(g(), None);
             let conc_eq = Atom {
-                terms_begin: f1,
-                terms_end: Term(universe.len()),
                 data: AtomData::Equal(f1, g1),
                 location: None,
             };
 
-            let terms_end = Term(universe.len());
-
             let premise = Formula {
                 atoms: vec![prem_eq],
-                terms_begin: g0,
-                terms_end: f1,
                 location: None,
             };
             let conclusion = Formula {
                 atoms: vec![conc_eq],
-                terms_begin: f1,
-                terms_end,
                 location: None,
             };
 

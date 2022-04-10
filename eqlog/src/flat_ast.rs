@@ -136,7 +136,7 @@ where
                     };
 
                 self.flat_names.union(lhs, rhs);
-                for tm in (atom.terms_begin.0..atom.terms_end.0).map(Term) {
+                for tm in atom.iter_subterms(&self.universe) {
                     self.emit_term_structure(tm);
                 }
 
@@ -150,12 +150,12 @@ where
                 self.flat_names.congruence_closure();
             }
             Defined(_, _) => {
-                for tm in (atom.terms_begin.0..atom.terms_end.0).map(Term) {
+                for tm in atom.iter_subterms(&self.universe) {
                     self.emit_term_structure(tm);
                 }
             }
             Predicate(pred, args) => {
-                for tm in (atom.terms_begin.0..atom.terms_end.0).map(Term) {
+                for tm in atom.iter_subterms(&self.universe) {
                     self.emit_term_structure(tm);
                 }
                 let args = args
@@ -176,7 +176,7 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
     let mut unconstrained = TermUnification::new(universe, vec![true; len], |lhs, rhs| lhs && rhs);
     let mut flat_names = TermUnification::new(universe, vec![None; len], |lhs, rhs| lhs.or(rhs));
 
-    for tm in (sequent.premise.terms_begin.0..sequent.premise.terms_end.0).map(Term) {
+    for tm in sequent.premise.iter_subterms(universe) {
         use TermData::*;
         match universe.data(tm) {
             Variable(_) | Wildcard => (),
