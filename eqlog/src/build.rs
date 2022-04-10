@@ -1,15 +1,31 @@
 use crate::ast::*;
+use crate::error::*;
 use crate::flat_ast::*;
 use crate::grammar::*;
 use crate::index_selection::*;
 use crate::query_action::*;
 use crate::rust_gen::*;
+use crate::signature::*;
+use crate::unification::*;
 use convert_case::{Case, Casing};
 use std::env;
+use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{exit, Command};
+
+fn parse(
+    src: String,
+) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>), CompileErrorWithSource> {
+    match TheoryParser::new().parse(&mut TermUniverse::new(), &src) {
+        Ok(x) => Ok(x),
+        Err(parse_error) => {
+            let error = CompileError::from(parse_error);
+            Err(CompileErrorWithSource { error, source: src })
+        }
+    }
+}
 
 fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     let mut result = Vec::new();
@@ -42,15 +58,13 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-fn process_file(name: &str, in_file: PathBuf, out_file: PathBuf) -> io::Result<()> {
+fn process_file(name: &str, in_file: &Path, out_file: &Path) -> Result<(), Box<dyn Error>> {
     let src: String = fs::read_to_string(in_file)?;
-    let (sig, axioms) = TheoryParser::new()
-        .parse(&mut TermUniverse::new(), &src)
-        .unwrap();
+    let (sig, axioms) = parse(src)?;
     let query_actions: Vec<QueryAction> = axioms
         .iter()
-        .map(|(sequent, term_sorts)| {
-            let flat_sequent = flatten_sequent(sequent, term_sorts);
+        .map(|(axiom, term_sorts)| {
+            let flat_sequent = flatten_sequent(&axiom.sequent, term_sorts);
             QueryAction::new(&sig, &flat_sequent)
         })
         .collect();
@@ -66,16 +80,17 @@ fn process_file(name: &str, in_file: PathBuf, out_file: PathBuf) -> io::Result<(
     Ok(())
 }
 
-pub fn process_root() -> io::Result<()> {
+pub fn process_root() {
     let in_dir: PathBuf = "src".into();
     let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
 
-    for in_file in eqlog_files(&in_dir)? {
-        println!("Processing file {:?}", &in_file);
+    for in_file in eqlog_files(&in_dir).unwrap() {
         let stem = in_file.file_stem().unwrap().to_str().unwrap();
         let out_file = out_dir.join(stem).with_extension("rs");
-        println!("Output file: {:?}", &out_file);
-        process_file(&stem.to_case(Case::UpperCamel), in_file, out_file)?;
+        println!("Compiling {in_file:?} into {out_file:?}");
+        if let Err(err) = process_file(&stem.to_case(Case::UpperCamel), &in_file, &out_file) {
+            eprintln!("Error processing {in_file:?}: {err}");
+            exit(1);
+        }
     }
-    Ok(())
 }
