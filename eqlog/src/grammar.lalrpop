@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::error::*;
 use crate::signature::Signature;
 use std::iter::once;
 use crate::analysis::check_semantically;
@@ -7,6 +8,10 @@ use convert_case::{Case, Casing};
 use std::mem::swap;
 
 grammar(universe: &mut TermUniverse);
+
+extern {
+    type Error = SemanticsError;
+}
 
 Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
 
@@ -135,10 +140,10 @@ pub Theory: (Signature, Vec<(Sequent, TermMap<String>)>) = {
         sig.add_function(func);
         theory
     },
-    <mut theory: Theory> <ax: AxiomDecl> => {
+    <mut theory: Theory> <ax: AxiomDecl> =>? {
         let (ref sig, ref mut axioms) = &mut theory;
-        let sorts = check_semantically(&sig, &ax.sequent);
+        let sorts = check_semantically(&sig, &ax.sequent)?;
         axioms.push((ax.sequent, sorts));
-        theory
+        Ok(theory)
     },
 }
