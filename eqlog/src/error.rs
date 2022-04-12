@@ -41,6 +41,9 @@ pub enum CompileError {
         first_declaration: Option<Location>,
         second_declaration: Option<Location>,
     },
+    ReductionFromVariableOrWildcard {
+        location: Option<Location>,
+    },
     NoSort {
         location: Option<Location>,
     },
@@ -288,6 +291,10 @@ impl Display for CompileErrorWithContext {
                         display_location(source_path, source, *first_declaration)
                     )?;
                 }
+            }
+            ReductionFromVariableOrWildcard { location } => {
+                write!(f, "term before ~> cannot be variable or wildcard\n")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
             NoSort { location } => {
                 write!(f, "sort of term undetermined\n")?;
