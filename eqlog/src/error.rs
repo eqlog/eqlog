@@ -2,6 +2,7 @@ use crate::ast::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CompileError {
@@ -80,13 +81,22 @@ impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-struct FormatLocation<'a>(&'a str, Location);
+struct FormatLocation<'a> {
+    source_path: &'a Path,
+    source: &'a str,
+    location: Location,
+}
 
 impl<'a> Display for FormatLocation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FormatLocation(src, Location(begin, end)) = *self;
+        let FormatLocation {
+            source_path,
+            source,
+            location,
+        } = *self;
+        let Location(begin, end) = location;
 
-        let line_ranges = src.lines().scan(0, |len, line| {
+        let line_ranges = source.lines().scan(0, |len, line| {
             let b = *len;
             // TODO: Or line.chars().count()?
             *len += line.len();
@@ -96,26 +106,45 @@ impl<'a> Display for FormatLocation<'a> {
             Some((b, e))
         });
 
+        // An iterator over (line_number: usize, (line_begin: usize , line_end: usize)) over all
+        // lines that intersect location.
         let intersecting_line_ranges = line_ranges
             .enumerate()
             .skip_while(|(_, (_, e))| *e <= begin)
             .take_while(|(_, (b, _))| *b < end)
             .map(|(i, r)| (i + 1, r));
 
-        let max_line_num_digits = itertools::max(intersecting_line_ranges.clone().map(|(i, _)| i))
-            .map(|i| i.to_string().len());
+        // Digits of the largest line number we need to display.
+        let max_line_num_digits: usize =
+            match itertools::max(intersecting_line_ranges.clone().map(|(i, _)| i)) {
+                Some(max) => max.to_string().len(),
+                None => 0,
+            };
+
+        let write_padding = |f: &mut fmt::Formatter, n: usize| -> fmt::Result {
+            for _ in 0..n {
+                write!(f, " ")?;
+            }
+            Ok(())
+        };
+
+        write_padding(f, max_line_num_digits)?;
+        write!(f, "--> {}", source_path.display())?;
+        if let Some(first_line) = intersecting_line_ranges.clone().next().map(|(i, _)| i) {
+            write!(f, ":{first_line}")?;
+        }
+        write!(f, "\n")?;
+
+        write_padding(f, max_line_num_digits)?;
+        write!(f, " | \n")?;
 
         for (i, (b, e)) in intersecting_line_ranges {
             let line_num_str = i.to_string();
-            for _ in line_num_str.len()..max_line_num_digits.unwrap() {
-                write!(f, " ")?;
-            }
+            write_padding(f, max_line_num_digits - line_num_str.len())?;
             write!(f, "{line_num_str} | ")?;
-            write!(f, "{}\n", &src[b..e])?;
+            write!(f, "{}\n", &source[b..e])?;
 
-            for _ in 0..max_line_num_digits.unwrap() {
-                write!(f, " ")?;
-            }
+            write_padding(f, max_line_num_digits)?;
             write!(f, " | ")?;
             for i in b..e {
                 if i < begin || i >= end {
@@ -126,24 +155,41 @@ impl<'a> Display for FormatLocation<'a> {
             }
             write!(f, "\n")?;
         }
+
+        write_padding(f, max_line_num_digits)?;
+        write!(f, " | \n")?;
+
         Ok(())
     }
 }
 
-fn format_location(source: &str, location: Location) -> impl '_ + Display + Copy {
-    FormatLocation(source, location)
+fn display_location<'a>(
+    source_path: &'a Path,
+    source: &'a str,
+    location: Location,
+) -> impl 'a + Display + Copy {
+    FormatLocation {
+        source_path,
+        source,
+        location,
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct CompileErrorWithSource {
+pub struct CompileErrorWithContext {
     pub error: CompileError,
+    pub source_path: PathBuf,
     pub source: String,
 }
 
-impl Display for CompileErrorWithSource {
+impl Display for CompileErrorWithContext {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use CompileError::*;
-        let CompileErrorWithSource { error, source } = self;
+        let CompileErrorWithContext {
+            error,
+            source_path,
+            source,
+        } = self;
         match error {
             InvalidToken { location: _ } => {
                 write!(f, "invalid token")?;
@@ -174,7 +220,7 @@ impl Display for CompileErrorWithSource {
                     "Function takes {expected} arguments but {got} were supplied\n"
                 )?;
                 if let Some(loc) = *location {
-                    write!(f, "{}", format_location(source, loc))?;
+                    write!(f, "{}", display_location(source_path, source, loc))?;
                 }
             }
             PredicateArgumentNumber {
@@ -232,4 +278,4 @@ impl Display for CompileErrorWithSource {
     }
 }
 
-impl Error for CompileErrorWithSource {}
+impl Error for CompileErrorWithContext {}

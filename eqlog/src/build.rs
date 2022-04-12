@@ -15,16 +15,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
-fn parse(
-    src: String,
-) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>), CompileErrorWithSource> {
-    match TheoryParser::new().parse(&mut TermUniverse::new(), &src) {
-        Ok(x) => Ok(x),
-        Err(parse_error) => {
-            let error = CompileError::from(parse_error);
-            Err(CompileErrorWithSource { error, source: src })
-        }
-    }
+fn parse(source: &str) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>), CompileError> {
+    TheoryParser::new()
+        .parse(&mut TermUniverse::new(), source)
+        .map_err(CompileError::from)
 }
 
 fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
@@ -58,9 +52,14 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-fn process_file(name: &str, in_file: &Path, out_file: &Path) -> Result<(), Box<dyn Error>> {
-    let src: String = fs::read_to_string(in_file)?;
-    let (sig, axioms) = parse(src)?;
+fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
+    let source = fs::read_to_string(in_file)?;
+    let (sig, axioms) = parse(&source).map_err(|error| CompileErrorWithContext {
+        error,
+        source,
+        source_path: in_file.into(),
+    })?;
+
     let query_actions: Vec<QueryAction> = axioms
         .iter()
         .map(|(axiom, term_sorts)| {
@@ -69,9 +68,20 @@ fn process_file(name: &str, in_file: &Path, out_file: &Path) -> Result<(), Box<d
         })
         .collect();
     let index_selection = select_indices(&sig, &query_actions);
-
+    let theory_name = in_file
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_case(Case::UpperCamel);
     let mut result: Vec<u8> = Vec::new();
-    write_module(&mut result, name, &sig, &query_actions, &index_selection)?;
+    write_module(
+        &mut result,
+        &theory_name,
+        &sig,
+        &query_actions,
+        &index_selection,
+    )?;
     fs::write(&out_file, &result)?;
     Command::new("rustfmt")
         .arg(&out_file)
@@ -88,8 +98,8 @@ pub fn process_root() {
         let stem = in_file.file_stem().unwrap().to_str().unwrap();
         let out_file = out_dir.join(stem).with_extension("rs");
         println!("Compiling {in_file:?} into {out_file:?}");
-        if let Err(err) = process_file(&stem.to_case(Case::UpperCamel), &in_file, &out_file) {
-            eprintln!("Error processing {in_file:?}: {err}");
+        if let Err(err) = process_file(&in_file, &out_file) {
+            eprintln!("{err}");
             exit(1);
         }
     }
