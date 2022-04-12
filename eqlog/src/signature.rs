@@ -1,8 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
 use std::collections::HashMap;
-use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
 use std::iter::once;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -30,26 +28,9 @@ impl Symbol {
     }
 }
 
-#[derive(Clone, Debug)]
-struct SymbolUpToName(Symbol);
-
-impl PartialEq for SymbolUpToName {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.name() == other.0.name()
-    }
-}
-impl Eq for SymbolUpToName {}
-
-impl Hash for SymbolUpToName {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.name().hash(state);
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signature {
-    symbols: HashSet<SymbolUpToName>,
-    sorts: HashMap<String, Sort>,
+    symbols: HashMap<String, Symbol>,
     predicates: HashMap<String, Predicate>,
     functions: HashMap<String, Function>,
 }
@@ -57,14 +38,16 @@ pub struct Signature {
 impl Signature {
     pub fn new() -> Self {
         Signature {
-            symbols: HashSet::new(),
-            sorts: HashMap::new(),
+            symbols: HashMap::new(),
             predicates: HashMap::new(),
             functions: HashMap::new(),
         }
     }
-    pub fn sorts(&self) -> &HashMap<String, Sort> {
-        &self.sorts
+    pub fn iter_sorts(&self) -> impl Iterator<Item = &Sort> {
+        self.symbols.values().filter_map(|symbol| match symbol {
+            Symbol::Sort(s) => Some(s),
+            _ => None,
+        })
     }
     pub fn predicates(&self) -> &HashMap<String, Predicate> {
         &self.predicates
@@ -103,7 +86,7 @@ impl Signature {
 
     fn insert_symbol(&mut self, symbol: Symbol) -> Result<(), CompileError> {
         let second_location = symbol.location();
-        if let Some(SymbolUpToName(prev_symbol)) = self.symbols.replace(SymbolUpToName(symbol)) {
+        if let Some(prev_symbol) = self.symbols.insert(symbol.name().into(), symbol) {
             return Err(CompileError::SymbolDeclaredTwice {
                 name: prev_symbol.name().into(),
                 first_declaration: prev_symbol.location(),
@@ -113,16 +96,10 @@ impl Signature {
         Ok(())
     }
     fn get_symbol(&mut self, name: &str) -> Option<&Symbol> {
-        self.symbols
-            .get(&SymbolUpToName(Symbol::Sort(Sort {
-                name: name.into(),
-                location: None,
-            })))
-            .map(|upto| &upto.0)
+        self.symbols.get(name)
     }
 
     pub fn add_sort(&mut self, sort: Sort) -> Result<(), CompileError> {
-        self.sorts.insert(sort.name.clone(), sort.clone());
         self.insert_symbol(Symbol::Sort(sort))
     }
     pub fn add_predicate(&mut self, pred: Predicate) -> Result<(), CompileError> {

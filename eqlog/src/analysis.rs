@@ -271,11 +271,13 @@ mod tests {
         let signature = || "Signature".to_string();
 
         assert_eq!(
-            sig.sorts().keys().cloned().collect::<BTreeSet<String>>(),
+            sig.iter_sorts()
+                .map(|sort| sort.name.clone())
+                .collect::<BTreeSet<String>>(),
             btreeset! {obj(), mor()}
         );
-        let obj_sort = sig.sorts().get(&obj()).unwrap();
-        let mor_sort = sig.sorts().get(&mor()).unwrap();
+        let obj_sort = sig.iter_sorts().find(|sort| sort.name == obj()).unwrap();
+        let mor_sort = sig.iter_sorts().find(|sort| sort.name == mor()).unwrap();
 
         assert_eq!(
             sig.predicates()
