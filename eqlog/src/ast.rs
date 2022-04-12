@@ -1,3 +1,4 @@
+use crate::error::*;
 use std::iter::once;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -217,11 +218,15 @@ impl Sequent {
         mut premise: Vec<Atom>,
         from: Term,
         to: Term,
-    ) -> Sequent {
+    ) -> Result<Sequent, CompileError> {
         use TermData::*;
         let from_args = match universe.data(from) {
             Application(_, args) => args,
-            _ => panic!("Reduction with source Term::Variable or Term:Wildcard"),
+            _ => {
+                return Err(CompileError::ReductionFromVariableOrWildcard {
+                    location: universe.location(from),
+                })
+            }
         };
 
         premise.extend(from_args.iter().copied().chain(once(to)).map(|tm| Atom {
@@ -232,11 +237,11 @@ impl Sequent {
             data: AtomData::Equal(from, to),
             location: None,
         }];
-        Sequent {
+        Ok(Sequent {
             universe,
             premise,
             conclusion,
-        }
+        })
     }
     #[cfg(test)]
     pub fn without_locations(&self) -> Self {

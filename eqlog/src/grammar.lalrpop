@@ -104,15 +104,17 @@ pub Sequent: Sequent = {
         swap(&mut u, universe);
         Sequent::new_implication(u, premise, conclusion)
     },
-    <from: Term> "~>" <to: Term> => {
+    <from: Term> "~>" <to: Term> =>? {
         let mut u = TermUniverse::new();
         swap(&mut u, universe);
-        Sequent::new_reduction(u, Vec::new(), from, to)
+        let seq = Sequent::new_reduction(u, Vec::new(), from, to)?;
+        Ok(seq)
     },
-    <premise: Formula> "=>" <from: Term> "~>" <to: Term> => {
+    <premise: Formula> "=>" <from: Term> "~>" <to: Term> =>? {
         let mut u = TermUniverse::new();
         swap(&mut u, universe);
-        Sequent::new_reduction(u, premise, from, to)
+        let seq = Sequent::new_reduction(u, premise, from, to)?;
+        Ok(seq)
     },
 }
 
