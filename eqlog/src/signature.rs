@@ -31,7 +31,6 @@ impl Symbol {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signature {
     symbols: HashMap<String, Symbol>,
-    predicates: HashMap<String, Predicate>,
     functions: HashMap<String, Function>,
 }
 
@@ -39,9 +38,11 @@ impl Signature {
     pub fn new() -> Self {
         Signature {
             symbols: HashMap::new(),
-            predicates: HashMap::new(),
             functions: HashMap::new(),
         }
+    }
+    pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
+        self.symbols.get(name)
     }
     pub fn iter_sorts(&self) -> impl Iterator<Item = &Sort> {
         self.symbols.values().filter_map(|symbol| match symbol {
@@ -49,14 +50,17 @@ impl Signature {
             _ => None,
         })
     }
-    pub fn predicates(&self) -> &HashMap<String, Predicate> {
-        &self.predicates
+    pub fn iter_predicates(&self) -> impl Iterator<Item = &Predicate> {
+        self.symbols.values().filter_map(|symbol| match symbol {
+            Symbol::Predicate(p) => Some(p),
+            _ => None,
+        })
     }
     pub fn functions(&self) -> &HashMap<String, Function> {
         &self.functions
     }
     pub fn relations(&self) -> impl Iterator<Item = (&str, Vec<&str>)> {
-        let pred_rels = self.predicates().values().map(|pred| {
+        let pred_rels = self.iter_predicates().map(|pred| {
             let name = pred.name.as_str();
             let arity: Vec<&str> = pred.arity.iter().map(|s| s.as_str()).collect();
             (name, arity)
@@ -75,13 +79,15 @@ impl Signature {
     }
 
     pub fn arity(&self, relation: &str) -> Option<Vec<&str>> {
-        if let Some(Predicate { arity, .. }) = self.predicates.get(relation) {
-            return Some(arity.iter().map(|s| s.as_str()).collect());
+        match self.get_symbol(relation)? {
+            Symbol::Sort(_) => None,
+            Symbol::Predicate(Predicate { arity, .. }) => {
+                Some(arity.iter().map(|s| s.as_str()).collect())
+            }
+            Symbol::Function(Function { dom, cod, .. }) => {
+                Some(dom.iter().chain(once(cod)).map(|s| s.as_str()).collect())
+            }
         }
-        if let Some(Function { dom, cod, .. }) = self.functions.get(relation) {
-            return Some(dom.iter().chain(once(cod)).map(|s| s.as_str()).collect());
-        }
-        None
     }
 
     fn insert_symbol(&mut self, symbol: Symbol) -> Result<(), CompileError> {
@@ -95,15 +101,11 @@ impl Signature {
         }
         Ok(())
     }
-    fn get_symbol(&mut self, name: &str) -> Option<&Symbol> {
-        self.symbols.get(name)
-    }
 
     pub fn add_sort(&mut self, sort: Sort) -> Result<(), CompileError> {
         self.insert_symbol(Symbol::Sort(sort))
     }
     pub fn add_predicate(&mut self, pred: Predicate) -> Result<(), CompileError> {
-        self.predicates.insert(pred.name.clone(), pred.clone());
         for s in pred.arity.iter() {
             match self.get_symbol(s) {
                 None => {
