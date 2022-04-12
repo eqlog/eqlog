@@ -228,9 +228,12 @@ mod tests {
         let mut sig = Signature::new();
         sig.add_sort(Sort::new(obj())).unwrap();
         sig.add_sort(Sort::new(mor())).unwrap();
-        sig.add_function(Function::new(comp(), vec![mor(), mor()], mor()));
-        sig.add_function(Function::new(id(), vec![obj()], mor()));
-        sig.add_predicate(Predicate::new(signature(), vec![obj(), mor(), obj()]));
+        sig.add_function(Function::new(comp(), vec![mor(), mor()], mor()))
+            .unwrap();
+        sig.add_function(Function::new(id(), vec![obj()], mor()))
+            .unwrap();
+        sig.add_predicate(Predicate::new(signature(), vec![obj(), mor(), obj()]))
+            .unwrap();
         sig
     }
 
