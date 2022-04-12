@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CompileError {
     InvalidToken {
-        location: usize,
+        location: Location,
     },
     UnrecognizedEOF {
-        location: usize,
+        location: Location,
         expected: Vec<String>,
     },
     UnrecognizedToken {
@@ -64,10 +64,13 @@ pub enum CompileError {
 impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
     fn from(parse_error: ParseError<usize, Token<'_>, CompileError>) -> CompileError {
         match parse_error {
-            ParseError::InvalidToken { location } => CompileError::InvalidToken { location },
-            ParseError::UnrecognizedEOF { location, expected } => {
-                CompileError::UnrecognizedEOF { location, expected }
-            }
+            ParseError::InvalidToken { location } => CompileError::InvalidToken {
+                location: Location(location, location + 1),
+            },
+            ParseError::UnrecognizedEOF { location, expected } => CompileError::UnrecognizedEOF {
+                location: Location(location, location + 1),
+                expected,
+            },
             ParseError::UnrecognizedToken { token, expected } => CompileError::UnrecognizedToken {
                 location: Location(token.0, token.2),
                 expected,
@@ -81,20 +84,23 @@ impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-struct FormatLocation<'a> {
+struct DisplayLocation<'a> {
     source_path: &'a Path,
     source: &'a str,
-    location: Location,
+    location: Option<Location>,
 }
 
-impl<'a> Display for FormatLocation<'a> {
+impl<'a> Display for DisplayLocation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FormatLocation {
+        let DisplayLocation {
             source_path,
             source,
             location,
         } = *self;
-        let Location(begin, end) = location;
+        let (begin, end) = match location {
+            Some(Location(begin, end)) => (begin, end),
+            None => (0, 0),
+        };
 
         let line_ranges = source.lines().scan(0, |len, line| {
             let b = *len;
@@ -166,9 +172,9 @@ impl<'a> Display for FormatLocation<'a> {
 fn display_location<'a>(
     source_path: &'a Path,
     source: &'a str,
-    location: Location,
+    location: Option<Location>,
 ) -> impl 'a + Display + Copy {
-    FormatLocation {
+    DisplayLocation {
         source_path,
         source,
         location,
@@ -190,24 +196,45 @@ impl Display for CompileErrorWithContext {
             source_path,
             source,
         } = self;
+        write!(f, "Error: ")?;
         match error {
-            InvalidToken { location: _ } => {
-                write!(f, "invalid token")?;
+            InvalidToken { location } => {
+                write!(f, "invalid token\n")?;
+                write!(
+                    f,
+                    "{}",
+                    display_location(source_path, source, Some(*location))
+                )?;
             }
             UnrecognizedEOF {
-                location: _,
+                location,
                 expected: _,
             } => {
-                write!(f, "unexpected end of file")?;
+                write!(f, "unexpected end of file\n")?;
+                write!(
+                    f,
+                    "{}",
+                    display_location(source_path, source, Some(*location))
+                )?;
             }
             UnrecognizedToken {
-                location: _,
+                location,
                 expected: _,
             } => {
-                write!(f, "unrecognized token")?;
+                write!(f, "unrecognized token\n")?;
+                write!(
+                    f,
+                    "{}",
+                    display_location(source_path, source, Some(*location))
+                )?;
             }
-            ExtraToken { location: _ } => {
-                write!(f, "extra token")?;
+            ExtraToken { location } => {
+                write!(f, "unexpected token\n")?;
+                write!(
+                    f,
+                    "{}",
+                    display_location(source_path, source, Some(*location))
+                )?;
             }
             FunctionArgumentNumber {
                 function: _,
@@ -217,61 +244,59 @@ impl Display for CompileErrorWithContext {
             } => {
                 write!(
                     f,
-                    "Function takes {expected} arguments but {got} were supplied\n"
+                    "function takes {expected} arguments but {got} were supplied\n"
                 )?;
-                if let Some(loc) = *location {
-                    write!(f, "{}", display_location(source_path, source, loc))?;
-                }
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
             PredicateArgumentNumber {
                 predicate: _,
                 expected,
                 got,
-                location: _,
+                location,
             } => {
                 write!(
                     f,
-                    "predicate takes {expected} arguments but {got} were supplied"
+                    "predicate takes {expected} arguments but {got} were supplied\n"
                 )?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            UndeclaredSymbol {
-                name: _,
-                location: _,
-            } => {
-                write!(f, "undeclared symbol")?;
+            UndeclaredSymbol { name, location } => {
+                write!(f, "undeclared symbol \"{name}\"\n")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            NoSort { location: _ } => {
-                write!(f, "sort of term undetermined")?;
+            NoSort { location } => {
+                write!(f, "sort of term undetermined\n")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            ConflictingSorts {
-                sorts: _,
-                location: _,
-            } => {
-                write!(f, "term has conflicting sorts")?;
+            ConflictingSorts { sorts: _, location } => {
+                write!(f, "term has conflicting sorts\n")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            VariableNotInPremise {
-                var: _,
-                location: _,
-            } => {
-                write!(f, "variable in conclusion not used in premise")?;
+            VariableNotInPremise { var: _, location } => {
+                write!(f, "variable in conclusion not used in premise\n")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            WildcardInConclusion { location: _ } => {
-                write!(f, "wildcard in conclusion")?;
+            WildcardInConclusion { location } => {
+                write!(f, "wildcard in conclusion\n")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            ConclusionEqualityOfNewTerms { location: _ } => {
+            ConclusionEqualityOfNewTerms { location } => {
                 write!(
                     f,
-                    "both sides of equality in conclusion are not used earlier"
+                    "both sides of equality in conclusion are not used earlier\n"
                 )?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            ConclusionEqualityArgNew { location: _ } => {
+            ConclusionEqualityArgNew { location } => {
                 write!(
                     f,
-                    "argument of undefined term in equality in conclusion is not used earlier"
+                    "argument of undefined term in equality in conclusion is not used earlier\n"
                 )?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
-            ConclusionPredicateArgNew { location: _ } => {
+            ConclusionPredicateArgNew { location } => {
                 write!(f, "argument of predicate in conclusion is not used earlier")?;
+                write!(f, "{}", display_location(source_path, source, *location))?;
             }
         }
         Ok(())
