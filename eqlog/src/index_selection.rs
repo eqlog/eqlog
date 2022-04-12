@@ -226,8 +226,8 @@ mod tests {
 
     fn category_signature() -> Signature {
         let mut sig = Signature::new();
-        sig.add_sort(Sort::new(obj()));
-        sig.add_sort(Sort::new(mor()));
+        sig.add_sort(Sort::new(obj())).unwrap();
+        sig.add_sort(Sort::new(mor())).unwrap();
         sig.add_function(Function::new(comp(), vec![mor(), mor()], mor()));
         sig.add_function(Function::new(id(), vec![obj()], mor()));
         sig.add_predicate(Predicate::new(signature(), vec![obj(), mor(), obj()]));

@@ -125,20 +125,20 @@ AxiomDecl: Axiom = {
 
 pub Theory: (Signature, Vec<(Axiom, TermMap<String>)>) = {
     () => (Signature::new(), vec![]),
-    <mut theory: Theory> <sort: SortDecl> => {
+    <mut theory: Theory> <sort: SortDecl> =>? {
         let (ref mut sig, _) = &mut theory;
-        sig.add_sort(sort);
-        theory
+        sig.add_sort(sort)?;
+        Ok(theory)
     },
-    <mut theory: Theory> <pred: PredicateDecl> => {
+    <mut theory: Theory> <pred: PredicateDecl> =>? {
         let (ref mut sig, _) = &mut theory;
-        sig.add_predicate(pred);
-        theory
+        sig.add_predicate(pred)?;
+        Ok(theory)
     },
-    <mut theory: Theory> <func: FunctionDecl> => {
+    <mut theory: Theory> <func: FunctionDecl> =>? {
         let (ref mut sig, _) = &mut theory;
-        sig.add_function(func);
-        theory
+        sig.add_function(func)?;
+        Ok(theory)
     },
     <mut theory: Theory> <ax: AxiomDecl> =>? {
         let (ref sig, ref mut axioms) = &mut theory;

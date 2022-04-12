@@ -36,6 +36,11 @@ pub enum CompileError {
         name: String,
         location: Option<Location>,
     },
+    SymbolDeclaredTwice {
+        name: String,
+        first_declaration: Option<Location>,
+        second_declaration: Option<Location>,
+    },
     NoSort {
         location: Option<Location>,
     },
@@ -263,6 +268,26 @@ impl Display for CompileErrorWithContext {
             UndeclaredSymbol { name, location } => {
                 write!(f, "undeclared symbol \"{name}\"\n")?;
                 write!(f, "{}", display_location(source_path, source, *location))?;
+            }
+            SymbolDeclaredTwice {
+                name: _,
+                first_declaration,
+                second_declaration,
+            } => {
+                write!(f, "symbol declared multiple times\n")?;
+                write!(
+                    f,
+                    "{}",
+                    display_location(source_path, source, *second_declaration)
+                )?;
+                if first_declaration.is_some() {
+                    write!(f, "Previously declared here:\n")?;
+                    write!(
+                        f,
+                        "{}\n\n",
+                        display_location(source_path, source, *first_declaration)
+                    )?;
+                }
             }
             NoSort { location } => {
                 write!(f, "sort of term undetermined\n")?;

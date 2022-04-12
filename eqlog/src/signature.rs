@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::error::*;
 use std::collections::HashMap;
 use std::iter::once;
 
@@ -56,37 +57,54 @@ impl Signature {
         None
     }
 
-    pub fn add_sort(&mut self, sort: Sort) {
-        match self.sorts.insert(sort.name.clone(), sort) {
-            None => (),
-            Some(prev_sort) => panic!("Duplicate declaration of sort {}", prev_sort.name),
+    pub fn add_sort(&mut self, sort: Sort) -> Result<(), CompileError> {
+        let sort_location = sort.location;
+        if let Some(prev_sort) = self.sorts.insert(sort.name.clone(), sort) {
+            return Err(CompileError::SymbolDeclaredTwice {
+                name: prev_sort.name.clone(),
+                first_declaration: prev_sort.location,
+                second_declaration: sort_location,
+            });
         }
+        Ok(())
     }
-    pub fn add_predicate(&mut self, pred: Predicate) {
+    pub fn add_predicate(&mut self, pred: Predicate) -> Result<(), CompileError> {
         for s in pred.arity.iter() {
             if !self.sorts.contains_key(s) {
-                panic!("Undeclared sort {}", s)
+                return Err(CompileError::UndeclaredSymbol {
+                    name: s.clone(),
+                    location: pred.location,
+                });
             }
         }
-        match self.predicates.insert(pred.name.clone(), pred) {
-            None => (),
-            Some(prev_pred) => {
-                panic!("Duplicate declaration of predicate {}", prev_pred.name)
-            }
+        let pred_location = pred.location;
+        if let Some(prev_pred) = self.predicates.insert(pred.name.clone(), pred) {
+            return Err(CompileError::SymbolDeclaredTwice {
+                name: prev_pred.name.clone(),
+                first_declaration: prev_pred.location,
+                second_declaration: pred_location,
+            });
         }
+        Ok(())
     }
-    pub fn add_function(&mut self, func: Function) {
+    pub fn add_function(&mut self, func: Function) -> Result<(), CompileError> {
         for s in func.dom.iter().chain(once(&func.cod)) {
             if !self.sorts.contains_key(s) {
-                panic!("Undeclared sort {}", s)
+                return Err(CompileError::UndeclaredSymbol {
+                    name: s.clone(),
+                    location: func.location,
+                });
             }
         }
-        match self.functions.insert(func.name.clone(), func) {
-            None => (),
-            Some(prev_func) => {
-                panic!("Duplicate declaration of function {}", prev_func.name)
-            }
+        let func_location = func.location;
+        if let Some(prev_func) = self.functions.insert(func.name.clone(), func) {
+            return Err(CompileError::SymbolDeclaredTwice {
+                name: prev_func.name.clone(),
+                first_declaration: prev_func.location,
+                second_declaration: func_location,
+            });
         }
+        Ok(())
     }
 }
 
@@ -99,13 +117,16 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
-        th.add_sort(Sort::new(t()));
+        th.add_sort(Sort::new(s())).unwrap();
+        th.add_sort(Sort::new(t())).unwrap();
 
-        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]));
-        th.add_predicate(Predicate::new("P".to_string(), vec![s(), s(), s()]));
+        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]))
+            .unwrap();
+        th.add_predicate(Predicate::new("P".to_string(), vec![s(), s(), s()]))
+            .unwrap();
 
-        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()));
+        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()))
+            .unwrap();
         th.add_function(Function::new("G".to_string(), vec![t(), s()], t()));
     }
 
@@ -115,9 +136,9 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
-        th.add_sort(Sort::new(t()));
-        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(s())).unwrap();
+        th.add_sort(Sort::new(t())).unwrap();
+        th.add_sort(Sort::new(s())).unwrap();
     }
 
     #[test]
@@ -126,12 +147,15 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
-        th.add_sort(Sort::new(t()));
+        th.add_sort(Sort::new(s())).unwrap();
+        th.add_sort(Sort::new(t())).unwrap();
 
-        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]));
-        th.add_predicate(Predicate::new("P".to_string(), vec![s(), s(), s()]));
-        th.add_predicate(Predicate::new("Q".to_string(), vec![t(), s()]));
+        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]))
+            .unwrap();
+        th.add_predicate(Predicate::new("P".to_string(), vec![s(), s(), s()]))
+            .unwrap();
+        th.add_predicate(Predicate::new("Q".to_string(), vec![t(), s()]))
+            .unwrap();
     }
 
     #[test]
@@ -140,12 +164,15 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
-        th.add_sort(Sort::new(t()));
+        th.add_sort(Sort::new(s())).unwrap();
+        th.add_sort(Sort::new(t())).unwrap();
 
-        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()));
-        th.add_function(Function::new("G".to_string(), vec![t(), s()], t()));
-        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()));
+        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()))
+            .unwrap();
+        th.add_function(Function::new("G".to_string(), vec![t(), s()], t()))
+            .unwrap();
+        th.add_function(Function::new("F".to_string(), vec![s(), t()], t()))
+            .unwrap();
     }
 
     #[test]
@@ -154,9 +181,10 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(s())).unwrap();
 
-        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]));
+        th.add_predicate(Predicate::new("Q".to_string(), vec![s(), t()]))
+            .unwrap();
     }
 
     #[test]
@@ -165,9 +193,10 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(s())).unwrap();
 
-        th.add_function(Function::new("F".to_string(), vec![s(), s()], t()));
+        th.add_function(Function::new("F".to_string(), vec![s(), s()], t()))
+            .unwrap();
     }
 
     #[test]
@@ -176,8 +205,9 @@ mod tests {
         let mut th = Signature::new();
         let s = || "S".to_string();
         let t = || "T".to_string();
-        th.add_sort(Sort::new(s()));
+        th.add_sort(Sort::new(s())).unwrap();
 
-        th.add_function(Function::new("F".to_string(), vec![s(), t(), s()], s()));
+        th.add_function(Function::new("F".to_string(), vec![s(), t(), s()], s()))
+            .unwrap();
     }
 }
