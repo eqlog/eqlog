@@ -474,8 +474,8 @@ fn write_is_dirty_fn(out: &mut impl Write, signature: &Signature) -> io::Result<
             f(&format_args!("self.{relation_snake}.is_dirty()"))
         });
 
-    let sorts_dirty = signature.sorts().keys().format_with(" || ", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
+    let sorts_dirty = signature.iter_sorts().format_with(" || ", |sort, f| {
+        let sort_snake = sort.name.to_case(Snake);
         f(&format_args!("!self.{sort_snake}_dirty.is_empty()"))
     });
 
@@ -958,8 +958,8 @@ fn write_forget_dirt_fn(out: &mut impl Write, signature: &Signature) -> io::Resu
         let relation_snake = relation.to_case(Snake);
         f(&format_args!("self.{relation_snake}.drop_dirt();"))
     });
-    let sorts = signature.sorts().keys().format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
+    let sorts = signature.iter_sorts().format_with("\n", |sort, f| {
+        let sort_snake = sort.name.to_case(Snake);
         f(&format_args!("self.{sort_snake}_dirty.clear();"))
     });
     writedoc! {out, "
@@ -1058,14 +1058,11 @@ fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn new() -> Self {{\n")?;
     write!(out, "Self {{\n")?;
-    for sort in signature.sorts().keys() {
-        write!(
-            out,
-            "{}_equalities: Unification::new(),\n",
-            sort.to_case(Snake)
-        )?;
-        write!(out, "{}_dirty: BTreeSet::new(),\n", sort.to_case(Snake))?;
-        write!(out, "{}_all: BTreeSet::new(),\n", sort.to_case(Snake))?;
+    for sort in signature.iter_sorts() {
+        let sort_snake = sort.name.to_case(Snake);
+        write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
+        write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
+        write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
     for (relation, _) in signature.relations() {
         let relation_snake = relation.to_case(Snake);
@@ -1080,8 +1077,8 @@ fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
 fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
     write!(out, "#[derive(Debug)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
-    for sort in signature.sorts().keys() {
-        write_sort_fields(out, sort.as_str())?;
+    for sort in signature.iter_sorts() {
+        write_sort_fields(out, &sort.name)?;
         write!(out, "\n")?;
     }
 
@@ -1102,10 +1099,10 @@ fn write_theory_impl(
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
-    for sort in signature.sorts().keys() {
-        write_new_element(out, sort)?;
-        write_iter_sort_fn(out, sort)?;
-        write_sort_root_fn(out, sort)?;
+    for sort in signature.iter_sorts() {
+        write_new_element(out, &sort.name)?;
+        write_iter_sort_fn(out, &sort.name)?;
+        write_sort_root_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
     for (rel, arity) in signature.relations() {
@@ -1147,9 +1144,9 @@ pub fn write_module(
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for sort in signature.sorts().keys() {
-        write_sort_struct(out, sort)?;
-        write_sort_impl(out, sort)?;
+    for sort in signature.iter_sorts() {
+        write_sort_struct(out, &sort.name)?;
+        write_sort_impl(out, &sort.name)?;
     }
     write!(out, "\n")?;
 
