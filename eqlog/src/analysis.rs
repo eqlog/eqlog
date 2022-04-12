@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
-use crate::signature::Signature;
+use crate::signature::*;
 use crate::unification::{TermMap, TermUnification};
 use std::collections::HashSet;
 
@@ -61,8 +61,10 @@ pub fn infer_sorts(
             }
             AtomData::Defined(_, None) => (),
             AtomData::Predicate(p, args) => {
-                let arity = match signature.predicates().get(p) {
-                    Some(Predicate { arity, .. }) => arity,
+                let arity = match signature.get_symbol(p) {
+                    Some(Symbol::Predicate(Predicate { arity, .. })) => arity,
+                    Some(Symbol::Sort(_)) => panic!("Expected predicate, got arity"),
+                    Some(Symbol::Function(_)) => panic!("Expected predicate, got function"),
                     None => {
                         return Err(CompileError::UndeclaredSymbol {
                             name: p.clone(),
@@ -280,13 +282,15 @@ mod tests {
         let mor_sort = sig.iter_sorts().find(|sort| sort.name == mor()).unwrap();
 
         assert_eq!(
-            sig.predicates()
-                .keys()
-                .cloned()
+            sig.iter_predicates()
+                .map(|p| p.name.clone())
                 .collect::<BTreeSet<String>>(),
             btreeset! {signature()}
         );
-        let signature_pred = sig.predicates().get(&signature()).unwrap();
+        let signature_pred = sig
+            .iter_predicates()
+            .find(|p| p.name == signature())
+            .unwrap();
 
         assert_eq!(
             sig.functions()
