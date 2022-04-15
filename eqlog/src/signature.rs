@@ -15,16 +15,12 @@ impl Signature {
         }
     }
 
-    pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
-        self.symbols.get(name)
-    }
-
     pub fn get_symbol_at(
         &self,
         name: &str,
         location: Option<Location>,
     ) -> Result<&Symbol, CompileError> {
-        self.get_symbol(name)
+        self.symbols.get(name)
             .ok_or_else(|| CompileError::UndeclaredSymbol {
                 name: name.into(),
                 location,
@@ -94,7 +90,6 @@ impl Signature {
             _ => None,
         })
     }
-
     pub fn iter_predicates(&self) -> impl Iterator<Item = &Predicate> {
         self.symbols.values().filter_map(|symbol| match symbol {
             Symbol::Predicate(p) => Some(p),
@@ -107,6 +102,7 @@ impl Signature {
             _ => None,
         })
     }
+
     pub fn relations(&self) -> impl Iterator<Item = (&str, Vec<&str>)> {
         let pred_rels = self.iter_predicates().map(|pred| {
             let name = pred.name.as_str();
@@ -127,7 +123,7 @@ impl Signature {
     }
 
     pub fn arity(&self, relation: &str) -> Option<Vec<&str>> {
-        match self.get_symbol(relation)? {
+        match self.symbols.get(relation)? {
             Symbol::Sort(_) => None,
             Symbol::Predicate(Predicate { arity, .. }) => {
                 Some(arity.iter().map(|s| s.as_str()).collect())
