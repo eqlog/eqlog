@@ -28,6 +28,10 @@ pub enum CompileError {
         name: String,
         location: Option<Location>,
     },
+    VariableOccursOnlyOnce {
+        name: String,
+        location: Option<Location>,
+    },
     FunctionArgumentNumber {
         function: String,
         expected: usize,
@@ -265,6 +269,10 @@ impl Display for CompileErrorWithContext {
             }
             VariableNotSnakeCase { name, location } => {
                 write!(f, "variable {name} is not lower_snake_case\n")?;
+                display_location(source_path, source, *location).fmt(f)?;
+            }
+            VariableOccursOnlyOnce { name, location } => {
+                write!(f, "variable {name} occurs only once\n")?;
                 display_location(source_path, source, *location).fmt(f)?;
             }
             FunctionArgumentNumber {
