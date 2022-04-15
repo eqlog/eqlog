@@ -24,8 +24,16 @@ pub fn infer_sorts(
     // Assign sorts based on application of functions.
     for tm in sequent.universe.iter_terms() {
         match sequent.universe.data(tm) {
-            TermData::Application(f, args) => match signature.functions().get(f) {
-                Some(Function { dom, cod, .. }) => {
+            TermData::Application(f, args) => match signature.get_symbol(f) {
+                None => {
+                    return Err(CompileError::UndeclaredSymbol {
+                        name: f.clone(),
+                        location: sequent.universe.location(tm),
+                    })
+                }
+                Some(Symbol::Sort(_)) => panic!("Expected function, got sort"),
+                Some(Symbol::Predicate(_)) => panic!("Expected function, got predicate"),
+                Some(Symbol::Function(Function { dom, cod, .. })) => {
                     if args.len() != dom.len() {
                         return Err(CompileError::FunctionArgumentNumber {
                             function: f.clone(),
@@ -38,12 +46,6 @@ pub fn infer_sorts(
                         unification[arg].insert(sort.clone());
                     }
                     unification[tm].insert(cod.clone());
-                }
-                None => {
-                    return Err(CompileError::UndeclaredSymbol {
-                        name: f.clone(),
-                        location: sequent.universe.location(tm),
-                    })
                 }
             },
             TermData::Wildcard | TermData::Variable(_) => (),
@@ -293,14 +295,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            sig.functions()
-                .keys()
-                .cloned()
+            sig.iter_functions()
+                .map(|f| f.name.clone())
                 .collect::<BTreeSet<String>>(),
             btreeset! {comp(), id()}
         );
-        let id_func = sig.functions().get(&id()).unwrap();
-        let comp_func = sig.functions().get(&comp()).unwrap();
+        let id_func = sig.iter_functions().find(|f| f.name == id()).unwrap();
+        let comp_func = sig.iter_functions().find(|f| f.name == comp()).unwrap();
 
         assert_eq!(obj_sort.location, Some(src_loc("Sort Obj;", 0)));
         assert_eq!(obj_sort.location, Some(src_loc("Sort Obj;", 0)));

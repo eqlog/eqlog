@@ -31,14 +31,12 @@ impl Symbol {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signature {
     symbols: HashMap<String, Symbol>,
-    functions: HashMap<String, Function>,
 }
 
 impl Signature {
     pub fn new() -> Self {
         Signature {
             symbols: HashMap::new(),
-            functions: HashMap::new(),
         }
     }
     pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
@@ -56,8 +54,11 @@ impl Signature {
             _ => None,
         })
     }
-    pub fn functions(&self) -> &HashMap<String, Function> {
-        &self.functions
+    pub fn iter_functions(&self) -> impl Iterator<Item = &Function> {
+        self.symbols.values().filter_map(|symbol| match symbol {
+            Symbol::Function(f) => Some(f),
+            _ => None,
+        })
     }
     pub fn relations(&self) -> impl Iterator<Item = (&str, Vec<&str>)> {
         let pred_rels = self.iter_predicates().map(|pred| {
@@ -65,7 +66,7 @@ impl Signature {
             let arity: Vec<&str> = pred.arity.iter().map(|s| s.as_str()).collect();
             (name, arity)
         });
-        let func_rels = self.functions().values().map(|func| {
+        let func_rels = self.iter_functions().map(|func| {
             let name = func.name.as_str();
             let arity: Vec<&str> = func
                 .dom
@@ -121,7 +122,6 @@ impl Signature {
         self.insert_symbol(Symbol::Predicate(pred))
     }
     pub fn add_function(&mut self, func: Function) -> Result<(), CompileError> {
-        self.functions.insert(func.name.clone(), func.clone());
         for s in func.dom.iter().chain(once(&func.cod)) {
             match self.get_symbol(s) {
                 None => {

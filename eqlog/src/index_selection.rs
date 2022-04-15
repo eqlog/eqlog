@@ -98,7 +98,7 @@ pub fn select_indices(signature: &Signature, query_actions: &[QueryAction]) -> I
         .collect();
 
     // Add indices for (implicit) functionality axioms.
-    for func in signature.functions().values() {
+    for func in signature.iter_functions() {
         let spec = QuerySpec {
             projections: (0..func.dom.len()).collect(),
             diagonals: BTreeSet::new(),
