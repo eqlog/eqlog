@@ -3,31 +3,6 @@ use crate::error::*;
 use std::collections::HashMap;
 use std::iter::once;
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub enum Symbol {
-    Sort(Sort),
-    Predicate(Predicate),
-    Function(Function),
-}
-
-impl Symbol {
-    fn name(&self) -> &str {
-        use Symbol::*;
-        match self {
-            Sort(s) => &s.name,
-            Predicate(p) => &p.name,
-            Function(f) => &f.name,
-        }
-    }
-    fn location(&self) -> Option<Location> {
-        match self {
-            Symbol::Sort(Sort { location, .. }) => *location,
-            Symbol::Predicate(Predicate { location, .. }) => *location,
-            Symbol::Function(Function { location, .. }) => *location,
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signature {
     symbols: HashMap<String, Symbol>,
@@ -39,15 +14,87 @@ impl Signature {
             symbols: HashMap::new(),
         }
     }
+
     pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
         self.symbols.get(name)
     }
+
+    pub fn get_symbol_at(
+        &self,
+        name: &str,
+        location: Option<Location>,
+    ) -> Result<&Symbol, CompileError> {
+        self.get_symbol(name)
+            .ok_or_else(|| CompileError::UndeclaredSymbol {
+                name: name.into(),
+                location,
+            })
+    }
+    fn bad_symbol_kind(
+        symbol: &Symbol,
+        expected: SymbolKind,
+        used_location: Option<Location>,
+    ) -> CompileError {
+        CompileError::BadSymbolKind {
+            name: symbol.name().into(),
+            expected,
+            found: symbol.kind(),
+            used_location: used_location,
+            declared_location: symbol.location(),
+        }
+    }
+    pub fn get_sort_at(
+        &self,
+        name: &str,
+        location: Option<Location>,
+    ) -> Result<&Sort, CompileError> {
+        let symbol = self.get_symbol_at(name, location)?;
+        if let Symbol::Sort(s) = symbol {
+            Ok(s)
+        } else {
+            Err(Self::bad_symbol_kind(symbol, SymbolKind::Sort, location))
+        }
+    }
+    pub fn get_predicate_at(
+        &self,
+        name: &str,
+        location: Option<Location>,
+    ) -> Result<&Predicate, CompileError> {
+        let symbol = self.get_symbol_at(name, location)?;
+        if let Symbol::Predicate(p) = symbol {
+            Ok(p)
+        } else {
+            Err(Self::bad_symbol_kind(
+                symbol,
+                SymbolKind::Predicate,
+                location,
+            ))
+        }
+    }
+    pub fn get_function_at(
+        &self,
+        name: &str,
+        location: Option<Location>,
+    ) -> Result<&Function, CompileError> {
+        let symbol = self.get_symbol_at(name, location)?;
+        if let Symbol::Function(f) = symbol {
+            Ok(f)
+        } else {
+            Err(Self::bad_symbol_kind(
+                symbol,
+                SymbolKind::Function,
+                location,
+            ))
+        }
+    }
+
     pub fn iter_sorts(&self) -> impl Iterator<Item = &Sort> {
         self.symbols.values().filter_map(|symbol| match symbol {
             Symbol::Sort(s) => Some(s),
             _ => None,
         })
     }
+
     pub fn iter_predicates(&self) -> impl Iterator<Item = &Predicate> {
         self.symbols.values().filter_map(|symbol| match symbol {
             Symbol::Predicate(p) => Some(p),
@@ -108,31 +155,13 @@ impl Signature {
     }
     pub fn add_predicate(&mut self, pred: Predicate) -> Result<(), CompileError> {
         for s in pred.arity.iter() {
-            match self.get_symbol(s) {
-                None => {
-                    return Err(CompileError::UndeclaredSymbol {
-                        name: s.clone(),
-                        location: pred.location,
-                    });
-                }
-                Some(Symbol::Sort { .. }) => (),
-                Some(_) => panic!("Is not sort"),
-            }
+            self.get_sort_at(s, pred.location)?;
         }
         self.insert_symbol(Symbol::Predicate(pred))
     }
     pub fn add_function(&mut self, func: Function) -> Result<(), CompileError> {
         for s in func.dom.iter().chain(once(&func.cod)) {
-            match self.get_symbol(s) {
-                None => {
-                    return Err(CompileError::UndeclaredSymbol {
-                        name: s.clone(),
-                        location: func.location,
-                    });
-                }
-                Some(Symbol::Sort { .. }) => (),
-                Some(_) => panic!("Is not sort"),
-            }
+            self.get_sort_at(s, func.location)?;
         }
         self.insert_symbol(Symbol::Function(func))
     }
