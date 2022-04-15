@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
+use convert_case::{Case, Casing};
 use std::collections::HashMap;
 use std::iter::once;
 
@@ -20,7 +21,8 @@ impl Signature {
         name: &str,
         location: Option<Location>,
     ) -> Result<&Symbol, CompileError> {
-        self.symbols.get(name)
+        self.symbols
+            .get(name)
             .ok_or_else(|| CompileError::UndeclaredSymbol {
                 name: name.into(),
                 location,
@@ -135,6 +137,13 @@ impl Signature {
     }
 
     fn insert_symbol(&mut self, symbol: Symbol) -> Result<(), CompileError> {
+        if symbol.name().to_case(Case::UpperCamel) != *symbol.name() {
+            return Err(CompileError::SymbolNotCamelCase {
+                name: symbol.name().into(),
+                location: symbol.location(),
+            });
+        }
+
         let second_location = symbol.location();
         if let Some(prev_symbol) = self.symbols.insert(symbol.name().into(), symbol) {
             return Err(CompileError::SymbolDeclaredTwice {
@@ -143,6 +152,7 @@ impl Signature {
                 second_declaration: second_location,
             });
         }
+
         Ok(())
     }
 
