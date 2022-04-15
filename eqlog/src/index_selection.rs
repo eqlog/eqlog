@@ -209,19 +209,19 @@ mod tests {
     }
 
     fn obj() -> String {
-        "obj".to_string()
+        "Obj".to_string()
     }
     fn mor() -> String {
-        "mor".to_string()
+        "Mor".to_string()
     }
     fn comp() -> String {
-        "comp".to_string()
+        "Comp".to_string()
     }
     fn id() -> String {
-        "id".to_string()
+        "Id".to_string()
     }
     fn signature() -> String {
-        "signature".to_string()
+        "Signature".to_string()
     }
 
     fn category_signature() -> Signature {

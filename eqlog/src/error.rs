@@ -20,6 +20,10 @@ pub enum CompileError {
     ExtraToken {
         location: Location,
     },
+    SymbolNotCamelCase {
+        name: String,
+        location: Option<Location>,
+    },
     FunctionArgumentNumber {
         function: String,
         expected: usize,
@@ -250,6 +254,10 @@ impl Display for CompileErrorWithContext {
                     "{}",
                     display_location(source_path, source, Some(*location))
                 )?;
+            }
+            SymbolNotCamelCase { name, location } => {
+                write!(f, "symbol {name} is not UpperCamelCase\n")?;
+                display_location(source_path, source, *location).fmt(f)?;
             }
             FunctionArgumentNumber {
                 function: _,
