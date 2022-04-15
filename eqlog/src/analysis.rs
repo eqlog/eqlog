@@ -24,30 +24,22 @@ pub fn infer_sorts(
     // Assign sorts based on application of functions.
     for tm in sequent.universe.iter_terms() {
         match sequent.universe.data(tm) {
-            TermData::Application(f, args) => match signature.get_symbol(f) {
-                None => {
-                    return Err(CompileError::UndeclaredSymbol {
-                        name: f.clone(),
+            TermData::Application(f, args) => {
+                let loc = sequent.universe.location(tm);
+                let Function { dom, cod, .. } = signature.get_function_at(f, loc)?;
+                if args.len() != dom.len() {
+                    return Err(CompileError::FunctionArgumentNumber {
+                        function: f.clone(),
+                        expected: dom.len(),
+                        got: args.len(),
                         location: sequent.universe.location(tm),
-                    })
+                    });
                 }
-                Some(Symbol::Sort(_)) => panic!("Expected function, got sort"),
-                Some(Symbol::Predicate(_)) => panic!("Expected function, got predicate"),
-                Some(Symbol::Function(Function { dom, cod, .. })) => {
-                    if args.len() != dom.len() {
-                        return Err(CompileError::FunctionArgumentNumber {
-                            function: f.clone(),
-                            expected: dom.len(),
-                            got: args.len(),
-                            location: sequent.universe.location(tm),
-                        });
-                    }
-                    for (arg, sort) in args.iter().copied().zip(dom) {
-                        unification[arg].insert(sort.clone());
-                    }
-                    unification[tm].insert(cod.clone());
+                for (arg, sort) in args.iter().copied().zip(dom) {
+                    unification[arg].insert(sort.clone());
                 }
-            },
+                unification[tm].insert(cod.clone());
+            }
             TermData::Wildcard | TermData::Variable(_) => (),
         }
     }
@@ -63,17 +55,7 @@ pub fn infer_sorts(
             }
             AtomData::Defined(_, None) => (),
             AtomData::Predicate(p, args) => {
-                let arity = match signature.get_symbol(p) {
-                    Some(Symbol::Predicate(Predicate { arity, .. })) => arity,
-                    Some(Symbol::Sort(_)) => panic!("Expected predicate, got arity"),
-                    Some(Symbol::Function(_)) => panic!("Expected predicate, got function"),
-                    None => {
-                        return Err(CompileError::UndeclaredSymbol {
-                            name: p.clone(),
-                            location: atom.location,
-                        })
-                    }
-                };
+                let Predicate { arity, .. } = signature.get_predicate_at(p, atom.location)?;
                 if args.len() != arity.len() {
                     return Err(CompileError::PredicateArgumentNumber {
                         predicate: p.clone(),

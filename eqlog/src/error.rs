@@ -36,6 +36,13 @@ pub enum CompileError {
         name: String,
         location: Option<Location>,
     },
+    BadSymbolKind {
+        name: String,
+        expected: SymbolKind,
+        found: SymbolKind,
+        used_location: Option<Location>,
+        declared_location: Option<Location>,
+    },
     SymbolDeclaredTwice {
         name: String,
         first_declaration: Option<Location>,
@@ -271,6 +278,22 @@ impl Display for CompileErrorWithContext {
             UndeclaredSymbol { name, location } => {
                 write!(f, "undeclared symbol \"{name}\"\n")?;
                 write!(f, "{}", display_location(source_path, source, *location))?;
+            }
+            BadSymbolKind {
+                name,
+                expected,
+                found,
+                used_location,
+                declared_location,
+            } => {
+                write!(f, "expected {expected}, found {found} {name}\n")?;
+                if used_location.is_some() {
+                    display_location(source_path, source, *used_location).fmt(f)?;
+                }
+                if declared_location.is_some() {
+                    write!(f, "{name} declared as {found} here:\n")?;
+                    display_location(source_path, source, *declared_location).fmt(f)?;
+                }
             }
             SymbolDeclaredTwice {
                 name: _,

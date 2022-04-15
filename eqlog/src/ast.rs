@@ -1,4 +1,5 @@
 use crate::error::*;
+use std::fmt::{self, Display};
 use std::iter::once;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -54,6 +55,55 @@ impl Function {
             dom,
             cod,
             location: None,
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum SymbolKind {
+    Sort,
+    Predicate,
+    Function,
+}
+
+impl Display for SymbolKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use SymbolKind::*;
+        f.write_str(match self {
+            Sort => "sort",
+            Predicate => "predicate",
+            Function => "function",
+        })
+    }
+}
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+pub enum Symbol {
+    Sort(Sort),
+    Predicate(Predicate),
+    Function(Function),
+}
+
+impl Symbol {
+    pub fn kind(&self) -> SymbolKind {
+        match self {
+            Symbol::Sort(_) => SymbolKind::Sort,
+            Symbol::Predicate(_) => SymbolKind::Predicate,
+            Symbol::Function(_) => SymbolKind::Function,
+        }
+    }
+    pub fn name(&self) -> &str {
+        use Symbol::*;
+        match self {
+            Sort(s) => &s.name,
+            Predicate(p) => &p.name,
+            Function(f) => &f.name,
+        }
+    }
+    pub fn location(&self) -> Option<Location> {
+        match self {
+            Symbol::Sort(Sort { location, .. }) => *location,
+            Symbol::Predicate(Predicate { location, .. }) => *location,
+            Symbol::Function(Function { location, .. }) => *location,
         }
     }
 }
