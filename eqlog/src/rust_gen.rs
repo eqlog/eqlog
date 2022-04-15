@@ -449,9 +449,11 @@ fn write_table_impl(
     write_table_clear_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
-    for index in indices.iter() {
-        write_table_permute_fn(out, relation, arity, &index.order)?;
-        write_table_permute_inverse_fn(out, relation, arity, &index.order)?;
+    let index_orders: BTreeSet<&[usize]> =
+        indices.iter().map(|index| index.order.as_slice()).collect();
+    for order in index_orders {
+        write_table_permute_fn(out, relation, arity, order)?;
+        write_table_permute_inverse_fn(out, relation, arity, order)?;
     }
     for (query, index) in index_selection.iter() {
         for age in [TupleAge::All, TupleAge::Dirty] {

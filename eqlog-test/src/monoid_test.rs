@@ -183,4 +183,21 @@ mod test {
         assert_eq!(mon.iter_e().count(), 1);
         assert_eq!(mon.iter_mul().count(), 1 << (2 * n));
     }
+
+    #[test]
+    fn trivial_idempotent() {
+        use crate::trivial_idempotent::*;
+
+        let mut m = TrivialIdempotent::new();
+
+        let el0 = m.new_m();
+        m.insert_e(E(el0));
+        let el1 = m.new_m();
+        m.insert_mul(Mul(el1, el1, el1));
+
+        m.close();
+
+        assert_eq!(m.m_root(el0), m.m_root(el1));
+        assert_eq!(m.iter_m().count(), 1);
+    }
 }
