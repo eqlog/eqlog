@@ -3,7 +3,7 @@ use crate::error::*;
 use crate::signature::*;
 use crate::unification::{TermMap, TermUnification};
 use convert_case::{Case, Casing};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub fn infer_sorts(
     signature: &Signature,
@@ -216,6 +216,29 @@ pub fn check_variable_case(sequent: &Sequent) -> Result<(), CompileError> {
     Ok(())
 }
 
+pub fn check_variable_occurence(sequent: &Sequent) -> Result<(), CompileError> {
+    let mut occ_nums: HashMap<&str, (usize, Option<Location>)> = HashMap::new();
+    for tm in sequent.universe.iter_terms() {
+        if let TermData::Variable(v) = sequent.universe.data(tm) {
+            if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {
+                *n += 1;
+            } else {
+                let loc = sequent.universe.location(tm);
+                occ_nums.insert(v, (1, loc));
+            }
+        }
+    }
+    for (name, (n, location)) in occ_nums.into_iter() {
+        if n == 1 {
+            return Err(CompileError::VariableOccursOnlyOnce {
+                name: name.into(),
+                location,
+            });
+        }
+    }
+    Ok(())
+}
+
 pub fn check_semantically(
     signature: &Signature,
     sequent: &Sequent,
@@ -223,6 +246,7 @@ pub fn check_semantically(
     let sorts = infer_sorts(signature, sequent)?;
     check_epimorphism(sequent)?;
     check_variable_case(sequent)?;
+    check_variable_occurence(sequent)?;
     Ok(sorts)
 }
 
