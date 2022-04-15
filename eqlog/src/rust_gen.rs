@@ -749,7 +749,6 @@ fn write_collect_query_matches_fn(
         "}?;
     } else {
         for new_index in 0..queries.len() {
-            write!(out, "// Query {new_index} is for dirty data.\n")?;
             let query_ages = queries.iter().enumerate().map(|(i, query)| {
                 let age = if i == new_index {
                     TupleAge::Dirty
