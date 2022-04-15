@@ -1,4 +1,3 @@
-use crate::ast::*;
 use crate::flat_ast::*;
 use crate::signature::*;
 use itertools::Itertools;
@@ -157,7 +156,7 @@ fn translate_conclusion(
                         Action::AddTuple { relation, args }
                     } else {
                         let function = relation;
-                        let Function { cod, .. } = signature.functions().get(rel).unwrap();
+                        let cod = *signature.arity(rel).unwrap().last().unwrap();
                         fixed_terms.insert(result, cod.to_string());
                         Action::AddTerm {
                             function,
@@ -195,12 +194,13 @@ impl QueryAction {
                     result,
                 } => {
                     new_terms.insert(*result);
-                    let dom = &sig.functions().get(function).unwrap().dom;
+                    let arity = sig.arity(function).unwrap();
+                    let dom = &arity[0..arity.len() - 1];
                     query_terms.extend(args.iter().copied().enumerate().filter_map(|(i, tm)| {
                         if new_terms.contains(&tm) {
                             None
                         } else {
-                            Some((tm, dom[i].as_str()))
+                            Some((tm, dom[i]))
                         }
                     }));
                 }

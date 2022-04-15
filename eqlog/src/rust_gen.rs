@@ -601,7 +601,7 @@ fn write_close_data_struct(
     let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!("    query_matches_{i}: Vec<QueryMatch{i}>,"))
     });
-    let functionality_matches = signature.functions().values().format_with("\n", |func, f| {
+    let functionality_matches = signature.iter_functions().format_with("\n", |func, f| {
         let Function { name, cod, .. } = func;
         let func_snake = name.to_case(Snake);
         f(&format_args!(
@@ -633,7 +633,7 @@ fn write_close_data_impl(
     let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!("    query_matches_{i}: Vec::new(),"))
     });
-    let functionality_matches = signature.functions().values().format_with("\n", |func, f| {
+    let functionality_matches = signature.iter_functions().format_with("\n", |func, f| {
         let func_snake = func.name.to_case(Snake);
         f(&format_args!(
             "    functionality_matches_{func_snake}: Vec::new(),"
@@ -826,7 +826,9 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             result,
         } => {
             let function_snake = function.to_case(Snake);
-            let Function { dom, cod, .. } = signature.functions().get(function).unwrap();
+            let arity = signature.arity(function).unwrap();
+            let dom = &arity[0..arity.len() - 1];
+            let cod = *arity.last().unwrap();
             let cod_snake = cod.to_case(Snake);
             let canonicalize_iter_args =
                 args.iter().zip(dom).format_with("\n", |(arg, sort), f| {
@@ -999,13 +1001,12 @@ fn write_close_fn(
             "            self.collect_query_matches_{i}(&mut data);"
         ))
     });
-    let collect_functionality_matches =
-        signature.functions().keys().format_with("\n", |func, f| {
-            let func_snake = func.to_case(Snake);
-            f(&format_args!(
-                "            self.collect_functionality_matches_{func_snake}(&mut data);"
-            ))
-        });
+    let collect_functionality_matches = signature.iter_functions().format_with("\n", |func, f| {
+        let func_snake = func.name.to_case(Snake);
+        f(&format_args!(
+            "            self.collect_functionality_matches_{func_snake}(&mut data);"
+        ))
+    });
     let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
     let apply_surjective_axiom_actions = (0..query_actions.len())
         .filter(is_surjective_axiom)
@@ -1019,15 +1020,12 @@ fn write_close_fn(
         .format_with("\n", |i, f| {
             f(&format_args!("        self.apply_actions_{i}(&mut data);"))
         });
-    let apply_functionality = signature
-        .functions()
-        .keys()
-        .format_with("\n", |function, f| {
-            let function_snake = function.to_case(Snake);
-            f(&format_args!(
-                "            self.apply_functionality_{function_snake}(&mut data);"
-            ))
-        });
+    let apply_functionality = signature.iter_functions().format_with("\n", |function, f| {
+        let function_snake = function.name.to_case(Snake);
+        f(&format_args!(
+            "            self.apply_functionality_{function_snake}(&mut data);"
+        ))
+    });
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
@@ -1121,7 +1119,7 @@ fn write_theory_impl(
         write_collect_query_matches_fn(out, signature, query_action, i)?;
         write_apply_actions_fn(out, signature, query_action, i)?;
     }
-    for function in signature.functions().values() {
+    for function in signature.iter_functions() {
         write_collect_functionality_matches_fn(out, function)?;
         write_apply_functionality_fn(out, signature, function)?;
     }
