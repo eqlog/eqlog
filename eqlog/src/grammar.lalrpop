@@ -15,13 +15,6 @@ extern {
 
 Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
 
-SnakeCaseId: String = {
-    <id: Id> => { 
-        assert_eq!(id.to_case(Case::Snake), id, "Expected identifier in snake_case");
-        id
-    },
-}
-
 SortDecl: Sort = {
     <l: @L>  "Sort" <name: Id> ";" <r: @R> => {
         Sort{name, location: Some(Location(l, r))}
@@ -57,7 +50,7 @@ Application: (String, Vec<Term>) = {
 }
 
 Term: Term = {
-    <l: @L> <var: SnakeCaseId> <r: @R> => {
+    <l: @L> <var: Id> <r: @R> => {
         universe.new_term(TermData::Variable(var), Some(Location(l, r)))
     },
     <l: @L> "_" <r: @R> => {

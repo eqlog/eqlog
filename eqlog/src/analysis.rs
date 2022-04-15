@@ -2,6 +2,7 @@ use crate::ast::*;
 use crate::error::*;
 use crate::signature::*;
 use crate::unification::{TermMap, TermUnification};
+use convert_case::{Case, Casing};
 use std::collections::HashSet;
 
 pub fn infer_sorts(
@@ -201,12 +202,27 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
     Ok(())
 }
 
+pub fn check_variable_case(sequent: &Sequent) -> Result<(), CompileError> {
+    for tm in sequent.universe.iter_terms() {
+        if let TermData::Variable(v) = sequent.universe.data(tm) {
+            if *v != v.to_case(Case::Snake) {
+                return Err(CompileError::VariableNotSnakeCase {
+                    name: v.into(),
+                    location: sequent.universe.location(tm),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn check_semantically(
     signature: &Signature,
     sequent: &Sequent,
 ) -> Result<TermMap<String>, CompileError> {
     let sorts = infer_sorts(signature, sequent)?;
     check_epimorphism(sequent)?;
+    check_variable_case(sequent)?;
     Ok(sorts)
 }
 

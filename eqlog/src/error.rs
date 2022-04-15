@@ -24,6 +24,10 @@ pub enum CompileError {
         name: String,
         location: Option<Location>,
     },
+    VariableNotSnakeCase {
+        name: String,
+        location: Option<Location>,
+    },
     FunctionArgumentNumber {
         function: String,
         expected: usize,
@@ -257,6 +261,10 @@ impl Display for CompileErrorWithContext {
             }
             SymbolNotCamelCase { name, location } => {
                 write!(f, "symbol {name} is not UpperCamelCase\n")?;
+                display_location(source_path, source, *location).fmt(f)?;
+            }
+            VariableNotSnakeCase { name, location } => {
+                write!(f, "variable {name} is not lower_snake_case\n")?;
                 display_location(source_path, source, *location).fmt(f)?;
             }
             FunctionArgumentNumber {
