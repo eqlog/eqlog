@@ -3,14 +3,14 @@ use crate::ast::{Def, Tm, Ty};
 
 grammar;
 
+pub Id: String = r"[A-Za-z_][A-Za-z0-9'_]*" => <>.to_string();
+
 pub Unit: Vec<Def> =
     Def* => <>;
 
 pub Def: Def = {
     "def" <DefBody> "." => <>,
     "unit_ind" <UnitIndBody> "." => <>,
-    "nat_ind" <NatIndBody> "." => <>,
-    "bool_ind" <BoolIndBody> "." => <>,
     "dump" "." => Def::Dump,
 }
 
@@ -23,24 +23,6 @@ pub UnitIndBody: Def = {
     => Def::UnitInd { <> }
 }
 
-pub BoolIndBody: Def = {
-    <name: Id> "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
-    "|" "true" "=>" <true_case: Tm>
-    "|" "false" "=>" <false_case: Tm>
-    => Def::BoolInd { <> }
-}
-
-pub NatIndBody: Def = {
-    <name: Id> "(" <into_var: Id> ":" "Nat" ")" ":" <into_ty: Ty>
-    "|" "Z" "=>" <zero_case: Tm>
-    "|"
-        "(" "S" <succ_nat_var: Id> ":" "Nat" ")"
-        "(" <succ_hyp_var: Id> ":" <succ_hyp_ty: Ty> ")"
-        "=>"
-        <succ_tm: Tm>
-    => Def::NatInd { <> }
-}
-
 pub Args: Vec<(String, Ty)> =
     ("(" <Id+> ":" <Ty> ")")*
     => <>.into_iter()
@@ -51,61 +33,17 @@ pub Args: Vec<(String, Ty)> =
          .collect();
 
 pub Ty: Ty = {
-    <left: Tm2> "=" <right: Tm> =>
+    "(" <Ty> ")" => <>,
+    "Unit" => Ty::UnitTy,
+    <left: Tm> "=" <right: Tm> =>
         Ty::Eq(Box::new(left), Box::new(right)),
-    Ty2
-};
-
-pub Ty2: Ty = {
-    "Unit" => Ty::Unit,
-    "Bool" => Ty::Bool,
-    "Nat" => Ty::Nat,
-    "(" <Ty> ")",
 };
 
 pub Tm: Tm = {
+    "(" <Tm> ")" => <>,
     "let" <body: Def*> "in" <result: Tm> =>
         Tm::Let { body,
                   result: Box::new(result) },
-    Tm2
-};
-Tm2: Tm = {
-    <left: Tm2> "+" <right: Tm3> =>
-        Tm::App { fun: "plus".to_string(), args: vec![left, right] },
-    Tm3
-};
-Tm3: Tm = {
+    "refl" <tm: Tm> => Tm::Refl(Box::new(tm)),
     "unit" => Tm::UnitTm,
-    "true" => Tm::True,
-    "false" => Tm::False,
-    "Z" => Tm::Z,
-    "neg" <ArgTm> => Tm::Neg(Box::new(<>)),
-    "refl" <ArgTm> => Tm::Refl(Box::new(<>)),
-    "S" <ArgTm> => Tm::S(Box::new(<>)),
-    <fun: Id> <args: ArgTm*> => Tm::App { <> },
-    <NumTm>,
-    <CastTm>,
-    "(" <Tm> ")",
 };
-ArgTm: Tm = {
-    "unit" => Tm::UnitTm,
-    "true" => Tm::True,
-    "false" => Tm::False,
-    "Z" => Tm::Z,
-    <Id> => Tm::App { fun: <>, args: vec![] },
-    <NumTm>,
-    <CastTm>,
-    "(" <Tm> ")"
-};
-NumTm: Tm = {
-    <Nat> =>
-        (0..<>).into_iter()
-        .fold(Tm::Z, |cur, _| Tm::S(Box::new(cur))),
-};
-CastTm: Tm = {
-    "(" <tm: Tm> ":" <ty: Ty> ")" =>
-        Tm::Typed { tm: Box::new(tm), ty: Box::new(ty) }
-}
-
-pub Id: String = r"[A-Za-z_][A-Za-z0-9'_]*" => <>.to_string();
-pub Nat: u32 = r"[0-9]+" => u32::from_str(<>).unwrap();
