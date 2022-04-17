@@ -15,6 +15,24 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
+fn whipe_comments(source: &str) -> String {
+    let lines: Vec<String> = source
+        .lines()
+        .map(|line| {
+            if let Some(i) = line.find("//") {
+                let mut l = line[0..i].to_string();
+                for _ in i..line.len() {
+                    l.push(' ');
+                }
+                l
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+    lines.join("\n")
+}
+
 fn parse(source: &str) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>), CompileError> {
     TheoryParser::new()
         .parse(&mut TermUniverse::new(), source)
@@ -54,11 +72,13 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
 
 fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
     let source = fs::read_to_string(in_file)?;
-    let (sig, axioms) = parse(&source).map_err(|error| CompileErrorWithContext {
-        error,
-        source,
-        source_path: in_file.into(),
-    })?;
+    let source_without_comments = whipe_comments(&source);
+    let (sig, axioms) =
+        parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
+            error,
+            source,
+            source_path: in_file.into(),
+        })?;
 
     let query_actions: Vec<QueryAction> = axioms
         .iter()
