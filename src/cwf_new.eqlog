@@ -1,0 +1,91 @@
+Sort Ctx;
+Sort Mor;
+
+Func Dom: Mor -> Ctx;
+Func Cod: Mor -> Ctx;
+Func Comp: Mor * Mor -> Mor;
+Func Id: Ctx -> Mor;
+
+Axiom ctx!: Ctx => Id(ctx)!;
+Axiom Dom(Id(ctx)) ~> ctx;
+Axiom Cod(Id(ctx)) ~> ctx;
+Axiom Dom(Comp(_, f)) ~> Dom(f);
+Axiom Cod(Comp(g, _)) ~> Cod(g);
+
+Axiom Comp(f, Id(Dom(f))) ~> f;
+Axiom Comp(Id(Cod(f)), f) ~> f;
+
+Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
+Axiom Comp(Comp(h, g), f) ~> Comp(h, Comp(g, f));
+
+Sort Ty;
+Sort Tm;
+
+Func TyCtx : Ty -> Ctx;
+Func TmTy : Tm -> Ty;
+Func SubstTy: Mor * Ty-> Ty;
+Func SubstTm: Mor * Tm-> Tm;
+
+Axiom TyCtx(SubstTy(f, _)) ~> Cod(f);
+Axiom TmTy(SubstTm(f, s)) ~> SubstTy(f, TmTy(s));
+
+Axiom SubstTy(Id(TyCtx(sigma)), sigma) ~> sigma;
+Axiom SubstTm(Id(TyCtx(TmTy(s))), s) ~> s;
+
+Axiom SubstTy(g, SubstTy(f, sigma)) ~> SubstTy(Comp(g, f), sigma);
+Axiom SubstTy(Comp(g, f), sigma) ~> SubstTy(g, SubstTy(f, sigma));
+Axiom SubstTm(g, SubstTm(f, s)) ~> SubstTm(Comp(g, f), s);
+Axiom SubstTm(Comp(g, f), s) ~> SubstTm(g, SubstTm(f, s));
+
+Func ExtCtx: Ctx * Ty -> Ctx;
+Func Wkn: Ctx * Ty -> Mor;
+Func Var: Ctx * Ty -> Tm;
+Func MorExt: Ctx * Ty * Mor * Tm -> Mor;
+
+Axiom Dom(Wkn(ctx, _)) ~> ctx;
+Axiom Cod(Wkn(ctx, sigma)) ~> ExtCtx(ctx, sigma);
+Axiom TmTy(Var(ctx, sigma)) ~> SubstTy(Wkn(ctx, sigma), sigma);
+Axiom Dom(MorExt(ctx, sigma, _, _)) ~> ExtCtx(ctx, sigma);
+Axiom Cod(MorExt(_, _, f, _)) ~> Cod(f);
+Axiom Comp(MorExt(ctx, sigma, f, _), Wkn(ctx, sigma)) ~> f;
+Axiom SubstTm(MorExt(ctx, sigma, _, s), Var(ctx, sigma)) ~> s;
+
+Func Unit: Ctx -> Ty;
+Func UnitTm: Ctx -> Tm;
+Func UnitInd : Ctx * Ty * Tm -> Tm;
+
+Axiom TyCtx(Unit(ctx)) ~> ctx;
+Axiom TmTy(UnitTm(ctx)) ~> Unit(ctx);
+Axiom SubstTy(f, Unit(Dom(f))) ~> Unit(Cod(f));
+Axiom SubstTm(f, UnitTm(Dom(f))) ~> UnitTm(Cod(f));
+Axiom TmTy(UnitInd(_, sigma, _)) ~> sigma;
+Axiom
+	dom = Dom(f) &
+	cod = Cod(f) &
+	ind_c = UnitInd(dom, sigma, c) &
+	f_unit = MorExt(dom, sigma, f, UnitTm(cod))
+	=>
+	SubstTm(f_unit, ind_c) ~> SubstTm(f, c)
+	;
+
+// Induction principle:
+//Axiom
+//	uty = Unit(ctx) &
+//	ctx_uty = ExtCtx(ctx, uty) &
+//	TyCtx(sigma) = ctx_uty &
+//	utm = UnitTm(ctx) &
+//	utm_subst = MorExt(ctx, uty, Id(ctx), utm) &
+//	sigma_utm = SubstTy(utm_subst, sigma) &
+//	TmTy(c) = sigma_utm
+//	=>
+//	TmTy(UnitInd(ctx, sigma, c)) = sigma
+//	;
+
+Func Eq: Tm * Tm -> Ty;
+Func Refl: Tm -> Tm;
+
+Axiom Eq(s, t)! & sigma = TmTy(s) & tau = TmTy(t) => sigma = tau;
+Axiom TyCtx(Eq(s, _)) ~> TyCtx(TmTy(s));
+Axiom TyCtx(Eq(_, t)) ~> TyCtx(TmTy(t));
+Axiom TmTy(Refl(s)) ~> Eq(s, s);
+Axiom TmTy(r) = Eq(s, t) => s = t & r = Refl(s) & r = Refl(t);

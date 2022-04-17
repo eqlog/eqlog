@@ -5,6 +5,10 @@ extern crate lalrpop_util;
 extern crate lazy_static;
 #[macro_use] #[cfg(test)]
 extern crate maplit;
+extern crate eqlog_util;
+use eqlog_util::eqlog_mod;
+
+eqlog_mod!(cwf_new);
 
 #[macro_use]
 pub mod eqlog;

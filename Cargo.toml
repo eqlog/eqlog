@@ -8,10 +8,16 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lalrpop-util = "0.19.0"
-lazy_static = "1.4.0"
-maplit = "1.0.2"
+lalrpop-util = "0"
+lazy_static = "1"
+maplit = "1"
 regex = "1"
 
+[dependencies.eqlog-util]
+path = "eqlog-util"
+
 [build-dependencies]
-lalrpop = { version = "0.19.0", features = [ "lexer" ] }
+lalrpop = { version = "0", features = [ "lexer" ] }
+
+[build-dependencies.eqlog]
+path = "eqlog"
