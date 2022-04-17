@@ -207,9 +207,10 @@ fn write_table_permute_inverse_fn(
 ) -> io::Result<()> {
     let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
     let order_name = OrderName(order);
-    let rel_args = order.iter().copied().format_with(", ", |i, f| {
+    let rel_args = (0..order.len()).format_with(", ", |i, f| {
         let sort = arity[i];
-        f(&format_args!("{sort}::from(t.{i})"))
+        let j = order[i];
+        f(&format_args!("{sort}::from(t.{j})"))
     });
     writedoc! {out, "
         fn permute_inverse{order_name}(t: ({tuple_type_args})) -> {relation} {{
