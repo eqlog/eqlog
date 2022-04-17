@@ -3,6 +3,12 @@ pub enum Def {
     Dump,
     Trace(Vec<Def>),
     Def { name: String, args: Vec<(String, Ty)>, ty: Ty, tm: Tm },
+    UnitInd {
+        name: String,
+        var: String,
+        into_ty: Ty,
+        unit_case: Tm,
+    },
     BoolInd {
         name: String,
         into_var: String,
