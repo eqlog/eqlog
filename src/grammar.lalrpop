@@ -8,6 +8,7 @@ pub Unit: Vec<Def> =
 
 pub Def: Def = {
     "def" <DefBody> "." => <>,
+    "unit_ind" <UnitIndBody> "." => <>,
     "nat_ind" <NatIndBody> "." => <>,
     "bool_ind" <BoolIndBody> "." => <>,
     "dump" "." => Def::Dump,
@@ -15,6 +16,12 @@ pub Def: Def = {
 
 pub DefBody: Def =
     <name: Id> <args: Args> ":" <ty: Ty> ":=" <tm: Tm> => Def::Def { <> };
+
+pub UnitIndBody: Def = {
+    <name: Id> "(" <var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
+    "|" "unit" "=>" <unit_case: Tm>
+    => Def::UnitInd { <> }
+}
 
 pub BoolIndBody: Def = {
     <name: Id> "(" <into_var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
