@@ -1,7 +1,6 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Def {
     Dump,
-    Trace(Vec<Def>),
     Def { name: String, args: Vec<(String, Ty)>, ty: Ty, tm: Tm },
     UnitInd {
         name: String,
