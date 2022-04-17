@@ -2,8 +2,6 @@ use crate::eqlog::relational_structure::*;
 use crate::eqlog::theory::*;
 use super::eqlog::element::*;
 use std::collections::HashMap;
-#[macro_use]
-use crate::eqlog::*;
 
 arities!{
     pub enum CwfSort {Ctx, Mor, Ty, Tm},

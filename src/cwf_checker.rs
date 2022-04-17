@@ -2,7 +2,7 @@ use crate::eqlog::element::*;
 use crate::eqlog::signature::*;
 use crate::eqlog::closure::*;
 use crate::cwf::*;
-use crate::lang::ast;
+use crate::ast;
 use std::collections::{HashSet, HashMap};
 use std::iter::once;
 use std::convert::TryFrom;
