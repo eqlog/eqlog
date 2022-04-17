@@ -136,7 +136,8 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
         .flatten()
     {
         match universe.data(tm) {
-            TermData::Variable(_) if has_occurred[tm] => (),
+            TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
+            TermData::Application(_, _) => (),
             TermData::Variable(var) => {
                 return Err(CompileError::VariableNotInPremise {
                     var: var.clone(),
@@ -148,7 +149,6 @@ pub fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
                     location: universe.location(tm),
                 })
             }
-            TermData::Application(_, _) => (),
         }
     }
 
