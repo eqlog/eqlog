@@ -1,5 +1,3 @@
-use crate::eqlog::element::*;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Def {
     Dump,
@@ -26,7 +24,6 @@ pub enum Def {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Tm {
-    AlreadyAdded(Element),
     Typed { tm: Box<Tm>, ty: Box<Ty> },
     App { fun: String, args: Vec<Tm> },
     Let { body: Vec<Def>, result: Box<Tm> },
@@ -42,7 +39,6 @@ pub enum Tm {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
-    AlreadyAdded(Element),
     Unit,
     Bool,
     Nat,
