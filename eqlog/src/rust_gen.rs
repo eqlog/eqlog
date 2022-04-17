@@ -1075,7 +1075,7 @@ fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
 }
 
 fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
-    write!(out, "#[derive(Debug)]\n")?;
+    write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
     for sort in signature.iter_sorts() {
         write_sort_fields(out, &sort.name)?;
