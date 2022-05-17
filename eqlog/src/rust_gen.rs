@@ -1074,6 +1074,40 @@ fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
     Ok(())
 }
 
+fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> {
+    let Function { name, dom, cod, .. } = function;
+    let function_snake = name.to_case(Snake);
+    let fn_args = dom
+        .iter()
+        .enumerate()
+        .format_with(", ", |(i, sort), f| f(&format_args!("arg{i}: {sort}")));
+
+    let query = QuerySpec {
+        projections: (0..dom.len()).collect(),
+        diagonals: BTreeSet::new(),
+    };
+    let iter = IterName(&name, TupleAge::All, &query);
+    let iter_args = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+
+    let cod_index = dom.len();
+
+    let cod_snake = cod.to_case(Snake);
+
+    let insert_dom_args = (0..dom.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
+
+    writedoc! {out, "
+        #[allow(dead_code)]
+        pub fn define_{function_snake}(&mut self, {fn_args}) -> {cod} {{
+            if let Some(t) = self.{iter}({iter_args}).next() {{
+                return t.{cod_index};
+            }}
+            let result = self.new_{cod_snake}();
+            self.insert_{function_snake}({name}({insert_dom_args}result));
+            result
+        }}
+    "}
+}
+
 fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
@@ -1124,6 +1158,7 @@ fn write_theory_impl(
     for function in signature.iter_functions() {
         write_collect_functionality_matches_fn(out, function)?;
         write_apply_functionality_fn(out, signature, function)?;
+        write_define_fn(out, function)?;
     }
 
     write_forget_dirt_fn(out, signature)?;
