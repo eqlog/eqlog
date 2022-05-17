@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::ast;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EqChecking {
+pub enum Checking {
     Yes,
     No,
 }
@@ -40,7 +40,7 @@ impl Scope {
         self.cwf.insert_tm_ty(TmTy(tm, ty));
         ty
     }
-    fn add_type(&mut self, checking: EqChecking, ty: &ast::Ty) -> Ty {
+    fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
         match ty {
             ast::Ty::Unit => {
                 let ty = self.cwf.new_ty();
@@ -51,7 +51,7 @@ impl Scope {
                 let lhs = self.add_term(checking, lhs);
                 let rhs = self.add_term(checking, rhs);
                 
-                if checking == EqChecking::Yes {
+                if checking == Checking::Yes {
                     let lhs_ty = self.ty(lhs);
                     let rhs_ty = self.ty(lhs);
                     self.cwf.close();
@@ -63,12 +63,12 @@ impl Scope {
             }
         }
     }
-    fn add_term(&mut self, checking: EqChecking, tm: &ast::Tm) -> Tm {
+    fn add_term(&mut self, checking: Checking, tm: &ast::Tm) -> Tm {
         match tm {
             ast::Tm::Typed { tm, ty } => {
                 let tm = self.add_term(checking, tm);
                 let ty = self.add_type(checking, ty);
-                if checking == EqChecking::Yes {
+                if checking == Checking::Yes {
                     let tm_ty = self.ty(tm);
                     self.cwf.close();
                     assert_eq!(self.cwf.ty_root(tm_ty), self.cwf.ty_root(ty));
@@ -91,7 +91,7 @@ impl Scope {
         }
     }
     // Adjoing indeterminate term of a given type, do not change context.
-    fn adjoin_variable(&mut self, checking: EqChecking, name: &str, ty: &ast::Ty) {
+    fn adjoin_variable(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
         let ty = self.add_type(checking, ty);
         let var = self.cwf.new_tm();
         self.cwf.insert_tm_ty(TmTy(var, ty));
@@ -102,7 +102,7 @@ impl Scope {
         });
     }
     // Extend context by a variable.
-    fn extend_context(&mut self, checking: EqChecking, name: &str, ty: &ast::Ty) {
+    fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
         let ty = self.add_type(checking, ty);
         let base_ctx = *self.extensions.last().unwrap();
         let ext_ctx = self.cwf.new_ctx();
@@ -117,19 +117,19 @@ impl Scope {
         });
     }
                     
-    pub fn add_definition(&mut self, checking: EqChecking, def: &ast::Def) {
+    pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
         use ast::Def::*;
         match def {
             Dump => {
                 println!("{:?}", self.cwf);
             }
             Def { name, args, ty, tm } => {
-                if checking == EqChecking::Yes {
+                if checking == Checking::Yes {
                     let mut copy = self.clone();
                     for (arg_var, arg_ty) in args.iter() {
-                        copy.adjoin_variable(EqChecking::Yes, arg_var, arg_ty);
+                        copy.adjoin_variable(Checking::Yes, arg_var, arg_ty);
                     }
-                    copy.add_term(EqChecking::Yes, tm);
+                    copy.add_term(Checking::Yes, tm);
                 }
             }
             UnitInd { name, var, into_ty, unit_case } => {
