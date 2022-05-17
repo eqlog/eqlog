@@ -34,7 +34,7 @@ pub Args: Vec<(String, Ty)> =
 
 pub Ty: Ty = {
     "(" <Ty> ")" => <>,
-    "Unit" => Ty::UnitTy,
+    "Unit" => Ty::Unit,
     <left: Tm> "=" <right: Tm> =>
         Ty::Eq(Box::new(left), Box::new(right)),
 };

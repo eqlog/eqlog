@@ -9,3 +9,5 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(#[allow(unused)] grammar);
 eqlog_mod!(cwf);
 pub mod ast;
+
+pub mod cwf_checker;

@@ -22,6 +22,6 @@ pub enum Tm {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
-    UnitTy,
+    Unit,
     Eq(Box<Tm>, Box<Tm>),
 }
