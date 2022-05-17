@@ -1,5 +1,5 @@
-extern crate lalrpop;
 extern crate eqlog;
+extern crate lalrpop;
 
 fn main() {
     lalrpop::process_root().unwrap();
