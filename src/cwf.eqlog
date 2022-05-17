@@ -68,19 +68,6 @@ Axiom
 	SubstTm(f_unit, ind_c) ~> SubstTm(f, c)
 	;
 
-// Induction principle:
-//Axiom
-//	uty = Unit(ctx) &
-//	ctx_uty = ExtCtx(ctx, uty) &
-//	TyCtx(sigma) = ctx_uty &
-//	utm = UnitTm(ctx) &
-//	utm_subst = MorExt(ctx, uty, Id(ctx), utm) &
-//	sigma_utm = SubstTy(utm_subst, sigma) &
-//	TmTy(c) = sigma_utm
-//	=>
-//	TmTy(UnitInd(ctx, sigma, c)) = sigma
-//	;
-
 Func Eq: Tm * Tm -> Ty;
 Func Refl: Tm -> Tm;
 
