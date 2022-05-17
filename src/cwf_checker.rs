@@ -10,7 +10,7 @@ pub enum Checking {
 
 #[derive(Clone, Debug)]
 struct Definition {
-    ambient_context: Ctx,
+    base_context: Ctx,
     extensions: Vec<(Ty, Ctx)>,
     term: Tm,
 }
@@ -18,17 +18,19 @@ struct Definition {
 #[derive(Clone, Debug)]
 pub struct Scope {
     definitions: HashMap<String, Definition>,
-    extensions: Vec<Ctx>,
+    empty_context: Ctx,
+    extensions: Vec<(Ty, Ctx)>,
     cwf: Cwf,
 }
 
 impl Scope {
     fn new() -> Self {
         let mut cwf = Cwf::new();
-        let empty_ctx = cwf.new_ctx();
+        let empty_context = cwf.new_ctx();
         Scope {
             definitions: HashMap::new(),
-            extensions: vec![empty_ctx],
+            empty_context,
+            extensions: Vec::new(),
             cwf,
         }
     }
@@ -36,7 +38,10 @@ impl Scope {
 
 impl Scope {
     fn current_context(&self) -> Ctx {
-        *self.extensions.last().unwrap()
+        self.extensions
+            .last()
+            .map(|(_, ctx)| *ctx)
+            .unwrap_or(self.empty_context)
     }
 
     fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
@@ -88,36 +93,34 @@ impl Scope {
         }
     }
     // Adjoing indeterminate term of a given type, do not change context.
-    fn adjoin_variable(&mut self, checking: Checking, name: &str, ty: &ast::Ty) -> (Tm, Ty) {
+    fn adjoin_variable(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
         let ty = self.add_type(checking, ty);
         let var = self.cwf.new_tm();
         self.cwf.insert_tm_ty(TmTy(var, ty));
         self.definitions.insert(
             name.to_string(),
             Definition {
-                ambient_context: self.current_context(),
+                base_context: self.current_context(),
                 extensions: Vec::new(),
                 term: var,
             },
         );
-        (var, ty)
     }
     // Extend context by a variable.
-    fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) -> (Tm, Ty) {
+    fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
         let ty = self.add_type(checking, ty);
         let base_ctx = self.current_context();
         let ext_ctx = self.cwf.define_ext_ctx(base_ctx, ty);
         let var = self.cwf.define_var(base_ctx, ty);
-        self.extensions.push(ext_ctx);
+        self.extensions.push((ty, ext_ctx));
         self.definitions.insert(
             name.to_string(),
             Definition {
-                ambient_context: ext_ctx,
+                base_context: ext_ctx,
                 extensions: Vec::new(),
                 term: var,
             },
         );
-        (var, ty)
     }
 
     pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
@@ -139,7 +142,7 @@ impl Scope {
                 self.definitions.insert(
                     name.to_string(),
                     Definition {
-                        ambient_context: self.current_context(),
+                        base_context: self.current_context(),
                         extensions: Vec::new(),
                         term: tm,
                     },
@@ -164,8 +167,8 @@ impl Scope {
 
                 let mut extensions = Vec::new();
                 for (arg_name, arg_ty) in args {
-                    let (_, ty) = self.extend_context(Checking::No, arg_name, arg_ty);
-                    extensions.push((ty, self.current_context()));
+                    self.extend_context(Checking::No, arg_name, arg_ty);
+                    extensions.push(*self.extensions.last().unwrap())
                 }
                 let tm = self.add_term(Checking::No, tm);
                 let ty = self.add_type(Checking::No, ty);
@@ -177,7 +180,7 @@ impl Scope {
                 self.definitions.insert(
                     name.to_string(),
                     Definition {
-                        ambient_context: self.current_context(),
+                        base_context: self.current_context(),
                         extensions,
                         term: tm,
                     },
