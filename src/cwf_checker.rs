@@ -35,9 +35,13 @@ impl Scope {
 }
 
 impl Scope {
+    fn current_ctx(&self) -> Ctx {
+        *self.extensions.last().unwrap()
+    }
+
     fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
         match ty {
-            ast::Ty::Unit => self.cwf.define_unit(*self.extensions.last().unwrap()),
+            ast::Ty::Unit => self.cwf.define_unit(self.current_ctx()),
             ast::Ty::Eq(lhs, rhs) => {
                 let lhs = self.add_term(checking, lhs);
                 let rhs = self.add_term(checking, rhs);
@@ -65,8 +69,16 @@ impl Scope {
                 tm
             }
             ast::Tm::App { .. } => panic!(),
-            ast::Tm::Let { .. } => panic!(),
-            ast::Tm::UnitTm => self.cwf.define_unit_tm(*self.extensions.last().unwrap()),
+            ast::Tm::Let { body, result } => {
+                let before_defs = self.definitions.clone();
+                for def in body {
+                    self.add_definition(checking, def);
+                }
+                let result = self.add_term(checking, result);
+                self.definitions = before_defs;
+                result
+            }
+            ast::Tm::UnitTm => self.cwf.define_unit_tm(self.current_ctx()),
             ast::Tm::Refl(s) => {
                 let s = self.add_term(checking, s);
                 self.cwf.define_refl(s)
@@ -81,7 +93,7 @@ impl Scope {
         self.definitions.insert(
             name.to_string(),
             Definition {
-                ambient_ctx: *self.extensions.last().unwrap(),
+                ambient_ctx: self.current_ctx(),
                 extensions: Vec::new(),
                 tm: var,
             },
@@ -90,7 +102,7 @@ impl Scope {
     // Extend context by a variable.
     fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
         let ty = self.add_type(checking, ty);
-        let base_ctx = *self.extensions.last().unwrap();
+        let base_ctx = self.current_ctx();
         let ext_ctx = self.cwf.define_ext_ctx(base_ctx, ty);
         let var = self.cwf.define_var(base_ctx, ty);
         self.extensions.push(ext_ctx);
@@ -104,24 +116,40 @@ impl Scope {
         );
     }
 
-    //pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
-    //    panic!();
-    //    use ast::Def::*;
-    //    match def {
-    //        Dump => {
-    //            println!("{:?}", self.cwf);
-    //        }
-    //        Def { name, args, ty, tm } => {
-    //            if checking == Checking::Yes {
-    //                let mut copy = self.clone();
-    //                for (arg_var, arg_ty) in args.iter() {
-    //                    copy.adjoin_variable(Checking::Yes, arg_var, arg_ty);
-    //                }
-    //                copy.add_term(Checking::Yes, tm);
-    //            }
-    //        }
-    //        UnitInd { name, var, into_ty, unit_case } => {
-    //        }
-    //    }
-    //}
+    pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
+        use ast::Def::*;
+        match def {
+            Dump => {
+                println!("{:?}", self);
+            }
+            Def { name, args, ty, tm } if args.is_empty() => {
+                let tm = self.add_term(checking, tm);
+                let ty = self.add_type(checking, ty);
+                if checking == Checking::Yes {
+                    let tm_ty = self.cwf.define_tm_ty(tm);
+                    self.cwf.close();
+                    assert_eq!(tm_ty, ty);
+                }
+                self.definitions.insert(
+                    name.to_string(),
+                    Definition {
+                        ambient_ctx: self.current_ctx(),
+                        extensions: Vec::new(),
+                        tm,
+                    },
+                );
+            }
+            Def { name, args, ty, tm } => {
+                panic!()
+            }
+            UnitInd {
+                name,
+                var,
+                into_ty,
+                unit_case,
+            } => {
+                panic!()
+            }
+        }
+    }
 }
