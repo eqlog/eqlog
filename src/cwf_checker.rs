@@ -10,9 +10,9 @@ pub enum Checking {
 
 #[derive(Clone, Debug)]
 struct Definition {
-    ambient_ctx: Ctx,
-    extensions: Vec<ExtCtx>,
-    tm: Tm,
+    ambient_context: Ctx,
+    extensions: Vec<(Ty, Ctx)>,
+    term: Tm,
 }
 
 #[derive(Clone, Debug)]
@@ -35,13 +35,13 @@ impl Scope {
 }
 
 impl Scope {
-    fn current_ctx(&self) -> Ctx {
+    fn current_context(&self) -> Ctx {
         *self.extensions.last().unwrap()
     }
 
     fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
         match ty {
-            ast::Ty::Unit => self.cwf.define_unit(self.current_ctx()),
+            ast::Ty::Unit => self.cwf.define_unit(self.current_context()),
             ast::Ty::Eq(lhs, rhs) => {
                 let lhs = self.add_term(checking, lhs);
                 let rhs = self.add_term(checking, rhs);
@@ -68,7 +68,9 @@ impl Scope {
                 }
                 tm
             }
-            ast::Tm::App { .. } => panic!(),
+            ast::Tm::App { fun, args } => {
+                panic!()
+            }
             ast::Tm::Let { body, result } => {
                 let before_defs = self.definitions.clone();
                 for def in body {
@@ -78,7 +80,7 @@ impl Scope {
                 self.definitions = before_defs;
                 result
             }
-            ast::Tm::UnitTm => self.cwf.define_unit_tm(self.current_ctx()),
+            ast::Tm::UnitTm => self.cwf.define_unit_tm(self.current_context()),
             ast::Tm::Refl(s) => {
                 let s = self.add_term(checking, s);
                 self.cwf.define_refl(s)
@@ -86,34 +88,36 @@ impl Scope {
         }
     }
     // Adjoing indeterminate term of a given type, do not change context.
-    fn adjoin_variable(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
+    fn adjoin_variable(&mut self, checking: Checking, name: &str, ty: &ast::Ty) -> (Tm, Ty) {
         let ty = self.add_type(checking, ty);
         let var = self.cwf.new_tm();
         self.cwf.insert_tm_ty(TmTy(var, ty));
         self.definitions.insert(
             name.to_string(),
             Definition {
-                ambient_ctx: self.current_ctx(),
+                ambient_context: self.current_context(),
                 extensions: Vec::new(),
-                tm: var,
+                term: var,
             },
         );
+        (var, ty)
     }
     // Extend context by a variable.
-    fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
+    fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) -> (Tm, Ty) {
         let ty = self.add_type(checking, ty);
-        let base_ctx = self.current_ctx();
+        let base_ctx = self.current_context();
         let ext_ctx = self.cwf.define_ext_ctx(base_ctx, ty);
         let var = self.cwf.define_var(base_ctx, ty);
         self.extensions.push(ext_ctx);
         self.definitions.insert(
             name.to_string(),
             Definition {
-                ambient_ctx: ext_ctx,
+                ambient_context: ext_ctx,
                 extensions: Vec::new(),
-                tm: var,
+                term: var,
             },
         );
+        (var, ty)
     }
 
     pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
@@ -128,19 +132,56 @@ impl Scope {
                 if checking == Checking::Yes {
                     let tm_ty = self.cwf.define_tm_ty(tm);
                     self.cwf.close();
-                    assert_eq!(tm_ty, ty);
+                    assert_eq!(self.cwf.ty_root(tm_ty), self.cwf.ty_root(ty));
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(tm, ty));
                 }
                 self.definitions.insert(
                     name.to_string(),
                     Definition {
-                        ambient_ctx: self.current_ctx(),
+                        ambient_context: self.current_context(),
                         extensions: Vec::new(),
-                        tm,
+                        term: tm,
                     },
                 );
             }
             Def { name, args, ty, tm } => {
-                panic!()
+                if checking == Checking::Yes {
+                    let before_self = self.clone();
+                    for (arg_name, arg_ty) in args {
+                        self.adjoin_variable(Checking::Yes, arg_name, arg_ty);
+                    }
+                    let tm = self.add_term(Checking::Yes, tm);
+                    let ty = self.add_type(Checking::Yes, ty);
+                    let tm_ty = self.cwf.define_tm_ty(tm);
+                    self.cwf.close();
+                    assert_eq!(self.cwf.ty_root(tm_ty), self.cwf.ty_root(ty));
+                    *self = before_self;
+                }
+
+                let before_definitions = self.definitions.clone();
+                let before_extensions = self.extensions.clone();
+
+                let mut extensions = Vec::new();
+                for (arg_name, arg_ty) in args {
+                    let (_, ty) = self.extend_context(Checking::No, arg_name, arg_ty);
+                    extensions.push((ty, self.current_context()));
+                }
+                let tm = self.add_term(Checking::No, tm);
+                let ty = self.add_type(Checking::No, ty);
+                self.cwf.insert_tm_ty(TmTy(tm, ty));
+
+                self.definitions = before_definitions;
+                self.extensions = before_extensions;
+
+                self.definitions.insert(
+                    name.to_string(),
+                    Definition {
+                        ambient_context: self.current_context(),
+                        extensions,
+                        term: tm,
+                    },
+                );
             }
             UnitInd {
                 name,
