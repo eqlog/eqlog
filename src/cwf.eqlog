@@ -74,5 +74,7 @@ Func Refl: Tm -> Tm;
 Axiom Eq(s, t)! & sigma = TmTy(s) & tau = TmTy(t) => sigma = tau;
 Axiom TyCtx(Eq(s, _)) ~> TyCtx(TmTy(s));
 Axiom TyCtx(Eq(_, t)) ~> TyCtx(TmTy(t));
+Axiom SubstTy(f, Eq(s, t)) ~> Eq(SubstTm(f, s), SubstTm(f, t));
+Axiom SubstTm(f, Refl(s)) ~> Refl(SubstTm(f, s));
 Axiom TmTy(Refl(s)) ~> Eq(s, s);
 Axiom TmTy(r) = Eq(s, t) => s = t & r = Refl(s) & r = Refl(t);

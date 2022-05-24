@@ -1,8 +1,9 @@
 #![recursion_limit = "128"]
-#[macro_use]
+extern crate eqlog_util;
+#[cfg(test)]
+extern crate indoc;
 #[cfg(test)]
 extern crate maplit;
-extern crate eqlog_util;
 use eqlog_util::eqlog_mod;
 extern crate lalrpop_util;
 use lalrpop_util::lalrpop_mod;
@@ -15,3 +16,76 @@ eqlog_mod!(cwf);
 pub mod ast;
 
 pub mod cwf_checker;
+
+use crate::cwf_checker::*;
+use crate::grammar::UnitParser;
+#[cfg(test)]
+use indoc::indoc;
+
+fn check(source: &str) {
+    let defs = UnitParser::new().parse(source).unwrap();
+
+    let mut scope = Scope::new();
+    for def in defs.iter() {
+        scope.add_definition(Checking::Yes, def);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unit_identity() {
+        let src = indoc! {"
+            def id(x: Unit) : Unit := x.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_unit_term() {
+        let src = indoc! {"
+            def u : Unit := unit.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_let_unit_term() {
+        let src = indoc! {"
+            def u : Unit :=
+              let
+                def x : Unit := unit.
+                def y : Unit := x.
+              in y.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_unit_unit_refl() {
+        let src = indoc! {"
+            def r : unit = unit := refl unit.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unit_equaity_not_well_typed() {
+        let src = indoc! {"
+            def r : unit = unit := unit.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_app_refl() {
+        let src = indoc! {"
+            def r (x : Unit) : x = x := refl x.
+            def s : unit = unit := r(unit).
+        "};
+        check(&src);
+    }
+}

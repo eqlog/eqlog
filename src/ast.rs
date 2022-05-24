@@ -17,6 +17,7 @@ pub enum Def {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Tm {
+    Variable(String),
     Typed { tm: Box<Tm>, ty: Box<Ty> },
     App { fun: String, args: Vec<Tm> },
     Let { body: Vec<Def>, result: Box<Tm> },
