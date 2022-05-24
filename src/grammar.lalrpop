@@ -39,6 +39,15 @@ pub Ty: Ty = {
         Ty::Eq(Box::new(left), Box::new(right)),
 };
 
+RevArgList : Vec<Tm> = {
+    "" => Vec::new(),
+    <tm: Tm> => vec![tm],
+    <head: Tm> "," <mut tail: RevArgList> => {
+        tail.push(head);
+        tail
+    },
+};
+
 pub Tm: Tm = {
     "(" <Tm> ")" => <>,
     "let" <body: Def*> "in" <result: Tm> =>
@@ -46,4 +55,9 @@ pub Tm: Tm = {
                   result: Box::new(result) },
     "refl" <tm: Tm> => Tm::Refl(Box::new(tm)),
     "unit" => Tm::UnitTm,
+    <var: Id> => Tm::Variable(var),
+    <fun: Id> "(" <mut args: RevArgList> ")" => {
+        args.reverse();
+        Tm::App { fun, args}
+    }
 };

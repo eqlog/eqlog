@@ -21,3 +21,6 @@ lalrpop = { version = "0", features = [ "lexer" ] }
 
 [build-dependencies.eqlog]
 path = "eqlog"
+
+[dev-dependencies]
+indoc = "1"

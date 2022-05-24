@@ -141,6 +141,7 @@ version = "0.1.0"
 dependencies = [
  "eqlog",
  "eqlog-util",
+ "indoc",
  "lalrpop",
  "lalrpop-util",
  "lazy_static",
