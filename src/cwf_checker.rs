@@ -247,7 +247,57 @@ impl Scope {
                 into_ty,
                 unit_case,
             } => {
-                panic!()
+                if checking == Checking::Yes {
+                    // Check `into_ty`.
+                    let before_self = self.clone();
+                    self.adjoin_variable(Checking::No, var, &ast::Ty::Unit);
+                    self.add_type(Checking::Yes, into_ty);
+                    *self = before_self;
+                }
+
+                // Adjoin `into_ty`, back off into current context again. We remember the extended
+                // context to construct a `Definition` later.
+                self.extend_context(Checking::No, var, &ast::Ty::Unit);
+                let into_ty = self.add_type(Checking::No, into_ty);
+                let extensions = vec![self.extensions.pop().unwrap()];
+                self.definitions.remove(var).unwrap();
+
+                // Add `unit_tm`.
+                let unit_case = self.add_term(checking, unit_case);
+
+                // Adjoin morphism `subst_unit = [var |-> unit]`.
+                let id = self.cwf.define_id(self.current_context());
+                let unit_ty = self.cwf.define_unit(self.current_context());
+                let unit_tm = self.cwf.define_unit_tm(self.current_context());
+                let subst_unit =
+                    self.cwf
+                        .define_mor_ext(self.current_context(), unit_ty, id, unit_tm);
+
+                // Substitute `into_ty` into current context.
+                let into_ty_unit_subst = self.cwf.define_subst_ty(subst_unit, into_ty);
+
+                if checking == Checking::Yes {
+                    let unit_case_ty = self.cwf.define_tm_ty(unit_case);
+                    self.cwf.close();
+                    assert_eq!(
+                        self.cwf.ty_root(unit_case_ty),
+                        self.cwf.ty_root(into_ty_unit_subst)
+                    );
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(unit_case, into_ty_unit_subst));
+                }
+
+                let term = self
+                    .cwf
+                    .define_unit_ind(self.current_context(), into_ty, unit_case);
+                self.definitions.insert(
+                    name.clone(),
+                    Definition {
+                        base_context: self.current_context(),
+                        extensions,
+                        term,
+                    },
+                );
             }
         }
     }

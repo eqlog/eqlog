@@ -18,7 +18,7 @@ pub DefBody: Def =
     <name: Id> <args: Args> ":" <ty: Ty> ":=" <tm: Tm> => Def::Def { <> };
 
 pub UnitIndBody: Def = {
-    <name: Id> "(" <var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
+    <name: Id> "(" <var: Id> ":" "Unit" ")" ":" <into_ty: Ty>
     "|" "unit" "=>" <unit_case: Tm>
     => Def::UnitInd { <> }
 }

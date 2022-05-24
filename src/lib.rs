@@ -88,4 +88,31 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_unit_uniqueness() {
+        let src = indoc! {"
+            unit_ind unique_based (x : Unit) : x = unit
+              | unit => (refl unit : unit = unit)
+              .
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_app_unit_uniqueness() {
+        let src = indoc! {"
+            unit_ind unique_based (x : Unit) : x = unit
+              | unit => (refl unit : unit = unit)
+              .
+            def unique (x : Unit) (y : Unit) : x = y :=
+              let
+                def xu : x = unit := unique_based(x).
+                def yu : y = unit := unique_based(y).
+              in
+                refl unit
+              .
+        "};
+        check(&src);
+    }
 }
