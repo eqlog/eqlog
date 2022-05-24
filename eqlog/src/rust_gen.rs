@@ -209,7 +209,7 @@ fn write_table_permute_inverse_fn(
     let order_name = OrderName(order);
     let rel_args = (0..order.len()).format_with(", ", |i, f| {
         let sort = arity[i];
-        let j = order[i];
+        let j = order.iter().copied().position(|j| j == i).unwrap();
         f(&format_args!("{sort}::from(t.{j})"))
     });
     writedoc! {out, "
