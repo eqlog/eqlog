@@ -50,6 +50,11 @@ RevArgList : Vec<Tm> = {
 
 pub Tm: Tm = {
     "(" <Tm> ")" => <>,
+    "(" <tm: Tm> ":" <ty: Ty> ")" => {
+        let tm = Box::new(tm);
+        let ty = Box::new(ty);
+        Tm::Typed { tm, ty }
+    },
     "let" <body: Def*> "in" <result: Tm> =>
         Tm::Let { body,
                   result: Box::new(result) },
