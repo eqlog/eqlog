@@ -12,6 +12,7 @@ lalrpop-util = "0"
 lazy_static = "1"
 maplit = "1"
 regex = "1"
+indoc = "1"
 
 [dependencies.eqlog-util]
 path = "eqlog-util"
@@ -21,6 +22,3 @@ lalrpop = { version = "0", features = [ "lexer" ] }
 
 [build-dependencies.eqlog]
 path = "eqlog"
-
-[dev-dependencies]
-indoc = "1"

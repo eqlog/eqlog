@@ -1,6 +1,5 @@
 #![recursion_limit = "128"]
 extern crate eqlog_util;
-#[cfg(test)]
 extern crate indoc;
 #[cfg(test)]
 extern crate maplit;
