@@ -60,10 +60,8 @@ Axiom SubstTy(f, Unit(Dom(f))) ~> Unit(Cod(f));
 Axiom SubstTm(f, UnitTm(Dom(f))) ~> UnitTm(Cod(f));
 Axiom TmTy(UnitInd(_, sigma, _)) ~> sigma;
 Axiom
-	dom = Dom(f) &
-	cod = Cod(f) &
-	ind_c = UnitInd(dom, sigma, c) &
-	f_unit = MorExt(dom, sigma, f, UnitTm(cod))
+	ind_c = UnitInd(base, _, c) &
+	f_unit = MorExt(base, Unit(base), f, UnitTm(Cod(f)))
 	=>
 	SubstTm(f_unit, ind_c) ~> SubstTm(f, c)
 	;

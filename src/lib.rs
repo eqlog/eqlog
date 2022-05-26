@@ -123,4 +123,16 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_app_const_unit() {
+        let src = indoc! {"
+            unit_ind const_unit (x : Unit) : Unit
+              | unit => unit
+              .
+            def u : Unit := const_unit(unit).
+            def r : u = unit := refl unit.
+        "};
+        check(&src);
+    }
 }
