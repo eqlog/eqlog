@@ -23,6 +23,13 @@ pub UnitIndBody: Def = {
     => Def::UnitInd { <> }
 }
 
+pub BoolIndBody: Def = {
+    <name: Id> "(" <var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
+    "|" "false" "=>" <false_case: Tm>
+    "|" "true" "=>" <true_case: Tm>
+    => Def::BoolInd { <> }
+}
+
 pub Args: Vec<(String, Ty)> =
     ("(" <Id+> ":" <Ty> ")")*
     => <>.into_iter()
@@ -35,6 +42,7 @@ pub Args: Vec<(String, Ty)> =
 pub Ty: Ty = {
     "(" <Ty> ")" => <>,
     "Unit" => Ty::Unit,
+    "Bool" => Ty::Bool,
     <left: Tm> "=" <right: Tm> =>
         Ty::Eq(Box::new(left), Box::new(right)),
 };
@@ -60,6 +68,8 @@ pub Tm: Tm = {
                   result: Box::new(result) },
     "refl" <tm: Tm> => Tm::Refl(Box::new(tm)),
     "unit" => Tm::UnitTm,
+    "true" => Tm::True,
+    "false" => Tm::False,
     <var: Id> => Tm::Variable(var),
     <fun: Id> "(" <mut args: RevArgList> ")" => {
         args.reverse();

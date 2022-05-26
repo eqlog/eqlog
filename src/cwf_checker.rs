@@ -91,6 +91,7 @@ impl Scope {
     fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
         match ty {
             ast::Ty::Unit => self.cwf.define_unit(self.current_context()),
+            ast::Ty::Bool => panic!("Not implemented"),
             ast::Ty::Eq(lhs, rhs) => {
                 let lhs = self.add_term(checking, lhs);
                 let rhs = self.add_term(checking, rhs);
@@ -141,6 +142,8 @@ impl Scope {
                 result
             }
             ast::Tm::UnitTm => self.cwf.define_unit_tm(self.current_context()),
+            ast::Tm::True => panic!("Not implemented"),
+            ast::Tm::False => panic!("Not implemented"),
             ast::Tm::Refl(s) => {
                 let s = self.add_term(checking, s);
                 self.cwf.define_refl(s)
@@ -301,6 +304,15 @@ impl Scope {
                         term,
                     },
                 );
+            }
+            BoolInd {
+                name,
+                var,
+                into_ty,
+                false_case,
+                true_case,
+            } => {
+                panic!("Not implemented")
             }
         }
     }

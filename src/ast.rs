@@ -13,6 +13,13 @@ pub enum Def {
         into_ty: Ty,
         unit_case: Tm,
     },
+    BoolInd {
+        name: String,
+        var: String,
+        into_ty: Ty,
+        false_case: Tm,
+        true_case: Tm,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -22,11 +29,14 @@ pub enum Tm {
     App { fun: String, args: Vec<Tm> },
     Let { body: Vec<Def>, result: Box<Tm> },
     UnitTm,
+    True,
+    False,
     Refl(Box<Tm>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ty {
     Unit,
+    Bool,
     Eq(Box<Tm>, Box<Tm>),
 }
