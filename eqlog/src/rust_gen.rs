@@ -18,7 +18,8 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         use std::collections::{{BTreeSet, BTreeMap}};
         use std::fmt;
         use crate::eqlog_util;
-        use eqlog_util::{{tabled::Tabled, Unification}};
+        use eqlog_util::Unification;
+        use eqlog_util::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
         use std::ops::Bound;
     "}
 }
@@ -472,6 +473,25 @@ fn write_table_impl(
         write_table_drain_with_element(out, relation, index_selection, sort)?;
     }
     writedoc! {out, "
+        }}
+    "}
+}
+
+fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<()> {
+    writedoc! {out, "
+        impl fmt::Display for {relation}Table {{
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
+                Table::new(self.iter_all())
+                    .with(Extract::segment(1.., ..))
+                    .with(Header(\"{relation}\"))
+                    .with(Modify::new(Segment::all()).with(Alignment::center()))
+                    .with(
+                        Style::modern()
+                            .top_intersection('─')
+                            .header_intersection('┬')
+                    )
+                    .fmt(f)
+            }}
         }}
     "}
 }
@@ -1176,6 +1196,26 @@ fn write_theory_impl(
     Ok(())
 }
 
+fn write_theory_display_impl(
+    out: &mut impl Write,
+    name: &str,
+    signature: &Signature,
+) -> io::Result<()> {
+    let rels = signature.relations().format_with("", |(rel, _), f| {
+        let rel_snake = rel.to_case(Snake);
+        f(&format_args!("self.{rel_snake}.fmt(f)?;"))
+    });
+
+    writedoc! {out, "
+        impl fmt::Display for {name} {{
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
+                {rels}
+                Ok(())
+            }}
+        }}
+    "}
+}
+
 pub fn write_module(
     out: &mut impl Write,
     name: &str,
@@ -1197,6 +1237,7 @@ pub fn write_module(
         let index = index_selection.get(rel).unwrap();
         write_table_struct(out, rel, &arity, index)?;
         write_table_impl(out, rel, &arity, index)?;
+        write_table_display_impl(out, rel)?;
     }
     write!(out, "\n")?;
 
@@ -1211,6 +1252,7 @@ pub fn write_module(
 
     write_theory_struct(out, name, signature)?;
     write_theory_impl(out, name, signature, query_actions)?;
+    write_theory_display_impl(out, name, signature)?;
 
     Ok(())
 }
