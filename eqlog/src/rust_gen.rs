@@ -16,7 +16,9 @@ use Case::Snake;
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
         use std::collections::{{BTreeSet, BTreeMap}};
-        use eqlog_util::Unification;
+        use std::fmt;
+        use crate::eqlog_util;
+        use eqlog_util::{{tabled::Tabled, Unification}};
         use std::ops::Bound;
     "}
 }
@@ -35,6 +37,11 @@ fn write_sort_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
     writedoc! {out, "
         impl Into<u32> for {sort} {{ fn into(self) -> u32 {{ self.0 }} }}
         impl From<u32> for {sort} {{ fn from(x: u32) -> Self {{ {sort}(x) }} }}
+        impl fmt::Display for {sort} {{
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
+                write!(f, \"{{:?}}\", self)
+            }}
+        }}
     "}
 }
 
@@ -47,7 +54,7 @@ fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -
         .format_with(", ", |sort, f| f(&format_args!("pub {sort}")));
     writedoc! {out, "
         #[allow(dead_code)]
-        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
         pub struct {relation}({args});
     "}
 }

@@ -1,6 +1,7 @@
 mod unification;
 
 pub use crate::unification::Unification;
+pub extern crate tabled;
 
 #[macro_export]
 macro_rules! eqlog_mod {
