@@ -81,6 +81,15 @@ mod tests {
     }
 
     #[test]
+    fn test_app_unit_identity() {
+        let src = indoc! {"
+            def id (x: Unit) : Unit := x.
+            def r : unit = id(unit) := refl unit.
+        "};
+        check(&src);
+    }
+
+    #[test]
     fn test_app_refl() {
         let src = indoc! {"
             def r (x : Unit) : x = x := refl x.
