@@ -182,7 +182,10 @@ impl Scope {
         use ast::Def::*;
         match def {
             Dump => {
-                println!("{:?}", self);
+                if checking == Checking::Yes {
+                    self.cwf.close();
+                    println!("{:?}", self);
+                }
             }
             Def { name, args, ty, tm } if args.is_empty() => {
                 let tm = self.add_term(checking, tm);
