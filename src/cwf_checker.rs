@@ -184,7 +184,7 @@ impl Scope {
             Dump => {
                 if checking == Checking::Yes {
                     self.cwf.close();
-                    println!("{:?}", self);
+                    println!("{}", self.cwf);
                 }
             }
             Def { name, args, ty, tm } if args.is_empty() => {
