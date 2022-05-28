@@ -331,7 +331,8 @@ impl Scope {
                 let false_case = self.add_term(checking, false_case);
                 let true_case = self.add_term(checking, true_case);
 
-                // Adjoin morphisms `subst_false = [var |-> false]` and `subst_true = [var |-> true]`
+                // Adjoin morphisms `subst_false = [var |-> false]` and
+                // `subst_true = [var |-> true]`.
                 let id = self.cwf.define_id(self.current_context());
                 let bool_ty = self.cwf.define_bool(self.current_context());
                 let false_tm = self.cwf.define_false_tm(self.current_context());
