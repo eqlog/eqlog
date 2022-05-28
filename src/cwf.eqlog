@@ -65,6 +65,33 @@ Axiom
 	=>
 	SubstTm(f_unit, ind_c) ~> SubstTm(f, c)
 	;
+// TODO: Substitution stability of unit ind
+
+Func Bool: Ctx -> Ty;
+Func FalseTm: Ctx -> Tm;
+Func TrueTm: Ctx -> Tm;
+// base ctx, into type, false case, true case
+Func BoolInd: Ctx * Ty * Tm * Tm -> Tm;
+
+Axiom TyCtx(Bool(ctx)) ~> ctx;
+Axiom TmTy(FalseTm(ctx)) ~> Bool(ctx);
+Axiom TmTy(TrueTm(ctx)) ~> Bool(ctx);
+Axiom SubstTy(f, Bool(Dom(f))) ~> Bool(Cod(f));
+Axiom SubstTm(f, FalseTm(Dom(f))) ~> FalseTm(Cod(f));
+Axiom SubstTm(f, TrueTm(Dom(f))) ~> TrueTm(Cod(f));
+// Induction principle for substituting false:
+Axiom
+	ind = BoolInd(base, _, false_case, _) &
+	f_false = MorExt(base, Bool(base), f, FalseTm(Cod(f)))
+	=>
+	SubstTm(f_false, ind) ~> SubstTm(f, false_case);
+// Induction principle for substituting true:
+Axiom
+	ind = BoolInd(base, _, _, true_case) &
+	f_true = MorExt(base, Bool(base), f, TrueTm(Cod(f)))
+	=>
+	SubstTm(f_true, ind) ~> SubstTm(f, true_case);
+// TODO: Substitution stability of bool ind
 
 Func Eq: Tm * Tm -> Ty;
 Func Refl: Tm -> Tm;
