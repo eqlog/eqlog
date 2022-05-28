@@ -135,4 +135,17 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_bool_not() {
+        let src = indoc! {"
+            bool_ind not (x : Bool) : Bool
+              | false => true
+              | true => false
+              .
+            def r0 : not(true) = false := refl false.
+            def r1 : not(false) = true := refl true.
+        "};
+        check(&src);
+    }
 }
