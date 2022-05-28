@@ -79,6 +79,7 @@ Axiom TmTy(TrueTm(ctx)) ~> Bool(ctx);
 Axiom SubstTy(f, Bool(Dom(f))) ~> Bool(Cod(f));
 Axiom SubstTm(f, FalseTm(Dom(f))) ~> FalseTm(Cod(f));
 Axiom SubstTm(f, TrueTm(Dom(f))) ~> TrueTm(Cod(f));
+Axiom TmTy(BoolInd(_, sigma, _, _)) ~> sigma;
 // Induction principle for substituting false:
 Axiom
 	ind = BoolInd(base, _, false_case, _) &
