@@ -91,7 +91,7 @@ impl Scope {
     fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
         match ty {
             ast::Ty::Unit => self.cwf.define_unit(self.current_context()),
-            ast::Ty::Bool => panic!("Not implemented"),
+            ast::Ty::Bool => self.cwf.define_bool(self.current_context()),
             ast::Ty::Eq(lhs, rhs) => {
                 let lhs = self.add_term(checking, lhs);
                 let rhs = self.add_term(checking, rhs);
@@ -142,8 +142,8 @@ impl Scope {
                 result
             }
             ast::Tm::UnitTm => self.cwf.define_unit_tm(self.current_context()),
-            ast::Tm::True => panic!("Not implemented"),
-            ast::Tm::False => panic!("Not implemented"),
+            ast::Tm::False => self.cwf.define_false_tm(self.current_context()),
+            ast::Tm::True => self.cwf.define_true_tm(self.current_context()),
             ast::Tm::Refl(s) => {
                 let s = self.add_term(checking, s);
                 self.cwf.define_refl(s)
@@ -268,7 +268,7 @@ impl Scope {
                 let extensions = vec![self.extensions.pop().unwrap()];
                 self.definitions.remove(var).unwrap();
 
-                // Add `unit_tm`.
+                // Add `unit_case`.
                 let unit_case = self.add_term(checking, unit_case);
 
                 // Adjoin morphism `subst_unit = [var |-> unit]`.
@@ -312,7 +312,73 @@ impl Scope {
                 false_case,
                 true_case,
             } => {
-                panic!("Not implemented")
+                if checking == Checking::Yes {
+                    // Check `into_ty`.
+                    let before_self = self.clone();
+                    self.adjoin_variable(Checking::No, var, &ast::Ty::Bool);
+                    self.add_type(Checking::Yes, into_ty);
+                    *self = before_self;
+                }
+
+                // Adjoin `into_ty`, back off into current context again. We remember the extended
+                // context to construct a `Definition` later.
+                self.extend_context(Checking::No, var, &ast::Ty::Bool);
+                let into_ty = self.add_type(Checking::No, into_ty);
+                let extensions = vec![self.extensions.pop().unwrap()];
+                self.definitions.remove(var).unwrap();
+
+                // Add `true_case` and `false_case` terms.
+                let false_case = self.add_term(checking, false_case);
+                let true_case = self.add_term(checking, true_case);
+
+                // Adjoin morphisms `subst_false = [var |-> false]` and `subst_true = [var |-> true]`
+                let id = self.cwf.define_id(self.current_context());
+                let bool_ty = self.cwf.define_bool(self.current_context());
+                let false_tm = self.cwf.define_false_tm(self.current_context());
+                let true_tm = self.cwf.define_true_tm(self.current_context());
+                let subst_false =
+                    self.cwf
+                        .define_mor_ext(self.current_context(), bool_ty, id, false_tm);
+                let subst_true =
+                    self.cwf
+                        .define_mor_ext(self.current_context(), bool_ty, id, true_tm);
+
+                // Substitute `into_ty` into current context, once with `true` and once with
+                // `false`.
+                let into_ty_false_subst = self.cwf.define_subst_ty(subst_false, into_ty);
+                let into_ty_true_subst = self.cwf.define_subst_ty(subst_true, into_ty);
+
+                if checking == Checking::Yes {
+                    let false_case_ty = self.cwf.define_tm_ty(false_case);
+                    let true_case_ty = self.cwf.define_tm_ty(true_case);
+                    self.cwf.close();
+                    assert_eq!(
+                        self.cwf.ty_root(false_case_ty),
+                        self.cwf.ty_root(into_ty_false_subst)
+                    );
+                    assert_eq!(
+                        self.cwf.ty_root(true_case_ty),
+                        self.cwf.ty_root(into_ty_true_subst)
+                    );
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(false_case, into_ty_false_subst));
+                    self.cwf.insert_tm_ty(TmTy(true_case, into_ty_true_subst));
+                }
+
+                let term = self.cwf.define_bool_ind(
+                    self.current_context(),
+                    into_ty,
+                    false_case,
+                    true_case,
+                );
+                self.definitions.insert(
+                    name.clone(),
+                    Definition {
+                        base_context: self.current_context(),
+                        extensions,
+                        term,
+                    },
+                );
             }
         }
     }
