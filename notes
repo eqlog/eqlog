@@ -1,0 +1,81 @@
+
+      X.S ----- f.S ------> Y.fS
+     /|                     |\
+<s> | |                     | | <fs>
+     \|                     |/
+      X ------- f --------> Y
+
+If T in X.s, need
+
+	f(<s>(T)) = <fs>(f.S(T)).
+
+  f(<s>(T))
+= <f, fs>(T)
+= (<fs> o f.S)(T)
+= <fs>(f.S(T))
+
+f(<s>(T)) = (f o <s>)(T)
+
+
+  (f o <s>) o w_X
+= f o (<s> o w_X)
+= f o id
+= f
+
+
+  (fs o f.S) o w_X
+= fs o (f.S o w_X)
+= fs o (w_Y o f)
+= (fs o w_Y) o f
+= (id o f)
+= f
+
+
+  (f o <s>)(v_X)
+= f(<s>(v_X))
+= fs
+
+  (<fs> o f.S)(v_X)
+= (<fs>(f.S(v_X))
+= <fs>(v_Y)
+= fs
+
+
+
+# On Reduction:
+
+1. Morphisms of the form
+  
+  	f : Gamma -> Delta
+  = f : (x_1 : sigma_1) ... (x_n : sigma_n) -> (y_1 : tau_1) ... (y_m : tau_m)
+
+are always added/defined as
+
+	f = < ... <<!_Delta, s_1>, s_2>, ..., s_n>				(1)
+
+where !_Delta : () -> Delta is the unique map from the empty context.
+
+
+2. If we have that
+	
+	g(f(X))
+
+is defined for some term or type X, then also
+
+	(g o f)(X)
+
+should be defined.
+
+
+3. If g o f is defined and
+	
+	f = <f_0, s>
+
+then also g o f_0 and g(s) should be defined, and
+
+  g o f = <g o f_0, g(s)>
+
+If f is not of this form, then we must have f = !_Gamma for Gamma = Cod(f).
+In this case, the domain of (g o f) is the empty context, so (g o f) = !_{Cod(g)}.
+
+By induction over the size of the context Cod(f), we see that the reduction rule ensures that every morphism is of the form (1).
