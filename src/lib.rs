@@ -148,4 +148,26 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_bool_and() {
+        let src = indoc! {"
+            def and (x : Bool) (y : Bool) : Bool :=
+              let
+                bool_ind x_case (x0 : Bool) : Bool
+                  | false => false
+                  | true => y
+                  .
+              in
+                x_case(x)
+              .
+
+            bool_ind x_case_y_false(x0 : Bool) : Bool
+              | false => false
+              | true => false
+              .
+            def false_false : and(false, false) = false := refl false.
+        "};
+        check(&src);
+    }
 }

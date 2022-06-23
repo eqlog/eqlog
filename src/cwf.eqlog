@@ -32,9 +32,7 @@ Axiom TmTy(SubstTm(f, s)) ~> SubstTy(f, TmTy(s));
 Axiom SubstTy(Id(TyCtx(sigma)), sigma) ~> sigma;
 Axiom SubstTm(Id(TyCtx(TmTy(s))), s) ~> s;
 
-Axiom SubstTy(g, SubstTy(f, sigma)) ~> SubstTy(Comp(g, f), sigma);
 Axiom SubstTy(Comp(g, f), sigma) ~> SubstTy(g, SubstTy(f, sigma));
-Axiom SubstTm(g, SubstTm(f, s)) ~> SubstTm(Comp(g, f), s);
 Axiom SubstTm(Comp(g, f), s) ~> SubstTm(g, SubstTm(f, s));
 
 Func ExtCtx: Ctx * Ty -> Ctx;
@@ -49,6 +47,26 @@ Axiom Dom(MorExt(ctx, sigma, _, _)) ~> ExtCtx(ctx, sigma);
 Axiom Cod(MorExt(_, _, f, _)) ~> Cod(f);
 Axiom Comp(MorExt(ctx, sigma, f, _), Wkn(ctx, sigma)) ~> f;
 Axiom SubstTm(MorExt(ctx, sigma, _, s), Var(ctx, sigma)) ~> s;
+
+// Reduction for composition.
+Axiom MorExt(ctx, sigma, Comp(g, f), SubstTm(g, s)) ~> Comp(g, MorExt(ctx, sigma, f, s));
+
+// If an extended context is defined, then also weakening and variable are
+// defined.
+Axiom ExtCtx(base, sigma)! => Wkn(base, sigma)! & Var(base, sigma)!;
+
+Axiom
+	ExtCtx(dom, sigma)! &
+	dom = Dom(f) &
+	cod = Cod(f) &
+	sigma_f = SubstTy(f, sigma) &
+	ExtCtx(cod, sigma_f)! &
+	cod_wkn = Wkn(cod, sigma_f) &
+	var_cod = Var(cod, sigma)
+	=>
+	Comp(cod_wkn, f)! &
+	MorExt(dom, sigma, Comp(cod_wkn, f), var_cod)!
+	;
 
 Func Unit: Ctx -> Ty;
 Func UnitTm: Ctx -> Tm;
