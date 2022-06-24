@@ -42,40 +42,57 @@ f(<s>(T)) = (f o <s>)(T)
 
 
 
-# On Reduction:
+# On normal forms of morphisms:
 
-1. Morphisms of the form
-  
-  	f : Gamma -> Delta
-  = f : (x_1 : sigma_1) ... (x_n : sigma_n) -> (y_1 : tau_1) ... (y_m : tau_m)
+1. Every morphism is of the form
 
-are always added/defined as
+	< ... <<w, s_1>, s_2>, ..., s_n>				(1)
 
-	f = < ... <<!_Delta, s_1>, s_2>, ..., s_n>				(1)
+where
 
-where !_Delta : () -> Delta is the unique map from the empty context.
+  w = Comp(Wkn(gamma_m), Comp(Wkn(gamma_{m - 1}), Comp(..., Id(gamma_0))))				(2)
+
+is a left-associated compositions of weakenings, starting from an identity.
+Both n = 0 and m = 0 are allowed.
 
 
 2. If we have that
-	
+
 	g(f(X))
 
-is defined for some term or type X, then also
+is defined for some term or type X, then also g o f should be defined and
 
-	(g o f)(X)
+	g(f(X)) = (g o f)(X)
 
-should be defined.
+should hold.
+This is to make iterated substitutions work.
+The introduction of g o f will potentially violate the normal form assumption, so the following reduction rules are introduced.
+The effect of these rules will be that morphisms with a normal form are closed under
+- identities
+- weakenings
+- extensions, i.e. if f has a normal form, then also <f, s> has a normal form for all terms s
+- composition, i.e. if g and f have normal forms, then also g o f has a normal form
 
 
 3. If g o f is defined and
-	
-	f = <f_0, s>
 
-then also g o f_0 and g(s) should be defined, and
+	f = <f', s>
 
-  g o f = <g o f_0, g(s)>
+(so in (1) we have n >= 1), then also g o f' and g(s) should be defined, and
 
-If f is not of this form, then we must have f = !_Gamma for Gamma = Cod(f).
-In this case, the domain of (g o f) is the empty context, so (g o f) = !_{Cod(g)}.
+	g o f = <g o f', g(s)>
 
-By induction over the size of the context Cod(f), we see that the reduction rule ensures that every morphism is of the form (1).
+By induction, we may thus assume that n = 0 for f.
+
+
+4. If g o f is defined with n = 0 for f but m > 0 (so that f is a non-trivial composition of weakenings) and n > 0 for g, so that g = <g', t>, then
+
+  g o f = <g', t> o (p o f') ~> g' o f'.
+
+We may thus assume that if g o f is defined, then n = 0 for f and n = 0 for g.
+If m = 0 for g or m = 0 for f, then we are done.
+Otherwise we have g = w o g'' for some weakening w, and we have
+
+  g o f = (w o g'') o f ~> w o (g'' o f)
+
+which concludes the reduction inductively.
