@@ -150,6 +150,24 @@ mod tests {
     }
 
     #[test]
+    fn test_bool_not_nested() {
+        let src = indoc! {"
+            def not (x : Bool) : Bool :=
+              let 
+                bool_ind x_case (x0 : Bool): Bool
+                | false => true
+                | true => false
+                .
+              in
+                x_case(x)
+              .
+            def r0 : not(true) = false := refl false.
+            def r1 : not(false) = true := refl true.
+        "};
+        check(&src);
+    }
+
+    #[test]
     fn test_bool_and() {
         let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
