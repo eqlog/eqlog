@@ -1,60 +1,102 @@
+// The category of contexts and morphisms.
 Sort Ctx;
 Sort Mor;
 
+// Domains and codomains of morphisms.
 Func Dom: Mor -> Ctx;
 Func Cod: Mor -> Ctx;
+// Compositions of morphisms.
 Func Comp: Mor * Mor -> Mor;
+// Identity morphisms.
 Func Id: Ctx -> Mor;
 
-Axiom ctx!: Ctx => Id(ctx)!;
+// The identity morphisms is defined at every context.
+Axiom ctx! : Ctx => Id(ctx)!;
+// Domains and codomains of identity morphisms.
 Axiom Dom(Id(ctx)) ~> ctx;
 Axiom Cod(Id(ctx)) ~> ctx;
+// Domains and codomains of composed morphisms.
 Axiom Dom(Comp(_, f)) ~> Dom(f);
 Axiom Cod(Comp(g, _)) ~> Cod(g);
 
+// Composition with identity morphisms.
 Axiom Comp(f, Id(Dom(f))) ~> f;
 Axiom Comp(Id(Cod(f)), f) ~> f;
 
-Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
-Axiom Comp(Comp(h, g), f) ~> Comp(h, Comp(g, f));
+// // Associativity of composition.
+// Axiom Comp(h, Comp(g, f)) ~> Comp(Comp(h, g), f);
+// Axiom Comp(Comp(h, g), f) ~> Comp(h, Comp(g, f));
 
+// Types and terms.
 Sort Ty;
 Sort Tm;
 
+// The context of a type.
 Func TyCtx : Ty -> Ctx;
+// The type of a term.
 Func TmTy : Tm -> Ty;
+
+// Substituting types and terms.
 Func SubstTy: Mor * Ty-> Ty;
 Func SubstTm: Mor * Tm-> Tm;
 
+// The context of a substituted type.
 Axiom TyCtx(SubstTy(f, _)) ~> Cod(f);
+// The type of a substituted term.
 Axiom TmTy(SubstTm(f, s)) ~> SubstTy(f, TmTy(s));
 
+// Substitution along identity morphisms.
 Axiom SubstTy(Id(TyCtx(sigma)), sigma) ~> sigma;
 Axiom SubstTm(Id(TyCtx(TmTy(s))), s) ~> s;
 
-Axiom SubstTy(Comp(g, f), sigma) ~> SubstTy(g, SubstTy(f, sigma));
-Axiom SubstTm(Comp(g, f), s) ~> SubstTm(g, SubstTm(f, s));
+// Substitution along composed morphisms.
+Axiom SubstTy(g, SubstTy(f, _))! => Comp(g, f)!;
+Axiom SubstTm(g, SubstTm(f, _))! => Comp(g, f)!;
+Axiom subst_sigma = SubstTy(g, SubstTy(f, sigma)) & h = Comp(g, f) => subst_sigma = SubstTy(h, sigma);
+Axiom subst_s = SubstTm(g, SubstTm(f, s)) & h = Comp(g, f) => subst_s = SubstTm(h, s);
 
+// Context extensions by variables of a given type.
 Func ExtCtx: Ctx * Ty -> Ctx;
+// The corresponding weakenings.
 Func Wkn: Ctx * Ty -> Mor;
+// The corresponding variable terms.
 Func Var: Ctx * Ty -> Tm;
+// The extended morphisms induced by the universal property of context extensions.
 Func MorExt: Ctx * Ty * Mor * Tm -> Mor;
 
-Axiom Dom(Wkn(ctx, _)) ~> ctx;
-Axiom Cod(Wkn(ctx, sigma)) ~> ExtCtx(ctx, sigma);
-Axiom TmTy(Var(ctx, sigma)) ~> SubstTy(Wkn(ctx, sigma), sigma);
-Axiom Dom(MorExt(ctx, sigma, _, _)) ~> ExtCtx(ctx, sigma);
-Axiom Cod(MorExt(_, _, f, _)) ~> Cod(f);
-Axiom Comp(MorExt(ctx, sigma, f, _), Wkn(ctx, sigma)) ~> f;
-Axiom SubstTm(MorExt(ctx, sigma, _, s), Var(ctx, sigma)) ~> s;
-
-// Reduction for composition.
-Axiom MorExt(ctx, sigma, Comp(g, f), SubstTm(g, s)) ~> Comp(g, MorExt(ctx, sigma, f, s));
-
-// If an extended context is defined, then also weakening and variable are
-// defined.
+// If an extended context is defined, then also weakening and variable are defined.
 Axiom ExtCtx(base, sigma)! => Wkn(base, sigma)! & Var(base, sigma)!;
 
+// Domains and codomains of weakenings.
+Axiom Dom(Wkn(ctx, _)) ~> ctx;
+Axiom Cod(Wkn(ctx, sigma)) ~> ExtCtx(ctx, sigma);
+
+// The types of variables.
+Axiom TmTy(Var(ctx, sigma)) ~> SubstTy(Wkn(ctx, sigma), sigma);
+// Domains and codomains of extended morphisms.
+Axiom Dom(MorExt(ctx, sigma, _, _)) ~> ExtCtx(ctx, sigma);
+Axiom Cod(MorExt(_, _, f, _)) ~> Cod(f);
+
+// The composition of weakening and extended morphisms.
+Axiom c = Comp(MorExt(ctx, sigma, f, _), Comp(Wkn(ctx, sigma), q)) => c = Comp(f, q);
+// The composition of weakenings.
+Axiom c = Comp(Comp(Wkn(ctx, sigma), g), f) => Comp(g, f)! & c = Comp(Wkn(ctx, sigma), Comp(g, f));
+
+// Substituting variables along extended morphisms.
+Axiom SubstTm(MorExt(ctx, sigma, _, s), Var(ctx, sigma)) ~> s;
+
+// Uniqueness of extended morphisms.
+// TODO: Enough to detect identities?
+Axiom
+	SubstTm(e, Var(ctx, sigma)) = s &
+	Comp(e, Wkn(ctx, sigma)) = f
+  =>
+	e = MorExt(ctx, sigma, f, s)
+	;
+
+// If f : dom -> cod and the extended contexts dom.sigma and cod.f(sigma) are defined, then also
+//   <w o f, v> : dom.sigma -> cod.f(sigma)
+// is defined.
 Axiom
 	ExtCtx(dom, sigma)! &
 	dom = Dom(f) &
@@ -68,15 +110,24 @@ Axiom
 	MorExt(dom, sigma, Comp(cod_wkn, f), var_cod)!
 	;
 
+// The unit type.
 Func Unit: Ctx -> Ty;
+// The unique term of the unit type.
 Func UnitTm: Ctx -> Tm;
+// The induction principle for the unit type.
 Func UnitInd : Ctx * Ty * Tm -> Tm;
 
+// Context of unit types.
 Axiom TyCtx(Unit(ctx)) ~> ctx;
+// Types of unit terms.
 Axiom TmTy(UnitTm(ctx)) ~> Unit(ctx);
+// Substitution stability of unit types.
 Axiom SubstTy(f, Unit(Dom(f))) ~> Unit(Cod(f));
+// Substitution stability of unit terms.
 Axiom SubstTm(f, UnitTm(Dom(f))) ~> UnitTm(Cod(f));
+// Type of unit induction terms.
 Axiom TmTy(UnitInd(_, sigma, _)) ~> sigma;
+// Evaluation rule for unit induction.
 Axiom
 	ind_c = UnitInd(base, _, c) &
 	f_unit = MorExt(base, Unit(base), f, UnitTm(Cod(f)))
@@ -98,13 +149,13 @@ Axiom SubstTy(f, Bool(Dom(f))) ~> Bool(Cod(f));
 Axiom SubstTm(f, FalseTm(Dom(f))) ~> FalseTm(Cod(f));
 Axiom SubstTm(f, TrueTm(Dom(f))) ~> TrueTm(Cod(f));
 Axiom TmTy(BoolInd(_, sigma, _, _)) ~> sigma;
-// Induction principle for substituting false:
+// Evaluation rule for induction on false:
 Axiom
 	ind = BoolInd(base, _, false_case, _) &
 	f_false = MorExt(base, Bool(base), f, FalseTm(Cod(f)))
 	=>
 	SubstTm(f_false, ind) ~> SubstTm(f, false_case);
-// Induction principle for substituting true:
+// Evaluation rule for induction on true:
 Axiom
 	ind = BoolInd(base, _, _, true_case) &
 	f_true = MorExt(base, Bool(base), f, TrueTm(Cod(f)))
