@@ -1,6 +1,8 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Def {
-    Dump,
+    Dump {
+        message: Option<String>,
+    },
     Def {
         name: String,
         args: Vec<(String, Ty)>,

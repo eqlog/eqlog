@@ -43,6 +43,18 @@ mod tests {
     }
 
     #[test]
+    fn test_unit_identity_nested() {
+        let src = indoc! {"
+            def id (x: Unit) : Unit :=
+              let
+                def id0 (y: Unit) : Unit := y.
+              in
+                id0(x).
+        "};
+        check(&src);
+    }
+
+    #[test]
     fn test_unit_term() {
         let src = indoc! {"
             def u : Unit := unit.
@@ -83,6 +95,20 @@ mod tests {
     fn test_app_unit_identity() {
         let src = indoc! {"
             def id (x: Unit) : Unit := x.
+            def r : unit = id(unit) := refl unit.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_app_unit_identity_nested() {
+        let src = indoc! {"
+            def id (x: Unit) : Unit :=
+              let
+                def id0 (y: Unit) : Unit := y.
+              in
+                id0(x).
+            dump 'Applying id next'.
             def r : unit = id(unit) := refl unit.
         "};
         check(&src);

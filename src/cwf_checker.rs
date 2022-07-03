@@ -184,10 +184,14 @@ impl Scope {
     pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
         use ast::Def::*;
         match def {
-            Dump => {
+            Dump { message } => {
                 if checking == Checking::Yes {
                     self.cwf.close();
+                    if let Some(message) = message {
+                        println!("{}", message);
+                    }
                     println!("{}", self.cwf);
+                    println!("{}", (0..80).map(|_| "─").collect::<String>());
                 }
             }
             Def { name, args, ty, tm } if args.is_empty() => {

@@ -3,16 +3,19 @@ use crate::ast::{Def, Tm, Ty};
 
 grammar;
 
-pub Id: String = r"[A-Za-z_][A-Za-z0-9'_]*" => <>.to_string();
+pub Id: String = <s : r"[A-Za-z_][A-Za-z0-9_]*"> => s.to_string();
 
 pub Unit: Vec<Def> =
     Def* => <>;
+
+pub StringLiteral: String = 
+  <s : r"'[^']*'"> => s[1 .. s.len() - 1].to_string();
 
 pub Def: Def = {
     "def" <DefBody> "." => <>,
     "unit_ind" <UnitIndBody> "." => <>,
     "bool_ind" <BoolIndBody> "." => <>,
-    "dump" "." => Def::Dump,
+    "dump" <message: StringLiteral?> "." => Def::Dump{ message },
 }
 
 pub DefBody: Def =
