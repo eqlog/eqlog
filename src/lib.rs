@@ -108,8 +108,9 @@ mod tests {
                 def id0 (y: Unit) : Unit := y.
               in
                 id0(x).
-            dump 'Applying id next'.
+            dump 'id defined'.
             def r : unit = id(unit) := refl unit.
+            dump 'done'.
         "};
         check(&src);
     }
