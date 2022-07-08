@@ -1,3 +1,7 @@
+use std::collections::BTreeMap;
+use std::fmt;
+use std::iter::once;
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Unification<T> {
     parents: Vec<T>,
@@ -20,6 +24,14 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         }
         el
     }
+    pub fn root_const(&self, mut el: T) -> T {
+        let mut parent = self.parents[el.into() as usize];
+        while el != parent {
+            el = parent;
+            parent = self.parents[el.into() as usize];
+        }
+        el
+    }
     pub fn union_roots_into(&mut self, lhs: T, rhs: T) {
         assert!(lhs == self.root(lhs));
         assert!(rhs == self.root(rhs));
@@ -36,3 +48,41 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
         self.parents.len()
     }
 }
+
+impl<T: Copy + PartialEq + From<u32> + Into<u32> + PartialOrd + Ord> Unification<T> {
+    pub fn classes(&self) -> BTreeMap<T, Vec<T>> {
+        let mut result = BTreeMap::new();
+        for p in 0..self.parents.len() {
+            let p = T::from(p as u32);
+            let root = self.root_const(p);
+
+            // TODO: Eliminate one search once try_insert is stabilized.
+            if !result.contains_key(&root) {
+                result.insert(root, Vec::new());
+            }
+            let class_els = result.get_mut(&root).unwrap();
+
+            if p != root {
+                class_els.push(p);
+            }
+        }
+        result
+    }
+    pub fn class_table(&self) -> tabled::Table {
+        let classes = self.classes();
+
+        let mut tabled_builder = tabled::builder::Builder::new();
+        for (root, children) in classes.iter() {
+            let root: u32 = (*root).into();
+            let children = children.iter().map(|el| {
+                let el: u32 = (*el).into();
+                el
+            });
+            tabled_builder = tabled_builder.add_record(once(root).chain(children));
+        }
+
+        tabled_builder.build()
+    }
+}
+
+impl<T: Copy + PartialEq + From<u32> + Into<u32> + PartialOrd + Ord + fmt::Display> Unification<T> {}

@@ -4,7 +4,7 @@ use crate::index_selection::*;
 use crate::query_action::*;
 use crate::signature::Signature;
 use convert_case::{Case, Casing};
-use indoc::writedoc;
+use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Display, Formatter};
@@ -1200,6 +1200,23 @@ fn write_theory_display_impl(
     name: &str,
     signature: &Signature,
 ) -> io::Result<()> {
+    let els = signature.iter_sorts().format_with("", |sort, f| {
+        let sort_camel = &sort.name;
+        let sort_snake = sort.name.to_case(Snake);
+        let modify_table = formatdoc! {"
+            with(Header(\"{sort_camel}\"))
+            .with(Modify::new(Segment::all())
+            .with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+        "};
+        f(&format_args!(
+            "self.{sort_snake}_equalities.class_table().{modify_table}.fmt(f)?;"
+        ))
+    });
     let rels = signature.relations().format_with("", |(rel, _), f| {
         let rel_snake = rel.to_case(Snake);
         f(&format_args!("self.{rel_snake}.fmt(f)?;"))
@@ -1208,6 +1225,7 @@ fn write_theory_display_impl(
     writedoc! {out, "
         impl fmt::Display for {name} {{
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
+                {els}
                 {rels}
                 Ok(())
             }}
