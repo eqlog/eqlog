@@ -33,7 +33,9 @@ fn whipe_comments(source: &str) -> String {
     lines.join("\n")
 }
 
-fn parse(source: &str) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>), CompileError> {
+fn parse(
+    source: &str,
+) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>, Vec<UserQuery>), CompileError> {
     TheoryParser::new()
         .parse(&mut TermUniverse::new(), source)
         .map_err(CompileError::from)
@@ -73,7 +75,7 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
 fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
     let source = fs::read_to_string(in_file)?;
     let source_without_comments = whipe_comments(&source);
-    let (sig, axioms) =
+    let (sig, axioms, _) =
         parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
             error,
             source,

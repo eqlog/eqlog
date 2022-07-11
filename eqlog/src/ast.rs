@@ -316,3 +316,19 @@ pub struct Axiom {
     pub sequent: Sequent,
     pub location: Option<Location>,
 }
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct QueryArgument {
+    pub variable: Term,
+    pub sort: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct UserQuery {
+    pub universe: TermUniverse,
+    pub name: String,
+    pub arguments: Vec<QueryArgument>,
+    pub results: Option<Vec<Term>>,
+    pub where_formula: Option<Vec<Atom>>,
+    pub location: Option<Location>,
+}

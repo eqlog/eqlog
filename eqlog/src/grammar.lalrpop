@@ -111,27 +111,75 @@ AxiomDecl: Axiom = {
     },
 }
 
-pub Theory: (Signature, Vec<(Axiom, TermMap<String>)>) = {
-    () => (Signature::new(), vec![]),
+QueryArgument: QueryArgument = {
+    <l: @L> <var: Id> <r: @R> <sort: (":" <Id>)?> => QueryArgument {
+        variable: universe.new_term(TermData::Variable(var), Some(Location(l, r))),
+        sort,
+    }
+}
+
+QueryArguments: Vec<QueryArgument> = {
+    "(" <head_arg: (<QueryArgument>)?> <tail_args: ("," <QueryArgument>)*> ")" => {
+        let args: Vec<QueryArgument> = head_arg.into_iter().chain(tail_args).collect();
+        args
+    }
+}
+
+QueryResults: Vec<Term> = {
+    "->" "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
+        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
+        args
+    }
+}
+
+QueryDecl: UserQuery = {
+    <l: @L>
+        "Query"
+        <name: Id>
+        <arguments: QueryArguments>
+        <results: ("->" <QueryResults>)?>
+        <where_formula: ("where" <Formula>)?>
+        ";"
+        <r: @R> => {
+
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        UserQuery {
+            universe: u,
+            name,
+            arguments,
+            results,
+            where_formula,
+            location: Some(Location(l, r)),
+        }
+    }
+}
+
+pub Theory: (Signature, Vec<(Axiom, TermMap<String>)>, Vec<UserQuery>) = {
+    () => (Signature::new(), vec![], vec![]),
     <mut theory: Theory> <sort: SortDecl> =>? {
-        let (ref mut sig, _) = &mut theory;
+        let (ref mut sig, _, _) = &mut theory;
         sig.add_sort(sort)?;
         Ok(theory)
     },
     <mut theory: Theory> <pred: PredicateDecl> =>? {
-        let (ref mut sig, _) = &mut theory;
+        let (ref mut sig, _, _) = &mut theory;
         sig.add_predicate(pred)?;
         Ok(theory)
     },
     <mut theory: Theory> <func: FunctionDecl> =>? {
-        let (ref mut sig, _) = &mut theory;
+        let (ref mut sig, _, _) = &mut theory;
         sig.add_function(func)?;
         Ok(theory)
     },
     <mut theory: Theory> <ax: AxiomDecl> =>? {
-        let (ref sig, ref mut axioms) = &mut theory;
+        let (ref sig, ref mut axioms, _) = &mut theory;
         let sorts = check_semantically(&sig, &ax.sequent)?;
         axioms.push((ax, sorts));
+        Ok(theory)
+    },
+    <mut theory: Theory> <query: QueryDecl> =>? {
+        let (ref sig, ref mut axioms, _) = &mut theory;
         Ok(theory)
     },
 }
