@@ -8,13 +8,12 @@ extern crate convert_case;
 extern crate indoc;
 
 mod ast;
-mod signature;
+mod module;
 mod unification;
 lalrpop_mod!(
     #[allow(unused)]
     grammar
 );
-mod analysis;
 mod build;
 mod error;
 mod flat_ast;

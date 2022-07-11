@@ -1,5 +1,5 @@
 use crate::flat_ast::*;
-use crate::signature::*;
+use crate::module::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -77,7 +77,7 @@ fn results(
 }
 
 fn translate_premise(
-    signature: &Signature,
+    module: &Module,
     premise: &[FlatAtom],
 ) -> (Vec<Query>, HashMap<FlatTerm, String>) {
     let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
@@ -93,7 +93,7 @@ fn translate_premise(
                     let diagonals = diagonals(args);
                     let projections = projections(&fixed_terms, args);
                     let results = results(&fixed_terms, args);
-                    let arity = signature.arity(rel).unwrap();
+                    let arity = module.arity(rel).unwrap();
 
                     for (arg, sort) in args.iter().copied().zip(arity.iter()) {
                         fixed_terms.insert(arg, sort.to_string());
@@ -120,7 +120,7 @@ fn translate_premise(
 }
 
 fn translate_conclusion(
-    signature: &Signature,
+    module: &Module,
     mut fixed_terms: HashMap<FlatTerm, String>,
     conclusion: &[FlatAtom],
 ) -> Vec<Action> {
@@ -156,7 +156,7 @@ fn translate_conclusion(
                         Action::AddTuple { relation, args }
                     } else {
                         let function = relation;
-                        let cod = *signature.arity(rel).unwrap().last().unwrap();
+                        let cod = *module.arity(rel).unwrap().last().unwrap();
                         fixed_terms.insert(result, cod.to_string());
                         Action::AddTerm {
                             function,
@@ -174,14 +174,14 @@ fn translate_conclusion(
 }
 
 impl QueryAction {
-    pub fn new(signature: &Signature, sequent: &FlatSequent) -> Self {
-        let (queries, fixed_terms) = translate_premise(signature, &sequent.premise);
-        let actions = translate_conclusion(signature, fixed_terms, &sequent.conclusion);
+    pub fn new(module: &Module, sequent: &FlatSequent) -> Self {
+        let (queries, fixed_terms) = translate_premise(module, &sequent.premise);
+        let actions = translate_conclusion(module, fixed_terms, &sequent.conclusion);
         QueryAction { queries, actions }
     }
     pub fn query_terms_used_in_actions<'a>(
         &'a self,
-        sig: &'a Signature,
+        module: &'a Module,
     ) -> BTreeMap<FlatTerm, &'a str> {
         let mut new_terms = BTreeSet::new();
         let mut query_terms = BTreeMap::new();
@@ -194,7 +194,7 @@ impl QueryAction {
                     result,
                 } => {
                     new_terms.insert(*result);
-                    let arity = sig.arity(function).unwrap();
+                    let arity = module.arity(function).unwrap();
                     let dom = &arity[0..arity.len() - 1];
                     query_terms.extend(args.iter().copied().enumerate().filter_map(|(i, tm)| {
                         if new_terms.contains(&tm) {
@@ -205,7 +205,7 @@ impl QueryAction {
                     }));
                 }
                 AddTuple { relation, args } => {
-                    let arity = sig
+                    let arity = module
                         .relations()
                         .find_map(
                             |(rel, arity)| {

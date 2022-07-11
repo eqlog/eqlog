@@ -1,8 +1,8 @@
 use crate::ast::*;
 use crate::flat_ast::FlatTerm;
 use crate::index_selection::*;
+use crate::module::*;
 use crate::query_action::*;
-use crate::signature::Signature;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
@@ -495,15 +495,13 @@ fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<
     "}
 }
 
-fn write_is_dirty_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
-    let rels_dirty = signature
-        .relations()
-        .format_with(" || ", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!("self.{relation_snake}.is_dirty()"))
-        });
+fn write_is_dirty_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let rels_dirty = module.relations().format_with(" || ", |(relation, _), f| {
+        let relation_snake = relation.to_case(Snake);
+        f(&format_args!("self.{relation_snake}.is_dirty()"))
+    });
 
-    let sorts_dirty = signature.iter_sorts().format_with(" || ", |sort, f| {
+    let sorts_dirty = module.iter_sorts().format_with(" || ", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
         f(&format_args!("!self.{sort_snake}_dirty.is_empty()"))
     });
@@ -604,11 +602,11 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
 
 fn write_query_match_struct(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
-    let terms = query_action.query_terms_used_in_actions(signature);
+    let terms = query_action.query_terms_used_in_actions(module);
     let term_decls = terms.into_iter().format_with("\n", |(term, sort), f| {
         let tm = term.0;
         f(&format_args!("  tm{tm}: {sort},"))
@@ -624,20 +622,20 @@ fn write_query_match_struct(
 
 fn write_close_data_struct(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!("    query_matches_{i}: Vec<QueryMatch{i}>,"))
     });
-    let functionality_matches = signature.iter_functions().format_with("\n", |func, f| {
+    let functionality_matches = module.iter_functions().format_with("\n", |func, f| {
         let Function { name, cod, .. } = func;
         let func_snake = name.to_case(Snake);
         f(&format_args!(
             "    functionality_matches_{func_snake}: Vec<({cod}, {cod})>,"
         ))
     });
-    let relations_new = signature.relations().format_with("\n", |(relation, _), f| {
+    let relations_new = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!("    {relation_snake}_new: Vec<{relation}>,"))
     });
@@ -656,19 +654,19 @@ fn write_close_data_struct(
 
 fn write_close_data_impl(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!("    query_matches_{i}: Vec::new(),"))
     });
-    let functionality_matches = signature.iter_functions().format_with("\n", |func, f| {
+    let functionality_matches = module.iter_functions().format_with("\n", |func, f| {
         let func_snake = func.name.to_case(Snake);
         f(&format_args!(
             "    functionality_matches_{func_snake}: Vec::new(),"
         ))
     });
-    let relations_new = signature.relations().format_with("\n", |(relation, _), f| {
+    let relations_new = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!("    {relation_snake}_new: Vec::new(),"))
     });
@@ -688,7 +686,7 @@ fn write_close_data_impl(
 
 fn write_query_loop_headers<'a>(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_ages: impl Iterator<Item = (&'a Query, TupleAge)>,
 ) -> io::Result<()> {
     for (query, age) in query_ages {
@@ -700,7 +698,7 @@ fn write_query_loop_headers<'a>(
                 projections,
                 results,
             } => {
-                let arity_len = signature
+                let arity_len = module
                     .relations()
                     .find(|(rel, _)| rel == relation)
                     .unwrap()
@@ -761,7 +759,7 @@ fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Resul
 
 fn write_collect_query_matches_fn(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
@@ -786,8 +784,8 @@ fn write_collect_query_matches_fn(
                 };
                 (query, age)
             });
-            write_query_loop_headers(out, signature, query_ages)?;
-            let query_terms = query_action.query_terms_used_in_actions(signature);
+            write_query_loop_headers(out, module, query_ages)?;
+            let query_terms = query_action.query_terms_used_in_actions(module);
             let action_args = query_terms.keys().copied().format_with(", ", |tm, f| {
                 let tm = tm.0;
                 f(&format_args!("tm{tm}"))
@@ -845,7 +843,7 @@ fn write_collect_functionality_matches_fn(
     "}
 }
 
-fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) -> io::Result<()> {
+fn write_action(out: &mut impl Write, module: &Module, action: &Action) -> io::Result<()> {
     use Action::*;
     match action {
         AddTerm {
@@ -854,7 +852,7 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             result,
         } => {
             let function_snake = function.to_case(Snake);
-            let arity = signature.arity(function).unwrap();
+            let arity = module.arity(function).unwrap();
             let dom = &arity[0..arity.len() - 1];
             let cod = *arity.last().unwrap();
             let cod_snake = cod.to_case(Snake);
@@ -911,7 +909,7 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
             let sort_snake = sort.to_case(Snake);
             let arity_contains_sort =
                 |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
-            let clean_rels = signature
+            let clean_rels = module
                 .relations()
                 .filter(|(_, arity)| arity_contains_sort(arity))
                 .format_with("\n", |(relation, _), f| {
@@ -938,11 +936,11 @@ fn write_action(out: &mut impl Write, signature: &Signature, action: &Action) ->
 
 fn write_apply_actions_fn(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
-    let terms = query_action.query_terms_used_in_actions(signature);
+    let terms = query_action.query_terms_used_in_actions(module);
     let unpack_args = terms.keys().format_with(", ", |tm, f| {
         let tm = tm.0;
         f(&format_args!("tm{tm}"))
@@ -953,7 +951,7 @@ fn write_apply_actions_fn(
                 let QueryMatch{axiom_index}{{{unpack_args}}} = query_match;
     "}?;
     for action in query_action.actions.iter() {
-        write_action(out, signature, action)?;
+        write_action(out, module, action)?;
     }
     writedoc! {out, "
             }}
@@ -963,7 +961,7 @@ fn write_apply_actions_fn(
 
 fn write_apply_functionality_fn(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     function: &Function,
 ) -> io::Result<()> {
     let function_snake = function.name.to_case(Snake);
@@ -976,19 +974,19 @@ fn write_apply_functionality_fn(
         lhs: FlatTerm(0),
         rhs: FlatTerm(1),
     };
-    write_action(out, signature, &action)?;
+    write_action(out, module, &action)?;
     writedoc! {out, "
             }}
         }}
     "}
 }
 
-fn write_forget_dirt_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
-    let relations = signature.relations().format_with("\n", |(relation, _), f| {
+fn write_forget_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let relations = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!("self.{relation_snake}.drop_dirt();"))
     });
-    let sorts = signature.iter_sorts().format_with("\n", |sort, f| {
+    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
         f(&format_args!("self.{sort_snake}_dirty.clear();"))
     });
@@ -1001,8 +999,8 @@ fn write_forget_dirt_fn(out: &mut impl Write, signature: &Signature) -> io::Resu
     "}
 }
 
-fn write_insert_new_tuples_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
-    let relation_tuples = signature.relations().format_with("\n", |(relation, _), f| {
+fn write_insert_new_tuples_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let relation_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!(
             "
@@ -1021,7 +1019,7 @@ fn write_insert_new_tuples_fn(out: &mut impl Write, signature: &Signature) -> io
 
 fn write_close_fn(
     out: &mut impl Write,
-    signature: &Signature,
+    module: &Module,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     let collect_query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
@@ -1029,7 +1027,7 @@ fn write_close_fn(
             "            self.collect_query_matches_{i}(&mut data);"
         ))
     });
-    let collect_functionality_matches = signature.iter_functions().format_with("\n", |func, f| {
+    let collect_functionality_matches = module.iter_functions().format_with("\n", |func, f| {
         let func_snake = func.name.to_case(Snake);
         f(&format_args!(
             "            self.collect_functionality_matches_{func_snake}(&mut data);"
@@ -1048,7 +1046,7 @@ fn write_close_fn(
         .format_with("\n", |i, f| {
             f(&format_args!("        self.apply_actions_{i}(&mut data);"))
         });
-    let apply_functionality = signature.iter_functions().format_with("\n", |function, f| {
+    let apply_functionality = module.iter_functions().format_with("\n", |function, f| {
         let function_snake = function.name.to_case(Snake);
         f(&format_args!(
             "            self.apply_functionality_{function_snake}(&mut data);"
@@ -1080,17 +1078,17 @@ fn write_close_fn(
     "}
 }
 
-fn write_new_fn(out: &mut impl Write, signature: &Signature) -> io::Result<()> {
+fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn new() -> Self {{\n")?;
     write!(out, "Self {{\n")?;
-    for sort in signature.iter_sorts() {
+    for sort in module.iter_sorts() {
         let sort_snake = sort.name.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
-    for (relation, _) in signature.relations() {
+    for (relation, _) in module.relations() {
         let relation_snake = relation.to_case(Snake);
         write!(out, "{relation_snake}: {relation}Table::new(),")?;
     }
@@ -1134,15 +1132,15 @@ fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> 
     "}
 }
 
-fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) -> io::Result<()> {
+fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io::Result<()> {
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
-    for sort in signature.iter_sorts() {
+    for sort in module.iter_sorts() {
         write_sort_fields(out, &sort.name)?;
         write!(out, "\n")?;
     }
 
-    for (relation, _) in signature.relations() {
+    for (relation, _) in module.relations() {
         let relation_snake = relation.to_case(Snake);
         write!(out, "  {relation_snake}: {relation}Table,")?;
     }
@@ -1155,52 +1153,48 @@ fn write_theory_struct(out: &mut impl Write, name: &str, signature: &Signature) 
 fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
-    signature: &Signature,
+    module: &Module,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
-    for sort in signature.iter_sorts() {
+    for sort in module.iter_sorts() {
         write_new_element(out, &sort.name)?;
         write_iter_sort_fn(out, &sort.name)?;
         write_sort_root_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
-    for (rel, arity) in signature.relations() {
+    for (rel, arity) in module.relations() {
         write_pub_iter_fn(out, rel)?;
         write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
     }
 
-    write_new_fn(out, signature)?;
+    write_new_fn(out, module)?;
     write!(out, "\n")?;
 
-    write_is_dirty_fn(out, signature)?;
+    write_is_dirty_fn(out, module)?;
     write!(out, "\n")?;
 
     for (i, query_action) in query_actions.iter().enumerate() {
-        write_collect_query_matches_fn(out, signature, query_action, i)?;
-        write_apply_actions_fn(out, signature, query_action, i)?;
+        write_collect_query_matches_fn(out, module, query_action, i)?;
+        write_apply_actions_fn(out, module, query_action, i)?;
     }
-    for function in signature.iter_functions() {
+    for function in module.iter_functions() {
         write_collect_functionality_matches_fn(out, function)?;
-        write_apply_functionality_fn(out, signature, function)?;
+        write_apply_functionality_fn(out, module, function)?;
         write_define_fn(out, function)?;
     }
 
-    write_forget_dirt_fn(out, signature)?;
-    write_insert_new_tuples_fn(out, signature)?;
-    write_close_fn(out, signature, query_actions)?;
+    write_forget_dirt_fn(out, module)?;
+    write_insert_new_tuples_fn(out, module)?;
+    write_close_fn(out, module, query_actions)?;
 
     write!(out, "}}\n")?;
     Ok(())
 }
 
-fn write_theory_display_impl(
-    out: &mut impl Write,
-    name: &str,
-    signature: &Signature,
-) -> io::Result<()> {
-    let els = signature.iter_sorts().format_with("", |sort, f| {
+fn write_theory_display_impl(out: &mut impl Write, name: &str, module: &Module) -> io::Result<()> {
+    let els = module.iter_sorts().format_with("", |sort, f| {
         let sort_camel = &sort.name;
         let sort_snake = sort.name.to_case(Snake);
         let modify_table = formatdoc! {"
@@ -1217,7 +1211,7 @@ fn write_theory_display_impl(
             "self.{sort_snake}_equalities.class_table().{modify_table}.fmt(f)?;"
         ))
     });
-    let rels = signature.relations().format_with("", |(rel, _), f| {
+    let rels = module.relations().format_with("", |(rel, _), f| {
         let rel_snake = rel.to_case(Snake);
         f(&format_args!("self.{rel_snake}.fmt(f)?;"))
     });
@@ -1236,20 +1230,20 @@ fn write_theory_display_impl(
 pub fn write_module(
     out: &mut impl Write,
     name: &str,
-    signature: &Signature,
+    module: &Module,
     query_actions: &[QueryAction],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for sort in signature.iter_sorts() {
+    for sort in module.iter_sorts() {
         write_sort_struct(out, &sort.name)?;
         write_sort_impl(out, &sort.name)?;
     }
     write!(out, "\n")?;
 
-    for (rel, arity) in signature.relations() {
+    for (rel, arity) in module.relations() {
         write_relation_struct(out, rel, &arity)?;
         let index = index_selection.get(rel).unwrap();
         write_table_struct(out, rel, &arity, index)?;
@@ -1259,17 +1253,17 @@ pub fn write_module(
     write!(out, "\n")?;
 
     for (i, qa) in query_actions.iter().enumerate() {
-        write_query_match_struct(out, signature, qa, i)?;
+        write_query_match_struct(out, module, qa, i)?;
         write!(out, "\n")?;
     }
 
-    write_close_data_struct(out, signature, query_actions)?;
-    write_close_data_impl(out, signature, query_actions)?;
+    write_close_data_struct(out, module, query_actions)?;
+    write_close_data_impl(out, module, query_actions)?;
     write!(out, "\n")?;
 
-    write_theory_struct(out, name, signature)?;
-    write_theory_impl(out, name, signature, query_actions)?;
-    write_theory_display_impl(out, name, signature)?;
+    write_theory_struct(out, name, module)?;
+    write_theory_impl(out, name, module, query_actions)?;
+    write_theory_display_impl(out, name, module)?;
 
     Ok(())
 }

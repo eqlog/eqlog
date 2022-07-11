@@ -1,9 +1,7 @@
 use crate::ast::*;
 use crate::error::*;
-use crate::signature::Signature;
+use crate::module::*;
 use std::iter::once;
-use crate::analysis::check_semantically;
-use crate::unification::TermMap;
 use convert_case::{Case, Casing};
 use std::mem::swap;
 
@@ -155,31 +153,26 @@ QueryDecl: UserQuery = {
     }
 }
 
-pub Theory: (Signature, Vec<(Axiom, TermMap<String>)>, Vec<UserQuery>) = {
-    () => (Signature::new(), vec![], vec![]),
-    <mut theory: Theory> <sort: SortDecl> =>? {
-        let (ref mut sig, _, _) = &mut theory;
-        sig.add_sort(sort)?;
-        Ok(theory)
+pub Module: Module = {
+    () => Module::new(),
+    <mut module: Module> <sort: SortDecl> =>? {
+        module.add_sort(sort)?;
+        Ok(module)
     },
-    <mut theory: Theory> <pred: PredicateDecl> =>? {
-        let (ref mut sig, _, _) = &mut theory;
-        sig.add_predicate(pred)?;
-        Ok(theory)
+    <mut module: Module> <pred: PredicateDecl> =>? {
+        module.add_predicate(pred)?;
+        Ok(module)
     },
-    <mut theory: Theory> <func: FunctionDecl> =>? {
-        let (ref mut sig, _, _) = &mut theory;
-        sig.add_function(func)?;
-        Ok(theory)
+    <mut module: Module> <func: FunctionDecl> =>? {
+        module.add_function(func)?;
+        Ok(module)
     },
-    <mut theory: Theory> <ax: AxiomDecl> =>? {
-        let (ref sig, ref mut axioms, _) = &mut theory;
-        let sorts = check_semantically(&sig, &ax.sequent)?;
-        axioms.push((ax, sorts));
-        Ok(theory)
+    <mut module: Module> <axiom: AxiomDecl> =>? { 
+        module.add_axiom(axiom);
+        Ok(module)
     },
-    <mut theory: Theory> <query: QueryDecl> =>? {
-        let (ref sig, ref mut axioms, _) = &mut theory;
-        Ok(theory)
+    <mut module: Module> <query: QueryDecl> =>? {
+				module.add_query(query);
+        Ok(module)
     },
 }

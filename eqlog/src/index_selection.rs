@@ -1,5 +1,5 @@
+use crate::module::Module;
 use crate::query_action::*;
-use crate::signature::Signature;
 use maplit::hashset;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -90,15 +90,15 @@ impl IndexSpec {
 // Maps relation name and query spec to an index for the relation that can serve the query.
 pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
-pub fn select_indices(signature: &Signature, query_actions: &[QueryAction]) -> IndexSelection {
+pub fn select_indices(module: &Module, query_actions: &[QueryAction]) -> IndexSelection {
     // Maps relations to tuple of arity.len() and set of collected query specs.
-    let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> = signature
+    let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> = module
         .relations()
         .map(|(rel, arity)| (rel.to_string(), (arity.len(), hashset! {QuerySpec::new()})))
         .collect();
 
     // Add indices for (implicit) functionality axioms.
-    for func in signature.iter_functions() {
+    for func in module.iter_functions() {
         let spec = QuerySpec {
             projections: (0..func.dom.len()).collect(),
             diagonals: BTreeSet::new(),
@@ -224,25 +224,28 @@ mod tests {
         "Signature".to_string()
     }
 
-    fn category_signature() -> Signature {
-        let mut sig = Signature::new();
-        sig.add_sort(Sort::new(obj())).unwrap();
-        sig.add_sort(Sort::new(mor())).unwrap();
-        sig.add_function(Function::new(comp(), vec![mor(), mor()], mor()))
+    fn category_signature() -> Module {
+        let mut module = Signature::new();
+        module.add_sort(Sort::new(obj())).unwrap();
+        module.add_sort(Sort::new(mor())).unwrap();
+        module
+            .add_function(Function::new(comp(), vec![mor(), mor()], mor()))
             .unwrap();
-        sig.add_function(Function::new(id(), vec![obj()], mor()))
+        module
+            .add_function(Function::new(id(), vec![obj()], mor()))
             .unwrap();
-        sig.add_predicate(Predicate::new(signature(), vec![obj(), mor(), obj()]))
+        module
+            .add_predicate(Predicate::new(signature(), vec![obj(), mor(), obj()]))
             .unwrap();
-        sig
+        module
     }
 
-    fn check_well_formed_index_selection(signature: &Signature, index_selection: &IndexSelection) {
-        let sig_rels: HashSet<&str> = signature.relations().map(|(name, _)| name).collect();
+    fn check_well_formed_index_selection(module: &Module, index_selection: &IndexSelection) {
+        let mod_rels: HashSet<&str> = module.relations().map(|(name, _)| name).collect();
         let sel_rels: HashSet<&str> = index_selection.keys().map(|s| s.as_str()).collect();
         assert_eq!(sel_rels, sig_rels);
 
-        for (rel, arity) in signature.relations() {
+        for (rel, arity) in module.relations() {
             for (query, index) in index_selection.get(rel).unwrap().iter() {
                 // `index.order` is a permutation of [0, arity.len()).
                 assert_eq!(index.order.len(), arity.len());

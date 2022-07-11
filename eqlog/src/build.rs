@@ -3,10 +3,9 @@ use crate::error::*;
 use crate::flat_ast::*;
 use crate::grammar::*;
 use crate::index_selection::*;
+use crate::module::*;
 use crate::query_action::*;
 use crate::rust_gen::*;
-use crate::signature::*;
-use crate::unification::*;
 use convert_case::{Case, Casing};
 use std::env;
 use std::error::Error;
@@ -33,10 +32,8 @@ fn whipe_comments(source: &str) -> String {
     lines.join("\n")
 }
 
-fn parse(
-    source: &str,
-) -> Result<(Signature, Vec<(Axiom, TermMap<String>)>, Vec<UserQuery>), CompileError> {
-    TheoryParser::new()
+fn parse(source: &str) -> Result<Module, CompileError> {
+    ModuleParser::new()
         .parse(&mut TermUniverse::new(), source)
         .map_err(CompileError::from)
 }
@@ -75,21 +72,20 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
 fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
     let source = fs::read_to_string(in_file)?;
     let source_without_comments = whipe_comments(&source);
-    let (sig, axioms, _) =
-        parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
-            error,
-            source,
-            source_path: in_file.into(),
-        })?;
+    let module = parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
+        error,
+        source,
+        source_path: in_file.into(),
+    })?;
 
-    let query_actions: Vec<QueryAction> = axioms
-        .iter()
+    let query_actions: Vec<QueryAction> = module
+        .iter_axioms()
         .map(|(axiom, term_sorts)| {
             let flat_sequent = flatten_sequent(&axiom.sequent, term_sorts);
-            QueryAction::new(&sig, &flat_sequent)
+            QueryAction::new(&module, &flat_sequent)
         })
         .collect();
-    let index_selection = select_indices(&sig, &query_actions);
+    let index_selection = select_indices(&module, &query_actions);
     let theory_name = in_file
         .file_stem()
         .unwrap()
@@ -100,7 +96,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     write_module(
         &mut result,
         &theory_name,
-        &sig,
+        &module,
         &query_actions,
         &index_selection,
     )?;
