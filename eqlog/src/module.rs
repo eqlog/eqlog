@@ -233,6 +233,7 @@ impl Module {
                     sorts.union(*lhs, *rhs);
                 }
                 AtomData::Defined(tm, Some(sort)) => {
+                    let _ = self.get_sort_at(sort, atom.location)?;
                     sorts[*tm].insert(sort.clone());
                 }
                 AtomData::Defined(_, None) => (),
