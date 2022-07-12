@@ -225,7 +225,7 @@ mod tests {
     }
 
     fn category_signature() -> Module {
-        let mut module = Signature::new();
+        let mut module = Module::new();
         module.add_sort(Sort::new(obj())).unwrap();
         module.add_sort(Sort::new(mor())).unwrap();
         module
@@ -243,7 +243,7 @@ mod tests {
     fn check_well_formed_index_selection(module: &Module, index_selection: &IndexSelection) {
         let mod_rels: HashSet<&str> = module.relations().map(|(name, _)| name).collect();
         let sel_rels: HashSet<&str> = index_selection.keys().map(|s| s.as_str()).collect();
-        assert_eq!(sel_rels, sig_rels);
+        assert_eq!(sel_rels, mod_rels);
 
         for (rel, arity) in module.relations() {
             for (query, index) in index_selection.get(rel).unwrap().iter() {

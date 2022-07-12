@@ -103,10 +103,6 @@ impl TermUniverse {
     pub fn iter_terms(&self) -> impl Iterator<Item = Term> {
         (0..self.0.len()).map(Term)
     }
-    #[cfg(test)]
-    pub fn without_locations(&self) -> TermUniverse {
-        TermUniverse(self.0.iter().cloned().map(|(tm, _)| (tm, None)).collect())
-    }
 }
 
 struct SubtermIterator<'a> {
@@ -170,14 +166,6 @@ pub struct Atom {
 }
 
 impl Atom {
-    #[cfg(test)]
-    pub fn without_locations(&self) -> Self {
-        Atom {
-            data: self.data.clone(),
-            location: None,
-        }
-    }
-
     pub fn iter_subterms<'a>(
         &'a self,
         universe: &'a TermUniverse,
@@ -243,22 +231,6 @@ impl Sequent {
             premise,
             conclusion,
         })
-    }
-    #[cfg(test)]
-    pub fn without_locations(&self) -> Self {
-        Sequent {
-            universe: self.universe.without_locations(),
-            premise: self
-                .premise
-                .iter()
-                .map(|atom| atom.without_locations())
-                .collect(),
-            conclusion: self
-                .conclusion
-                .iter()
-                .map(|atom| atom.without_locations())
-                .collect(),
-        }
     }
 }
 
