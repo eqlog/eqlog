@@ -381,13 +381,13 @@ fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
     Ok(())
 }
 
-fn check_variable_case(sequent: &Sequent) -> Result<(), CompileError> {
-    for tm in sequent.universe.iter_terms() {
-        if let TermData::Variable(v) = sequent.universe.data(tm) {
+fn check_variable_case(universe: &TermUniverse) -> Result<(), CompileError> {
+    for tm in universe.iter_terms() {
+        if let TermData::Variable(v) = universe.data(tm) {
             if *v != v.to_case(Case::Snake) {
                 return Err(CompileError::VariableNotSnakeCase {
                     name: v.into(),
-                    location: sequent.universe.location(tm),
+                    location: universe.location(tm),
                 });
             }
         }
@@ -395,14 +395,14 @@ fn check_variable_case(sequent: &Sequent) -> Result<(), CompileError> {
     Ok(())
 }
 
-fn check_variable_occurence(sequent: &Sequent) -> Result<(), CompileError> {
+fn check_variable_occurence(universe: &TermUniverse) -> Result<(), CompileError> {
     let mut occ_nums: HashMap<&str, (usize, Option<Location>)> = HashMap::new();
-    for tm in sequent.universe.iter_terms() {
-        if let TermData::Variable(v) = sequent.universe.data(tm) {
+    for tm in universe.iter_terms() {
+        if let TermData::Variable(v) = universe.data(tm) {
             if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {
                 *n += 1;
             } else {
-                let loc = sequent.universe.location(tm);
+                let loc = universe.location(tm);
                 occ_nums.insert(v, (1, loc));
             }
         }
@@ -422,8 +422,8 @@ impl Module {
     pub fn add_axiom(&mut self, axiom: Axiom) -> Result<(), CompileError> {
         let sorts = self.infer_sorts(&axiom.sequent)?;
         check_epimorphism(&axiom.sequent)?;
-        check_variable_case(&axiom.sequent)?;
-        check_variable_occurence(&axiom.sequent)?;
+        check_variable_case(&axiom.sequent.universe)?;
+        check_variable_occurence(&axiom.sequent.universe)?;
         self.axioms.push((axiom, sorts));
         Ok(())
     }
