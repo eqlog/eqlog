@@ -272,6 +272,7 @@ pub struct Axiom {
 pub struct QueryArgument {
     pub variable: Term,
     pub sort: Option<String>,
+    pub location: Option<Location>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

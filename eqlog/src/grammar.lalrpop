@@ -110,9 +110,10 @@ AxiomDecl: Axiom = {
 }
 
 QueryArgument: QueryArgument = {
-    <l: @L> <var: Id> <r: @R> <sort: (":" <Id>)?> => QueryArgument {
-        variable: universe.new_term(TermData::Variable(var), Some(Location(l, r))),
+    <l: @L> <var: Id> <r0: @R> <sort: (":" <Id>)?> <r1: @R> => QueryArgument {
+        variable: universe.new_term(TermData::Variable(var), Some(Location(l, r0))),
         sort,
+        location: Some(Location(l, r1)),
     }
 }
 

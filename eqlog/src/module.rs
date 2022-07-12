@@ -180,12 +180,6 @@ impl Module {
         self.insert_symbol(Symbol::Function(func))
     }
 
-    pub fn add_query(&mut self, query: UserQuery) -> Result<(), CompileError> {
-        eprintln!("Warning: Queries are not implemented");
-        // TODO: Implement them.
-        self.insert_symbol(Symbol::Query(query))
-    }
-
     // Functions to implement sort inference/checking.
     fn collect_function_application_requirements<SortMap>(
         &self,
@@ -309,6 +303,43 @@ impl Module {
         )?;
 
         Self::into_unique_sorts(&sequent.universe, sorts)
+    }
+
+    fn collect_query_argument_requirements<'a, SortMap>(
+        &self,
+        arguments: &[QueryArgument],
+        sorts: &mut SortMap,
+    ) -> Result<(), CompileError>
+    where
+        SortMap: AbstractTermUnification<HashSet<String>>,
+    {
+        for arg in arguments.iter() {
+            if let Some(sort) = &arg.sort {
+                let _ = self.get_sort_at(sort, arg.location)?;
+                sorts[arg.variable].insert(sort.clone());
+            }
+        }
+        Ok(())
+    }
+
+    fn infer_query_sorts(&self, query: &UserQuery) -> Result<TermMap<String>, CompileError> {
+        let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
+            lhs.extend(rhs);
+            lhs
+        };
+
+        let mut sorts = TermUnification::new(
+            &query.universe,
+            vec![HashSet::new(); query.universe.len()],
+            unify_sorts,
+        );
+
+        self.collect_query_argument_requirements(&query.arguments, &mut sorts)?;
+        self.collect_function_application_requirements(&query.universe, &mut sorts)?;
+        if let Some(where_formula) = &query.where_formula {
+            self.collect_atom_requirements(where_formula, &mut sorts)?;
+        }
+        Self::into_unique_sorts(&query.universe, sorts)
     }
 
     fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
@@ -460,6 +491,14 @@ impl Module {
         Self::check_variable_case(&axiom.sequent.universe)?;
         Self::check_variable_occurence(&axiom.sequent.universe)?;
         self.axioms.push((axiom, sorts));
+        Ok(())
+    }
+
+    pub fn add_query(&mut self, query: UserQuery) -> Result<(), CompileError> {
+        let _ = self.infer_query_sorts(&query)?;
+        Self::check_variable_case(&query.universe)?;
+        Self::check_variable_occurence(&query.universe)?;
+        self.insert_symbol(Symbol::Query(query))?;
         Ok(())
     }
 }
