@@ -5,12 +5,15 @@ use convert_case::{Case, Casing};
 use std::collections::{HashMap, HashSet};
 use std::iter::once;
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Symbol {
     Sort(Sort),
     Predicate(Predicate),
     Function(Function),
-    Query(UserQuery),
+    Query {
+        ast: UserQuery,
+        term_sorts: TermMap<String>,
+    },
 }
 
 impl Symbol {
@@ -19,7 +22,7 @@ impl Symbol {
             Symbol::Sort(_) => SymbolKind::Sort,
             Symbol::Predicate(_) => SymbolKind::Predicate,
             Symbol::Function(_) => SymbolKind::Function,
-            Symbol::Query(_) => SymbolKind::Query,
+            Symbol::Query { .. } => SymbolKind::Query,
         }
     }
     pub fn name(&self) -> &str {
@@ -28,7 +31,7 @@ impl Symbol {
             Sort(s) => &s.name,
             Predicate(p) => &p.name,
             Function(f) => &f.name,
-            Query(q) => &q.name,
+            Query { ast, .. } => &ast.name,
         }
     }
     pub fn location(&self) -> Option<Location> {
@@ -36,7 +39,7 @@ impl Symbol {
             Symbol::Sort(Sort { location, .. }) => *location,
             Symbol::Predicate(Predicate { location, .. }) => *location,
             Symbol::Function(Function { location, .. }) => *location,
-            Symbol::Query(UserQuery { location, .. }) => *location,
+            Symbol::Query { ast, .. } => ast.location,
         }
     }
 }
@@ -176,7 +179,7 @@ impl Module {
             Symbol::Function(Function { dom, cod, .. }) => {
                 Some(dom.iter().chain(once(cod)).map(|s| s.as_str()).collect())
             }
-            Symbol::Query(_) => None,
+            Symbol::Query { .. } => None,
         }
     }
 
@@ -531,10 +534,13 @@ impl Module {
     }
 
     pub fn add_query(&mut self, query: UserQuery) -> Result<(), CompileError> {
-        let _ = self.infer_query_sorts(&query)?;
+        let term_sorts = self.infer_query_sorts(&query)?;
         Self::check_variable_case(&query.universe)?;
         Self::check_variable_occurence(&query.universe)?;
-        self.insert_symbol(Symbol::Query(query))?;
+        self.insert_symbol(Symbol::Query {
+            ast: query,
+            term_sorts,
+        })?;
         Ok(())
     }
 }
