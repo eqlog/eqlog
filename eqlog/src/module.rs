@@ -186,51 +186,54 @@ impl Module {
         self.insert_symbol(Symbol::Query(query))
     }
 
-    fn infer_sorts(&self, sequent: &Sequent) -> Result<TermMap<String>, CompileError> {
-        let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
-            lhs.extend(rhs);
-            lhs
-        };
-
-        let mut unification = TermUnification::new(
-            &sequent.universe,
-            vec![HashSet::new(); sequent.universe.len()],
-            unify_sorts,
-        );
-        // Merge variables of the same name.
-        unification.congruence_closure();
-
-        // Assign sorts based on application of functions.
-        for tm in sequent.universe.iter_terms() {
-            match sequent.universe.data(tm) {
+    // Functions to implement sort inference/checking.
+    fn collect_function_application_requirements<SortMap>(
+        &self,
+        universe: &TermUniverse,
+        sorts: &mut SortMap,
+    ) -> Result<(), CompileError>
+    where
+        SortMap: AbstractTermUnification<HashSet<String>>,
+    {
+        for tm in universe.iter_terms() {
+            match universe.data(tm) {
                 TermData::Application(f, args) => {
-                    let loc = sequent.universe.location(tm);
+                    let loc = universe.location(tm);
                     let Function { dom, cod, .. } = self.get_function_at(f, loc)?;
                     if args.len() != dom.len() {
                         return Err(CompileError::FunctionArgumentNumber {
                             function: f.clone(),
                             expected: dom.len(),
                             got: args.len(),
-                            location: sequent.universe.location(tm),
+                            location: universe.location(tm),
                         });
                     }
                     for (arg, sort) in args.iter().copied().zip(dom) {
-                        unification[arg].insert(sort.clone());
+                        sorts[arg].insert(sort.clone());
                     }
-                    unification[tm].insert(cod.clone());
+                    sorts[tm].insert(cod.clone());
                 }
                 TermData::Wildcard | TermData::Variable(_) => (),
             }
         }
-
-        // Assign sorts based on atoms.
-        for atom in sequent.premise.iter().chain(sequent.conclusion.iter()) {
+        Ok(())
+    }
+    fn collect_atom_requirements<'a, AtomIterator, SortMap>(
+        &self,
+        atoms: AtomIterator,
+        sorts: &mut SortMap,
+    ) -> Result<(), CompileError>
+    where
+        SortMap: AbstractTermUnification<HashSet<String>>,
+        AtomIterator: IntoIterator<Item = &'a Atom>,
+    {
+        for atom in atoms.into_iter() {
             match &atom.data {
                 AtomData::Equal(lhs, rhs) => {
-                    unification.union(*lhs, *rhs);
+                    sorts.union(*lhs, *rhs);
                 }
                 AtomData::Defined(tm, Some(sort)) => {
-                    unification[*tm].insert(sort.clone());
+                    sorts[*tm].insert(sort.clone());
                 }
                 AtomData::Defined(_, None) => (),
                 AtomData::Predicate(p, args) => {
@@ -244,186 +247,217 @@ impl Module {
                         });
                     }
                     for (arg, sort) in args.iter().copied().zip(arity) {
-                        unification[arg].insert(sort.clone());
+                        sorts[arg].insert(sort.clone());
                     }
                 }
             }
         }
+        Ok(())
+    }
+    // Check that all terms have precisely one assigned sort, and return a map assigning to each
+    // term its unique sort.
+    fn into_unique_sorts<SortMap>(
+        universe: &TermUniverse,
+        mut sorts: SortMap,
+    ) -> Result<TermMap<String>, CompileError>
+    where
+        SortMap: AbstractTermUnification<HashSet<String>>,
+    {
+        // Merge all syntactically equal terms (i.e. variables with the same name and all terms
+        // implied by functionality/right-uniqueness of functions.
+        sorts.congruence_closure();
 
-        // Check that all terms have precisely one assigned sort.
-        for tm in sequent.universe.iter_terms() {
-            match unification[tm].len() {
+        for tm in universe.iter_terms() {
+            match sorts[tm].len() {
                 0 => {
                     return Err(CompileError::NoSort {
-                        location: sequent.universe.location(tm),
+                        location: universe.location(tm),
                     })
                 }
                 1 => (),
                 _ => {
                     return Err(CompileError::ConflictingSorts {
-                        location: sequent.universe.location(tm),
-                        sorts: unification[tm].iter().cloned().collect(),
+                        location: universe.location(tm),
+                        sorts: sorts[tm].iter().cloned().collect(),
+                    })
+                }
+            }
+        }
+        let sorts = sorts
+            .freeze()
+            .map(|sorts| sorts.into_iter().next().unwrap());
+        Ok(sorts)
+    }
+
+    fn infer_sequent_sorts(&self, sequent: &Sequent) -> Result<TermMap<String>, CompileError> {
+        let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
+            lhs.extend(rhs);
+            lhs
+        };
+
+        let mut sorts = TermUnification::new(
+            &sequent.universe,
+            vec![HashSet::new(); sequent.universe.len()],
+            unify_sorts,
+        );
+
+        self.collect_function_application_requirements(&sequent.universe, &mut sorts)?;
+        self.collect_atom_requirements(
+            sequent.premise.iter().chain(sequent.conclusion.iter()),
+            &mut sorts,
+        )?;
+
+        Self::into_unique_sorts(&sequent.universe, sorts)
+    }
+
+    fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
+        let universe = &sequent.universe;
+        let mut has_occurred = TermUnification::new(
+            universe,
+            vec![false; universe.len()],
+            |lhs_occured, rhs_occured| lhs_occured || rhs_occured,
+        );
+
+        // Set all premise terms to have occurred.
+        for tm in sequent
+            .premise
+            .iter()
+            .map(|atom| atom.iter_subterms(universe))
+            .flatten()
+        {
+            has_occurred[tm] = true;
+        }
+
+        // Unify terms occuring in equalities in premise.
+        for atom in &sequent.premise {
+            use AtomData::*;
+            match &atom.data {
+                Equal(lhs, rhs) => {
+                    has_occurred.union(*lhs, *rhs);
+                }
+                Defined(_, _) | Predicate(_, _) => (),
+            }
+        }
+
+        has_occurred.congruence_closure();
+
+        // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
+        // premise.
+        for tm in sequent
+            .conclusion
+            .iter()
+            .map(|atom| atom.iter_subterms(universe))
+            .flatten()
+        {
+            match universe.data(tm) {
+                TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
+                TermData::Application(_, _) => (),
+                TermData::Variable(var) => {
+                    return Err(CompileError::VariableNotInPremise {
+                        var: var.clone(),
+                        location: universe.location(tm),
+                    })
+                }
+                TermData::Wildcard => {
+                    return Err(CompileError::WildcardInConclusion {
+                        location: universe.location(tm),
                     })
                 }
             }
         }
 
-        let sorts = unification
-            .freeze()
-            .map(|sorts| sorts.into_iter().next().unwrap());
-        Ok(sorts)
-    }
-}
+        for atom in &sequent.conclusion {
+            use AtomData::*;
+            match &atom.data {
+                Equal(lhs, rhs) => {
+                    let lhs = *lhs;
+                    let rhs = *rhs;
+                    if !has_occurred[lhs] && !has_occurred[rhs] {
+                        return Err(CompileError::ConclusionEqualityOfNewTerms {
+                            location: atom.location,
+                        });
+                    }
 
-fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
-    let universe = &sequent.universe;
-    let mut has_occurred = TermUnification::new(
-        universe,
-        vec![false; universe.len()],
-        |lhs_occured, rhs_occured| lhs_occured || rhs_occured,
-    );
-
-    // Set all premise terms to have occurred.
-    for tm in sequent
-        .premise
-        .iter()
-        .map(|atom| atom.iter_subterms(universe))
-        .flatten()
-    {
-        has_occurred[tm] = true;
-    }
-
-    // Unify terms occuring in equalities in premise.
-    for atom in &sequent.premise {
-        use AtomData::*;
-        match &atom.data {
-            Equal(lhs, rhs) => {
-                has_occurred.union(*lhs, *rhs);
-            }
-            Defined(_, _) | Predicate(_, _) => (),
-        }
-    }
-
-    has_occurred.congruence_closure();
-
-    // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
-    // premise.
-    for tm in sequent
-        .conclusion
-        .iter()
-        .map(|atom| atom.iter_subterms(universe))
-        .flatten()
-    {
-        match universe.data(tm) {
-            TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
-            TermData::Application(_, _) => (),
-            TermData::Variable(var) => {
-                return Err(CompileError::VariableNotInPremise {
-                    var: var.clone(),
-                    location: universe.location(tm),
-                })
-            }
-            TermData::Wildcard => {
-                return Err(CompileError::WildcardInConclusion {
-                    location: universe.location(tm),
-                })
-            }
-        }
-    }
-
-    for atom in &sequent.conclusion {
-        use AtomData::*;
-        match &atom.data {
-            Equal(lhs, rhs) => {
-                let lhs = *lhs;
-                let rhs = *rhs;
-                if !has_occurred[lhs] && !has_occurred[rhs] {
-                    return Err(CompileError::ConclusionEqualityOfNewTerms {
-                        location: atom.location,
-                    });
-                }
-
-                if !has_occurred[lhs] || !has_occurred[rhs] {
-                    let new = if has_occurred[lhs] { rhs } else { lhs };
-                    use TermData::*;
-                    match universe.data(new) {
-                        Variable(_) | Wildcard => {
-                            // Variables or Wildcards should've been checked earlier.
-                            debug_assert!(has_occurred[new]);
-                        }
-                        Application(_, args) => {
-                            if let Some(arg) = args.iter().find(|arg| !has_occurred[**arg]) {
-                                return Err(CompileError::ConclusionEqualityArgNew {
-                                    location: universe.location(*arg),
-                                });
+                    if !has_occurred[lhs] || !has_occurred[rhs] {
+                        let new = if has_occurred[lhs] { rhs } else { lhs };
+                        use TermData::*;
+                        match universe.data(new) {
+                            Variable(_) | Wildcard => {
+                                // Variables or Wildcards should've been checked earlier.
+                                debug_assert!(has_occurred[new]);
+                            }
+                            Application(_, args) => {
+                                if let Some(arg) = args.iter().find(|arg| !has_occurred[**arg]) {
+                                    return Err(CompileError::ConclusionEqualityArgNew {
+                                        location: universe.location(*arg),
+                                    });
+                                }
                             }
                         }
                     }
-                }
 
-                has_occurred.union(lhs, rhs);
-                has_occurred.congruence_closure();
+                    has_occurred.union(lhs, rhs);
+                    has_occurred.congruence_closure();
+                }
+                Defined(_, _) => (),
+                Predicate(_, args) => {
+                    if let Some(arg) = args.iter().copied().find(|arg| !has_occurred[*arg]) {
+                        return Err(CompileError::ConclusionPredicateArgNew {
+                            location: universe.location(arg),
+                        });
+                    }
+                }
             }
-            Defined(_, _) => (),
-            Predicate(_, args) => {
-                if let Some(arg) = args.iter().copied().find(|arg| !has_occurred[*arg]) {
-                    return Err(CompileError::ConclusionPredicateArgNew {
-                        location: universe.location(arg),
+            for tm in atom.iter_subterms(universe) {
+                has_occurred[tm] = true;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_variable_case(universe: &TermUniverse) -> Result<(), CompileError> {
+        for tm in universe.iter_terms() {
+            if let TermData::Variable(v) = universe.data(tm) {
+                if *v != v.to_case(Case::Snake) {
+                    return Err(CompileError::VariableNotSnakeCase {
+                        name: v.into(),
+                        location: universe.location(tm),
                     });
                 }
             }
         }
-        for tm in atom.iter_subterms(universe) {
-            has_occurred[tm] = true;
-        }
+        Ok(())
     }
 
-    Ok(())
-}
-
-fn check_variable_case(universe: &TermUniverse) -> Result<(), CompileError> {
-    for tm in universe.iter_terms() {
-        if let TermData::Variable(v) = universe.data(tm) {
-            if *v != v.to_case(Case::Snake) {
-                return Err(CompileError::VariableNotSnakeCase {
-                    name: v.into(),
-                    location: universe.location(tm),
+    fn check_variable_occurence(universe: &TermUniverse) -> Result<(), CompileError> {
+        let mut occ_nums: HashMap<&str, (usize, Option<Location>)> = HashMap::new();
+        for tm in universe.iter_terms() {
+            if let TermData::Variable(v) = universe.data(tm) {
+                if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {
+                    *n += 1;
+                } else {
+                    let loc = universe.location(tm);
+                    occ_nums.insert(v, (1, loc));
+                }
+            }
+        }
+        for (name, (n, location)) in occ_nums.into_iter() {
+            if n == 1 {
+                return Err(CompileError::VariableOccursOnlyOnce {
+                    name: name.into(),
+                    location,
                 });
             }
         }
+        Ok(())
     }
-    Ok(())
-}
 
-fn check_variable_occurence(universe: &TermUniverse) -> Result<(), CompileError> {
-    let mut occ_nums: HashMap<&str, (usize, Option<Location>)> = HashMap::new();
-    for tm in universe.iter_terms() {
-        if let TermData::Variable(v) = universe.data(tm) {
-            if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {
-                *n += 1;
-            } else {
-                let loc = universe.location(tm);
-                occ_nums.insert(v, (1, loc));
-            }
-        }
-    }
-    for (name, (n, location)) in occ_nums.into_iter() {
-        if n == 1 {
-            return Err(CompileError::VariableOccursOnlyOnce {
-                name: name.into(),
-                location,
-            });
-        }
-    }
-    Ok(())
-}
-
-impl Module {
     pub fn add_axiom(&mut self, axiom: Axiom) -> Result<(), CompileError> {
-        let sorts = self.infer_sorts(&axiom.sequent)?;
-        check_epimorphism(&axiom.sequent)?;
-        check_variable_case(&axiom.sequent.universe)?;
-        check_variable_occurence(&axiom.sequent.universe)?;
+        let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
+        Self::check_epimorphism(&axiom.sequent)?;
+        Self::check_variable_case(&axiom.sequent.universe)?;
+        Self::check_variable_occurence(&axiom.sequent.universe)?;
         self.axioms.push((axiom, sorts));
         Ok(())
     }

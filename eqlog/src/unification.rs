@@ -39,6 +39,14 @@ impl<Value> TermMap<Value> {
     }
 }
 
+pub trait AbstractTermUnification<Payload>: IndexMut<Term, Output = Payload> {
+    fn root_const(&self, tm: Term) -> Term;
+    fn root(&mut self, tm: Term) -> Term;
+    fn union(&mut self, lhs: Term, rhs: Term) -> &Payload;
+    fn congruence_closure(&mut self);
+    fn freeze(self) -> TermMap<Payload>;
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct TermUnification<'a, Payload, UnionFunction> {
     universe: &'a TermUniverse,
@@ -47,22 +55,13 @@ pub struct TermUnification<'a, Payload, UnionFunction> {
     union: UnionFunction,
 }
 
-impl<'a, Payload, UnionFunction> TermUnification<'a, Payload, UnionFunction>
+impl<'a, Payload, UnionFunction> AbstractTermUnification<Payload>
+    for TermUnification<'a, Payload, UnionFunction>
 where
     UnionFunction: Fn(Payload, Payload) -> Payload,
 {
-    pub fn new(universe: &'a TermUniverse, payloads: Vec<Payload>, union: UnionFunction) -> Self {
-        assert_eq!(universe.len(), payloads.len());
-        TermUnification {
-            universe: universe,
-            parents: (0..universe.len()).collect(),
-            payloads: payloads.into_iter().map(Some).collect(),
-            union,
-        }
-    }
-
     // TODO: Find a way to get rid of this by making `root` take &self.
-    pub fn root_const(&self, tm: Term) -> Term {
+    fn root_const(&self, tm: Term) -> Term {
         let mut i = tm.0;
         while i != self.parents[i] {
             i = self.parents[i];
@@ -71,7 +70,7 @@ where
         Term(root)
     }
 
-    pub fn root(&mut self, tm: Term) -> Term {
+    fn root(&mut self, tm: Term) -> Term {
         let mut i = tm.0;
         while i != self.parents[i] {
             i = self.parents[i];
@@ -86,7 +85,7 @@ where
         Term(root)
     }
 
-    pub fn union(&mut self, lhs: Term, rhs: Term) -> &Payload {
+    fn union(&mut self, lhs: Term, rhs: Term) -> &Payload {
         let lhs_root = self.root(lhs);
         let rhs_root = self.root(rhs);
 
@@ -108,7 +107,7 @@ where
         self.payloads[rhs_root.0].as_ref().unwrap()
     }
 
-    pub fn congruence_closure(&mut self) {
+    fn congruence_closure(&mut self) {
         let mut vars: HashMap<&str, Term> = HashMap::new();
         for tm in self.universe.iter_terms() {
             if let TermData::Variable(s) = self.universe.data(tm) {
@@ -140,7 +139,7 @@ where
         }
     }
 
-    pub fn freeze(mut self) -> TermMap<Payload> {
+    fn freeze(mut self) -> TermMap<Payload> {
         let mut ids = vec![usize::MAX; self.universe.len()];
         let mut values = Vec::new();
         let mut next_id = 0;
@@ -162,6 +161,21 @@ where
         }
 
         TermMap { ids, values }
+    }
+}
+
+impl<'a, Payload, UnionFunction> TermUnification<'a, Payload, UnionFunction>
+where
+    UnionFunction: Fn(Payload, Payload) -> Payload,
+{
+    pub fn new(universe: &'a TermUniverse, payloads: Vec<Payload>, union: UnionFunction) -> Self {
+        assert_eq!(universe.len(), payloads.len());
+        TermUnification {
+            universe: universe,
+            parents: (0..universe.len()).collect(),
+            payloads: payloads.into_iter().map(Some).collect(),
+            union,
+        }
     }
 }
 

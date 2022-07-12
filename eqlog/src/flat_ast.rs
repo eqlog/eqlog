@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::unification::{TermMap, TermUnification};
+use crate::unification::*;
 use std::collections::HashSet;
 use std::iter::once;
 use std::mem::swap;
