@@ -304,38 +304,3 @@ impl Display for SymbolKind {
         })
     }
 }
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub enum Symbol {
-    Sort(Sort),
-    Predicate(Predicate),
-    Function(Function),
-    Query(UserQuery),
-}
-
-impl Symbol {
-    pub fn kind(&self) -> SymbolKind {
-        match self {
-            Symbol::Sort(_) => SymbolKind::Sort,
-            Symbol::Predicate(_) => SymbolKind::Predicate,
-            Symbol::Function(_) => SymbolKind::Function,
-            Symbol::Query(_) => SymbolKind::Query,
-        }
-    }
-    pub fn name(&self) -> &str {
-        use Symbol::*;
-        match self {
-            Sort(s) => &s.name,
-            Predicate(p) => &p.name,
-            Function(f) => &f.name,
-            Query(q) => &q.name,
-        }
-    }
-    pub fn location(&self) -> Option<Location> {
-        match self {
-            Symbol::Sort(Sort { location, .. }) => *location,
-            Symbol::Predicate(Predicate { location, .. }) => *location,
-            Symbol::Function(Function { location, .. }) => *location,
-            Symbol::Query(UserQuery { location, .. }) => *location,
-        }
-    }
-}
