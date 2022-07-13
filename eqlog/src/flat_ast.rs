@@ -66,6 +66,46 @@ impl FlatSequent {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct FlatQuery {
+    pub input_terms: Vec<(FlatTerm, String)>,
+    pub output_terms: Vec<(FlatTerm, String)>,
+    pub query: Vec<FlatAtom>,
+}
+
+#[cfg(debug_assertions)]
+impl FlatQuery {
+    fn check(&self) {
+        let mut occurred: BTreeSet<FlatTerm> = BTreeSet::new();
+        for (tm, _) in self.input_terms.iter() {
+            occurred.insert(*tm);
+        }
+
+        for atom in self.query.iter() {
+            use FlatAtom::*;
+            match atom {
+                Equal(lhs, rhs) => {
+                    assert_ne!(*lhs, *rhs, "FlatAtom::Equal with equal arguments");
+                    occurred.insert(*lhs);
+                    occurred.insert(*rhs);
+                }
+                Relation(_, args) => {
+                    for arg in args.iter().copied() {
+                        occurred.insert(arg);
+                    }
+                }
+                Unconstrained(tm, _) => {
+                    occurred.insert(*tm);
+                }
+            }
+        }
+
+        for (tm, _) in self.output_terms.iter() {
+            assert!(occurred.contains(tm));
+        }
+    }
+}
+
 // Various `TermUnification` types for bookkeeping during emission.
 
 // `NameUnification` keeps track of flat names assigned to terms (if any).
