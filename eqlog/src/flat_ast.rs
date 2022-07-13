@@ -72,7 +72,7 @@ struct Emitter<'a, F, G> {
     flat_names: TermUnification<'a, Option<FlatTerm>, F>,
     name_num: FlatTerm,
     structurally_added: TermUnification<'a, bool, G>,
-    unconstrained: &'a TermMap<bool>,
+    constrained: &'a TermMap<bool>,
     sorts: &'a TermMap<String>,
     flat_atoms: Vec<FlatAtom>,
 }
@@ -101,7 +101,7 @@ where
         use TermData::*;
         match self.universe.data(term) {
             Variable(_) | Wildcard => {
-                if self.unconstrained[term] {
+                if !self.constrained[term] {
                     self.flat_atoms
                         .push(FlatAtom::Unconstrained(name, self.sorts[term].clone()));
                 }
@@ -169,54 +169,86 @@ where
     }
 }
 
-pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequent {
-    let universe = &sequent.universe;
-    let len = universe.len();
-
-    let mut unconstrained = TermUnification::new(universe, vec![true; len], |lhs, rhs| lhs && rhs);
-    let mut flat_names = TermUnification::new(universe, vec![None; len], |lhs, rhs| lhs.or(rhs));
-
-    for tm in sequent
-        .premise
-        .iter()
-        .map(|atom| atom.iter_subterms(universe))
-        .flatten()
-    {
+fn collect_function_application_constrainedness(
+    universe: &TermUniverse,
+    terms: impl IntoIterator<Item = Term>,
+    constrained: &mut impl AbstractTermUnification<bool>,
+) {
+    for tm in terms.into_iter() {
         use TermData::*;
         match universe.data(tm) {
             Variable(_) | Wildcard => (),
             Application(_, args) => {
                 for arg in args.iter().copied() {
-                    unconstrained[arg] = false;
+                    constrained[arg] = true;
                 }
-                unconstrained[tm] = false;
+                constrained[tm] = true;
             }
         }
     }
+}
 
+fn collect_atom_constrainedness<'a>(
+    universe: &TermUniverse,
+    atoms: impl IntoIterator<Item = &'a Atom>,
+    constrained: &mut impl AbstractTermUnification<bool>,
+) {
+    for atom in atoms.into_iter() {
+        collect_function_application_constrainedness(
+            universe,
+            atom.iter_subterms(universe),
+            constrained,
+        );
+
+        use AtomData::*;
+        match &atom.data {
+            Equal(lhs, rhs) => {
+                constrained.union(*lhs, *rhs);
+            }
+            Defined(_, _) => (),
+            Predicate(_, args) => {
+                for arg in args.iter().copied() {
+                    constrained[arg] = true;
+                }
+            }
+        }
+    }
+}
+
+fn constrained_sequent_terms(sequent: &Sequent) -> TermMap<bool> {
+    let mut constrained = TermUnification::new(
+        &sequent.universe,
+        vec![false; sequent.universe.len()],
+        |lhs, rhs| lhs || rhs,
+    );
+
+    collect_atom_constrainedness(&sequent.universe, sequent.premise.iter(), &mut constrained);
+
+    constrained.congruence_closure();
+    constrained.freeze()
+}
+
+pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequent {
+    let universe = &sequent.universe;
+
+    let constrained = constrained_sequent_terms(sequent);
+
+    let mut flat_names =
+        TermUnification::new(universe, vec![None; universe.len()], |lhs, rhs| lhs.or(rhs));
     for atom in &sequent.premise {
         use AtomData::*;
         match &atom.data {
             Equal(lhs, rhs) => {
                 flat_names.union(*lhs, *rhs);
-                unconstrained.union(*lhs, *rhs);
             }
             Defined(_, _) => (),
-            Predicate(_, args) => {
-                for arg in args.iter().copied() {
-                    unconstrained[arg] = false;
-                }
-            }
+            Predicate(_, _) => (),
         }
     }
-
-    unconstrained.congruence_closure();
-    let unconstrained = unconstrained.freeze();
-
     flat_names.congruence_closure();
 
     let mut structurally_added =
-        TermUnification::new(universe, vec![false; len], |lhs, rhs| lhs || rhs);
+        TermUnification::new(universe, vec![false; universe.len()], |lhs, rhs| lhs || rhs);
     structurally_added.congruence_closure();
 
     let mut emitter = Emitter {
@@ -224,7 +256,7 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
         flat_names,
         name_num: FlatTerm(0),
         structurally_added,
-        unconstrained: &unconstrained,
+        constrained: &constrained,
         sorts,
         flat_atoms: vec![],
     };
