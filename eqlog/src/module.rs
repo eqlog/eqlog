@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::error::*;
 use crate::unification::*;
 use convert_case::{Case, Casing};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter::once;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -46,14 +46,14 @@ impl Symbol {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Module {
-    symbols: HashMap<String, Symbol>,
+    symbols: BTreeMap<String, Symbol>,
     axioms: Vec<(Axiom, TermMap<String>)>,
 }
 
 impl Module {
     pub fn new() -> Self {
         Module {
-            symbols: HashMap::new(),
+            symbols: BTreeMap::new(),
             axioms: Vec::new(),
         }
     }
@@ -218,16 +218,23 @@ impl Module {
         }
         self.insert_symbol(Symbol::Function(func))
     }
+}
 
-    // Functions to implement sort inference/checking.
-    fn collect_function_application_requirements<SortMap>(
+struct SortMerge {}
+impl MergeFn<BTreeSet<String>> for SortMerge {
+    fn merge(&mut self, mut lhs: BTreeSet<String>, rhs: BTreeSet<String>) -> BTreeSet<String> {
+        lhs.extend(rhs);
+        lhs
+    }
+}
+type SortMap<'a> = TermUnification<'a, BTreeSet<String>, SortMerge>;
+
+impl Module {
+    fn collect_function_application_requirements(
         &self,
         universe: &TermUniverse,
         sorts: &mut SortMap,
-    ) -> Result<(), CompileError>
-    where
-        SortMap: AbstractTermUnification<HashSet<String>>,
-    {
+    ) -> Result<(), CompileError> {
         for tm in universe.iter_terms() {
             match universe.data(tm) {
                 TermData::Application(f, args) => {
@@ -251,13 +258,12 @@ impl Module {
         }
         Ok(())
     }
-    fn collect_atom_requirements<'a, AtomIterator, SortMap>(
+    fn collect_atom_requirements<'a, AtomIterator>(
         &self,
         atoms: AtomIterator,
         sorts: &mut SortMap,
     ) -> Result<(), CompileError>
     where
-        SortMap: AbstractTermUnification<HashSet<String>>,
         AtomIterator: IntoIterator<Item = &'a Atom>,
     {
         for atom in atoms.into_iter() {
@@ -290,13 +296,10 @@ impl Module {
     }
     // Check that all terms have precisely one assigned sort, and return a map assigning to each
     // term its unique sort.
-    fn into_unique_sorts<SortMap>(
+    fn into_unique_sorts(
         universe: &TermUniverse,
         mut sorts: SortMap,
-    ) -> Result<TermMap<String>, CompileError>
-    where
-        SortMap: AbstractTermUnification<HashSet<String>>,
-    {
+    ) -> Result<TermMap<String>, CompileError> {
         // Merge all syntactically equal terms (i.e. variables with the same name and all terms
         // implied by functionality/right-uniqueness of functions.
         sorts.congruence_closure();
@@ -324,15 +327,10 @@ impl Module {
     }
 
     fn infer_sequent_sorts(&self, sequent: &Sequent) -> Result<TermMap<String>, CompileError> {
-        let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
-            lhs.extend(rhs);
-            lhs
-        };
-
         let mut sorts = TermUnification::new(
             &sequent.universe,
-            vec![HashSet::new(); sequent.universe.len()],
-            unify_sorts,
+            vec![BTreeSet::new(); sequent.universe.len()],
+            SortMerge {},
         );
 
         self.collect_function_application_requirements(&sequent.universe, &mut sorts)?;
@@ -344,14 +342,11 @@ impl Module {
         Self::into_unique_sorts(&sequent.universe, sorts)
     }
 
-    fn collect_query_argument_requirements<'a, SortMap>(
+    fn collect_query_argument_requirements<'a>(
         &self,
         arguments: &[QueryArgument],
         sorts: &mut SortMap,
-    ) -> Result<(), CompileError>
-    where
-        SortMap: AbstractTermUnification<HashSet<String>>,
-    {
+    ) -> Result<(), CompileError> {
         for arg in arguments.iter() {
             if let Some(sort) = &arg.sort {
                 let _ = self.get_sort_at(sort, arg.location)?;
@@ -362,15 +357,10 @@ impl Module {
     }
 
     fn infer_query_sorts(&self, query: &UserQuery) -> Result<TermMap<String>, CompileError> {
-        let unify_sorts = |mut lhs: HashSet<String>, rhs: HashSet<String>| {
-            lhs.extend(rhs);
-            lhs
-        };
-
-        let mut sorts = TermUnification::new(
+        let mut sorts = SortMap::new(
             &query.universe,
-            vec![HashSet::new(); query.universe.len()],
-            unify_sorts,
+            vec![BTreeSet::new(); query.universe.len()],
+            SortMerge {},
         );
 
         self.collect_query_argument_requirements(&query.arguments, &mut sorts)?;
@@ -502,7 +492,7 @@ impl Module {
     }
 
     fn check_variable_occurence(universe: &TermUniverse) -> Result<(), CompileError> {
-        let mut occ_nums: HashMap<&str, (usize, Option<Location>)> = HashMap::new();
+        let mut occ_nums: BTreeMap<&str, (usize, Option<Location>)> = BTreeMap::new();
         for tm in universe.iter_terms() {
             if let TermData::Variable(v) = universe.data(tm) {
                 if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {

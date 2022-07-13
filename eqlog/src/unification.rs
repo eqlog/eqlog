@@ -39,29 +39,43 @@ impl<Value> TermMap<Value> {
     }
 }
 
-pub trait AbstractTermUnification<Payload>: IndexMut<Term, Output = Payload> {
-    fn root_const(&self, tm: Term) -> Term;
-    fn root(&mut self, tm: Term) -> Term;
-    fn union(&mut self, lhs: Term, rhs: Term) -> &Payload;
-    fn congruence_closure(&mut self);
-    fn freeze(self) -> TermMap<Payload>;
+pub trait MergeFn<Payload> {
+    fn merge(&mut self, lhs: Payload, rhs: Payload) -> Payload;
+}
+
+impl<Payload, F> MergeFn<Payload> for F
+where
+    F: FnMut(Payload, Payload) -> Payload,
+{
+    fn merge(&mut self, lhs: Payload, rhs: Payload) -> Payload {
+        (*self)(lhs, rhs)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct TermUnification<'a, Payload, UnionFunction> {
+pub struct TermUnification<'a, Payload, Merge>
+where
+    Merge: MergeFn<Payload>,
+{
     universe: &'a TermUniverse,
     parents: Vec<usize>,
     payloads: Vec<Option<Payload>>,
-    union: UnionFunction,
+    merge: Merge,
 }
 
-impl<'a, Payload, UnionFunction> AbstractTermUnification<Payload>
-    for TermUnification<'a, Payload, UnionFunction>
-where
-    UnionFunction: Fn(Payload, Payload) -> Payload,
-{
+impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
+    pub fn new(universe: &'a TermUniverse, payloads: Vec<Payload>, merge: Merge) -> Self {
+        assert_eq!(universe.len(), payloads.len());
+        TermUnification {
+            universe: universe,
+            parents: (0..universe.len()).collect(),
+            payloads: payloads.into_iter().map(Some).collect(),
+            merge,
+        }
+    }
+
     // TODO: Find a way to get rid of this by making `root` take &self.
-    fn root_const(&self, tm: Term) -> Term {
+    pub fn root_const(&self, tm: Term) -> Term {
         let mut i = tm.0;
         while i != self.parents[i] {
             i = self.parents[i];
@@ -70,7 +84,7 @@ where
         Term(root)
     }
 
-    fn root(&mut self, tm: Term) -> Term {
+    pub fn root(&mut self, tm: Term) -> Term {
         let mut i = tm.0;
         while i != self.parents[i] {
             i = self.parents[i];
@@ -85,7 +99,7 @@ where
         Term(root)
     }
 
-    fn union(&mut self, lhs: Term, rhs: Term) -> &Payload {
+    pub fn union(&mut self, lhs: Term, rhs: Term) -> &Payload {
         let lhs_root = self.root(lhs);
         let rhs_root = self.root(rhs);
 
@@ -99,7 +113,7 @@ where
         let mut rhs_payload = None;
         swap(&mut self.payloads[rhs_root.0], &mut rhs_payload);
 
-        let new_payload = (self.union)(lhs_payload.unwrap(), rhs_payload.unwrap());
+        let new_payload = self.merge.merge(lhs_payload.unwrap(), rhs_payload.unwrap());
 
         self.parents[lhs_root.0] = rhs_root.0;
         self.payloads[rhs_root.0] = Some(new_payload);
@@ -107,7 +121,7 @@ where
         self.payloads[rhs_root.0].as_ref().unwrap()
     }
 
-    fn congruence_closure(&mut self) {
+    pub fn congruence_closure(&mut self) {
         let mut vars: HashMap<&str, Term> = HashMap::new();
         for tm in self.universe.iter_terms() {
             if let TermData::Variable(s) = self.universe.data(tm) {
@@ -139,7 +153,7 @@ where
         }
     }
 
-    fn freeze(mut self) -> TermMap<Payload> {
+    pub fn freeze(mut self) -> TermMap<Payload> {
         let mut ids = vec![usize::MAX; self.universe.len()];
         let mut values = Vec::new();
         let mut next_id = 0;
@@ -164,24 +178,9 @@ where
     }
 }
 
-impl<'a, Payload, UnionFunction> TermUnification<'a, Payload, UnionFunction>
+impl<'a, Payload, Merge> Index<Term> for TermUnification<'a, Payload, Merge>
 where
-    UnionFunction: Fn(Payload, Payload) -> Payload,
-{
-    pub fn new(universe: &'a TermUniverse, payloads: Vec<Payload>, union: UnionFunction) -> Self {
-        assert_eq!(universe.len(), payloads.len());
-        TermUnification {
-            universe: universe,
-            parents: (0..universe.len()).collect(),
-            payloads: payloads.into_iter().map(Some).collect(),
-            union,
-        }
-    }
-}
-
-impl<'a, Payload, UnionFunction> Index<Term> for TermUnification<'a, Payload, UnionFunction>
-where
-    UnionFunction: Fn(Payload, Payload) -> Payload,
+    Merge: MergeFn<Payload>,
 {
     type Output = Payload;
     fn index(&self, tm: Term) -> &Payload {
@@ -190,9 +189,9 @@ where
     }
 }
 
-impl<'a, Payload, UnionFunction> IndexMut<Term> for TermUnification<'a, Payload, UnionFunction>
+impl<'a, Payload, Merge> IndexMut<Term> for TermUnification<'a, Payload, Merge>
 where
-    UnionFunction: Fn(Payload, Payload) -> Payload,
+    Merge: MergeFn<Payload>,
 {
     fn index_mut(&mut self, tm: Term) -> &mut Payload {
         let root = self.root(tm);
