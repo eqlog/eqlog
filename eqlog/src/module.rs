@@ -220,6 +220,8 @@ impl Module {
     }
 }
 
+// The term unification used for sort inference and checking. For each term, we infer a set of
+// sorts that the term must have, and in the end check that the set has precisely one element.
 struct SortMerge {}
 impl MergeFn<BTreeSet<String>> for SortMerge {
     fn merge(&mut self, mut lhs: BTreeSet<String>, rhs: BTreeSet<String>) -> BTreeSet<String> {
@@ -371,6 +373,10 @@ impl Module {
         Self::into_unique_sorts(&query.universe, sorts)
     }
 
+    // Check the following:
+    // - Every variable in the conclusion also appears in the premise.
+    // - Every term in the conclusion is equal to some term that occurred earlier or inside an
+    //   Atom::Defined.
     fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
         let universe = &sequent.universe;
         let mut has_occurred = TermUnification::new(
@@ -477,6 +483,7 @@ impl Module {
         Ok(())
     }
 
+    // Check that all variables are snake_case.
     fn check_variable_case(universe: &TermUniverse) -> Result<(), CompileError> {
         for tm in universe.iter_terms() {
             if let TermData::Variable(v) = universe.data(tm) {
@@ -491,6 +498,7 @@ impl Module {
         Ok(())
     }
 
+    // Check that every variable occurs at least twice.
     fn check_variable_occurence(universe: &TermUniverse) -> Result<(), CompileError> {
         let mut occ_nums: BTreeMap<&str, (usize, Option<Location>)> = BTreeMap::new();
         for tm in universe.iter_terms() {
@@ -511,15 +519,6 @@ impl Module {
                 });
             }
         }
-        Ok(())
-    }
-
-    pub fn add_axiom(&mut self, axiom: Axiom) -> Result<(), CompileError> {
-        let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
-        Self::check_epimorphism(&axiom.sequent)?;
-        Self::check_variable_case(&axiom.sequent.universe)?;
-        Self::check_variable_occurence(&axiom.sequent.universe)?;
-        self.axioms.push((axiom, sorts));
         Ok(())
     }
 
