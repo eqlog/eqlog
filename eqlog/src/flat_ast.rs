@@ -68,20 +68,20 @@ impl FlatSequent {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FlatQuery {
-    pub input_terms: Vec<(FlatTerm, String)>,
-    pub output_terms: Vec<(FlatTerm, String)>,
-    pub query: Vec<FlatAtom>,
+    pub inputs: Vec<(FlatTerm, String)>,
+    pub outputs: Vec<(FlatTerm, String)>,
+    pub atoms: Vec<FlatAtom>,
 }
 
 #[cfg(debug_assertions)]
 impl FlatQuery {
     fn check(&self) {
         let mut occurred: BTreeSet<FlatTerm> = BTreeSet::new();
-        for (tm, _) in self.input_terms.iter() {
+        for (tm, _) in self.inputs.iter() {
             occurred.insert(*tm);
         }
 
-        for atom in self.query.iter() {
+        for atom in self.atoms.iter() {
             use FlatAtom::*;
             match atom {
                 Equal(lhs, rhs) => {
@@ -100,7 +100,7 @@ impl FlatQuery {
             }
         }
 
-        for (tm, _) in self.output_terms.iter() {
+        for (tm, _) in self.outputs.iter() {
             assert!(occurred.contains(tm));
         }
     }
@@ -193,13 +193,18 @@ impl<'a> Emitter<'a> {
         self.constrained.congruence_closure();
     }
 
-    // Mark terms as constrained based on a given `atom` (but based on subterms of `atom`).
+    // Mark terms as constrained based on a given `atom` (but not based on subterms of `atom`).
     fn setup_premise_atom(&mut self, atom: &Atom) {
         use AtomData::*;
         match &atom.data {
             Equal(lhs, rhs) => {
-                self.flat_names.union(*lhs, *rhs);
                 self.constrained.union(*lhs, *rhs);
+                // Unless both terms are already added (e.g. because they are arguments of a
+                // query), we can merge their names so that we don't have to explicitly generate a
+                // `FlatAtom::Equals` for them.
+                if !(self.added[*lhs] && self.added[*rhs]) {
+                    self.flat_names.union(*lhs, *rhs);
+                }
             }
             Defined(_, _) => (),
             Predicate(_, args) => {
@@ -335,6 +340,64 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
     #[cfg(debug_assertions)]
     flat_sequent.check();
     flat_sequent
+}
+
+pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
+    let universe = &query.universe;
+
+    let mut emitter = Emitter::new(&query.universe, sorts);
+
+    let mut inputs: Vec<(FlatTerm, String)> = Vec::new();
+    let mut outputs: Vec<(FlatTerm, String)> = Vec::new();
+    let mut flat_atoms: Vec<FlatAtom> = Vec::new();
+
+    for QueryArgument { variable, .. } in query.arguments.iter() {
+        emitter.constrained[*variable] = true;
+        emitter.emit_term_structure(*variable, &mut flat_atoms);
+        assert!(flat_atoms.is_empty());
+        let flat_variable = emitter.flat_names[*variable].unwrap();
+        let sort = sorts[*variable].clone();
+        inputs.push((flat_variable, sort));
+    }
+
+    if let Some(results) = &query.results {
+        for tm in results.iter().copied() {
+            emitter.setup_premise_term(tm);
+        }
+    }
+
+    if let Some(where_formula) = &query.where_formula {
+        for atom in where_formula.iter() {
+            for tm in atom.iter_subterms(universe) {
+                emitter.setup_premise_term(tm);
+            }
+            emitter.setup_premise_atom(atom);
+        }
+    }
+
+    if let Some(results) = &query.results {
+        for result in results.iter().copied() {
+            emitter.emit_term_structure(result, &mut flat_atoms);
+            let flat_result = emitter.flat_names[result].unwrap();
+            let sort = sorts[result].clone();
+            outputs.push((flat_result, sort));
+        }
+    }
+
+    if let Some(where_formula) = &query.where_formula {
+        for atom in where_formula.iter() {
+            emitter.emit_atom(atom, &mut flat_atoms);
+        }
+    }
+
+    let flat_query = FlatQuery {
+        inputs,
+        outputs,
+        atoms: flat_atoms,
+    };
+    #[cfg(debug_assertions)]
+    flat_query.check();
+    flat_query
 }
 
 #[cfg(test)]
