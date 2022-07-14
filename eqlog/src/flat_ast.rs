@@ -86,8 +86,8 @@ impl FlatQuery {
             match atom {
                 Equal(lhs, rhs) => {
                     assert_ne!(*lhs, *rhs, "FlatAtom::Equal with equal arguments");
-                    occurred.insert(*lhs);
-                    occurred.insert(*rhs);
+                    assert!(occurred.contains(lhs));
+                    assert!(occurred.contains(rhs));
                 }
                 Relation(_, args) => {
                     for arg in args.iter().copied() {
