@@ -523,10 +523,63 @@ impl Module {
         Ok(())
     }
 
+    // Check whether every variable occuring in the output of a query also occurs as argument or in
+    // the where clause.
+    fn check_query_output_variables(query: &UserQuery) -> Result<(), CompileError> {
+        let universe = &query.universe;
+        let mut occured_vars = BTreeSet::new();
+        let mut insert_occured_if_var = |term: Term| {
+            use TermData::*;
+            match universe.data(term) {
+                Variable(name) => {
+                    occured_vars.insert(name);
+                }
+                Wildcard | Application(_, _) => (),
+            };
+        };
+        for QueryArgument { variable, .. } in query.arguments.iter() {
+            insert_occured_if_var(*variable);
+        }
+        if let Some(where_formula) = &query.where_formula {
+            for atom in where_formula.iter() {
+                for tm in atom.iter_subterms(universe) {
+                    insert_occured_if_var(tm);
+                }
+            }
+        }
+
+        for tm in query.results.iter().flatten().copied() {
+            use TermData::*;
+            match universe.data(tm) {
+                Variable(name) => {
+                    if !occured_vars.contains(name) {
+                        return Err(CompileError::QueryVariableOnlyInOutput {
+                            name: name.clone(),
+                            location: universe.location(tm),
+                        });
+                    }
+                }
+                Wildcard | Application(_, _) => (),
+            };
+        }
+
+        Ok(())
+    }
+
+    pub fn add_axiom(&mut self, axiom: Axiom) -> Result<(), CompileError> {
+        let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
+        Self::check_epimorphism(&axiom.sequent)?;
+        Self::check_variable_case(&axiom.sequent.universe)?;
+        Self::check_variable_occurence(&axiom.sequent.universe)?;
+        self.axioms.push((axiom, sorts));
+        Ok(())
+    }
+
     pub fn add_query(&mut self, query: UserQuery) -> Result<(), CompileError> {
         let term_sorts = self.infer_query_sorts(&query)?;
         Self::check_variable_case(&query.universe)?;
         Self::check_variable_occurence(&query.universe)?;
+        Self::check_query_output_variables(&query)?;
         self.insert_symbol(Symbol::Query {
             ast: query,
             term_sorts,

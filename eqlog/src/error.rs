@@ -32,6 +32,10 @@ pub enum CompileError {
         name: String,
         location: Option<Location>,
     },
+    QueryVariableOnlyInOutput {
+        name: String,
+        location: Option<Location>,
+    },
     FunctionArgumentNumber {
         function: String,
         expected: usize,
@@ -273,6 +277,10 @@ impl Display for CompileErrorWithContext {
             }
             VariableOccursOnlyOnce { name, location } => {
                 write!(f, "variable {name} occurs only once\n")?;
+                display_location(source_path, source, *location).fmt(f)?;
+            }
+            QueryVariableOnlyInOutput { name, location } => {
+                write!(f, "variable {name} occurs only as output\n")?;
                 display_location(source_path, source, *location).fmt(f)?;
             }
             FunctionArgumentNumber {
