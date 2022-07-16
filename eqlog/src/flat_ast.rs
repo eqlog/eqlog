@@ -76,6 +76,16 @@ pub struct FlatQuery {
 #[cfg(debug_assertions)]
 impl FlatQuery {
     fn check(&self) {
+        // Input terms must be pairwise distinct.
+        assert_eq!(
+            self.inputs
+                .iter()
+                .map(|(tm, _)| tm)
+                .copied()
+                .collect::<BTreeSet<FlatTerm>>()
+                .len(),
+            self.inputs.len()
+        );
         let mut occurred: BTreeSet<FlatTerm> = BTreeSet::new();
         for (tm, _) in self.inputs.iter() {
             occurred.insert(*tm);

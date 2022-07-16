@@ -251,3 +251,21 @@ impl QueryAction {
             .is_none()
     }
 }
+
+struct PureQuery {
+    inputs: Vec<(FlatTerm, String)>,
+    outputs: Vec<(FlatTerm, String)>,
+    queries: Vec<Query>,
+}
+
+impl PureQuery {
+    pub fn new(module: &Module, query: &FlatQuery) -> Self {
+        let mut fixed_terms: HashMap<FlatTerm, String> = query.inputs.iter().cloned().collect();
+        let queries = translate_premise(module, &mut fixed_terms, &query.atoms);
+        PureQuery {
+            inputs: query.inputs.clone(),
+            outputs: query.outputs.clone(),
+            queries,
+        }
+    }
+}
