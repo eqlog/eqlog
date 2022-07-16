@@ -18,7 +18,7 @@ mod build;
 mod error;
 mod flat_ast;
 mod index_selection;
-mod query_action;
+mod llam;
 mod rust_gen;
 
 pub use crate::build::process_root;
