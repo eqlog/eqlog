@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum Query {
+    Equal(FlatTerm, FlatTerm),
     Relation {
         relation: String,
         diagonals: BTreeSet<BTreeSet<usize>>,
@@ -78,17 +79,15 @@ fn results(
 
 fn translate_premise(
     module: &Module,
+    fixed_terms: &mut HashMap<FlatTerm, String>,
     premise: &[FlatAtom],
-) -> (Vec<Query>, HashMap<FlatTerm, String>) {
-    let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
+) -> Vec<Query> {
     let premise = premise
         .iter()
         .map(|atom| {
             use FlatAtom::*;
             match atom {
-                Equal(_, _) => {
-                    panic!("FlatAtom::Equal in premise not supported")
-                }
+                Equal(lhs, rhs) => Query::Equal(*lhs, *rhs),
                 Relation(rel, args) => {
                     let diagonals = diagonals(args);
                     let projections = projections(&fixed_terms, args);
@@ -116,12 +115,12 @@ fn translate_premise(
             }
         })
         .collect();
-    (premise, fixed_terms)
+    premise
 }
 
 fn translate_conclusion(
     module: &Module,
-    mut fixed_terms: HashMap<FlatTerm, String>,
+    fixed_terms: &mut HashMap<FlatTerm, String>,
     conclusion: &[FlatAtom],
 ) -> Vec<Action> {
     conclusion
@@ -175,8 +174,9 @@ fn translate_conclusion(
 
 impl QueryAction {
     pub fn new(module: &Module, sequent: &FlatSequent) -> Self {
-        let (queries, fixed_terms) = translate_premise(module, &sequent.premise);
-        let actions = translate_conclusion(module, fixed_terms, &sequent.conclusion);
+        let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
+        let queries = translate_premise(module, &mut fixed_terms, &sequent.premise);
+        let actions = translate_conclusion(module, &mut fixed_terms, &sequent.conclusion);
         QueryAction { queries, actions }
     }
     pub fn query_terms_used_in_actions<'a>(

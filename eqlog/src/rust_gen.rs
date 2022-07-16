@@ -692,6 +692,9 @@ fn write_query_loop_headers<'a>(
     for (query, age) in query_ages {
         use Query::*;
         match query {
+            Equal(lhs, rhs) => {
+                write!(out, "if tm{} == tm{} {{\n", lhs.0, rhs.0)?;
+            }
             Relation {
                 relation,
                 diagonals,

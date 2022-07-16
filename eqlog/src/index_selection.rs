@@ -122,7 +122,7 @@ pub fn select_indices(module: &Module, query_actions: &[QueryAction]) -> IndexSe
                         projections: projections.keys().copied().collect(),
                     });
                 }
-                Sort { .. } => (),
+                Sort { .. } | Equal(_, _) => (),
             }
         }
     }
