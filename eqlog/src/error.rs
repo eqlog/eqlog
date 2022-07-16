@@ -23,6 +23,12 @@ pub enum CompileError {
     SymbolNotCamelCase {
         name: String,
         location: Option<Location>,
+        symbol_kind: SymbolKind,
+    },
+    SymbolNotSnakeCase {
+        name: String,
+        location: Option<Location>,
+        symbol_kind: SymbolKind,
     },
     VariableNotSnakeCase {
         name: String,
@@ -267,8 +273,20 @@ impl Display for CompileErrorWithContext {
                     display_location(source_path, source, Some(*location))
                 )?;
             }
-            SymbolNotCamelCase { name, location } => {
-                write!(f, "symbol {name} is not UpperCamelCase\n")?;
+            SymbolNotCamelCase {
+                name,
+                location,
+                symbol_kind,
+            } => {
+                write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
+                display_location(source_path, source, *location).fmt(f)?;
+            }
+            SymbolNotSnakeCase {
+                name,
+                location,
+                symbol_kind,
+            } => {
+                write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
                 display_location(source_path, source, *location).fmt(f)?;
             }
             VariableNotSnakeCase { name, location } => {

@@ -190,13 +190,35 @@ impl Module {
         }
     }
 
-    fn insert_symbol(&mut self, symbol: Symbol) -> Result<(), CompileError> {
-        if symbol.name().to_case(Case::UpperCamel) != *symbol.name() {
-            return Err(CompileError::SymbolNotCamelCase {
-                name: symbol.name().into(),
-                location: symbol.location(),
-            });
+    fn check_symbol_case(symbol: &Symbol) -> Result<(), CompileError> {
+        let name = symbol.name();
+        let kind = symbol.kind();
+        use SymbolKind::*;
+        match kind {
+            Sort | Predicate | Function => {
+                if name.to_case(Case::UpperCamel) != *name {
+                    return Err(CompileError::SymbolNotCamelCase {
+                        name: name.to_string(),
+                        location: symbol.location(),
+                        symbol_kind: kind,
+                    });
+                }
+            }
+            Query => {
+                if name.to_case(Case::Snake) != *name {
+                    return Err(CompileError::SymbolNotSnakeCase {
+                        name: name.to_string(),
+                        location: symbol.location(),
+                        symbol_kind: kind,
+                    });
+                }
+            }
         }
+        Ok(())
+    }
+
+    fn insert_symbol(&mut self, symbol: Symbol) -> Result<(), CompileError> {
+        Self::check_symbol_case(&symbol)?;
 
         let second_location = symbol.location();
         if let Some(prev_symbol) = self.symbols.insert(symbol.name().into(), symbol) {
