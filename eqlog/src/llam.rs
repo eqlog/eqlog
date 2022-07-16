@@ -252,10 +252,10 @@ impl QueryAction {
     }
 }
 
-struct PureQuery {
-    inputs: Vec<(FlatTerm, String)>,
-    outputs: Vec<(FlatTerm, String)>,
-    queries: Vec<Query>,
+pub struct PureQuery {
+    pub inputs: Vec<(FlatTerm, String)>,
+    pub outputs: Vec<(FlatTerm, String)>,
+    pub queries: Vec<Query>,
 }
 
 impl PureQuery {

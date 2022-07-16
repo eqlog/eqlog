@@ -147,6 +147,13 @@ impl Module {
         })
     }
 
+    pub fn iter_queries(&self) -> impl Iterator<Item = (&UserQuery, &TermMap<String>)> {
+        self.symbols.values().filter_map(|symbol| match symbol {
+            Symbol::Query { ast, term_sorts } => Some((ast, term_sorts)),
+            _ => None,
+        })
+    }
+
     pub fn iter_axioms(&self) -> impl Iterator<Item = &(Axiom, TermMap<String>)> {
         self.axioms.iter()
     }

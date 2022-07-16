@@ -90,7 +90,10 @@ impl IndexSpec {
 // Maps relation name and query spec to an index for the relation that can serve the query.
 pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
-pub fn select_indices(module: &Module, query_actions: &[QueryAction]) -> IndexSelection {
+pub fn select_indices<'a, Queries>(module: &Module, queries: Queries) -> IndexSelection
+where
+    Queries: IntoIterator<Item = &'a Query>,
+{
     // Maps relations to tuple of arity.len() and set of collected query specs.
     let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> = module
         .relations()
@@ -106,24 +109,22 @@ pub fn select_indices(module: &Module, query_actions: &[QueryAction]) -> IndexSe
         query_specs.get_mut(&func.name).unwrap().1.insert(spec);
     }
 
-    // Add indices for axioms.
-    for query_action in query_actions.iter() {
-        for query in query_action.queries.iter() {
-            use Query::*;
-            match query {
-                Relation {
-                    relation,
-                    diagonals,
-                    projections,
-                    ..
-                } => {
-                    query_specs.get_mut(relation).unwrap().1.insert(QuerySpec {
-                        diagonals: diagonals.clone(),
-                        projections: projections.keys().copied().collect(),
-                    });
-                }
-                Sort { .. } | Equal(_, _) => (),
+    // Add indices for queries.
+    for query in queries.into_iter() {
+        use Query::*;
+        match query {
+            Relation {
+                relation,
+                diagonals,
+                projections,
+                ..
+            } => {
+                query_specs.get_mut(relation).unwrap().1.insert(QuerySpec {
+                    diagonals: diagonals.clone(),
+                    projections: projections.keys().copied().collect(),
+                });
             }
+            Sort { .. } | Equal(_, _) => (),
         }
     }
 

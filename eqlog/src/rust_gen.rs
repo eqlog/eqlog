@@ -9,7 +9,7 @@ use itertools::Itertools;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
-use std::iter::once;
+use std::iter::{once, repeat};
 
 use Case::Snake;
 
@@ -846,6 +846,41 @@ fn write_collect_functionality_matches_fn(
     "}
 }
 
+fn write_pure_query_fn(
+    out: &mut impl Write,
+    module: &Module,
+    name: &str,
+    pure_query: &PureQuery,
+) -> io::Result<()> {
+    let arg_list = pure_query.inputs.iter().format_with("", |(tm, sort), f| {
+        let tm = tm.0;
+        f(&format_args!("tm{tm}: {sort}, "))
+    });
+    let output_type_list = pure_query
+        .outputs
+        .iter()
+        .format_with(", ", |(_, sort), f| f(&format_args!("{sort}")));
+    let match_term_list = pure_query.outputs.iter().format_with(", ", |(tm, _), f| {
+        let tm = tm.0;
+        f(&format_args!("tm{tm}"))
+    });
+
+    writedoc! {out, "
+        fn {name}(&self, {arg_list}) - impl Iterator<{output_type_list}> {{
+            let mut matches = Vec::new();
+    "}?;
+    let query_ages = pure_query.queries.iter().zip(repeat(TupleAge::All));
+    write_query_loop_headers(out, module, query_ages)?;
+    writedoc! {out, "
+        matches.push(({match_term_list}));
+    "}?;
+    write_query_loop_footers(out, pure_query.queries.len())?;
+    writedoc! {out, "
+        matches.into_iter()
+        }}
+    "}
+}
+
 fn write_action(out: &mut impl Write, module: &Module, action: &Action) -> io::Result<()> {
     use Action::*;
     match action {
@@ -1158,6 +1193,7 @@ fn write_theory_impl(
     name: &str,
     module: &Module,
     query_actions: &[QueryAction],
+    pure_queries: &[(String, PureQuery)],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
     for sort in module.iter_sorts() {
@@ -1186,6 +1222,9 @@ fn write_theory_impl(
         write_collect_functionality_matches_fn(out, function)?;
         write_apply_functionality_fn(out, module, function)?;
         write_define_fn(out, function)?;
+    }
+    for (name, pure_query) in pure_queries.iter() {
+        write_pure_query_fn(out, module, name, pure_query)?;
     }
 
     write_forget_dirt_fn(out, module)?;
@@ -1235,6 +1274,7 @@ pub fn write_module(
     name: &str,
     module: &Module,
     query_actions: &[QueryAction],
+    pure_queries: &[(String, PureQuery)],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
@@ -1265,7 +1305,7 @@ pub fn write_module(
     write!(out, "\n")?;
 
     write_theory_struct(out, name, module)?;
-    write_theory_impl(out, name, module, query_actions)?;
+    write_theory_impl(out, name, module, query_actions, pure_queries)?;
     write_theory_display_impl(out, name, module)?;
 
     Ok(())

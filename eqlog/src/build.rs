@@ -85,7 +85,24 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
             QueryAction::new(&module, &flat_sequent)
         })
         .collect();
-    let index_selection = select_indices(&module, &query_actions);
+    let pure_queries: Vec<(String, PureQuery)> = module
+        .iter_queries()
+        .map(|(query, term_sorts)| {
+            let flat_query = flatten_query(&query, term_sorts);
+            (query.name.clone(), PureQuery::new(&module, &flat_query))
+        })
+        .collect();
+    let queries = query_actions
+        .iter()
+        .map(|qa| qa.queries.iter())
+        .flatten()
+        .chain(
+            pure_queries
+                .iter()
+                .map(|(_, pq)| pq.queries.iter())
+                .flatten(),
+        );
+    let index_selection = select_indices(&module, queries);
     let theory_name = in_file
         .file_stem()
         .unwrap()
@@ -98,6 +115,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         &theory_name,
         &module,
         &query_actions,
+        &pure_queries,
         &index_selection,
     )?;
     fs::write(&out_file, &result)?;
