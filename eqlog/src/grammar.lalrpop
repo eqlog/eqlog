@@ -125,7 +125,7 @@ QueryArguments: Vec<QueryArgument> = {
 }
 
 QueryResults: Vec<Term> = {
-    "->" "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
+    "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
         let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
         args
     }
