@@ -254,7 +254,7 @@ impl QueryAction {
 
 pub struct PureQuery {
     pub inputs: Vec<(FlatTerm, String)>,
-    pub outputs: Vec<(FlatTerm, String)>,
+    pub output: FlatQueryOutput,
     pub queries: Vec<Query>,
 }
 
@@ -264,7 +264,7 @@ impl PureQuery {
         let queries = translate_premise(module, &mut fixed_terms, &query.atoms);
         PureQuery {
             inputs: query.inputs.clone(),
-            outputs: query.outputs.clone(),
+            output: query.output.clone(),
             queries,
         }
     }

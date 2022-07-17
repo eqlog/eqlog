@@ -67,9 +67,16 @@ impl FlatSequent {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
+pub enum FlatQueryOutput {
+    NoOutput,
+    SingleOutput(FlatTerm, String),
+    TupleOutput(Vec<(FlatTerm, String)>),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FlatQuery {
     pub inputs: Vec<(FlatTerm, String)>,
-    pub outputs: Vec<(FlatTerm, String)>,
+    pub output: FlatQueryOutput,
     pub atoms: Vec<FlatAtom>,
 }
 
@@ -110,8 +117,16 @@ impl FlatQuery {
             }
         }
 
-        for (tm, _) in self.outputs.iter() {
-            assert!(occurred.contains(tm));
+        match &self.output {
+            FlatQueryOutput::NoOutput => (),
+            FlatQueryOutput::SingleOutput(tm, _) => {
+                assert!(occurred.contains(tm));
+            }
+            FlatQueryOutput::TupleOutput(tm_sorts) => {
+                for (tm, _) in tm_sorts.iter() {
+                    assert!(occurred.contains(tm));
+                }
+            }
         }
     }
 }
@@ -358,7 +373,6 @@ pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
     let mut emitter = Emitter::new(&query.universe, sorts);
 
     let mut inputs: Vec<(FlatTerm, String)> = Vec::new();
-    let mut outputs: Vec<(FlatTerm, String)> = Vec::new();
     let mut flat_atoms: Vec<FlatAtom> = Vec::new();
 
     for QueryArgument { variable, .. } in query.arguments.iter() {
@@ -370,10 +384,8 @@ pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
         inputs.push((flat_variable, sort));
     }
 
-    if let Some(results) = &query.results {
-        for tm in results.iter().copied() {
-            emitter.setup_premise_term(tm);
-        }
+    for tm in query.result.iter_subterms(universe) {
+        emitter.setup_premise_term(tm);
     }
 
     if let Some(where_formula) = &query.where_formula {
@@ -385,13 +397,8 @@ pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
         }
     }
 
-    if let Some(results) = &query.results {
-        for result in results.iter().copied() {
-            emitter.emit_term_structure(result, &mut flat_atoms);
-            let flat_result = emitter.flat_names[result].unwrap();
-            let sort = sorts[result].clone();
-            outputs.push((flat_result, sort));
-        }
+    for tm in query.result.iter_subterms(universe) {
+        emitter.emit_term_structure(tm, &mut flat_atoms);
     }
 
     if let Some(where_formula) = &query.where_formula {
@@ -400,9 +407,27 @@ pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
         }
     }
 
+    let output = match &query.result {
+        QueryResult::NoResult => FlatQueryOutput::NoOutput,
+        QueryResult::SingleResult(tm) => {
+            let flat_tm = emitter.flat_names[*tm].unwrap();
+            let sort = sorts[*tm].clone();
+            FlatQueryOutput::SingleOutput(flat_tm, sort)
+        }
+        QueryResult::TupleResult(tms) => FlatQueryOutput::TupleOutput(
+            tms.iter()
+                .map(|tm| {
+                    let flat_tm = emitter.flat_names[*tm].unwrap();
+                    let sort = sorts[*tm].clone();
+                    (flat_tm, sort)
+                })
+                .collect(),
+        ),
+    };
+
     let flat_query = FlatQuery {
         inputs,
-        outputs,
+        output,
         atoms: flat_atoms,
     };
     #[cfg(debug_assertions)]

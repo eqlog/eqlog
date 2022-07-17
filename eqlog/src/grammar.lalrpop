@@ -124,10 +124,12 @@ QueryArguments: Vec<QueryArgument> = {
     }
 }
 
-QueryResults: Vec<Term> = {
-    "(" <head_arg: (<Term>)?> <tail_args: ("," <Term>)*> ")" => {
-        let args: Vec<Term> = head_arg.into_iter().chain(tail_args).collect();
-        args
+QueryResult: QueryResult = {
+    () => QueryResult::NoResult,
+    "->" <term: Term> => QueryResult::SingleResult(term),
+    "->" "(" <head_result: (<Term>)?> <tail_results: ("," <Term>)*> ")" => {
+        let results: Vec<Term> = head_result.into_iter().chain(tail_results).collect();
+        QueryResult::TupleResult(results)
     }
 }
 
@@ -136,7 +138,7 @@ QueryDecl: UserQuery = {
         "Query"
         <name: Id>
         <arguments: QueryArguments>
-        <results: ("->" <QueryResults>)?>
+        <result: QueryResult>
         <where_formula: ("where" <Formula>)?>
         ";"
         <r: @R> => {
@@ -147,7 +149,7 @@ QueryDecl: UserQuery = {
             universe: u,
             name,
             arguments,
-            results,
+            result,
             where_formula,
             location: Some(Location(l, r)),
         }

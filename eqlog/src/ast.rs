@@ -1,6 +1,7 @@
 use crate::error::*;
 use std::fmt::{self, Display};
 use std::iter::once;
+use std::slice::from_ref;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Location(pub usize, pub usize);
@@ -248,11 +249,38 @@ pub struct QueryArgument {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum QueryResult {
+    NoResult,
+    SingleResult(Term),
+    TupleResult(Vec<Term>),
+}
+
+impl QueryResult {
+    pub fn iter_result_terms(&self) -> impl Iterator<Item = Term> + '_ {
+        use QueryResult::*;
+        let slice: &[Term] = match self {
+            NoResult => &[],
+            SingleResult(tm) => from_ref(tm),
+            TupleResult(tms) => tms.as_slice(),
+        };
+        slice.iter().copied()
+    }
+    pub fn iter_subterms<'a>(
+        &'a self,
+        universe: &'a TermUniverse,
+    ) -> impl Iterator<Item = Term> + 'a {
+        self.iter_result_terms()
+            .map(move |tm| universe.iter_subterms(tm))
+            .flatten()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct UserQuery {
     pub universe: TermUniverse,
     pub name: String,
     pub arguments: Vec<QueryArgument>,
-    pub results: Option<Vec<Term>>,
+    pub result: QueryResult,
     pub where_formula: Option<Vec<Atom>>,
     pub location: Option<Location>,
 }

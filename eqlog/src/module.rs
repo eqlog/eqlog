@@ -576,7 +576,7 @@ impl Module {
             }
         }
 
-        for tm in query.results.iter().flatten().copied() {
+        for tm in query.result.iter_subterms(universe) {
             use TermData::*;
             match universe.data(tm) {
                 Variable(name) => {

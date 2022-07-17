@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::flat_ast::FlatTerm;
+use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
@@ -856,27 +856,55 @@ fn write_pure_query_fn(
         let tm = tm.0;
         f(&format_args!("tm{tm}: {sort}, "))
     });
-    let output_type_list = pure_query
-        .outputs
-        .iter()
-        .format_with(", ", |(_, sort), f| f(&format_args!("{sort}")));
-    let match_term_list = pure_query.outputs.iter().format_with(", ", |(tm, _), f| {
-        let tm = tm.0;
-        f(&format_args!("tm{tm}"))
-    });
+
+    use FlatQueryOutput::*;
+    let output_type = match &pure_query.output {
+        NoOutput => "bool".to_string(),
+        SingleOutput(_, sort) => format!("impl Iterator<Item = {sort}>"),
+        TupleOutput(tm_sorts) => {
+            let sort_list = tm_sorts
+                .iter()
+                .format_with("", |(_, sort), f| f(&format_args!("{sort}, ")));
+            format!("impl Iterator<Item = ({sort_list})>")
+        }
+    };
+
+    let matches_vec_definition: &str = match &pure_query.output {
+        NoOutput => "",
+        SingleOutput(_, _) | TupleOutput(_) => "let mut matches = Vec::new();",
+    };
+
+    let match_found_statement = match &pure_query.output {
+        NoOutput => format!("return true;"),
+        SingleOutput(tm, _) => {
+            let tm = tm.0;
+            format!("matches.push(tm{tm});")
+        }
+        TupleOutput(tm_sorts) => {
+            let tm_list = tm_sorts.iter().format_with("", |(tm, _), f| {
+                let tm = tm.0;
+                f(&format_args!("tm{}, ", tm))
+            });
+            format!("matches.push(({tm_list}));")
+        }
+    };
+
+    let result: &str = match &pure_query.output {
+        NoOutput => "false",
+        SingleOutput(_, _) | TupleOutput(_) => "matches.into_iter()",
+    };
 
     writedoc! {out, "
-        fn {name}(&self, {arg_list}) - impl Iterator<{output_type_list}> {{
-            let mut matches = Vec::new();
+        #[allow(dead_code)]
+        pub fn {name}(&self, {arg_list}) -> {output_type} {{
+            {matches_vec_definition}
     "}?;
     let query_ages = pure_query.queries.iter().zip(repeat(TupleAge::All));
     write_query_loop_headers(out, module, query_ages)?;
-    writedoc! {out, "
-        matches.push(({match_term_list}));
-    "}?;
+    write!(out, "{match_found_statement}\n")?;
     write_query_loop_footers(out, pure_query.queries.len())?;
     writedoc! {out, "
-        matches.into_iter()
+        {result}
         }}
     "}
 }

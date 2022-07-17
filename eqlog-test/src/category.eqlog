@@ -1,9 +1,16 @@
 Sort Obj;
 Sort Mor;
 
-Pred Signature : Obj * Mor * Obj;
+Func Dom : Mor -> Obj;
+Func Cod : Mor -> Obj;
 Func Comp : Mor * Mor -> Mor;
 Func Id : Obj -> Mor;
 
-Axiom Signature(x, f, y) & Signature(y, g, z) => Comp(g, f)! & Signature(x, Comp(g, f), z);
+Axiom Cod(f) = Dom(g) => Comp(g, f)!;
+Axiom h = Comp(g, f) & d = Dom(f) => Dom(h) = d;
+Axiom h = Comp(g, f) & c = Cod(g) => Cod(g) = c;
 Axiom x! : Obj & y! : Obj => Id(x)! & Id(y)!;
+
+Query signature(f: Mor) -> (Dom(f), Cod(f));
+Query hom(x: Obj, y: Obj) -> f where Dom(f) = x & Cod(f) = y;
+Query has_signature(f: Mor, dom: Obj, cod: Obj) where Dom(f) = dom & Cod(f) = cod;
