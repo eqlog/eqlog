@@ -21,18 +21,18 @@ use crate::grammar::UnitParser;
 #[cfg(test)]
 use indoc::indoc;
 
-fn check(source: &str) {
-    let defs = UnitParser::new().parse(source).unwrap();
-
-    let mut scope = Scope::new();
-    for def in defs.iter() {
-        scope.add_definition(Checking::Yes, def);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn check(source: &str) {
+        let defs = UnitParser::new().parse(source).unwrap();
+
+        let mut scope = Scope::new();
+        for def in defs.iter() {
+            scope.add_definition(Checking::Yes, def);
+        }
+    }
 
     #[test]
     fn test_unit_identity() {
