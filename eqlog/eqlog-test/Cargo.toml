@@ -7,7 +7,7 @@ version = "0.1.0"
 path = "../eqlog-util"
 
 [build-dependencies.eqlog]
-path = "../eqlog"
+path = "../"
 
 [dependencies]
 maplit = "1"

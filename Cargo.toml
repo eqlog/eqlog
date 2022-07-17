@@ -15,7 +15,7 @@ regex = "1"
 indoc = "1"
 
 [dependencies.eqlog-util]
-path = "eqlog-util"
+path = "eqlog/eqlog-util"
 
 [build-dependencies]
 lalrpop = { version = "0", features = [ "lexer" ] }
