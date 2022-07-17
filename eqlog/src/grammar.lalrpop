@@ -171,11 +171,11 @@ pub Module: Module = {
         Ok(module)
     },
     <mut module: Module> <axiom: AxiomDecl> =>? { 
-        module.add_axiom(axiom);
+        module.add_axiom(axiom)?;
         Ok(module)
     },
     <mut module: Module> <query: QueryDecl> =>? {
-				module.add_query(query);
+				module.add_query(query)?;
         Ok(module)
     },
 }
