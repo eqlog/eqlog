@@ -895,7 +895,7 @@ fn write_pure_query_fn(
     };
 
     writedoc! {out, "
-        #[allow(dead_code)]
+        #[allow(dead_code)] #[allow(unused_variables)]
         pub fn {name}(&self, {arg_list}) -> {output_type} {{
             {matches_vec_definition}
     "}?;
