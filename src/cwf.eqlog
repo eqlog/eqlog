@@ -4,11 +4,18 @@ Sort Mor;
 
 // Domains and codomains of morphisms.
 Func Dom: Mor -> Ctx;
+Query dom(f) -> Dom(f);
 Func Cod: Mor -> Ctx;
+Query cod(f) -> Cod(f);
 // Compositions of morphisms.
 Func Comp: Mor * Mor -> Mor;
 // Identity morphisms.
 Func Id: Ctx -> Mor;
+
+Query id_pre(f: Mor) -> x where f = Id(x);
+
+// Iterator over hom(gamma, delta).
+Query hom(gamma, delta) -> f where Dom(f) = gamma & Cod(f) = delta;
 
 // The identity morphisms is defined at every context.
 Axiom ctx! : Ctx => Id(ctx)!;
@@ -35,10 +42,15 @@ Sort Tm;
 Func TyCtx : Ty -> Ctx;
 // The type of a term.
 Func TmTy : Tm -> Ty;
+Query ty_ctx(ty: Ty) -> TyCtx(ty);
+Query tm_ctx(tm: Tm) -> TyCtx(TmTy(tm));
 
 // Substituting types and terms.
 Func SubstTy: Mor * Ty-> Ty;
 Func SubstTm: Mor * Tm-> Tm;
+
+Query subst_ty_pre(subst_ty: Ty) -> (mor, ty) where subst_ty = SubstTy(mor, ty);
+Query subst_tm_pre(subst_tm: Tm) -> (mor, tm) where subst_tm = SubstTm(mor, tm);
 
 // The context of a substituted type.
 Axiom TyCtx(SubstTy(f, _)) ~> Cod(f);
@@ -51,7 +63,9 @@ Axiom SubstTm(Id(TyCtx(TmTy(s))), s) ~> s;
 
 // Substitution along composed morphisms.
 Axiom SubstTy(Comp(g, f), sigma) ~> SubstTy(g, SubstTy(f, sigma));
+Axiom SubstTy(g, SubstTy(f, sigma)) ~> SubstTy(Comp(g, f), sigma);
 Axiom SubstTm(Comp(g, f), s) ~> SubstTm(g, SubstTm(f, s));
+Axiom SubstTm(g, SubstTm(f, s)) ~> SubstTm(Comp(g, f), s);
 
 // Context extensions by variables of a given type.
 Func ExtCtx: Ctx * Ty -> Ctx;
@@ -61,6 +75,12 @@ Func Wkn: Ctx * Ty -> Mor;
 Func Var: Ctx * Ty -> Tm;
 // The extended morphisms induced by the universal property of context extensions.
 Func MorExt: Ctx * Ty * Mor * Tm -> Mor;
+
+Query var(ctx, ty) -> Var(ctx, ty);
+
+// Preimages of Comp(Wkn(-, -), -) and MorExt.
+Query mor_ext_pre(f: Mor) -> (gamma, sigma, f_0, s) where f = MorExt(gamma, sigma, f_0, s);
+Query comp_wkn_pre(f: Mor) -> (gamma, sigma, f_0) where f = Comp(Wkn(gamma, sigma), f_0);
 
 // If an extended context is defined, then also weakening and variable are defined.
 Axiom ExtCtx(base, sigma)! => Wkn(base, sigma)! & Var(base, sigma)!;
@@ -81,11 +101,12 @@ Axiom SubstTy(g, SubstTy(f, _))! & g = MorExt(_, _, _, _) => Comp(g, f)!;
 
 // The precomposition of an extended morphism.
 Axiom Comp(g, MorExt(_, _, f, s))! & SubstTm(g, s)! => Comp(g, f)!;
-Axiom h = Comp(g, MorExt(ctx, sigma, f, s)) & Comp(g, f)! & SubstTm(g, s)! => h = MorExt(ctx, sigma, Comp(g, f), SubstTm(g, s));
+Axiom MorExt(ctx, sigma, Comp(g, f), SubstTm(g, s)) ~> Comp(g, MorExt(ctx, sigma, f, s));
 // The composition of weakening and extended morphisms.
-Axiom c = Comp(MorExt(ctx, sigma, f, _), Comp(Wkn(ctx, sigma), q)) => c = Comp(f, q);
+Axiom Comp(MorExt(ctx, sigma, f, _), Comp(Wkn(ctx, sigma), q)) ~> Comp(f, q);
 // The composition of weakenings.
-Axiom c = Comp(Comp(Wkn(ctx, sigma), g), f) => Comp(g, f)! & c = Comp(Wkn(ctx, sigma), Comp(g, f));
+Axiom Comp(Comp(Wkn(_, _), g), f)! => Comp(g, f)!;
+Axiom Comp(Wkn(ctx, sigma), Comp(g, f)) ~> Comp(Comp(Wkn(ctx, sigma), g), f);
 
 // Substituting variables along extended morphisms.
 Axiom SubstTm(MorExt(ctx, sigma, _, s), Var(ctx, sigma)) ~> s;

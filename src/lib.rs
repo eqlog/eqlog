@@ -16,14 +16,12 @@ pub mod ast;
 
 pub mod cwf_checker;
 
-use crate::cwf_checker::*;
-use crate::grammar::UnitParser;
-#[cfg(test)]
-use indoc::indoc;
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+
+    use crate::cwf_checker::*;
+    use crate::grammar::UnitParser;
+    use indoc::indoc;
 
     fn check(source: &str) {
         let defs = UnitParser::new().parse(source).unwrap();
@@ -199,7 +197,7 @@ mod tests {
         let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
               let
-                bool_ind x_case (x0 : Bool) : Bool
+                bool_ind x_case (x1 : Bool) : Bool
                   | false => false
                   | true => y
                   .
@@ -207,10 +205,6 @@ mod tests {
                 x_case(x)
               .
 
-            bool_ind x_case_y_false(x0 : Bool) : Bool
-              | false => false
-              | true => false
-              .
             def false_false : and(false, false) = false := refl false.
         "};
         check(&src);

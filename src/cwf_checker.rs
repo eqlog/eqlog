@@ -1,6 +1,10 @@
 use crate::ast;
 use crate::cwf::*;
-use std::collections::HashMap;
+use indoc::formatdoc;
+use itertools::Itertools;
+use std::collections::{BTreeSet, HashMap};
+use std::fmt::Display;
+use std::iter::once;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Checking {
@@ -21,6 +25,10 @@ pub struct Scope {
     empty_context: Ctx,
     extensions: Vec<(Ty, Ctx)>,
     cwf: Cwf,
+
+    context_names: Vec<(Ctx, String)>,
+    type_names: Vec<(Ty, String)>,
+    term_names: Vec<(Tm, String)>,
 }
 
 impl Scope {
@@ -32,11 +40,155 @@ impl Scope {
             empty_context,
             extensions: Vec::new(),
             cwf,
+            context_names: Vec::new(),
+            type_names: Vec::new(),
+            term_names: Vec::new(),
         }
     }
 }
 
+struct MorphismNormalForm {
+    extensions: Vec<(Ctx, Ty, Tm)>,
+    weakenings: Vec<(Ctx, Ty)>,
+    abnormal_base_morphism: Option<Mor>,
+}
+
 impl Scope {
+    fn display_context(&mut self, mut ctx: Ctx) -> impl Display {
+        let Self {
+            cwf, context_names, ..
+        } = self;
+        ctx = cwf.ctx_root(ctx);
+        once(&format!("{ctx}"))
+            .chain(
+                context_names
+                    .iter()
+                    .filter_map(|(c, name)| {
+                        if cwf.ctx_root(*c) == ctx {
+                            Some(name)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<BTreeSet<&String>>(),
+            )
+            .join("_")
+    }
+
+    fn display_type(&mut self, mut ty: Ty) -> impl Display {
+        let Self {
+            cwf, type_names, ..
+        } = self;
+        ty = cwf.ty_root(ty);
+        once(&format!("{ty}"))
+            .chain(
+                type_names
+                    .iter()
+                    .filter_map(|(t, name)| {
+                        if cwf.ty_root(*t) == ty {
+                            Some(name)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<BTreeSet<&String>>(),
+            )
+            .join("_")
+    }
+
+    fn display_term(&mut self, mut tm: Tm) -> impl Display {
+        let Self {
+            cwf, term_names, ..
+        } = self;
+        tm = cwf.tm_root(tm);
+        once(&format!("{tm}"))
+            .chain(
+                term_names
+                    .iter()
+                    .filter_map(|(t, name)| {
+                        if cwf.tm_root(*t) == tm {
+                            Some(name)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<BTreeSet<&String>>(),
+            )
+            .join("_")
+    }
+
+    fn morphism_normal_form(&self, mut mor: Mor) -> MorphismNormalForm {
+        let mut extensions: Vec<(Ctx, Ty, Tm)> = Vec::new();
+
+        while let Some((ctx, ty, mor0, tm)) = self.cwf.mor_ext_pre(mor).next() {
+            extensions.push((ctx, ty, tm));
+            mor = mor0;
+        }
+        extensions.reverse();
+
+        let mut weakenings: Vec<(Ctx, Ty)> = Vec::new();
+        while let Some((ctx, ty, mor0)) = self.cwf.comp_wkn_pre(mor).next() {
+            weakenings.push((ctx, ty));
+            mor = mor0;
+        }
+        weakenings.reverse();
+
+        let abnormal_base_morphism = match self.cwf.id_pre(mor).next() {
+            Some(_) => None,
+            None => Some(mor),
+        };
+
+        MorphismNormalForm {
+            extensions,
+            weakenings,
+            abnormal_base_morphism,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn display_morphism(&mut self, mor: Mor) -> impl Display {
+        let dom = self.display_context(self.cwf.dom(mor).next().unwrap());
+        let cod = self.display_context(self.cwf.cod(mor).next().unwrap());
+
+        let signature = format!("{mor} : {dom} -> {cod}");
+
+        let MorphismNormalForm {
+            extensions,
+            weakenings,
+            abnormal_base_morphism,
+        } = self.morphism_normal_form(mor);
+        let mut ext_str = "".to_string();
+        for (base_ctx, ty, tm) in extensions.iter().copied() {
+            let var = self.cwf.var(base_ctx, ty).next().unwrap();
+            let var_displ = self.display_term(var);
+            let tm_displ = self.display_term(tm);
+            ext_str.push_str(&format!("  {var_displ} |-> {tm_displ}\n"));
+        }
+        let abnormal_base_str = match abnormal_base_morphism {
+            None => "".to_string(),
+            Some(base_mor) => {
+                let base_dom = self.display_context(self.cwf.dom(base_mor).next().unwrap());
+                let base_cod = self.display_context(self.cwf.cod(base_mor).next().unwrap());
+                let weakenings_displ = weakenings.iter().format_with("", |(base_ctx, _), f| {
+                    let base_ctx_displ = self.display_context(*base_ctx);
+                    f(&format_args!("{base_ctx_displ} ->"))
+                });
+                formatdoc! {"
+                    Abnormal base 
+                    Weakenings:
+                    {weakenings_displ}
+                    base:
+                    {base_mor} : {base_dom} -> {base_cod}
+                "}
+            }
+        };
+        formatdoc! {"
+            {signature}
+            {ext_str}
+            {abnormal_base_str}
+        "}
+    }
+
     fn current_context(&self) -> Ctx {
         self.extensions
             .last()
@@ -90,8 +242,16 @@ impl Scope {
 
     fn add_type(&mut self, checking: Checking, ty: &ast::Ty) -> Ty {
         match ty {
-            ast::Ty::Unit => self.cwf.define_unit(self.current_context()),
-            ast::Ty::Bool => self.cwf.define_bool(self.current_context()),
+            ast::Ty::Unit => {
+                let ty = self.cwf.define_unit(self.current_context());
+                self.type_names.push((ty, "Unit".to_string()));
+                ty
+            }
+            ast::Ty::Bool => {
+                let ty = self.cwf.define_bool(self.current_context());
+                self.type_names.push((ty, "Bool".to_string()));
+                ty
+            }
             ast::Ty::Eq(lhs, rhs) => {
                 let lhs = self.add_term(checking, lhs);
                 let rhs = self.add_term(checking, rhs);
@@ -102,7 +262,12 @@ impl Scope {
                     self.cwf.close();
                     assert_eq!(self.cwf.ty_root(lhs_ty), self.cwf.ty_root(rhs_ty));
                 }
-                self.cwf.define_eq(lhs, rhs)
+                let ty = self.cwf.define_eq(lhs, rhs);
+                let lhs_displ = self.display_term(lhs);
+                let rhs_displ = self.display_term(rhs);
+                self.type_names
+                    .push((ty, format!("Eq({lhs_displ}, {rhs_displ})")));
+                ty
             }
         }
     }
@@ -111,7 +276,9 @@ impl Scope {
             ast::Tm::Variable(name) => {
                 let def = self.definitions.get(name).unwrap().clone();
                 let wkn = self.add_weakening_from_base(&def);
-                self.cwf.define_subst_tm(wkn, def.term)
+                let tm = self.cwf.define_subst_tm(wkn, def.term);
+                self.term_names.push((tm, name.to_string()));
+                tm
             }
             ast::Tm::Typed { tm, ty } => {
                 let tm = self.add_term(checking, tm);
@@ -130,7 +297,14 @@ impl Scope {
                     .map(|arg| self.add_term(checking, arg))
                     .collect();
                 let subst = self.add_substitution(checking, &def, args.as_slice());
-                self.cwf.define_subst_tm(subst, def.term)
+                let tm = self.cwf.define_subst_tm(subst, def.term);
+                let args_displ = args
+                    .iter()
+                    .copied()
+                    .format_with(", ", |arg, f| f(&self.display_term(arg)));
+                let name = format!("{fun}({args_displ})");
+                self.term_names.push((tm, name));
+                tm
             }
             ast::Tm::Let { body, result } => {
                 let before_defs = self.definitions.clone();
@@ -141,12 +315,27 @@ impl Scope {
                 self.definitions = before_defs;
                 result
             }
-            ast::Tm::UnitTm => self.cwf.define_unit_tm(self.current_context()),
-            ast::Tm::False => self.cwf.define_false_tm(self.current_context()),
-            ast::Tm::True => self.cwf.define_true_tm(self.current_context()),
+            ast::Tm::UnitTm => {
+                let tm = self.cwf.define_unit_tm(self.current_context());
+                self.term_names.push((tm, "unit".to_string()));
+                tm
+            }
+            ast::Tm::False => {
+                let tm = self.cwf.define_false_tm(self.current_context());
+                self.term_names.push((tm, "false".to_string()));
+                tm
+            }
+            ast::Tm::True => {
+                let tm = self.cwf.define_true_tm(self.current_context());
+                self.term_names.push((tm, "true".to_string()));
+                tm
+            }
             ast::Tm::Refl(s) => {
                 let s = self.add_term(checking, s);
-                self.cwf.define_refl(s)
+                let tm = self.cwf.define_refl(s);
+                let s_displ = self.display_term(s);
+                self.term_names.push((tm, format!("refl({s_displ})")));
+                tm
             }
         }
     }
@@ -163,6 +352,7 @@ impl Scope {
                 term: var,
             },
         );
+        self.term_names.push((var, name.to_string()));
     }
     // Extend context by a variable.
     fn extend_context(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
@@ -179,6 +369,10 @@ impl Scope {
                 term: var,
             },
         );
+        self.term_names.push((var, name.to_string()));
+        let base_ctx_name = self.display_context(base_ctx);
+        self.context_names
+            .push((ext_ctx, format!("{base_ctx_name}.{name}")));
     }
 
     pub fn add_definition(&mut self, checking: Checking, def: &ast::Def) {
@@ -195,12 +389,51 @@ impl Scope {
                 }
             }
             Def { name, args, ty, tm } if args.is_empty() => {
-                let tm = self.add_term(checking, tm);
-                let ty = self.add_type(checking, ty);
+                let mut tm = self.add_term(checking, tm);
+                let mut ty = self.add_type(checking, ty);
                 if checking == Checking::Yes {
-                    let tm_ty = self.cwf.define_tm_ty(tm);
+                    let mut tm_ty = self.cwf.define_tm_ty(tm);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(tm_ty), self.cwf.ty_root(ty));
+                    tm = self.cwf.tm_root(tm);
+                    ty = self.cwf.ty_root(ty);
+                    tm_ty = self.cwf.ty_root(tm_ty);
+                    if tm_ty != ty {
+                        let ctx = self.cwf.ty_ctx(ty).next().unwrap();
+
+                        let ctx_displ = self.display_context(ctx);
+                        let tm_displ = self.display_term(tm);
+                        let ty_displ = self.display_type(ty);
+
+                        let tm_substs: Vec<(Mor, Tm)> = self.cwf.subst_tm_pre(tm).collect();
+                        let cwf_string = format!("{}", self.cwf);
+                        let tm_substs_displ =
+                            tm_substs
+                                .into_iter()
+                                .format_with("\n", |(pre_mor, pre_tm), f| {
+                                    let pre_tm_displ = self.display_term(pre_tm);
+                                    let pre_mor_displ = self.display_morphism(pre_mor);
+                                    let s = formatdoc! {"
+                                {pre_tm_displ} along
+                                {pre_mor_displ}
+
+                            "};
+                                    f(&s)
+                                });
+
+                        let err = formatdoc! {"
+                            In context {ctx_displ}:
+                            Term
+                                {tm_displ}
+                            does not have type
+                                {ty_displ}
+
+                            Info: Term is equal to the following substitutions:
+                            {tm_substs_displ}
+
+                            {cwf_string}
+                        "};
+                        panic!("{}", err);
+                    }
                 } else {
                     self.cwf.insert_tm_ty(TmTy(tm, ty));
                 }
@@ -220,6 +453,7 @@ impl Scope {
                         self.adjoin_variable(Checking::Yes, arg_name, arg_ty);
                     }
                     let tm = self.add_term(Checking::Yes, tm);
+                    self.term_names.push((tm, name.clone()));
                     let ty = self.add_type(Checking::Yes, ty);
                     let tm_ty = self.cwf.define_tm_ty(tm);
                     self.cwf.close();
@@ -229,6 +463,10 @@ impl Scope {
 
                 let before_definitions = self.definitions.clone();
                 let before_extensions = self.extensions.clone();
+
+                //let before_context_names = self.context_names.clone();
+                //let before_type_names = self.type_names.clone();
+                //let before_term_names = self.term_names.clone();
 
                 let mut extensions = Vec::new();
                 for (arg_name, arg_ty) in args {
@@ -241,6 +479,9 @@ impl Scope {
 
                 self.definitions = before_definitions;
                 self.extensions = before_extensions;
+                //self.context_names = before_context_names;
+                //self.type_names = before_type_names;
+                //self.term_names = before_term_names;
 
                 self.definitions.insert(
                     name.to_string(),
@@ -250,6 +491,7 @@ impl Scope {
                         term: tm,
                     },
                 );
+                self.term_names.push((tm, format!("{name}_def")));
             }
             UnitInd {
                 name,
@@ -308,6 +550,7 @@ impl Scope {
                         term,
                     },
                 );
+                self.term_names.push((term, "UnitInd".to_string()));
             }
             BoolInd {
                 name,
@@ -384,6 +627,7 @@ impl Scope {
                         term,
                     },
                 );
+                self.term_names.push((term, "BoolInd".to_string()));
             }
         }
     }

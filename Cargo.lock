@@ -145,6 +145,7 @@ dependencies = [
  "eqlog",
  "eqlog-util",
  "indoc",
+ "itertools",
  "lalrpop",
  "lalrpop-util",
  "lazy_static",
