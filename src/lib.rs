@@ -206,6 +206,9 @@ mod tests {
               .
 
             def false_false : and(false, false) = false := refl false.
+            def true_false : and(true, false) = false := refl false.
+            def false_true : and(false, true) = false := refl false.
+            def true_true : and(true, true) = true := refl true.
         "};
         check(&src);
     }
