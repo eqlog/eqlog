@@ -96,8 +96,12 @@ Axiom Dom(MorExt(ctx, sigma, _, _)) ~> ExtCtx(ctx, sigma);
 Axiom Cod(MorExt(_, _, f, _)) ~> Cod(f);
 
 // Iterated substitutions.
-Axiom SubstTm(g, SubstTm(f, _))! & g = MorExt(_, _, _, _) => Comp(g, f)!;
-Axiom SubstTy(g, SubstTy(f, _))! & g = MorExt(_, _, _, _) => Comp(g, f)!;
+Axiom SubstTm(g, SubstTm(f, _))! => Comp(g, f)!;
+Axiom SubstTy(g, SubstTy(f, _))! => Comp(g, f)!;
+
+//These seem to work too, but is that always the case?
+//Axiom SubstTm(g, SubstTm(f, _))! & g = MorExt(_, _, _, _) => Comp(g, f)!;
+//Axiom SubstTy(g, SubstTy(f, _))! & g = MorExt(_, _, _, _) => Comp(g, f)!;
 
 // The precomposition of an extended morphism.
 Axiom Comp(g, MorExt(_, _, f, s))! & SubstTm(g, s)! => Comp(g, f)!;
@@ -118,22 +122,6 @@ Axiom
 	Comp(e, Wkn(ctx, sigma)) = f
   =>
 	e = MorExt(ctx, sigma, f, s)
-	;
-
-// If f : dom -> cod and the extended contexts dom.sigma and cod.f(sigma) are defined, then also
-//   <w o f, v> : dom.sigma -> cod.f(sigma)
-// is defined.
-Axiom
-	ExtCtx(dom, sigma)! &
-	dom = Dom(f) &
-	cod = Cod(f) &
-	sigma_f = SubstTy(f, sigma) &
-	ExtCtx(cod, sigma_f)! &
-	cod_wkn = Wkn(cod, sigma_f) &
-	var_cod = Var(cod, sigma)
-	=>
-	Comp(cod_wkn, f)! &
-	MorExt(dom, sigma, Comp(cod_wkn, f), var_cod)!
 	;
 
 // The unit type.

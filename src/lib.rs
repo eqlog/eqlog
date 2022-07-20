@@ -188,6 +188,7 @@ mod tests {
               .
             def r0 : not(true) = false := refl false.
             def r1 : not(false) = true := refl true.
+            dump 'done'.
         "};
         check(&src);
     }
@@ -209,6 +210,28 @@ mod tests {
             def true_false : and(true, false) = false := refl false.
             def false_true : and(false, true) = false := refl false.
             def true_true : and(true, true) = true := refl true.
+        "};
+        check(&src);
+    }
+
+    #[test]
+    fn test_bool_fixed_false() {
+        let src = indoc! {"
+            def and (x : Bool) (y : Bool) : Bool :=
+              let
+                bool_ind x_case (x1 : Bool) : Bool
+                  | false => false
+                  | true => y
+                  .
+              in
+                x_case(x)
+              .
+
+            bool_ind and_second_false (x: Bool) : and(x, false) = false
+              | false => (refl false : and(false, false) = false)
+              | true => (refl false : and(true, false) = false)
+              .
+            def and_first_false (y: Bool) : and(false, y) = false := refl false.
         "};
         check(&src);
     }
