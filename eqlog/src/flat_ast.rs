@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::unification::*;
+#[cfg(debug_assertions)]
 use std::collections::BTreeSet;
 use std::iter::once;
 
