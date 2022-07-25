@@ -9,13 +9,6 @@ pub enum Def {
         ty: Ty,
         tm: Tm,
     },
-    BoolInd {
-        name: String,
-        var: String,
-        into_ty: Ty,
-        false_case: Tm,
-        true_case: Tm,
-    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,6 +35,13 @@ pub enum Tm {
     },
     True,
     False,
+    ElimBool {
+        discriminee: Box<Tm>,
+        var: String,
+        into_ty: Box<Ty>,
+        false_case: Box<Tm>,
+        true_case: Box<Tm>,
+    },
     Refl(Box<Tm>),
 }
 

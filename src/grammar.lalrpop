@@ -13,19 +13,11 @@ pub StringLiteral: String =
 
 pub Def: Def = {
     "def" <DefBody> "." => <>,
-    "bool_ind" <BoolIndBody> "." => <>,
     "dump" <message: StringLiteral?> "." => Def::Dump{ message },
 }
 
 pub DefBody: Def =
     <name: Id> <args: Args> ":" <ty: Ty> ":=" <tm: Tm> => Def::Def { <> };
-
-pub BoolIndBody: Def = {
-    <name: Id> "(" <var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
-    "|" "false" "=>" <false_case: Tm>
-    "|" "true" "=>" <true_case: Tm>
-    => Def::BoolInd { <> }
-}
 
 pub Args: Vec<(String, Ty)> =
     ("(" <Id+> ":" <Ty> ")")*
@@ -84,4 +76,16 @@ pub Tm: Tm = {
     },
     "true" => Tm::True,
     "false" => Tm::False,
+    "elim_bool" <discriminee : Tm> "into" "(" <var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
+      "|" "false" "=>" <false_case: Tm>
+      "|" "true" "=>" <true_case: Tm>
+    => {
+		  	Tm::ElimBool {
+          discriminee: Box::new(discriminee),
+					var,
+					into_ty: Box::new(into_ty),
+					false_case: Box::new(false_case),
+					true_case: Box::new(true_case),
+				}
+    },
 };

@@ -398,6 +398,83 @@ impl Scope {
                 self.term_names.push((tm, "true".to_string()));
                 tm
             }
+            ast::Tm::ElimBool {
+                discriminee,
+                var,
+                into_ty,
+                false_case,
+                true_case,
+            } => {
+                let discriminee = self.add_term(checking, discriminee);
+                let bool_ty = self.cwf.define_bool(self.current_context());
+
+                // Check that `discriminee` has the right type.
+                if checking == Checking::Yes {
+                    let tm_ty = self.cwf.define_tm_ty(discriminee);
+                    self.cwf.close();
+                    assert_eq!(self.cwf.ty_root(bool_ty), self.cwf.ty_root(tm_ty));
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(discriminee, bool_ty));
+                }
+
+                if checking == Checking::Yes {
+                    // Check `into_ty`.
+                    let before_self = self.clone();
+                    self.adjoin_variable(Checking::No, var, &ast::Ty::Bool);
+                    self.add_type(Checking::Yes, into_ty);
+                    *self = before_self;
+                }
+
+                // Adjoin `into_ty`, back off into current context again.
+                self.extend_context(Checking::No, var, &ast::Ty::Bool);
+                let into_ty = self.add_type(Checking::No, into_ty);
+                let (_, ext_ctx) = self.extensions.pop().unwrap();
+                self.definitions.remove(var).unwrap();
+
+                // Add `true_case` and `false_case` terms.
+                let false_case = self.add_term(checking, false_case);
+                let true_case = self.add_term(checking, true_case);
+
+                // Adjoin morphisms `subst_false = [var |-> false]` and
+                // `subst_true = [var |-> true]`.
+                let id = self.cwf.define_id(self.current_context());
+                let false_tm = self.cwf.define_false_tm(self.current_context());
+                let true_tm = self.cwf.define_true_tm(self.current_context());
+                let subst_false = self.cwf.define_ext_mor(ext_ctx, id, false_tm);
+                let subst_true = self.cwf.define_ext_mor(ext_ctx, id, true_tm);
+
+                // Substitute `into_ty` into current context, once with `true` and once with
+                // `false`.
+                let into_ty_false_subst = self.cwf.define_subst_ty(subst_false, into_ty);
+                let into_ty_true_subst = self.cwf.define_subst_ty(subst_true, into_ty);
+
+                if checking == Checking::Yes {
+                    let false_case_ty = self.cwf.define_tm_ty(false_case);
+                    let true_case_ty = self.cwf.define_tm_ty(true_case);
+                    self.cwf.close();
+                    assert_eq!(
+                        self.cwf.ty_root(false_case_ty),
+                        self.cwf.ty_root(into_ty_false_subst)
+                    );
+                    assert_eq!(
+                        self.cwf.ty_root(true_case_ty),
+                        self.cwf.ty_root(into_ty_true_subst)
+                    );
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(false_case, into_ty_false_subst));
+                    self.cwf.insert_tm_ty(TmTy(true_case, into_ty_true_subst));
+                }
+
+                let bool_ind = self.cwf.define_bool_ind(into_ty, false_case, true_case);
+
+                // Adjoin morphism `subst_discriminee = [var |-> discriminee]`.
+                let subst_discriminee = self.cwf.define_ext_mor(ext_ctx, id, discriminee);
+
+                // Substitute `bool_ind` into current context along `subst_discriminee`.
+                let elim_tm = self.cwf.define_subst_tm(subst_discriminee, bool_ind);
+                self.term_names.push((elim_tm, "elim_bool".to_string()));
+                elim_tm
+            }
             ast::Tm::Refl(s) => {
                 let s = self.add_term(checking, s);
                 let tm = self.cwf.define_refl(s);
@@ -517,72 +594,6 @@ impl Scope {
                     },
                 );
                 self.term_names.push((tm, format!("{name}_def")));
-            }
-            BoolInd {
-                name,
-                var,
-                into_ty,
-                false_case,
-                true_case,
-            } => {
-                if checking == Checking::Yes {
-                    // Check `into_ty`.
-                    let before_self = self.clone();
-                    self.adjoin_variable(Checking::No, var, &ast::Ty::Bool);
-                    self.add_type(Checking::Yes, into_ty);
-                    *self = before_self;
-                }
-
-                // Adjoin `into_ty`, back off into current context again.
-                self.extend_context(Checking::No, var, &ast::Ty::Bool);
-                let into_ty = self.add_type(Checking::No, into_ty);
-                let (bool_ty, ext_ctx) = self.extensions.pop().unwrap();
-                self.definitions.remove(var).unwrap();
-
-                // Add `true_case` and `false_case` terms.
-                let false_case = self.add_term(checking, false_case);
-                let true_case = self.add_term(checking, true_case);
-
-                // Adjoin morphisms `subst_false = [var |-> false]` and
-                // `subst_true = [var |-> true]`.
-                let id = self.cwf.define_id(self.current_context());
-                let false_tm = self.cwf.define_false_tm(self.current_context());
-                let true_tm = self.cwf.define_true_tm(self.current_context());
-                let subst_false = self.cwf.define_ext_mor(ext_ctx, id, false_tm);
-                let subst_true = self.cwf.define_ext_mor(ext_ctx, id, true_tm);
-
-                // Substitute `into_ty` into current context, once with `true` and once with
-                // `false`.
-                let into_ty_false_subst = self.cwf.define_subst_ty(subst_false, into_ty);
-                let into_ty_true_subst = self.cwf.define_subst_ty(subst_true, into_ty);
-
-                if checking == Checking::Yes {
-                    let false_case_ty = self.cwf.define_tm_ty(false_case);
-                    let true_case_ty = self.cwf.define_tm_ty(true_case);
-                    self.cwf.close();
-                    assert_eq!(
-                        self.cwf.ty_root(false_case_ty),
-                        self.cwf.ty_root(into_ty_false_subst)
-                    );
-                    assert_eq!(
-                        self.cwf.ty_root(true_case_ty),
-                        self.cwf.ty_root(into_ty_true_subst)
-                    );
-                } else {
-                    self.cwf.insert_tm_ty(TmTy(false_case, into_ty_false_subst));
-                    self.cwf.insert_tm_ty(TmTy(true_case, into_ty_true_subst));
-                }
-
-                let term = self.cwf.define_bool_ind(into_ty, false_case, true_case);
-                self.definitions.insert(
-                    name.clone(),
-                    Definition {
-                        base_context: self.current_context(),
-                        extensions: vec![(bool_ty, ext_ctx)],
-                        term,
-                    },
-                );
-                self.term_names.push((term, "BoolInd".to_string()));
             }
         }
     }

@@ -214,46 +214,24 @@ mod tests {
     #[test]
     fn test_bool_not() {
         let src = indoc! {"
-            bool_ind not (x : Bool) : Bool
-              | false => true
-              | true => false
-              .
-            def r0 : not(true) = false := refl false.
-            def r1 : not(false) = true := refl true.
-        "};
-        check(&src);
-    }
-
-    #[test]
-    fn test_bool_nested_not() {
-        let src = indoc! {"
             def not (x : Bool) : Bool :=
-              let 
-                bool_ind x_case (x0 : Bool): Bool
+              elim_bool x into (x0 : Bool) : Bool
                 | false => true
                 | true => false
-                .
-              in
-                x_case(x)
               .
             def r0 : not(true) = false := refl false.
             def r1 : not(false) = true := refl true.
-            dump 'done'.
         "};
         check(&src);
     }
 
     #[test]
-    fn test_bool_and() {
+    fn test_bool_and_def() {
         let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
+              elim_bool x into (x1 : Bool) : Bool
+                | false => false
+                | true => y
               .
             dump 'and defined'.
 
@@ -269,19 +247,16 @@ mod tests {
     fn test_bool_fixed_false_and() {
         let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
+              elim_bool x into (x1 : Bool) : Bool
+                | false => false
+                | true => y
               .
 
-            def and_first_false (y: Bool) : and(false, y) = false := refl false.
-            bool_ind and_second_false (x: Bool) : and(x, false) = false
-              | false => (refl false : and(false, false) = false)
-              | true => (refl false : and(true, false) = false)
+            def first_false (y: Bool) : and(false, y) = false := refl false.
+            def second_false (x: Bool) : and(x, false) = false :=
+              elim_bool x into (x0 : Bool) : and(x0, false) = false
+                | false => (refl false : and(false, false) = false)
+                | true => (refl false : and(true, false) = false)
               .
 
             dump 'done'.
@@ -293,19 +268,16 @@ mod tests {
     fn test_bool_fixed_true_and() {
         let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
+              elim_bool x into (x1 : Bool) : Bool
+                | false => false
+                | true => y
               .
 
-            def and_first_true (y: Bool) : and(true, y) = y := refl y.
-            bool_ind and_second_true (x: Bool) : and(x, true) = x
-              | false => (refl false : and(false, true) = false)
-              | true => (refl true : and(true, true) = true)
+            def first_true (y: Bool) : and(true, y) = y := refl y.
+            def second_true (x: Bool) : and(x, true) = x :=
+              elim_bool x into (x0 : Bool) : and(x0, true) = x0
+                | false => (refl false : and(false, true) = false)
+                | true => (refl true : and(true, true) = true)
               .
 
             dump 'done'.
@@ -317,267 +289,39 @@ mod tests {
     fn test_bool_and_commutative() {
         let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
+              elim_bool x into (x1 : Bool) : Bool
+                | false => false
+                | true => y
               .
 
             def first_false (y: Bool) : and(false, y) = false := refl false.
-            bool_ind second_false (x: Bool) : and(x, false) = false
-              | false => (refl false : and(false, false) = false)
-              | true => (refl false : and(true, false) = false)
+            def second_false (x: Bool) : and(x, false) = false :=
+              elim_bool x into (x0 : Bool) : and(x0, false) = false
+                | false => (refl false : and(false, false) = false)
+                | true => (refl false : and(true, false) = false)
               .
 
             def first_true (y: Bool) : and(true, y) = y := refl y.
-            bool_ind second_true (x: Bool) : and(x, true) = x
-              | false => (refl false : and(false, true) = false)
-              | true => (refl true : and(true, true) = true)
+            def second_true (x: Bool) : and(x, true) = x :=
+              elim_bool x into (x0 : Bool) : and(x0, true) = x0
+                | false => (refl false : and(false, true) = false)
+                | true => (refl true : and(true, true) = true)
               .
 
             def and_commutative (x : Bool) (y : Bool) : and(x, y) = and(y, x) :=
-              let
-                bool_ind x_case(x0 : Bool) : and(x0, y) = and(y, x0)
-                  | false =>
-                      let
-                        def left_is_false : and(false, y) = false := first_false(y).
-                        def right_is_false : and(y, false) = false := second_false(y).
-                      in
-                        refl false
-                  | true =>
-                      let
-                        def left_is_y : and(true, y) = y := first_true(y).
-                        def right_is_y : and(y, true) = y := second_true(y).
-                      in
-                        refl y
-                  .
-              in
-                x_case(x)
-              .
-        "};
-        check(&src);
-    }
-
-    #[test]
-    fn test_twice_bool_and_commutative() {
-        let src = indoc! {"
-            def and (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
-              .
-
-            def first_false (y: Bool) : and(false, y) = false := refl false.
-            bool_ind second_false (x: Bool) : and(x, false) = false
-              | false => (refl false : and(false, false) = false)
-              | true => (refl false : and(true, false) = false)
-              .
-
-            def first_true (y: Bool) : and(true, y) = y := refl y.
-            bool_ind second_true (x: Bool) : and(x, true) = x
-              | false => (refl false : and(false, true) = false)
-              | true => (refl true : and(true, true) = true)
-              .
-
-            def and_commutative (x : Bool) (y : Bool) : and(x, y) = and(y, x) :=
-              let
-                bool_ind x_case(x0 : Bool) : and(x0, y) = and(y, x0)
-                  | false =>
-                      let
-                        def left_is_false : and(false, y) = false := first_false(y).
-                        def right_is_false : and(y, false) = false := second_false(y).
-                      in
-                        refl false
-                  | true =>
-                      let
-                        def left_is_y : and(true, y) = y := first_true(y).
-                        def right_is_y : and(y, true) = y := second_true(y).
-                      in
-                        refl y
-                  .
-              in
-                x_case(x)
-              .
-
-            def and1 (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
-              .
-
-            def first_false1 (y: Bool) : and1(false, y) = false := refl false.
-            bool_ind second_false1 (x: Bool) : and1(x, false) = false
-              | false => (refl false : and1(false, false) = false)
-              | true => (refl false : and1(true, false) = false)
-              .
-
-            def first_true1 (y: Bool) : and1(true, y) = y := refl y.
-            bool_ind second_true1 (x: Bool) : and1(x, true) = x
-              | false => (refl false : and1(false, true) = false)
-              | true => (refl true : and1(true, true) = true)
-              .
-
-            def and_commutative1 (x : Bool) (y : Bool) : and1(x, y) = and1(y, x) :=
-              let
-                bool_ind x_case(x0 : Bool) : and1(x0, y) = and1(y, x0)
-                  | false =>
-                      let
-                        def left_is_false : and1(false, y) = false := first_false1(y).
-                        def right_is_false : and1(y, false) = false := second_false1(y).
-                      in
-                        refl false
-                  | true =>
-                      let
-                        def left_is_y : and1(true, y) = y := first_true1(y).
-                        def right_is_y : and1(y, true) = y := second_true1(y).
-                      in
-                        refl y
-                  .
-              in
-                x_case(x)
-              .
-        "};
-        check(&src);
-    }
-
-    #[test]
-    fn test_thrice_bool_and_commutative() {
-        let src = indoc! {"
-            def and (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
-              .
-
-            def first_false (y: Bool) : and(false, y) = false := refl false.
-            bool_ind second_false (x: Bool) : and(x, false) = false
-              | false => (refl false : and(false, false) = false)
-              | true => (refl false : and(true, false) = false)
-              .
-
-            def first_true (y: Bool) : and(true, y) = y := refl y.
-            bool_ind second_true (x: Bool) : and(x, true) = x
-              | false => (refl false : and(false, true) = false)
-              | true => (refl true : and(true, true) = true)
-              .
-
-            def and_commutative (x : Bool) (y : Bool) : and(x, y) = and(y, x) :=
-              let
-                bool_ind x_case(x0 : Bool) : and(x0, y) = and(y, x0)
-                  | false =>
-                      let
-                        def left_is_false : and(false, y) = false := first_false(y).
-                        def right_is_false : and(y, false) = false := second_false(y).
-                      in
-                        refl false
-                  | true =>
-                      let
-                        def left_is_y : and(true, y) = y := first_true(y).
-                        def right_is_y : and(y, true) = y := second_true(y).
-                      in
-                        refl y
-                  .
-              in
-                x_case(x)
-              .
-
-            def and1 (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
-              .
-
-            def first_false1 (y: Bool) : and1(false, y) = false := refl false.
-            bool_ind second_false1 (x: Bool) : and1(x, false) = false
-              | false => (refl false : and1(false, false) = false)
-              | true => (refl false : and1(true, false) = false)
-              .
-
-            def first_true1 (y: Bool) : and1(true, y) = y := refl y.
-            bool_ind second_true1 (x: Bool) : and1(x, true) = x
-              | false => (refl false : and1(false, true) = false)
-              | true => (refl true : and1(true, true) = true)
-              .
-
-            def and_commutative1 (x : Bool) (y : Bool) : and1(x, y) = and1(y, x) :=
-              let
-                bool_ind x_case(x0 : Bool) : and1(x0, y) = and1(y, x0)
-                  | false =>
-                      let
-                        def left_is_false : and1(false, y) = false := first_false1(y).
-                        def right_is_false : and1(y, false) = false := second_false1(y).
-                      in
-                        refl false
-                  | true =>
-                      let
-                        def left_is_y : and1(true, y) = y := first_true1(y).
-                        def right_is_y : and1(y, true) = y := second_true1(y).
-                      in
-                        refl y
-                  .
-              in
-                x_case(x)
-              .
-
-            def and2 (x : Bool) (y : Bool) : Bool :=
-              let
-                bool_ind x_case (x1 : Bool) : Bool
-                  | false => false
-                  | true => y
-                  .
-              in
-                x_case(x)
-              .
-
-            def first_false2 (y: Bool) : and2(false, y) = false := refl false.
-            bool_ind second_false2 (x: Bool) : and2(x, false) = false
-              | false => (refl false : and2(false, false) = false)
-              | true => (refl false : and2(true, false) = false)
-              .
-
-            def first_true2 (y: Bool) : and2(true, y) = y := refl y.
-            bool_ind second_true2 (x: Bool) : and2(x, true) = x
-              | false => (refl false : and2(false, true) = false)
-              | true => (refl true : and2(true, true) = true)
-              .
-
-            def and_commutative2 (x : Bool) (y : Bool) : and2(x, y) = and2(y, x) :=
-              let
-                bool_ind x_case(x0 : Bool) : and2(x0, y) = and2(y, x0)
-                  | false =>
-                      let
-                        def left_is_false : and2(false, y) = false := first_false2(y).
-                        def right_is_false : and2(y, false) = false := second_false2(y).
-                      in
-                        refl false
-                  | true =>
-                      let
-                        def left_is_y : and2(true, y) = y := first_true2(y).
-                        def right_is_y : and2(y, true) = y := second_true2(y).
-                      in
-                        refl y
-                  .
-              in
-                x_case(x)
+              elim_bool x into (x0 : Bool) : and(x0, y) = and(y, x0)
+                | false =>
+                    let
+                      def left_is_false : and(false, y) = false := first_false(y).
+                      def right_is_false : and(y, false) = false := second_false(y).
+                    in
+                      refl false
+                | true =>
+                    let
+                      def left_is_y : and(true, y) = y := first_true(y).
+                      def right_is_y : and(y, true) = y := second_true(y).
+                    in
+                      refl y
               .
         "};
         check(&src);
