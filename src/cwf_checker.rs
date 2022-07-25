@@ -323,6 +323,71 @@ impl Scope {
                 self.term_names.push((tm, "unit".to_string()));
                 tm
             }
+            ast::Tm::ElimUnit {
+                discriminee,
+                var,
+                into_ty,
+                unit_case,
+            } => {
+                let discriminee = self.add_term(checking, discriminee);
+                let unit_ty = self.cwf.define_unit(self.current_context());
+
+                // Check that `discriminee` has the right type.
+                if checking == Checking::Yes {
+                    let tm_ty = self.cwf.define_tm_ty(discriminee);
+                    self.cwf.close();
+                    assert_eq!(self.cwf.ty_root(unit_ty), self.cwf.ty_root(tm_ty));
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(discriminee, unit_ty));
+                }
+
+                // Check `into_ty`.
+                if checking == Checking::Yes {
+                    let before_self = self.clone();
+                    self.adjoin_variable(Checking::No, var, &ast::Ty::Unit);
+                    self.add_type(Checking::Yes, into_ty);
+                    *self = before_self;
+                }
+
+                // Adjoin `into_ty`, back off into current context again. We remember the extended
+                // context and the unit type.
+                self.extend_context(Checking::No, var, &ast::Ty::Unit);
+                let into_ty = self.add_type(Checking::No, into_ty);
+                let (_, ext_ctx) = self.extensions.pop().unwrap();
+                self.definitions.remove(var).unwrap();
+
+                // Add `unit_case`.
+                let unit_case = self.add_term(checking, unit_case);
+
+                // Adjoin morphism `subst_unit = [var |-> unit]`.
+                let id = self.cwf.define_id(self.current_context());
+                let unit_tm = self.cwf.define_unit_tm(self.current_context());
+                let subst_unit = self.cwf.define_ext_mor(ext_ctx, id, unit_tm);
+
+                // Substitute `into_ty` into current context.
+                let into_ty_unit_subst = self.cwf.define_subst_ty(subst_unit, into_ty);
+
+                if checking == Checking::Yes {
+                    let unit_case_ty = self.cwf.define_tm_ty(unit_case);
+                    self.cwf.close();
+                    assert_eq!(
+                        self.cwf.ty_root(unit_case_ty),
+                        self.cwf.ty_root(into_ty_unit_subst)
+                    );
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(unit_case, into_ty_unit_subst));
+                }
+
+                let unit_ind = self.cwf.define_unit_ind(into_ty, unit_case);
+
+                // Adjoin morphism `subst_discriminee = [var |-> discriminee]`.
+                let subst_discriminee = self.cwf.define_ext_mor(ext_ctx, id, discriminee);
+
+                // Substitute `unit_ind` into current context along `subst_discriminee`.
+                let elim_tm = self.cwf.define_subst_tm(subst_discriminee, unit_ind);
+                self.term_names.push((elim_tm, "elim_unit".to_string()));
+                elim_tm
+            }
             ast::Tm::False => {
                 let tm = self.cwf.define_false_tm(self.current_context());
                 self.term_names.push((tm, "false".to_string()));
@@ -452,60 +517,6 @@ impl Scope {
                     },
                 );
                 self.term_names.push((tm, format!("{name}_def")));
-            }
-            UnitInd {
-                name,
-                var,
-                into_ty,
-                unit_case,
-            } => {
-                if checking == Checking::Yes {
-                    // Check `into_ty`.
-                    let before_self = self.clone();
-                    self.adjoin_variable(Checking::No, var, &ast::Ty::Unit);
-                    self.add_type(Checking::Yes, into_ty);
-                    *self = before_self;
-                }
-
-                // Adjoin `into_ty`, back off into current context again. We remember the extended
-                // context and the unit type.
-                self.extend_context(Checking::No, var, &ast::Ty::Unit);
-                let into_ty = self.add_type(Checking::No, into_ty);
-                let (unit_ty, ext_ctx) = self.extensions.pop().unwrap();
-                self.definitions.remove(var).unwrap();
-
-                // Add `unit_case`.
-                let unit_case = self.add_term(checking, unit_case);
-
-                // Adjoin morphism `subst_unit = [var |-> unit]`.
-                let id = self.cwf.define_id(self.current_context());
-                let unit_tm = self.cwf.define_unit_tm(self.current_context());
-                let subst_unit = self.cwf.define_ext_mor(ext_ctx, id, unit_tm);
-
-                // Substitute `into_ty` into current context.
-                let into_ty_unit_subst = self.cwf.define_subst_ty(subst_unit, into_ty);
-
-                if checking == Checking::Yes {
-                    let unit_case_ty = self.cwf.define_tm_ty(unit_case);
-                    self.cwf.close();
-                    assert_eq!(
-                        self.cwf.ty_root(unit_case_ty),
-                        self.cwf.ty_root(into_ty_unit_subst)
-                    );
-                } else {
-                    self.cwf.insert_tm_ty(TmTy(unit_case, into_ty_unit_subst));
-                }
-
-                let term = self.cwf.define_unit_ind(into_ty, unit_case);
-                self.definitions.insert(
-                    name.clone(),
-                    Definition {
-                        base_context: self.current_context(),
-                        extensions: vec![(unit_ty, ext_ctx)],
-                        term,
-                    },
-                );
-                self.term_names.push((term, "UnitInd".to_string()));
             }
             BoolInd {
                 name,

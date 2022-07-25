@@ -13,19 +13,12 @@ pub StringLiteral: String =
 
 pub Def: Def = {
     "def" <DefBody> "." => <>,
-    "unit_ind" <UnitIndBody> "." => <>,
     "bool_ind" <BoolIndBody> "." => <>,
     "dump" <message: StringLiteral?> "." => Def::Dump{ message },
 }
 
 pub DefBody: Def =
     <name: Id> <args: Args> ":" <ty: Ty> ":=" <tm: Tm> => Def::Def { <> };
-
-pub UnitIndBody: Def = {
-    <name: Id> "(" <var: Id> ":" "Unit" ")" ":" <into_ty: Ty>
-    "|" "unit" "=>" <unit_case: Tm>
-    => Def::UnitInd { <> }
-}
 
 pub BoolIndBody: Def = {
     <name: Id> "(" <var: Id> ":" "Bool" ")" ":" <into_ty: Ty>
@@ -67,16 +60,28 @@ pub Tm: Tm = {
         let ty = Box::new(ty);
         Tm::Typed { tm, ty }
     },
-    "let" <body: Def*> "in" <result: Tm> =>
+    "let" <body: Def*> "in" <result: Tm> => {
         Tm::Let { body,
-                  result: Box::new(result) },
-    "refl" <tm: Tm> => Tm::Refl(Box::new(tm)),
-    "unit" => Tm::UnitTm,
-    "true" => Tm::True,
-    "false" => Tm::False,
+                  result: Box::new(result) }
+		},
     <var: Id> => Tm::Variable(var),
     <fun: Id> "(" <mut args: RevArgList> ")" => {
         args.reverse();
         Tm::App { fun, args}
-    }
+    },
+    "refl" <tm: Tm> => Tm::Refl(Box::new(tm)),
+    "unit" => Tm::UnitTm,
+
+    "elim_unit" <discriminee : Tm> "into" "(" <var: Id> ":" "Unit" ")" ":" <into_ty: Ty>
+      "|" "unit" "=>" <unit_case: Tm>
+    => {
+		  	Tm::ElimUnit {
+          discriminee: Box::new(discriminee),
+					var,
+					into_ty: Box::new(into_ty),
+					unit_case: Box::new(unit_case),
+				}
+    },
+    "true" => Tm::True,
+    "false" => Tm::False,
 };

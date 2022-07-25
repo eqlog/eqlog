@@ -152,8 +152,9 @@ mod tests {
     #[test]
     fn test_unit_uniqueness() {
         let src = indoc! {"
-            unit_ind unique_based (x : Unit) : x = unit
-              | unit => (refl unit : unit = unit)
+            def unique_based (x : Unit) : x = unit :=
+              elim_unit x into (x0 : Unit) : x0 = unit
+                | unit => (refl unit : unit = unit)
               .
         "};
         check(&src);
@@ -162,8 +163,9 @@ mod tests {
     #[test]
     fn test_app_unit_uniqueness() {
         let src = indoc! {"
-            unit_ind unique_based (x : Unit) : x = unit
-              | unit => (refl unit : unit = unit)
+            def unique_based (x : Unit) : x = unit :=
+              elim_unit x into (x0 : Unit) : x0 = unit
+                | unit => (refl unit : unit = unit)
               .
             def unique (x : Unit) (y : Unit) : x = y :=
               let
@@ -179,8 +181,9 @@ mod tests {
     #[test]
     fn test_app_const_unit() {
         let src = indoc! {"
-            unit_ind const_unit (x : Unit) : Unit
-              | unit => unit
+            def const_unit (x : Unit) : Unit :=
+              elim_unit x into (x0 : Unit) : Unit
+                | unit => unit
               .
             def u : Unit := const_unit(unit).
             def r : u = unit := refl unit.

@@ -9,12 +9,6 @@ pub enum Def {
         ty: Ty,
         tm: Tm,
     },
-    UnitInd {
-        name: String,
-        var: String,
-        into_ty: Ty,
-        unit_case: Tm,
-    },
     BoolInd {
         name: String,
         var: String,
@@ -27,10 +21,25 @@ pub enum Def {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Tm {
     Variable(String),
-    Typed { tm: Box<Tm>, ty: Box<Ty> },
-    App { fun: String, args: Vec<Tm> },
-    Let { body: Vec<Def>, result: Box<Tm> },
+    Typed {
+        tm: Box<Tm>,
+        ty: Box<Ty>,
+    },
+    App {
+        fun: String,
+        args: Vec<Tm>,
+    },
+    Let {
+        body: Vec<Def>,
+        result: Box<Tm>,
+    },
     UnitTm,
+    ElimUnit {
+        discriminee: Box<Tm>,
+        var: String,
+        into_ty: Box<Ty>,
+        unit_case: Box<Tm>,
+    },
     True,
     False,
     Refl(Box<Tm>),
