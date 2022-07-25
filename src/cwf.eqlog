@@ -27,7 +27,9 @@ Axiom Cod(Comp(g, _)) ~> Cod(g);
 // The set of active contexts.
 Pred ActiveCtx : Ctx;
 
-// Identity and associativity rules are intentionally missing.
+// Identity laws.
+Axiom ActiveCtx(Cod(f)) & i = Id(Dom(f)) => Comp(f, i) = f;
+Axiom ActiveCtx(ctx) & Cod(f) = ctx & i = Id(ctx) => Comp(i, f) = f;
 
 // Types and terms.
 Sort Ty;
@@ -115,7 +117,7 @@ Axiom
   ;
 
 // The equality
-//   MorExt(gamma, f, _) o ExtWkn(gamma) = f
+//   ExtMor(gamma, f, _) o ExtWkn(gamma) = f
 // in both directions, and in a version that works for compositions of 
 // weakenings instead of just a single one.
 Axiom 
@@ -136,7 +138,7 @@ Axiom
   ;
 
 // The equality
-//   g o MorExt(gamma, f, s) = MorExt(gamma, g o f, g[s])
+//   g o ExtMor(gamma, f, s) = ExtMor(gamma, g o f, g[s])
 // in both directions.
 Axiom
   ActiveCtx(Cod(g))
@@ -146,7 +148,6 @@ Axiom
   =>
   h = Comp(g, f)
   ;
-
 Axiom
   ActiveCtx(Cod(g))
   & Cod(f) = Dom(g)
@@ -203,3 +204,40 @@ Axiom SubstTm(f, Refl(s)) ~> Refl(SubstTm(f, s));
 Axiom TmTy(_) = Eq(s, t) => s = t;
 // Equality reflection, part two: Every two terms of and equality type are equal.
 Axiom e = Eq(s, s) & TmTy(r_1) = e & TmTy(r_2) = e => r_1 = r_2;
+
+// The type of booleans.
+Func Bool: Ctx -> Ty;
+Func FalseTm : Ctx -> Tm;
+Func TrueTm : Ctx -> Tm;
+// Boolean elimination, i.e. "if - else -". Takes
+// - the type to eliminate into, which must live a context extended by a variable of type `Bool`,
+// - the result for `FalseTm`,
+// - the result for `TrueTm`.
+// Returns a term in the extended context.
+Func BoolInd : Ty * Tm * Tm -> Tm;
+
+// The context of the bool type.
+Axiom TyCtx(Bool(ctx)) ~> ctx;
+// The types of the true and false terms.
+Axiom TmTy(FalseTm(ctx)) ~> Bool(ctx);
+Axiom TmTy(TrueTm(ctx)) ~> Bool(ctx);
+// Substitution stability of the bool type.
+Axiom SubstTy(f, Bool(Dom(f))) ~> Bool(Cod(f));
+// Substitution stability of the false and true terms.
+Axiom SubstTm(f, FalseTm(Dom(f))) ~> FalseTm(Cod(f));
+Axiom SubstTm(f, TrueTm(Dom(f))) ~> TrueTm(Cod(f));
+// The type of bool induction.
+Axiom TmTy(BoolInd(sigma, _, _)) ~> sigma;
+// Evaluation rules for BoolInd: One for substituting false, on for substituting true.
+Axiom 
+	c = BoolInd(sigma, false_case, _) &
+	f_false = ExtMor(TyCtx(sigma), f, FalseTm(Cod(f)))
+	=>
+	SubstTm(f_false, c) ~> SubstTm(f, false_case)
+	;
+Axiom 
+	c = BoolInd(sigma, _, true_case) &
+	f_true = ExtMor(TyCtx(sigma), f, TrueTm(Cod(f)))
+	=>
+	SubstTm(f_true, c) ~> SubstTm(f, true_case)
+	;

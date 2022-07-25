@@ -96,3 +96,32 @@ Otherwise we have g = w o g'' for some weakening w, and we have
   g o f = (w o g'') o f ~> w o (g'' o f)
 
 which concludes the reduction inductively.
+
+
+
+
+
+
+
+
+
+
+
+
+New appraoch:
+- Have some contexts marked as `Active : Ctx`
+- Have a predicate `TransExt : Ctx * Ctx` that records whether a context arises from iterated extensions.
+- Have the following rule:
+
+    Axiom
+	    Active(Cod(f))
+      & Cod(g) = Dom(f)
+      & TransExt(Dom(g), Dom(g))
+      =>
+      Comp(f, g)!
+  
+  This rule has the effect that if 
+
+  Axiom
+- Upon applying a function whose definition lives in context gamma into the current active_ scope delta:
+  Only add the immediate substitution f : gamma -> delta
