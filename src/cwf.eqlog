@@ -111,9 +111,12 @@ Axiom
   ActiveCtx(Cod(g))
   & Cod(f) = Dom(g)
   & CtxExt(Cod(f), Dom(f))
-  & SubstTm(g, SubstTm(f, _))!
+  & f = ExtMor(gamma, f_0, s)
+  & SubstTm(g, s)!
+  & Comp(g, f_0)!
   =>
-  Comp(g, f)!
+  ExtMor(gamma, Comp(g, f_0), SubstTm(g, s))! &
+  ExtMor(gamma, Comp(g, f_0), SubstTm(g, s)) = Comp(g, f)
   ;
 
 // The equality
