@@ -106,7 +106,9 @@ Axiom SubstTy(g, SubstTy(f, sigma)) ~> SubstTy(Comp(g, f), sigma);
 // - The codomain of g is an active context.
 // - The signatures of g and f match.
 // - f is a substitution from an inner scope of Dom(g) into Dom(g).
-// - SubstTm(g, SubstTm(f, s)) is defined for some term s in the domain of f.
+// - f = <f0, s> is an extended morphism for some term s in the domain of f0.
+// - The substitution g[s] is defined.
+// In this situation, we have Comp(g, f) = <g o f_0, g[s]>.
 Axiom
   ActiveCtx(Cod(g))
   & Cod(f) = Dom(g)
@@ -244,3 +246,31 @@ Axiom
 	=>
 	SubstTm(f_true, c) ~> SubstTm(f, true_case)
 	;
+
+// Implicitly adding morphisms to detect substitutions of bool inductions.
+Axiom
+  & bi_dom = BoolInd(sigma_dom, true_case, false_case)
+  & sigma_dom_ctx = TyCtx(sigma_dom)
+  & Dom(f) = BaseCtx(sigma_dom_ctx)
+  & ActiveCtx(Cod(f))
+  & bi_cod = BoolInd(sigma_cod, SubstTm(f, true_case), SubstTm(f, false_case))
+  & sigma_cod_ctx = TyCtx(sigma_cod)
+  & SubstTm(ExtMor(sigma_dom_ctx, Id(_), discriminee_dom), bi_dom)!
+  & SubstTm(ExtMor(sigma_cod_ctx, Id(_), SubstTm(f, discriminee_dom)), bi_cod)!
+  =>
+  ExtMor(sigma_dom_ctx, Comp(ExtWkn(sigma_cod_ctx), f), ExtVar(sigma_cod_ctx))!
+  ;
+
+// Substitution stability of bool induction.
+Axiom
+  & bi_dom = BoolInd(sigma_dom, true_case, false_case)
+  & sigma_dom_ctx = TyCtx(sigma_dom)
+  & Dom(f) = BaseCtx(sigma_dom_ctx)
+  & ActiveCtx(Cod(f))
+  & bi_cod = BoolInd(sigma_cod, SubstTm(f, true_case), SubstTm(f, false_case))
+  & sigma_cod_ctx = TyCtx(sigma_cod)
+  & qf = ExtMor(sigma_dom_ctx, Comp(ExtWkn(sigma_cod_ctx), f), ExtVar(sigma_cod_ctx))
+  & SubstTy(qf, sigma_dom) = sigma_cod
+  =>
+  SubstTm(qf, bi_dom) = bi_cod
+  ;

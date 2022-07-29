@@ -326,4 +326,29 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_bool_and_substitution() {
+        let src = indoc! {"
+            def and (x : Bool) (y : Bool) : Bool :=
+              elim_bool x into (x1 : Bool) : Bool
+                | false => false
+                | true => y
+                .
+            
+            def and_fixed_test (z : Bool) : Unit :=
+              let
+                def false_and_z : Bool := and(false, z).
+                def explicit_false_and_z : Bool :=
+                  elim_bool z into (z1 : Bool) : Bool
+                    | false => false
+                    | true => z
+                    .
+                def r : false_and_z = explicit_false_and_z := refl false_and_z.
+              in
+                unit
+              .
+        "};
+        check(&src);
+    }
 }
