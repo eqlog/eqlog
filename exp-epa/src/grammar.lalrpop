@@ -94,12 +94,8 @@ pub Tm: Tm = {
     "succ" <tm: Tm> => Tm::Succ(Box::new(tm)),
     "elim_nat" <discriminee : Tm> "into" "(" <var: Id> ":" "Nat" ")" ":" <into_ty: Ty>
       "|" "zero" "=>" <zero_case: Tm>
-      "|" "(" <succ_case_nat_var: Id> ":" "Nat" ")"
-          "(" <succ_case_prev_var: Id> ":" <succ_into_ty: Ty> "[" <succ_into_ty_arg: Id> "]" ")"
-          "=>" <succ_case: Tm>
+      "|" "(" <succ_case_nat_var: Id> "," <succ_case_prev_var: Id> ")" "=>" <succ_case: Tm>
     => {
-			assert_eq!(into_ty, succ_into_ty);
-			assert_eq!(succ_into_ty_arg, succ_case_prev_var);
       Tm::ElimNat {
 				discriminee: Box::new(discriminee),
         var,
