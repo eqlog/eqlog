@@ -369,4 +369,14 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_zero_succ() {
+        let src = indoc! {"
+            def nat0 : Nat := zero.
+            def nat1 : Nat := succ nat0.
+            def nat2 : Nat := succ nat1.
+        "};
+        check(&src);
+    }
 }

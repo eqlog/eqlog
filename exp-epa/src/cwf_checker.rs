@@ -272,7 +272,11 @@ impl Scope {
                     .push((ty, format!("Eq({lhs_displ}, {rhs_displ})")));
                 ty
             }
-            ast::Ty::Nat => todo!(),
+            ast::Ty::Nat => {
+                let ty = self.cwf.define_nat(self.current_context());
+                self.type_names.push((ty, "Bool".to_string()));
+                ty
+            }
         }
     }
     fn add_term(&mut self, checking: Checking, tm: &ast::Tm) -> Tm {
@@ -483,8 +487,24 @@ impl Scope {
                 self.term_names.push((tm, format!("refl({s_displ})")));
                 tm
             }
-            ast::Tm::Zero => todo!(),
-            ast::Tm::Succ(_) => todo!(),
+            ast::Tm::Zero => {
+                let tm = self.cwf.define_zero(self.current_context());
+                self.term_names.push((tm, "zero".to_string()));
+                tm
+            }
+            ast::Tm::Succ(n) => {
+                let n = self.add_term(checking, n);
+                // TODO: Intuitive to always add Nat here?
+                let nat = self.cwf.define_nat(self.current_context());
+                if checking == Checking::Yes {
+                    let tm_ty = self.cwf.define_tm_ty(n);
+                    self.cwf.close();
+                    assert_eq!(self.cwf.ty_root(nat), self.cwf.ty_root(tm_ty));
+                } else {
+                    self.cwf.insert_tm_ty(TmTy(n, nat));
+                }
+                self.cwf.define_succ(n)
+            }
             ast::Tm::ElimNat { .. } => todo!(),
         }
     }
