@@ -1,0 +1,22 @@
+[package]
+name = "exp-epa"
+version = "0.1.0"
+authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>", "Jakob Botsch Nielsen <Jakob.botsch.nielsen@gmail.com>"]
+edition = "2018"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lalrpop-util = "0"
+lazy_static = "1"
+maplit = "1"
+regex = "1"
+indoc = "1"
+itertools = "0"
+
+[dependencies.cwf-theory]
+path = "../cwf-theory"
+
+[build-dependencies]
+lalrpop = { version = "0", features = [ "lexer" ] }

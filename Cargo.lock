@@ -140,6 +140,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "eqlog-test"
+version = "0.1.0"
+dependencies = [
+ "eqlog",
+ "eqlog-util",
+ "maplit",
+]
+
+[[package]]
 name = "eqlog-util"
 version = "0.1.0"
 dependencies = [
