@@ -191,6 +191,60 @@ Axiom
 	SubstTm(f_unit, c) ~> SubstTm(f, unit_case)
 	;
 
+// Implicitly adding morphisms to detect substitutions of unit inductions.
+Axiom
+  // There is a unit induction term `ui_dom`.
+  & ui_dom = UnitInd(sigma_dom, case)
+  // Its type lives in context `sigma_dom_ctx`.
+  & sigma_dom_ctx = TyCtx(sigma_dom)
+  // There is a morphism `f` with domain the base of `sigma_dom_ctx`.
+  & Dom(f) = BaseCtx(sigma_dom_ctx)
+  // `f` is a morphism into an active context.
+  & ActiveCtx(Cod(f))
+	// There is a unit induction term whose case is given by the substitution of the case of the
+	// previous UnitInd. This automatically implies that `sigma_cod` must live in a context extension
+	// of the codomain of f by Unit.
+  & ui_cod = UnitInd(sigma_cod, SubstTm(f, case))
+  // `sigma_cod_ctx` is the context of `ui_cod` and `sigma_cod`.
+  & sigma_cod_ctx = TyCtx(sigma_cod)
+  // The domain unit induction is applied to some discriminee.
+  & SubstTm(ExtMor(sigma_dom_ctx, Id(_), discriminee_dom), ui_dom)!
+  // ... and so is the codomain unit induction.
+  & SubstTm(ExtMor(sigma_cod_ctx, Id(_), SubstTm(f, discriminee_dom)), ui_cod)!
+  =>
+  // Then we have that the map
+  //
+  //   f.Unit : Dom(f).Unit -> Cod(f).Unit
+  //
+  // is defined that is given by sending the variable for the domain to the variable in the
+  // codomain.
+  ExtMor(sigma_dom_ctx, Comp(ExtWkn(sigma_cod_ctx), f), ExtVar(sigma_cod_ctx))!
+  ;
+
+// Substitution stability of unit induction.
+Axiom
+  // There is a uni induction term `ui_dom`.
+  & ui_dom = UnitInd(sigma_dom, case)
+  // It and its type lives in context `sigma_dom_ctx`.
+  & sigma_dom_ctx = TyCtx(sigma_dom)
+  // There is a morphism with domain the base context of `sigma_dom_ctx`.
+  & Dom(f) = BaseCtx(sigma_dom_ctx)
+  // The codomain of `f` is active.
+  & ActiveCtx(Cod(f))
+	// There is a unit induction term `ui_cod` given by the substitutions of the case along `f`. This
+	// implies that `ui_cod` must live in a context extension of Cod(f) by Unit.
+  & ui_cod = UnitInd(sigma_cod, SubstTm(f, case))
+  // `sigma_cod_ctx` is the context of `ui_cod` and `sigma_cod`.
+  & sigma_cod_ctx = TyCtx(sigma_cod)
+  // `f_unit` is the evident map `Dom(f).Unit -> Cod(f).Unit`.
+  & f_unit = ExtMor(sigma_dom_ctx, Comp(ExtWkn(sigma_cod_ctx), f), ExtVar(sigma_cod_ctx))
+  // `f_unit` sends the domain induction target type to the codomain induction target type.
+  & SubstTy(f_unit, sigma_dom) = sigma_cod
+  =>
+  // Then the substitution of the domain induction term is the codomain induction term.
+  SubstTm(f_unit, ui_dom) = ui_cod
+  ;
+
 // The equality type.
 Func Eq: Tm * Tm -> Ty;
 // The reflexivity term.

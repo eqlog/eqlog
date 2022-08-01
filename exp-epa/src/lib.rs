@@ -347,4 +347,26 @@ mod tests {
         "};
         check(&src);
     }
+
+    #[test]
+    fn test_unit_substitution() {
+        let src = indoc! {"
+            def unit0 (x0 : Unit) : Unit :=
+              elim_unit x0 into (_0 : Unit) : Unit
+                | unit => unit
+                .
+
+            def unit1 (x1 : Unit) : Unit :=
+              let
+                def result : Unit :=
+                  elim_unit x1 into (_1 : Unit) : Unit
+                    | unit => unit
+                    .
+                def eq : result = unit0(x1) := refl result.
+              in
+                result
+              .
+        "};
+        check(&src);
+    }
 }
