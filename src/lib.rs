@@ -330,23 +330,22 @@ mod tests {
     #[test]
     fn test_bool_and_substitution() {
         let src = indoc! {"
-            def and (x : Bool) (y : Bool) : Bool :=
-              elim_bool x into (x1 : Bool) : Bool
+            def and0 (x0 : Bool) (y0 : Bool) : Bool :=
+              elim_bool x0 into (_ : Bool) : Bool
                 | false => false
-                | true => y
+                | true => y0
                 .
-            
-            def and_fixed_test (z : Bool) : Unit :=
+
+            def and1 (x1 : Bool) (y1 : Bool) : Bool :=
               let
-                def false_and_z : Bool := and(false, z).
-                def explicit_false_and_z : Bool :=
-                  elim_bool z into (z1 : Bool) : Bool
+                def result : Bool :=
+                  elim_bool x1 into (_ : Bool) : Bool
                     | false => false
-                    | true => z
+                    | true => y1
                     .
-                def r : false_and_z = explicit_false_and_z := refl false_and_z.
+                def eq : result = and0(x1, y1) := refl result.
               in
-                unit
+                result
               .
         "};
         check(&src);
