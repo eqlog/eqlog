@@ -354,3 +354,51 @@ Axiom
   // Then the substitution of the domain induction term is the codomain induction term.
   SubstTm(f_bool, bi_dom) = bi_cod
   ;
+
+
+// The type of natural numbers.
+Func Nat: Ctx -> Ty;
+Func Zero : Ctx -> Tm;
+Func Succ : Tm -> Tm;
+// Natural induction. Parameters:
+// - The type `sigma` to eliminate into, which must live a context extended by a variable of type `Nat`.
+// - The result term for `Zero` in the base context. Must have the type `sigma[Zero]`.
+// - The result term for `Succ(n)`. Must live in an extension of the base context by a variable
+//   `n : Nat` and `prev : `sigma[n]`. Must have the type `sigma[n + 1]`.
+// Returns a term in the extended context.
+Func NatInd : Ty * Tm * Tm -> Tm;
+
+// The context of the Nat type.
+Axiom TyCtx(Nat(ctx)) ~> ctx;
+
+// The types of Zero, Succ and BoolInd terms.
+Axiom TmTy(Zero(ctx)) ~> Nat(ctx);
+Axiom TmTy(Succ(n)) ~> TmTy(n);
+Axiom TmTy(BoolInd(sigma, _, _)) ~> sigma;
+
+// Substitution stability of the Nat type.
+Axiom SubstTy(f, Nat(Dom(f))) ~> Nat(Cod(f));
+
+// Substitution stability of Zero and Succ terms.
+Axiom SubstTm(f, Zero(Dom(f))) ~> Zero(Cod(f));
+Axiom SubstTm(f, Succ(n)) ~> Succ(SubstTm(f, n));
+
+// Evaluation rules for NatInd: One for substituting Zero, one for substituting Succ(n).
+Axiom 
+	c = NatInd(sigma, zero_case, _)
+	& f_zero = ExtMor(TyCtx(sigma), f, Zero(Cod(f)))
+	=>
+	SubstTm(f_zero, c) ~> SubstTm(f, zero_case)
+	;
+Axiom 
+	c = NatInd(sigma, _, succ_case)
+  & sigma_ctx = TyCtx(sigma)
+	& f_succ = ExtMor(sigma_ctx, f, Succ(n))
+  & f_n = ExtMor(TyCtx(sigma), f, n)
+  & f_n_result = SubstTm(f_n, c)
+  & succ_ctx = TyCtx(TmTy(succ_case))
+  & g_n = ExtMor(BaseCtx(succ_ctx), f, n)
+  & g_n_prev = ExtMor(succ_ctx, g_n, f_n_result)
+	=>
+  SubstTm(f_succ, c) ~> SubstTm(g_n_prev, succ_case)
+	;
