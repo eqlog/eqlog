@@ -1,8 +1,8 @@
 #![recursion_limit = "128"]
 extern crate indoc;
+extern crate lalrpop_util;
 #[cfg(test)]
 extern crate maplit;
-extern crate lalrpop_util;
 use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(
