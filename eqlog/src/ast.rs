@@ -12,32 +12,11 @@ pub struct Sort {
     pub location: Option<Location>,
 }
 
-impl Sort {
-    #[cfg(test)]
-    pub fn new(name: String) -> Sort {
-        Sort {
-            name,
-            location: None,
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Predicate {
     pub name: String,
     pub arity: Vec<String>,
     pub location: Option<Location>,
-}
-
-impl Predicate {
-    #[cfg(test)]
-    pub fn new(name: String, arity: Vec<String>) -> Predicate {
-        Predicate {
-            name,
-            arity,
-            location: None,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -46,18 +25,6 @@ pub struct Function {
     pub dom: Vec<String>,
     pub cod: String,
     pub location: Option<Location>,
-}
-
-impl Function {
-    #[cfg(test)]
-    pub fn new(name: String, dom: Vec<String>, cod: String) -> Function {
-        Function {
-            name,
-            dom,
-            cod,
-            location: None,
-        }
-    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
