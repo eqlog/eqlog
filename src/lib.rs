@@ -1,9 +1,7 @@
 #![recursion_limit = "128"]
-extern crate eqlog_util;
 extern crate indoc;
 #[cfg(test)]
 extern crate maplit;
-use eqlog_util::eqlog_mod;
 extern crate lalrpop_util;
 use lalrpop_util::lalrpop_mod;
 
@@ -11,7 +9,6 @@ lalrpop_mod!(
     #[allow(unused)]
     grammar
 );
-eqlog_mod!(cwf);
 pub mod ast;
 
 pub mod cwf_checker;

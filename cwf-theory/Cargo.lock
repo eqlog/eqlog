@@ -147,20 +147,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "exp-epa"
-version = "0.1.0"
-dependencies = [
- "cwf-theory",
- "indoc",
- "itertools",
- "lalrpop",
- "lalrpop-util",
- "lazy_static",
- "maplit",
- "regex",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -251,12 +237,6 @@ checksum = "d6d265705249fe209280676d8f68887859fa42e1d34f342fc05bd47726a5e188"
 dependencies = [
  "regex",
 ]
-
-[[package]]
-name = "lazy_static"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"

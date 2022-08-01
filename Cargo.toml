@@ -15,11 +15,8 @@ regex = "1"
 indoc = "1"
 itertools = "0"
 
-[dependencies.eqlog-util]
-path = "eqlog/eqlog-util"
+[dependencies.cwf-theory]
+path = "cwf-theory"
 
 [build-dependencies]
 lalrpop = { version = "0", features = [ "lexer" ] }
-
-[build-dependencies.eqlog]
-path = "eqlog"

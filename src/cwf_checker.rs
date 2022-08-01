@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::cwf::*;
+use cwf_theory::cwf::*;
 use itertools::Itertools;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Display;
