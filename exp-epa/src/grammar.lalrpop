@@ -32,6 +32,7 @@ pub Ty: Ty = {
     "(" <Ty> ")" => <>,
     "Unit" => Ty::Unit,
     "Bool" => Ty::Bool,
+    "Nat" => Ty::Nat,
     <left: Tm> "=" <right: Tm> =>
         Ty::Eq(Box::new(left), Box::new(right)),
 };
@@ -87,5 +88,26 @@ pub Tm: Tm = {
 					false_case: Box::new(false_case),
 					true_case: Box::new(true_case),
 				}
+    },
+
+    "zero" => Tm::Zero,
+    "succ" <tm: Tm> => Tm::Succ(Box::new(tm)),
+    "elim_nat" <discriminee : Tm> "into" "(" <var: Id> ":" "Nat" ")" ":" <into_ty: Ty>
+      "|" "zero" "=>" <zero_case: Tm>
+      "|" "(" <succ_case_nat_var: Id> ":" "Nat" ")"
+          "(" <succ_case_prev_var: Id> ":" <succ_into_ty: Ty> "[" <succ_into_ty_arg: Id> "]" ")"
+          "=>" <succ_case: Tm>
+    => {
+			assert_eq!(into_ty, succ_into_ty);
+			assert_eq!(succ_into_ty_arg, succ_case_prev_var);
+      Tm::ElimNat {
+				discriminee: Box::new(discriminee),
+        var,
+        into_ty: Box::new(into_ty),
+        zero_case: Box::new(zero_case),
+        succ_case_nat_var,
+				succ_case_prev_var,
+        succ_case: Box::new(succ_case),
+			}
     },
 };

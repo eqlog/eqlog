@@ -272,6 +272,7 @@ impl Scope {
                     .push((ty, format!("Eq({lhs_displ}, {rhs_displ})")));
                 ty
             }
+            ast::Ty::Nat => todo!(),
         }
     }
     fn add_term(&mut self, checking: Checking, tm: &ast::Tm) -> Tm {
@@ -482,6 +483,9 @@ impl Scope {
                 self.term_names.push((tm, format!("refl({s_displ})")));
                 tm
             }
+            ast::Tm::Zero => todo!(),
+            ast::Tm::Succ(_) => todo!(),
+            ast::Tm::ElimNat { .. } => todo!(),
         }
     }
     // Adjoing indeterminate term of a given type, do not change context.

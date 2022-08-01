@@ -43,6 +43,17 @@ pub enum Tm {
         true_case: Box<Tm>,
     },
     Refl(Box<Tm>),
+    Zero,
+    Succ(Box<Tm>),
+    ElimNat {
+        discriminee: Box<Tm>,
+        var: String,
+        into_ty: Box<Ty>,
+        zero_case: Box<Tm>,
+        succ_case_nat_var: String,
+        succ_case_prev_var: String,
+        succ_case: Box<Tm>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,4 +61,5 @@ pub enum Ty {
     Unit,
     Bool,
     Eq(Box<Tm>, Box<Tm>),
+    Nat,
 }
