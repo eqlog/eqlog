@@ -9,13 +9,22 @@ use std::iter::{once, repeat};
 pub struct QuerySpec {
     pub projections: BTreeSet<usize>,
     pub diagonals: BTreeSet<BTreeSet<usize>>,
+    pub only_dirty: bool,
 }
 
 impl QuerySpec {
-    pub fn new() -> QuerySpec {
+    pub fn all() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
             diagonals: BTreeSet::new(),
+            only_dirty: false,
+        }
+    }
+    pub fn all_dirty() -> Self {
+        QuerySpec {
+            projections: BTreeSet::new(),
+            diagonals: BTreeSet::new(),
+            only_dirty: true,
         }
     }
 }
@@ -23,7 +32,7 @@ impl QuerySpec {
 impl PartialOrd<QuerySpec> for QuerySpec {
     fn partial_cmp(&self, rhs: &QuerySpec) -> Option<Ordering> {
         use Ordering::*;
-        if self.diagonals != rhs.diagonals {
+        if self.diagonals != rhs.diagonals || self.only_dirty != rhs.only_dirty {
             None
         } else if self.projections == rhs.projections {
             Some(Equal)
@@ -36,7 +45,6 @@ impl PartialOrd<QuerySpec> for QuerySpec {
         }
     }
 }
-
 fn query_spec_chains(indices: HashSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
     let mut specs: Vec<QuerySpec> = indices.into_iter().collect();
     specs.sort_by_key(|index| index.projections.len());
@@ -58,6 +66,7 @@ fn query_spec_chains(indices: HashSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
 pub struct IndexSpec {
     pub order: Vec<usize>,
     pub diagonals: BTreeSet<BTreeSet<usize>>,
+    pub only_dirty: bool,
 }
 
 fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
@@ -67,7 +76,9 @@ fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
 
 impl IndexSpec {
     pub fn can_serve(&self, query: &QuerySpec) -> bool {
-        query.diagonals == self.diagonals && is_prefix(&query.projections, &self.order)
+        self.only_dirty == query.only_dirty
+            && query.diagonals == self.diagonals
+            && is_prefix(&query.projections, &self.order)
     }
     pub fn from_query_spec_chain(arity_len: usize, chain: &[QuerySpec]) -> Self {
         let empty_projections = BTreeSet::new();
@@ -82,60 +93,92 @@ impl IndexSpec {
 
         let order: Vec<usize> = diffs.flatten().collect();
 
-        let diagonals = chain.last().unwrap().diagonals.clone();
-        IndexSpec { order, diagonals }
+        let last = chain.last().unwrap();
+        let diagonals = last.diagonals.clone();
+        let only_dirty = last.only_dirty;
+        IndexSpec {
+            order,
+            diagonals,
+            only_dirty,
+        }
     }
 }
 
 // Maps relation name and query spec to an index for the relation that can serve the query.
 pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
-pub fn select_indices<'a, Queries>(module: &Module, queries: Queries) -> IndexSelection
+pub fn select_indices<'a, QA, AA>(
+    module: &Module,
+    query_atoms: QA,
+    action_atoms: AA,
+) -> IndexSelection
 where
-    Queries: IntoIterator<Item = &'a Query>,
+    QA: IntoIterator<Item = &'a QueryAtom>,
+    AA: IntoIterator<Item = &'a ActionAtom>,
 {
-    // Maps relations to tuple of arity.len() and set of collected query specs.
-    let mut query_specs: HashMap<String, (usize, HashSet<QuerySpec>)> = module
+    // Maps relations to a set of collected query specs. We always need a query for all (dirty)
+    // tuples.
+    let mut query_specs: HashMap<String, HashSet<QuerySpec>> = module
         .relations()
-        .map(|(rel, arity)| (rel.to_string(), (arity.len(), hashset! {QuerySpec::new()})))
+        .map(|(rel, _)| {
+            (
+                rel.to_string(),
+                hashset! {QuerySpec::all(), QuerySpec::all_dirty()},
+            )
+        })
         .collect();
 
-    // Add indices for (implicit) functionality axioms.
-    for func in module.iter_functions() {
-        let spec = QuerySpec {
-            projections: (0..func.dom.len()).collect(),
-            diagonals: BTreeSet::new(),
-        };
-        query_specs.get_mut(&func.name).unwrap().1.insert(spec);
-    }
-
     // Add indices for queries.
-    for query in queries.into_iter() {
-        use Query::*;
-        match query {
+    for query_atom in query_atoms.into_iter() {
+        use QueryAtom::*;
+        match query_atom {
             Relation {
                 relation,
                 diagonals,
-                projections,
+                in_projections,
+                only_dirty,
                 ..
             } => {
-                query_specs.get_mut(relation).unwrap().1.insert(QuerySpec {
+                query_specs.get_mut(relation).unwrap().insert(QuerySpec {
                     diagonals: diagonals.clone(),
-                    projections: projections.keys().copied().collect(),
+                    projections: in_projections.keys().copied().collect(),
+                    only_dirty: *only_dirty,
                 });
             }
             Sort { .. } | Equal(_, _) => (),
         }
     }
 
+    // Add indices for actions.
+    for action_atom in action_atoms.into_iter() {
+        use ActionAtom::*;
+        match action_atom {
+            InsertTuple {
+                relation,
+                in_projections,
+                ..
+            } => {
+                query_specs.get_mut(relation).unwrap().insert(QuerySpec {
+                    diagonals: BTreeSet::new(),
+                    projections: in_projections.keys().copied().collect(),
+                    only_dirty: false,
+                });
+            }
+            Equate { .. } => (),
+        }
+    }
+
     query_specs
         .into_iter()
-        .map(|(rel, (arity_len, query_specs))| {
+        .map(|(rel, query_specs)| {
             let chains = query_spec_chains(query_specs);
             let query_index_map: HashMap<QuerySpec, IndexSpec> = chains
                 .into_iter()
                 .flat_map(|queries| {
-                    let index = IndexSpec::from_query_spec_chain(arity_len, &queries);
+                    let index = IndexSpec::from_query_spec_chain(
+                        module.arity(&rel).unwrap().len(),
+                        &queries,
+                    );
                     queries.into_iter().zip(repeat(index))
                 })
                 .collect();

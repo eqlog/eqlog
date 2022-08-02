@@ -1,33 +1,40 @@
 use crate::flat_ast::*;
 use crate::module::*;
 use itertools::Itertools;
+use maplit::btreemap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum Quantifier {
+    All,
+    // TODO: Add Any quantifier.
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub enum Query {
+pub enum QueryAtom {
     Equal(FlatTerm, FlatTerm),
     Relation {
         relation: String,
         diagonals: BTreeSet<BTreeSet<usize>>,
-        projections: BTreeMap<usize, FlatTerm>,
-        results: BTreeMap<usize, FlatTerm>,
+        in_projections: BTreeMap<usize, FlatTerm>,
+        out_projections: BTreeMap<usize, FlatTerm>,
+        only_dirty: bool,
+        quantifier: Quantifier,
     },
     Sort {
         sort: String,
         result: FlatTerm,
+        only_dirty: bool,
     },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub enum Action {
-    AddTerm {
-        function: String,
-        args: Vec<FlatTerm>,
-        result: FlatTerm,
-    },
-    AddTuple {
+pub enum ActionAtom {
+    InsertTuple {
         relation: String,
-        args: Vec<FlatTerm>,
+        in_projections: BTreeMap<usize, FlatTerm>,
+        out_projections: BTreeMap<usize, FlatTerm>,
+        // Must not have diagonals in out_projections.
     },
     Equate {
         sort: String,
@@ -38,8 +45,9 @@ pub enum Action {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub struct QueryAction {
-    pub queries: Vec<Query>,
-    pub actions: Vec<Action>,
+    pub queries: Vec<Vec<QueryAtom>>,
+    pub action_inputs: BTreeMap<FlatTerm, String>,
+    pub action: Vec<ActionAtom>,
 }
 
 fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
@@ -55,7 +63,7 @@ fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
         .collect()
 }
 
-fn projections(
+fn in_projections(
     fixed_terms: &HashMap<FlatTerm, String>,
     args: &[FlatTerm],
 ) -> BTreeMap<usize, FlatTerm> {
@@ -66,7 +74,7 @@ fn projections(
         .collect()
 }
 
-fn results(
+fn out_projections(
     fixed_terms: &HashMap<FlatTerm, String>,
     args: &[FlatTerm],
 ) -> BTreeMap<usize, FlatTerm> {
@@ -81,36 +89,36 @@ fn translate_premise(
     module: &Module,
     fixed_terms: &mut HashMap<FlatTerm, String>,
     premise: &[FlatAtom],
-) -> Vec<Query> {
+) -> Vec<QueryAtom> {
     let premise = premise
         .iter()
-        .map(|atom| {
-            use FlatAtom::*;
-            match atom {
-                Equal(lhs, rhs) => Query::Equal(*lhs, *rhs),
-                Relation(rel, args) => {
-                    let diagonals = diagonals(args);
-                    let projections = projections(&fixed_terms, args);
-                    let results = results(&fixed_terms, args);
-                    let arity = module.arity(rel).unwrap();
+        .map(|atom| match atom {
+            FlatAtom::Equal(lhs, rhs) => QueryAtom::Equal(*lhs, *rhs),
+            FlatAtom::Relation(rel, args) => {
+                let diagonals = diagonals(args);
+                let in_projections = in_projections(&fixed_terms, args);
+                let out_projections = out_projections(&fixed_terms, args);
+                let arity = module.arity(rel).unwrap();
 
-                    for (arg, sort) in args.iter().copied().zip(arity.iter()) {
-                        fixed_terms.insert(arg, sort.to_string());
-                    }
-
-                    Query::Relation {
-                        relation: rel.clone(),
-                        projections,
-                        diagonals,
-                        results,
-                    }
+                for (arg, sort) in args.iter().copied().zip(arity.iter()) {
+                    fixed_terms.insert(arg, sort.to_string());
                 }
-                Unconstrained(tm, sort) => {
-                    fixed_terms.insert(*tm, sort.to_string());
-                    Query::Sort {
-                        sort: sort.clone(),
-                        result: *tm,
-                    }
+
+                QueryAtom::Relation {
+                    relation: rel.clone(),
+                    in_projections,
+                    out_projections,
+                    diagonals,
+                    only_dirty: false,
+                    quantifier: Quantifier::All,
+                }
+            }
+            FlatAtom::Unconstrained(tm, sort) => {
+                fixed_terms.insert(*tm, sort.to_string());
+                QueryAtom::Sort {
+                    sort: sort.clone(),
+                    result: *tm,
+                    only_dirty: false,
                 }
             }
         })
@@ -122,150 +130,164 @@ fn translate_conclusion(
     module: &Module,
     fixed_terms: &mut HashMap<FlatTerm, String>,
     conclusion: &[FlatAtom],
-) -> Vec<Action> {
+) -> Vec<ActionAtom> {
     conclusion
         .iter()
-        .map(|atom| {
-            use FlatAtom::*;
-            match atom {
-                Equal(lhs, rhs) => {
-                    let sort = fixed_terms.get(lhs).unwrap();
-                    assert_eq!(sort, fixed_terms.get(rhs).unwrap());
-                    Action::Equate {
-                        sort: sort.clone(),
-                        lhs: *lhs,
-                        rhs: *rhs,
-                    }
+        .map(|atom| match atom {
+            FlatAtom::Equal(lhs, rhs) => {
+                let sort = fixed_terms.get(lhs).unwrap();
+                assert_eq!(sort, fixed_terms.get(rhs).unwrap());
+                ActionAtom::Equate {
+                    sort: sort.clone(),
+                    lhs: *lhs,
+                    rhs: *rhs,
                 }
-                Relation(rel, args) if args.is_empty() => Action::AddTuple {
-                    relation: rel.clone(),
-                    args: Vec::new(),
-                },
-                Relation(rel, rel_args) => {
-                    let relation = rel.clone();
-                    let mut args: Vec<FlatTerm> =
-                        rel_args.iter().copied().take(rel_args.len() - 1).collect();
-                    for arg in args.iter() {
-                        assert!(fixed_terms.contains_key(arg));
-                    }
+            }
+            FlatAtom::Relation(rel, args) => {
+                let in_projections = in_projections(&fixed_terms, args);
+                let out_projections = out_projections(&fixed_terms, args);
 
-                    let result = rel_args.last().copied().unwrap();
-                    if fixed_terms.contains_key(&result) {
-                        args.push(result);
-                        Action::AddTuple { relation, args }
-                    } else {
-                        let function = relation;
-                        let cod = *module.arity(rel).unwrap().last().unwrap();
-                        fixed_terms.insert(result, cod.to_string());
-                        Action::AddTerm {
-                            function,
-                            args,
-                            result,
-                        }
-                    }
+                let arity = module.arity(rel).unwrap();
+                fixed_terms.extend(
+                    out_projections
+                        .iter()
+                        .map(|(index, tm)| (*tm, arity[*index].to_string())),
+                );
+
+                ActionAtom::InsertTuple {
+                    relation: rel.to_string(),
+                    in_projections,
+                    out_projections,
                 }
-                Unconstrained(_, _) => {
-                    panic!("FlatAtom::Unconstrained in conclusion not allowed")
-                }
+            }
+            FlatAtom::Unconstrained(_, _) => {
+                panic!("FlatAtom::Unconstrained in conclusion not allowed")
             }
         })
         .collect()
 }
 
-impl QueryAction {
-    pub fn new(module: &Module, sequent: &FlatSequent) -> Self {
-        let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
-        let queries = translate_premise(module, &mut fixed_terms, &sequent.premise);
-        let actions = translate_conclusion(module, &mut fixed_terms, &sequent.conclusion);
-        QueryAction { queries, actions }
-    }
-    pub fn query_terms_used_in_actions<'a>(
-        &'a self,
-        module: &'a Module,
-    ) -> BTreeMap<FlatTerm, &'a str> {
-        let mut new_terms = BTreeSet::new();
-        let mut query_terms = BTreeMap::new();
-        for query in self.actions.iter() {
-            use Action::*;
-            match query {
-                AddTerm {
-                    function,
-                    args,
-                    result,
-                } => {
-                    new_terms.insert(*result);
-                    let arity = module.arity(function).unwrap();
-                    let dom = &arity[0..arity.len() - 1];
-                    query_terms.extend(args.iter().copied().enumerate().filter_map(|(i, tm)| {
-                        if new_terms.contains(&tm) {
-                            None
-                        } else {
-                            Some((tm, dom[i]))
-                        }
-                    }));
-                }
-                AddTuple { relation, args } => {
-                    let arity = module
-                        .relations()
-                        .find_map(
-                            |(rel, arity)| {
-                                if rel == relation {
-                                    Some(arity)
-                                } else {
-                                    None
-                                }
-                            },
-                        )
-                        .unwrap();
-                    query_terms.extend(args.iter().copied().enumerate().filter_map(|(i, tm)| {
-                        if new_terms.contains(&tm) {
-                            None
-                        } else {
-                            Some((tm, arity[i]))
-                        }
-                    }));
-                }
-                Equate { lhs, rhs, sort } => {
-                    if !new_terms.contains(lhs) {
-                        query_terms.insert(*lhs, sort);
+fn action_inputs(module: &Module, atoms: &[ActionAtom]) -> BTreeMap<FlatTerm, String> {
+    // We add terms that are added during an action to this set. These should not be added to
+    // the result.
+    let mut new_action_terms = BTreeSet::new();
+    // The result.
+    let mut query_terms: BTreeMap<FlatTerm, String> = BTreeMap::new();
+
+    for action_atom in atoms.iter() {
+        use ActionAtom::*;
+        match action_atom {
+            InsertTuple {
+                relation,
+                in_projections,
+                out_projections,
+            } => {
+                // `out_projections` contains terms that are introduced in the action, so
+                // they're not in the query.
+                new_action_terms.extend(out_projections.values().copied());
+                let arity = module.arity(relation).unwrap();
+                // Add the terms of `in_projection` unless they were only introduced in the
+                // action, not the query.
+                query_terms.extend(in_projections.iter().filter_map(|(index, tm)| {
+                    if new_action_terms.contains(tm) {
+                        None
+                    } else {
+                        Some((*tm, arity[*index].to_string()))
                     }
-                    if !new_terms.contains(rhs) {
-                        query_terms.insert(*rhs, sort);
-                    }
+                }));
+            }
+            Equate { lhs, rhs, sort } => {
+                if !new_action_terms.contains(lhs) {
+                    query_terms.insert(*lhs, sort.to_string());
+                }
+                if !new_action_terms.contains(rhs) {
+                    query_terms.insert(*rhs, sort.to_string());
                 }
             }
         }
-        query_terms
+    }
+    query_terms
+}
+
+impl QueryAction {
+    pub fn functionality(relation: &str, arity: &[&str]) -> Self {
+        assert!(!arity.is_empty());
+        let lhs_query = QueryAtom::Relation {
+            relation: relation.to_string(),
+            diagonals: BTreeSet::new(),
+            in_projections: BTreeMap::new(),
+            out_projections: (0..arity.len()).map(|i| (i, FlatTerm(i))).collect(),
+            only_dirty: false,
+            quantifier: Quantifier::All,
+        };
+        let rhs_query = QueryAtom::Relation {
+            relation: relation.to_string(),
+            diagonals: BTreeSet::new(),
+            in_projections: (0..arity.len() - 1).map(|i| (i, FlatTerm(i))).collect(),
+            out_projections: btreemap! { arity.len() - 1 => FlatTerm(arity.len())},
+            only_dirty: false,
+            quantifier: Quantifier::All,
+        };
+
+        let lhs = FlatTerm(arity.len() - 1);
+        let rhs = FlatTerm(arity.len());
+
+        let action_inputs = btreemap! {
+            lhs => arity.last().unwrap().to_string(),
+            rhs => arity.last().unwrap().to_string(),
+        };
+
+        let equate = ActionAtom::Equate {
+            sort: arity.last().unwrap().to_string(),
+            lhs: FlatTerm(arity.len() - 1),
+            rhs: FlatTerm(arity.len()),
+        };
+
+        QueryAction {
+            queries: vec![vec![lhs_query, rhs_query]],
+            action_inputs,
+            action: vec![equate],
+        }
+    }
+    pub fn new(module: &Module, sequent: &FlatSequent) -> Self {
+        let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
+        let query = translate_premise(module, &mut fixed_terms, &sequent.premise);
+        let action = translate_conclusion(module, &mut fixed_terms, &sequent.conclusion);
+        let action_inputs = action_inputs(module, &action);
+        QueryAction {
+            queries: vec![query],
+            action,
+            action_inputs,
+        }
     }
     pub fn is_surjective(&self) -> bool {
-        use Action::*;
-        self.actions
-            .iter()
-            .find(|action| {
-                if let AddTerm { .. } = action {
-                    true
-                } else {
-                    false
-                }
-            })
-            .is_none()
+        self.action.iter().all(|action_atom| {
+            use ActionAtom::*;
+            match action_atom {
+                InsertTuple {
+                    out_projections, ..
+                } => out_projections.is_empty(),
+                Equate { .. } => true,
+            }
+        })
     }
 }
 
 pub struct PureQuery {
     pub inputs: Vec<(FlatTerm, String)>,
     pub output: FlatQueryOutput,
-    pub queries: Vec<Query>,
+    pub queries: Vec<Vec<QueryAtom>>,
 }
 
 impl PureQuery {
-    pub fn new(module: &Module, query: &FlatQuery) -> Self {
-        let mut fixed_terms: HashMap<FlatTerm, String> = query.inputs.iter().cloned().collect();
-        let queries = translate_premise(module, &mut fixed_terms, &query.atoms);
+    pub fn new(module: &Module, flat_query: &FlatQuery) -> Self {
+        let mut fixed_terms: HashMap<FlatTerm, String> =
+            flat_query.inputs.iter().cloned().collect();
+        let query = translate_premise(module, &mut fixed_terms, &flat_query.atoms);
         PureQuery {
-            inputs: query.inputs.clone(),
-            output: query.output.clone(),
-            queries,
+            inputs: flat_query.inputs.clone(),
+            output: flat_query.output.clone(),
+            queries: vec![query],
         }
     }
 }

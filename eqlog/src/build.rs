@@ -11,6 +11,7 @@ use std::env;
 use std::error::Error;
 use std::fs;
 use std::io;
+use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
@@ -78,13 +79,19 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source_path: in_file.into(),
     })?;
 
-    let query_actions: Vec<QueryAction> = module
-        .iter_axioms()
-        .map(|(axiom, term_sorts)| {
-            let flat_sequent = flatten_sequent(&axiom.sequent, term_sorts);
-            QueryAction::new(&module, &flat_sequent)
-        })
-        .collect();
+    let mut query_actions: Vec<QueryAction> = Vec::new();
+    query_actions.extend(
+        module
+            .iter_functions()
+            .map(|Function { name, dom, cod, .. }| {
+                let arity: Vec<&str> = dom.iter().chain(once(cod)).map(|s| s.as_str()).collect();
+                QueryAction::functionality(name, &arity)
+            }),
+    );
+    query_actions.extend(module.iter_axioms().map(|(axiom, term_sorts)| {
+        let flat_sequent = flatten_sequent(&axiom.sequent, term_sorts);
+        QueryAction::new(&module, &flat_sequent)
+    }));
     let pure_queries: Vec<(String, PureQuery)> = module
         .iter_queries()
         .map(|(query, term_sorts)| {
@@ -92,17 +99,18 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
             (query.name.clone(), PureQuery::new(&module, &flat_query))
         })
         .collect();
-    let queries = query_actions
+    let query_atoms = query_actions
         .iter()
-        .map(|qa| qa.queries.iter())
+        .map(|qa| qa.queries.iter().flatten())
         .flatten()
         .chain(
             pure_queries
                 .iter()
-                .map(|(_, pq)| pq.queries.iter())
+                .map(|(_, pq)| pq.queries.iter().flatten())
                 .flatten(),
         );
-    let index_selection = select_indices(&module, queries);
+    let action_atoms = query_actions.iter().map(|qa| qa.action.iter()).flatten();
+    let index_selection = select_indices(&module, query_atoms, action_atoms);
     let theory_name = in_file
         .file_stem()
         .unwrap()
