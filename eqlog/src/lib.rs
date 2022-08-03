@@ -14,6 +14,7 @@ lalrpop_mod!(
 mod build;
 mod error;
 mod flat_ast;
+mod flat_to_llam;
 mod flatten;
 mod index_selection;
 mod llam;

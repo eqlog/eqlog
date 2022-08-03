@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
+use crate::flat_to_llam::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::index_selection::*;
@@ -85,18 +86,18 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
             .iter_functions()
             .map(|Function { name, dom, cod, .. }| {
                 let arity: Vec<&str> = dom.iter().chain(once(cod)).map(|s| s.as_str()).collect();
-                QueryAction::functionality(name, &arity)
+                functionality(name, &arity)
             }),
     );
     query_actions.extend(module.iter_axioms().map(|(axiom, term_sorts)| {
         let flat_sequent = flatten_sequent(&axiom.sequent, term_sorts);
-        QueryAction::new(&module, &flat_sequent)
+        lower_sequent(&module, &flat_sequent)
     }));
     let pure_queries: Vec<(String, PureQuery)> = module
         .iter_queries()
         .map(|(query, term_sorts)| {
             let flat_query = flatten_query(&query, term_sorts);
-            (query.name.clone(), PureQuery::new(&module, &flat_query))
+            (query.name.clone(), lower_query(&module, &flat_query))
         })
         .collect();
     let query_atoms = query_actions
