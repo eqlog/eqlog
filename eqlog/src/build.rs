@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
-use crate::flat_ast::*;
+use crate::flatten::*;
 use crate::grammar::*;
 use crate::index_selection::*;
 use crate::llam::*;
