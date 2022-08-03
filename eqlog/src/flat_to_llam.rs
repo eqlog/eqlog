@@ -40,45 +40,41 @@ fn out_projections(
         .collect()
 }
 
-fn translate_premise(
+fn translate_query_atom(
     module: &Module,
     fixed_terms: &mut HashMap<FlatTerm, String>,
-    premise: &[FlatAtom],
-) -> Vec<QueryAtom> {
-    let premise = premise
-        .iter()
-        .map(|atom| match atom {
-            FlatAtom::Equal(lhs, rhs) => QueryAtom::Equal(*lhs, *rhs),
-            FlatAtom::Relation(rel, args) => {
-                let diagonals = diagonals(args);
-                let in_projections = in_projections(&fixed_terms, args);
-                let out_projections = out_projections(&fixed_terms, args);
-                let arity = module.arity(rel).unwrap();
+    atom: &FlatAtom,
+) -> QueryAtom {
+    match atom {
+        FlatAtom::Equal(lhs, rhs) => QueryAtom::Equal(*lhs, *rhs),
+        FlatAtom::Relation(rel, args) => {
+            let diagonals = diagonals(args);
+            let in_projections = in_projections(&fixed_terms, args);
+            let out_projections = out_projections(&fixed_terms, args);
+            let arity = module.arity(rel).unwrap();
 
-                for (arg, sort) in args.iter().copied().zip(arity.iter()) {
-                    fixed_terms.insert(arg, sort.to_string());
-                }
+            for (arg, sort) in args.iter().copied().zip(arity.iter()) {
+                fixed_terms.insert(arg, sort.to_string());
+            }
 
-                QueryAtom::Relation {
-                    relation: rel.clone(),
-                    in_projections,
-                    out_projections,
-                    diagonals,
-                    only_dirty: false,
-                    quantifier: Quantifier::All,
-                }
+            QueryAtom::Relation {
+                relation: rel.clone(),
+                in_projections,
+                out_projections,
+                diagonals,
+                only_dirty: false,
+                quantifier: Quantifier::All,
             }
-            FlatAtom::Unconstrained(tm, sort) => {
-                fixed_terms.insert(*tm, sort.to_string());
-                QueryAtom::Sort {
-                    sort: sort.clone(),
-                    result: *tm,
-                    only_dirty: false,
-                }
+        }
+        FlatAtom::Unconstrained(tm, sort) => {
+            fixed_terms.insert(*tm, sort.to_string());
+            QueryAtom::Sort {
+                sort: sort.clone(),
+                result: *tm,
+                only_dirty: false,
             }
-        })
-        .collect();
-    premise
+        }
+    }
 }
 
 fn translate_conclusion(
@@ -122,6 +118,7 @@ fn translate_conclusion(
         .collect()
 }
 
+// TODO: Very convoluted. Just compute used_variables \ introduced_variables.
 fn action_inputs(module: &Module, atoms: &[ActionAtom]) -> BTreeMap<FlatTerm, String> {
     // We add terms that are added during an action to this set. These should not be added to
     // the result.
@@ -166,7 +163,11 @@ fn action_inputs(module: &Module, atoms: &[ActionAtom]) -> BTreeMap<FlatTerm, St
 
 pub fn lower_sequent(module: &Module, sequent: &FlatSequent) -> QueryAction {
     let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
-    let query = translate_premise(module, &mut fixed_terms, &sequent.premise);
+    let query: Vec<QueryAtom> = sequent
+        .premise
+        .iter()
+        .map(|atom| translate_query_atom(module, &mut fixed_terms, atom))
+        .collect();
     let action = translate_conclusion(module, &mut fixed_terms, &sequent.conclusion);
     let action_inputs = action_inputs(module, &action);
     QueryAction {
@@ -178,7 +179,11 @@ pub fn lower_sequent(module: &Module, sequent: &FlatSequent) -> QueryAction {
 
 pub fn lower_query(module: &Module, flat_query: &FlatQuery) -> PureQuery {
     let mut fixed_terms: HashMap<FlatTerm, String> = flat_query.inputs.iter().cloned().collect();
-    let query = translate_premise(module, &mut fixed_terms, &flat_query.atoms);
+    let query = flat_query
+        .atoms
+        .iter()
+        .map(|atom| translate_query_atom(module, &mut fixed_terms, atom))
+        .collect();
     PureQuery {
         inputs: flat_query.inputs.clone(),
         output: flat_query.output.clone(),
