@@ -77,45 +77,42 @@ fn translate_query_atom(
     }
 }
 
-fn translate_conclusion(
+fn translate_action_atom(
     module: &Module,
     fixed_terms: &mut HashMap<FlatTerm, String>,
-    conclusion: &[FlatAtom],
-) -> Vec<ActionAtom> {
-    conclusion
-        .iter()
-        .map(|atom| match atom {
-            FlatAtom::Equal(lhs, rhs) => {
-                let sort = fixed_terms.get(lhs).unwrap();
-                assert_eq!(sort, fixed_terms.get(rhs).unwrap());
-                ActionAtom::Equate {
-                    sort: sort.clone(),
-                    lhs: *lhs,
-                    rhs: *rhs,
-                }
+    atom: &FlatAtom,
+) -> ActionAtom {
+    match atom {
+        FlatAtom::Equal(lhs, rhs) => {
+            let sort = fixed_terms.get(lhs).unwrap();
+            assert_eq!(sort, fixed_terms.get(rhs).unwrap());
+            ActionAtom::Equate {
+                sort: sort.clone(),
+                lhs: *lhs,
+                rhs: *rhs,
             }
-            FlatAtom::Relation(rel, args) => {
-                let in_projections = in_projections(&fixed_terms, args);
-                let out_projections = out_projections(&fixed_terms, args);
+        }
+        FlatAtom::Relation(rel, args) => {
+            let in_projections = in_projections(&fixed_terms, args);
+            let out_projections = out_projections(&fixed_terms, args);
 
-                let arity = module.arity(rel).unwrap();
-                fixed_terms.extend(
-                    out_projections
-                        .iter()
-                        .map(|(index, tm)| (*tm, arity[*index].to_string())),
-                );
+            let arity = module.arity(rel).unwrap();
+            fixed_terms.extend(
+                out_projections
+                    .iter()
+                    .map(|(index, tm)| (*tm, arity[*index].to_string())),
+            );
 
-                ActionAtom::InsertTuple {
-                    relation: rel.to_string(),
-                    in_projections,
-                    out_projections,
-                }
+            ActionAtom::InsertTuple {
+                relation: rel.to_string(),
+                in_projections,
+                out_projections,
             }
-            FlatAtom::Unconstrained(_, _) => {
-                panic!("FlatAtom::Unconstrained in conclusion not allowed")
-            }
-        })
-        .collect()
+        }
+        FlatAtom::Unconstrained(_, _) => {
+            panic!("FlatAtom::Unconstrained in conclusion not allowed")
+        }
+    }
 }
 
 // TODO: Very convoluted. Just compute used_variables \ introduced_variables.
@@ -168,8 +165,13 @@ pub fn lower_sequent(module: &Module, sequent: &FlatSequent) -> QueryAction {
         .iter()
         .map(|atom| translate_query_atom(module, &mut fixed_terms, atom))
         .collect();
-    let action = translate_conclusion(module, &mut fixed_terms, &sequent.conclusion);
-    let action_inputs = action_inputs(module, &action);
+    let action: Vec<ActionAtom> = sequent
+        .conclusion
+        .iter()
+        .map(|atom| translate_action_atom(module, &mut fixed_terms, atom))
+        .collect();
+
+    let action_inputs = action_inputs(module, action.as_slice());
     QueryAction {
         queries: vec![query],
         action,
