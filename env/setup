@@ -3,4 +3,4 @@
 repo_root=$(git rev-parse --show-toplevel)
 
 cd "$repo_root/env"
-docker build --tag eqlog .
+docker build --tag exp-epa .
