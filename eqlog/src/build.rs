@@ -91,7 +91,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     );
     query_actions.extend(module.iter_axioms().map(|(axiom, term_sorts)| {
         let flat_sequent = flatten_sequent(&axiom.sequent, term_sorts);
-        lower_sequent(&module, &flat_sequent)
+        lower_sequent_seminaive(&module, &flat_sequent)
     }));
     let pure_queries: Vec<(String, PureQuery)> = module
         .iter_queries()

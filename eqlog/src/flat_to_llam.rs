@@ -4,6 +4,7 @@ use crate::module::*;
 use itertools::Itertools;
 use maplit::btreemap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::iter::once;
 
 fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
     let mut enumerated_args: Vec<(usize, FlatTerm)> = args.iter().copied().enumerate().collect();
@@ -46,7 +47,11 @@ fn translate_query_atom(
     atom: &FlatAtom,
 ) -> QueryAtom {
     match atom {
-        FlatAtom::Equal(lhs, rhs) => QueryAtom::Equal(*lhs, *rhs),
+        FlatAtom::Equal(lhs, rhs) => {
+            debug_assert!(fixed_terms.contains_key(lhs));
+            debug_assert!(fixed_terms.contains_key(rhs));
+            QueryAtom::Equal(*lhs, *rhs)
+        }
         FlatAtom::Relation(rel, args) => {
             let diagonals = diagonals(args);
             let in_projections = in_projections(&fixed_terms, args);
@@ -158,7 +163,35 @@ fn action_inputs(module: &Module, atoms: &[ActionAtom]) -> BTreeMap<FlatTerm, St
     query_terms
 }
 
-pub fn lower_sequent(module: &Module, sequent: &FlatSequent) -> QueryAction {
+fn query_outputs(module: &Module, atoms: &[QueryAtom]) -> HashMap<FlatTerm, String> {
+    let mut outputs = HashMap::new();
+    for atom in atoms {
+        use QueryAtom::*;
+        match atom {
+            Relation {
+                relation,
+                out_projections,
+                ..
+            } => {
+                let arity = module.arity(relation).unwrap();
+                outputs.extend(
+                    out_projections
+                        .values()
+                        .copied()
+                        .zip(arity.iter().map(|s| s.to_string())),
+                );
+            }
+            Sort { sort, result, .. } => {
+                outputs.insert(*result, sort.to_string());
+            }
+            Equal { .. } => (),
+        }
+    }
+    outputs
+}
+
+#[allow(dead_code)]
+pub fn lower_sequent_naive(module: &Module, sequent: &FlatSequent) -> QueryAction {
     let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
     let query: Vec<QueryAtom> = sequent
         .premise
@@ -174,6 +207,56 @@ pub fn lower_sequent(module: &Module, sequent: &FlatSequent) -> QueryAction {
     let action_inputs = action_inputs(module, action.as_slice());
     QueryAction {
         queries: vec![query],
+        action,
+        action_inputs,
+    }
+}
+
+pub fn lower_premise_atoms_seminaive(
+    module: &Module,
+    atoms: &[FlatAtom],
+    dirty_index: usize,
+) -> Vec<QueryAtom> {
+    let mut fixed_terms: HashMap<FlatTerm, String> = HashMap::new();
+    let mut dirty_atom = translate_query_atom(module, &mut fixed_terms, &atoms[dirty_index]);
+    match &mut dirty_atom {
+        QueryAtom::Relation { only_dirty, .. } | QueryAtom::Sort { only_dirty, .. } => {
+            *only_dirty = true
+        }
+        QueryAtom::Equal(_, _) => panic!("Equal in premise of sequents should not occur"),
+    }
+
+    once(dirty_atom)
+        .chain(
+            atoms[..dirty_index]
+                .iter()
+                .chain(atoms[dirty_index + 1..].iter())
+                .map(|atom| translate_query_atom(module, &mut fixed_terms, atom)),
+        )
+        .collect()
+}
+
+#[allow(dead_code)]
+pub fn lower_sequent_seminaive(module: &Module, sequent: &FlatSequent) -> QueryAction {
+    let queries: Vec<Vec<QueryAtom>> = if sequent.premise.is_empty() {
+        vec![vec![]]
+    } else {
+        (0..sequent.premise.len())
+            .map(|dirty_index| lower_premise_atoms_seminaive(module, &sequent.premise, dirty_index))
+            .collect()
+    };
+
+    let mut fixed_terms = query_outputs(module, queries.first().unwrap());
+
+    let action: Vec<ActionAtom> = sequent
+        .conclusion
+        .iter()
+        .map(|atom| translate_action_atom(module, &mut fixed_terms, atom))
+        .collect();
+
+    let action_inputs = action_inputs(module, action.as_slice());
+    QueryAction {
+        queries,
         action,
         action_inputs,
     }
