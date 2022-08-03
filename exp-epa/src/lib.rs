@@ -9,95 +9,93 @@ lalrpop_mod!(
     #[allow(unused)]
     grammar
 );
-pub mod ast;
+mod ast;
 
-pub mod cwf_checker;
+mod cwf_checker;
 
+use crate::cwf_checker::*;
+use crate::grammar::UnitParser;
 #[cfg(test)]
-mod tests {
+use indoc::indoc;
 
-    use crate::cwf_checker::*;
-    use crate::grammar::UnitParser;
-    use indoc::indoc;
+pub fn check(source: &str) {
+    let defs = UnitParser::new().parse(source).unwrap();
 
-    fn check(source: &str) {
-        let defs = UnitParser::new().parse(source).unwrap();
-
-        let mut scope = Scope::new();
-        for def in defs.iter() {
-            scope.add_definition(Checking::Yes, def);
-        }
+    let mut scope = Scope::new();
+    for def in defs.iter() {
+        scope.add_definition(Checking::Yes, def);
     }
+}
 
-    #[test]
-    fn test_unit_identity() {
-        let src = indoc! {"
+#[test]
+fn test_unit_identity() {
+    let src = indoc! {"
             def id(x: Unit) : Unit := x.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_unit_nested_identity() {
-        let src = indoc! {"
+#[test]
+fn test_unit_nested_identity() {
+    let src = indoc! {"
             def id (x: Unit) : Unit :=
               let
                 def id0 (y: Unit) : Unit := y.
               in
                 id0(x).
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_unit_term() {
-        let src = indoc! {"
+#[test]
+fn test_unit_term() {
+    let src = indoc! {"
             def u : Unit := unit.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_let_unit_term() {
-        let src = indoc! {"
+#[test]
+fn test_let_unit_term() {
+    let src = indoc! {"
             def u : Unit :=
               let
                 def x : Unit := unit.
                 def y : Unit := x.
               in y.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_unit_unit_refl() {
-        let src = indoc! {"
+#[test]
+fn test_unit_unit_refl() {
+    let src = indoc! {"
             def r : unit = unit := refl unit.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    #[should_panic]
-    fn test_unit_equaity_not_well_typed() {
-        let src = indoc! {"
+#[test]
+#[should_panic]
+fn test_unit_equaity_not_well_typed() {
+    let src = indoc! {"
             def r : unit = unit := unit.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_app_unit_identity() {
-        let src = indoc! {"
+#[test]
+fn test_app_unit_identity() {
+    let src = indoc! {"
             def id (x: Unit) : Unit := x.
             def r : unit = id(unit) := refl unit.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_app_unit_nested_identity() {
-        let src = indoc! {"
+#[test]
+fn test_app_unit_nested_identity() {
+    let src = indoc! {"
             def id (x: Unit) : Unit :=
               let
                 def id0 (y: Unit) : Unit := y.
@@ -107,13 +105,13 @@ mod tests {
             def r : unit = id(unit) := refl unit.
             dump 'done'.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    #[should_panic]
-    fn test_app_unit_iterated_identity_not_expanded() {
-        let src = indoc! {"
+#[test]
+#[should_panic]
+fn test_app_unit_iterated_identity_not_expanded() {
+    let src = indoc! {"
             def id0 (x0: Unit) : Unit := x0.
             dump 'id0 defined'.
             def id1 (x1: Unit) : Unit := id0(x1).
@@ -121,12 +119,12 @@ mod tests {
             def r : unit = id1(unit) := refl unit.
             dump 'done'.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_app_unit_iterated_identity_expanded() {
-        let src = indoc! {"
+#[test]
+fn test_app_unit_iterated_identity_expanded() {
+    let src = indoc! {"
             def id0 (x0: Unit) : Unit := x0.
             dump 'id0 defined'.
             def id1 (x1: Unit) : Unit := id0(x1).
@@ -134,32 +132,32 @@ mod tests {
             def r : id0(unit) = id1(unit) := refl unit.
             dump 'done'.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_app_refl() {
-        let src = indoc! {"
+#[test]
+fn test_app_refl() {
+    let src = indoc! {"
             def r (x : Unit) : x = x := refl x.
             def s : unit = unit := r(unit).
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_unit_uniqueness() {
-        let src = indoc! {"
+#[test]
+fn test_unit_uniqueness() {
+    let src = indoc! {"
             def unique_based (x : Unit) : x = unit :=
               elim_unit x into (x0 : Unit) : x0 = unit
                 | unit => (refl unit : unit = unit)
               .
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_app_unit_uniqueness() {
-        let src = indoc! {"
+#[test]
+fn test_app_unit_uniqueness() {
+    let src = indoc! {"
             def unique_based (x : Unit) : x = unit :=
               elim_unit x into (x0 : Unit) : x0 = unit
                 | unit => (refl unit : unit = unit)
@@ -172,12 +170,12 @@ mod tests {
                 refl unit
               .
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_app_const_unit() {
-        let src = indoc! {"
+#[test]
+fn test_app_const_unit() {
+    let src = indoc! {"
             def const_unit (x : Unit) : Unit :=
               elim_unit x into (x0 : Unit) : Unit
                 | unit => unit
@@ -185,32 +183,32 @@ mod tests {
             def u : Unit := const_unit(unit).
             def r : u = unit := refl unit.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_first_bool() {
-        let src = indoc! {"
+#[test]
+fn test_first_bool() {
+    let src = indoc! {"
             def first (x: Bool) (y: Bool) : Bool := x.
             def r : first(false, true) = false := refl false.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    #[should_panic]
-    fn test_bad_first_bool() {
-        let src = indoc! {"
+#[test]
+#[should_panic]
+fn test_bad_first_bool() {
+    let src = indoc! {"
             def first (x: Bool) (y: Bool) : Bool := x.
             dump 'first defined'.
             def r : first(false, true) = true := refl true.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_bool_not() {
-        let src = indoc! {"
+#[test]
+fn test_bool_not() {
+    let src = indoc! {"
             def not (x : Bool) : Bool :=
               elim_bool x into (x0 : Bool) : Bool
                 | false => true
@@ -219,12 +217,12 @@ mod tests {
             def r0 : not(true) = false := refl false.
             def r1 : not(false) = true := refl true.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_bool_and_def() {
-        let src = indoc! {"
+#[test]
+fn test_bool_and_def() {
+    let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
               elim_bool x into (x1 : Bool) : Bool
                 | false => false
@@ -237,12 +235,12 @@ mod tests {
             def false_true : and(false, true) = false := refl false.
             def true_true : and(true, true) = true := refl true.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_bool_fixed_false_and() {
-        let src = indoc! {"
+#[test]
+fn test_bool_fixed_false_and() {
+    let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
               elim_bool x into (x1 : Bool) : Bool
                 | false => false
@@ -258,12 +256,12 @@ mod tests {
 
             dump 'done'.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_bool_fixed_true_and() {
-        let src = indoc! {"
+#[test]
+fn test_bool_fixed_true_and() {
+    let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
               elim_bool x into (x1 : Bool) : Bool
                 | false => false
@@ -279,12 +277,12 @@ mod tests {
 
             dump 'done'.
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_bool_and_commutative() {
-        let src = indoc! {"
+#[test]
+fn test_bool_and_commutative() {
+    let src = indoc! {"
             def and (x : Bool) (y : Bool) : Bool :=
               elim_bool x into (x1 : Bool) : Bool
                 | false => false
@@ -321,12 +319,12 @@ mod tests {
                       refl y
               .
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_bool_and_substitution() {
-        let src = indoc! {"
+#[test]
+fn test_bool_and_substitution() {
+    let src = indoc! {"
             def and0 (x0 : Bool) (y0 : Bool) : Bool :=
               elim_bool x0 into (_ : Bool) : Bool
                 | false => false
@@ -345,12 +343,12 @@ mod tests {
                 result
               .
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_unit_substitution() {
-        let src = indoc! {"
+#[test]
+fn test_unit_substitution() {
+    let src = indoc! {"
             def unit0 (x0 : Unit) : Unit :=
               elim_unit x0 into (_0 : Unit) : Unit
                 | unit => unit
@@ -367,16 +365,15 @@ mod tests {
                 result
               .
         "};
-        check(&src);
-    }
+    check(&src);
+}
 
-    #[test]
-    fn test_zero_succ() {
-        let src = indoc! {"
+#[test]
+fn test_zero_succ() {
+    let src = indoc! {"
             def nat0 : Nat := zero.
             def nat1 : Nat := succ nat0.
             def nat2 : Nat := succ nat1.
         "};
-        check(&src);
-    }
+    check(&src);
 }
