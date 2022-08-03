@@ -20,3 +20,10 @@ path = "../cwf-theory"
 
 [build-dependencies]
 lalrpop = { version = "0", features = [ "lexer" ] }
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "bench"
+harness = false
