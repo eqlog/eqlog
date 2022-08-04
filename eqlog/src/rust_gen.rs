@@ -786,6 +786,10 @@ fn write_model_delta_impl(
         impl ModelDelta {{
     "}?;
     write_model_delta_new_fn(out, module, query_actions)?;
+    write_model_delta_apply_fn(out)?;
+    write_model_delta_apply_new_elements_fn(out, module)?;
+    write_model_delta_apply_equalities_fn(out, module)?;
+    write_model_delta_apply_tuples_fn(out, module)?;
     writedoc! {out, "
         }}
     "}?;
@@ -829,39 +833,42 @@ fn write_model_delta_new_fn(
     "}
 }
 
-fn write_apply_delta_fn(out: &mut impl Write) -> io::Result<()> {
+fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
-        fn apply_delta(&mut self, delta: &mut ModelDelta) {{
-            self.apply_new_elements_delta(delta);
-            self.apply_equalities_delta(delta);
-            self.apply_tuple_delta(delta);
+        fn apply(&mut self, model: &mut Model) {{
+            self.apply_new_elements_delta(model);
+            self.apply_equalities(model);
+            self.apply_tuples(model);
         }}
     "}
 }
 
-fn write_apply_new_elements_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_model_delta_apply_new_elements_fn(
+    out: &mut impl Write,
+    module: &Module,
+) -> io::Result<()> {
     let sorts = module.iter_sorts().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
         f(&formatdoc! {"
-            let old_{sort_snake}_number = self.{sort_snake}_equalities.len();
-            let new_{sort_snake}_number = old_{sort_snake}_number + delta.new_{sort_snake}_number;
-            self.{sort_snake}_equalities.increase_size_to(new_{sort_snake}_number);
+            let old_{sort_snake}_number = model.{sort_snake}_equalities.len();
+            let new_{sort_snake}_number = old_{sort_snake}_number + self.new_{sort_snake}_number;
+            model.{sort_snake}_equalities.increase_size_to(new_{sort_snake}_number);
             for i in old_{sort_snake}_number .. new_{sort_snake}_number {{
                 let el = {sort}::from(i as u32);
-                self.{sort_snake}_dirty.insert(el);
-                self.{sort_snake}_all.insert(el);
+                model.{sort_snake}_dirty.insert(el);
+                model.{sort_snake}_all.insert(el);
             }}
         "})
     });
     writedoc! {out, "
-        fn apply_new_elements_delta(&mut self, delta: &mut ModelDelta) {{
+        fn apply_new_elements_delta(&mut self, model: &mut Model) {{
         {sorts}
         }}
     "}
 }
 
-fn write_apply_equalities_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let sorts = module.iter_sorts().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
@@ -874,45 +881,45 @@ fn write_apply_equalities_delta_fn(out: &mut impl Write, module: &Module) -> io:
             .format_with("\n", |(relation, _), f| {
                 let relation_snake = relation.to_case(Snake);
                 f(&format_args! {"
-                    delta.new_{relation_snake}.extend(
-                        self.{relation_snake}.drain_with_element_{sort_snake}(lhs)
+                    self.new_{relation_snake}.extend(
+                        model.{relation_snake}.drain_with_element_{sort_snake}(lhs)
                     );
                 "})
             });
 
         f(&formatdoc! {"
-            for (mut lhs, mut rhs) in delta.new_{sort_snake}_equalities.drain(..) {{
-                lhs = self.{sort_snake}_equalities.root(lhs);
-                rhs = self.{sort_snake}_equalities.root(rhs);
+            for (mut lhs, mut rhs) in self.new_{sort_snake}_equalities.drain(..) {{
+                lhs = model.{sort_snake}_equalities.root(lhs);
+                rhs = model.{sort_snake}_equalities.root(rhs);
                 if lhs != rhs {{
-                    self.{sort_snake}_equalities.union_roots_into(lhs, rhs);
-                    self.{sort_snake}_all.remove(&lhs);
-                    self.{sort_snake}_dirty.remove(&lhs);
+                    model.{sort_snake}_equalities.union_roots_into(lhs, rhs);
+                    model.{sort_snake}_all.remove(&lhs);
+                    model.{sort_snake}_dirty.remove(&lhs);
                     {clean_rels}
                 }}
             }}
         "})
     });
     writedoc! {out, "
-        fn apply_equalities_delta(&mut self, delta: &mut ModelDelta) {{
+        fn apply_equalities(&mut self, model: &mut Model) {{
         {sorts}
         }}
     "}
 }
 
-fn write_apply_tuple_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let relation_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!(
             "
-                for t in delta.new_{relation_snake}.drain(..) {{
-                    self.insert_{relation_snake}(t);
+                for t in self.new_{relation_snake}.drain(..) {{
+                    model.insert_{relation_snake}(t);
                 }}
             "
         ))
     });
     writedoc! {out, "
-        fn apply_tuple_delta(&mut self, delta: &mut ModelDelta) {{
+        fn apply_tuples(&mut self, model: &mut Model) {{
         {relation_tuples}
         }}
     "}
@@ -1401,7 +1408,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
 
         {apply_surjective_axiom_actions}
 
-                    self.apply_delta(&mut delta);
+                    delta.apply(self);
                     if !self.is_dirty() {{
                         break;
                     }}
@@ -1410,7 +1417,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
         {collect_non_surjective_query_matches}
                 self.drop_dirt();
         {apply_non_surjective_axiom_actions}
-                self.apply_delta(&mut delta);
+                delta.apply(self);
             }}
         }}
     "}
@@ -1489,6 +1496,7 @@ fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io:
     write!(out, "empty_join_is_dirty: bool,\n")?;
     write!(out, "empty_join_is_dirty_prev: bool,\n")?;
     write!(out, "}}\n")?;
+    write!(out, "type Model = {name};")?;
     Ok(())
 }
 
@@ -1531,10 +1539,6 @@ fn write_theory_impl(
 
     write_drop_dirt_fn(out, module)?;
     write_retire_dirt_fn(out, module)?;
-    write_apply_delta_fn(out)?;
-    write_apply_new_elements_delta_fn(out, module)?;
-    write_apply_equalities_delta_fn(out, module)?;
-    write_apply_tuple_delta_fn(out, module)?;
     write_recall_previous_dirt(out, module)?;
     write_close_fn(out, query_actions)?;
 
