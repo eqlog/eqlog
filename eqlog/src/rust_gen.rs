@@ -1285,7 +1285,10 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
-            let mut delta = ModelDelta::new();
+            let mut delta_opt = None;
+            std::mem::swap(&mut delta_opt, &mut self.delta);
+            let mut delta = delta_opt.unwrap();
+
             while self.is_dirty() {{
                 loop {{
         {surjective_axioms}
@@ -1303,6 +1306,8 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                 self.drop_dirt();
                 delta.apply(self);
             }}
+
+            self.delta = Some(delta);
         }}
     "}
 }
