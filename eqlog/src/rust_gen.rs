@@ -107,14 +107,19 @@ fn write_table_struct(
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
+    let tuple_type = format!("({tuple_type_args})");
 
     let index_fields = indices.iter().copied().format_with("\n", |index, f| {
         let index_name = IndexName(index);
-        let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
         f(&format_args!(
-            "    index_{index_name}: BTreeSet<({tuple_type_args})>,"
+            "    index_{index_name}: BTreeSet<{tuple_type}>,"
         ))
     });
+
+    let dirty_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
+    let dirty_index_name = IndexName(dirty_index);
+    let prev_dirty_field = format!("index_{dirty_index_name}_prev: Vec<BTreeSet<{tuple_type}>>,");
 
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
     let element_index_fields = sorts.iter().copied().format_with("\n", |sort, f| {
@@ -128,6 +133,8 @@ fn write_table_struct(
         #[derive(Clone, Hash, Debug)]
         struct {relation}Table {{
         {index_fields}
+
+        {prev_dirty_field}
 
         {element_index_fields}
         }}
@@ -147,6 +154,10 @@ fn write_table_new_fn(
         ))
     });
 
+    let dirty_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
+    let dirty_index_name = IndexName(dirty_index);
+    let prev_dirty_init = format!("index_{dirty_index_name}_prev: Vec::new(),");
+
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
     let element_index_inits = sorts.iter().copied().format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
@@ -158,6 +169,7 @@ fn write_table_new_fn(
         fn new() -> Self {{
             Self {{
         {index_inits}
+        {prev_dirty_init}
         {element_index_inits}
             }}
         }}
