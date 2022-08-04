@@ -1203,7 +1203,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             let new_out_proj_args = out_projections.iter().format_with("\n", |(index, tm), f| {
                 let tm = tm.0;
                 let sort_snake = arity[*index].to_case(Snake);
-                f(&format_args!("let tm{tm} = self.new_{sort_snake}();"))
+                f(&format_args!("let tm{tm} = delta.new_{sort_snake}(self);"))
             });
             let full_tuple_args = (0..arity.len()).format_with(",", |index, f| {
                 let tm = if let Some(tm) = in_projections.get(&index) {
