@@ -777,6 +777,21 @@ fn write_model_delta_struct(
     "}
 }
 
+fn write_model_delta_impl(
+    out: &mut impl Write,
+    module: &Module,
+    query_actions: &[QueryAction],
+) -> io::Result<()> {
+    writedoc! {out, "
+        impl ModelDelta {{
+    "}?;
+    write_model_delta_new_fn(out, module, query_actions)?;
+    writedoc! {out, "
+        }}
+    "}?;
+    Ok(())
+}
+
 fn write_model_delta_new_fn(
     out: &mut impl Write,
     module: &Module,
@@ -814,19 +829,93 @@ fn write_model_delta_new_fn(
     "}
 }
 
-fn write_model_delta_impl(
-    out: &mut impl Write,
-    module: &Module,
-    query_actions: &[QueryAction],
-) -> io::Result<()> {
+fn write_apply_delta_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
-        impl ModelDelta {{
-    "}?;
-    write_model_delta_new_fn(out, module, query_actions)?;
-    writedoc! {out, "
+        fn apply_delta(&mut self, delta: &mut ModelDelta) {{
+            self.apply_new_elements_delta(delta);
+            self.apply_equalities_delta(delta);
+            self.apply_tuple_delta(delta);
         }}
-    "}?;
-    Ok(())
+    "}
+}
+
+fn write_apply_new_elements_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort = &sort.name;
+        let sort_snake = sort.to_case(Snake);
+        f(&formatdoc! {"
+            let old_{sort_snake}_number = self.{sort_snake}_equalities.len();
+            let new_{sort_snake}_number = old_{sort_snake}_number + delta.new_{sort_snake}_number;
+            self.{sort_snake}_equalities.increase_size_to(new_{sort_snake}_number);
+            for i in old_{sort_snake}_number .. new_{sort_snake}_number {{
+                let el = {sort}::from(i as u32);
+                self.{sort_snake}_dirty.insert(el);
+                self.{sort_snake}_all.insert(el);
+            }}
+        "})
+    });
+    writedoc! {out, "
+        fn apply_new_elements_delta(&mut self, delta: &mut ModelDelta) {{
+        {sorts}
+        }}
+    "}
+}
+
+fn write_apply_equalities_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort = &sort.name;
+        let sort_snake = sort.to_case(Snake);
+
+        let arity_contains_sort =
+            |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
+        let clean_rels = module
+            .relations()
+            .filter(|(_, arity)| arity_contains_sort(arity))
+            .format_with("\n", |(relation, _), f| {
+                let relation_snake = relation.to_case(Snake);
+                f(&format_args! {"
+                    delta.new_{relation_snake}.extend(
+                        self.{relation_snake}.drain_with_element_{sort_snake}(lhs)
+                    );
+                "})
+            });
+
+        f(&formatdoc! {"
+            for (mut lhs, mut rhs) in delta.new_{sort_snake}_equalities.drain(..) {{
+                lhs = self.{sort_snake}_equalities.root(lhs);
+                rhs = self.{sort_snake}_equalities.root(rhs);
+                if lhs != rhs {{
+                    self.{sort_snake}_equalities.union_roots_into(lhs, rhs);
+                    self.{sort_snake}_all.remove(&lhs);
+                    self.{sort_snake}_dirty.remove(&lhs);
+                    {clean_rels}
+                }}
+            }}
+        "})
+    });
+    writedoc! {out, "
+        fn apply_equalities_delta(&mut self, delta: &mut ModelDelta) {{
+        {sorts}
+        }}
+    "}
+}
+
+fn write_apply_tuple_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let relation_tuples = module.relations().format_with("\n", |(relation, _), f| {
+        let relation_snake = relation.to_case(Snake);
+        f(&format_args!(
+            "
+                for t in delta.new_{relation_snake}.drain(..) {{
+                    self.insert_{relation_snake}(t);
+                }}
+            "
+        ))
+    });
+    writedoc! {out, "
+        fn apply_tuple_delta(&mut self, delta: &mut ModelDelta) {{
+        {relation_tuples}
+        }}
+    "}
 }
 
 fn write_query_loop_headers<'a>(
@@ -1227,95 +1316,6 @@ fn write_retire_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()>
     "}
 }
 
-fn write_apply_delta_fn(out: &mut impl Write) -> io::Result<()> {
-    writedoc! {out, "
-        fn apply_delta(&mut self, delta: &mut ModelDelta) {{
-            self.apply_new_elements_delta(delta);
-            self.apply_equalities_delta(delta);
-            self.apply_tuple_delta(delta);
-        }}
-    "}
-}
-
-fn write_apply_new_elements_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
-        let sort = &sort.name;
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-            let old_{sort_snake}_number = self.{sort_snake}_equalities.len();
-            let new_{sort_snake}_number = old_{sort_snake}_number + delta.new_{sort_snake}_number;
-            self.{sort_snake}_equalities.increase_size_to(new_{sort_snake}_number);
-            for i in old_{sort_snake}_number .. new_{sort_snake}_number {{
-                let el = {sort}::from(i as u32);
-                self.{sort_snake}_dirty.insert(el);
-                self.{sort_snake}_all.insert(el);
-            }}
-        "})
-    });
-    writedoc! {out, "
-        fn apply_new_elements_delta(&mut self, delta: &mut ModelDelta) {{
-        {sorts}
-        }}
-    "}
-}
-
-fn write_apply_equalities_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
-        let sort = &sort.name;
-        let sort_snake = sort.to_case(Snake);
-
-        let arity_contains_sort =
-            |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
-        let clean_rels = module
-            .relations()
-            .filter(|(_, arity)| arity_contains_sort(arity))
-            .format_with("\n", |(relation, _), f| {
-                let relation_snake = relation.to_case(Snake);
-                f(&format_args! {"
-                    delta.new_{relation_snake}.extend(
-                        self.{relation_snake}.drain_with_element_{sort_snake}(lhs)
-                    );
-                "})
-            });
-
-        f(&formatdoc! {"
-            for (mut lhs, mut rhs) in delta.new_{sort_snake}_equalities.drain(..) {{
-                lhs = self.{sort_snake}_equalities.root(lhs);
-                rhs = self.{sort_snake}_equalities.root(rhs);
-                if lhs != rhs {{
-                    self.{sort_snake}_equalities.union_roots_into(lhs, rhs);
-                    self.{sort_snake}_all.remove(&lhs);
-                    self.{sort_snake}_dirty.remove(&lhs);
-                    {clean_rels}
-                }}
-            }}
-        "})
-    });
-    writedoc! {out, "
-        fn apply_equalities_delta(&mut self, delta: &mut ModelDelta) {{
-        {sorts}
-        }}
-    "}
-}
-
-fn write_apply_tuple_delta_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let relation_tuples = module.relations().format_with("\n", |(relation, _), f| {
-        let relation_snake = relation.to_case(Snake);
-        f(&format_args!(
-            "
-                for t in delta.new_{relation_snake}.drain(..) {{
-                    self.insert_{relation_snake}(t);
-                }}
-            "
-        ))
-    });
-    writedoc! {out, "
-        fn apply_tuple_delta(&mut self, delta: &mut ModelDelta) {{
-        {relation_tuples}
-        }}
-    "}
-}
-
 fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let relations = module
         .relations()
@@ -1608,10 +1608,11 @@ pub fn write_module(
     }
 
     write_model_delta_struct(out, module, query_actions)?;
+    write_theory_struct(out, name, module)?;
+
     write_model_delta_impl(out, module, query_actions)?;
     write!(out, "\n")?;
 
-    write_theory_struct(out, name, module)?;
     write_theory_impl(out, name, module, query_actions, pure_queries)?;
     write_theory_display_impl(out, name, module)?;
 
