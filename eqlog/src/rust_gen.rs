@@ -721,7 +721,7 @@ fn write_model_delta_struct(out: &mut impl Write, module: &Module) -> io::Result
     });
 
     writedoc! {out, "
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         struct ModelDelta {{
         {new_tuples}
         {new_equalities}
@@ -1324,6 +1324,7 @@ fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
     write!(out, "empty_join_is_dirty_prev: true,\n")?;
+    write!(out, "delta: Some(Box::new(ModelDelta::new())),\n")?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
@@ -1379,6 +1380,7 @@ fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io:
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
     write!(out, "empty_join_is_dirty_prev: bool,\n")?;
+    write!(out, "delta: Option<Box<ModelDelta>>,\n")?;
     write!(out, "}}\n")?;
     write!(out, "type Model = {name};")?;
     Ok(())
