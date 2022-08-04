@@ -843,7 +843,7 @@ fn write_model_delta_new_fn(
 fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
         fn apply(&mut self, model: &mut Model) {{
-            self.apply_new_elements_delta(model);
+            self.apply_new_elements(model);
             self.apply_equalities(model);
             self.apply_tuples(model);
         }}
@@ -866,10 +866,11 @@ fn write_model_delta_apply_new_elements_fn(
                 model.{sort_snake}_dirty.insert(el);
                 model.{sort_snake}_all.insert(el);
             }}
+            self.new_{sort_snake}_number = 0;
         "})
     });
     writedoc! {out, "
-        fn apply_new_elements_delta(&mut self, model: &mut Model) {{
+        fn apply_new_elements(&mut self, model: &mut Model) {{
         {sorts}
         }}
     "}
