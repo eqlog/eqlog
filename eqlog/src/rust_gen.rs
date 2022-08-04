@@ -919,6 +919,7 @@ fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> i
 fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
+        #[allow(dead_code)]
         fn new_{sort_snake}(&mut self, model: &Model) -> {sort} {{
             let id: usize = model.{sort_snake}_equalities.len() + self.new_{sort_snake}_number;
             assert!(id <= (u32::MAX as usize));
