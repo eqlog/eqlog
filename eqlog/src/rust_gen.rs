@@ -1289,6 +1289,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
             std::mem::swap(&mut delta_opt, &mut self.delta);
             let mut delta = delta_opt.unwrap();
 
+            delta.apply(self);
             while self.is_dirty() {{
                 loop {{
         {surjective_axioms}
