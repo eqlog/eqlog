@@ -418,6 +418,26 @@ fn write_table_is_dirty_fn(
     "}
 }
 
+fn write_table_drop_dirt_fn(
+    out: &mut impl Write,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let clears = indices
+        .iter()
+        .copied()
+        .filter(|index| index.only_dirty)
+        .format_with("\n", |index, f| {
+            let index_name = IndexName(index);
+            f(&format_args!("    self.index_{index_name}.clear();"))
+        });
+    writedoc! {out, "
+        fn drop_dirt(&mut self) {{
+            {clears}
+        }}
+    "}
+}
+
 fn write_table_retire_dirt_fn(
     out: &mut impl Write,
     index_selection: &HashMap<QuerySpec, IndexSpec>,
@@ -532,6 +552,7 @@ fn write_table_impl(
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_insert_dirt_fn(out, relation, index_selection)?;
+    write_table_drop_dirt_fn(out, index_selection)?;
     write_table_retire_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
@@ -1095,6 +1116,27 @@ fn write_apply_actions_fn(
     "}
 }
 
+fn write_drop_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let relations = module.relations().format_with("\n", |(relation, _), f| {
+        let relation_snake = relation.to_case(Snake);
+        f(&format_args!("self.{relation_snake}.drop_dirt();"))
+    });
+    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort_snake = sort.name.to_case(Snake);
+        f(&format_args!("self.{sort_snake}_dirty.clear();"))
+    });
+
+    writedoc! {out, "
+        fn drop_dirt(&mut self) {{
+            self.empty_join_is_dirty = false;
+
+        {relations}
+
+        {sorts}
+        }}
+    "}
+}
+
 fn write_retire_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let relations = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
@@ -1210,7 +1252,6 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
             f(&format_args!("        self.apply_actions_{i}(&mut data);"))
         });
 
-    // TODO: The retire_dirt in the outer loop should also drop previous dirt.
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
@@ -1230,7 +1271,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                 }}
                 self.recall_previous_dirt();
         {collect_non_surjective_query_matches}
-                self.retire_dirt();
+                self.drop_dirt();
         {apply_non_surjective_axiom_actions}
                 self.insert_new_tuples(&mut data);
             }}
@@ -1351,6 +1392,7 @@ fn write_theory_impl(
         write_pure_query_fn(out, module, name, pure_query)?;
     }
 
+    write_drop_dirt_fn(out, module)?;
     write_retire_dirt_fn(out, module)?;
     write_insert_new_tuples_fn(out, module)?;
     write_recall_previous_dirt(out, module)?;
