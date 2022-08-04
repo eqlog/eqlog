@@ -64,6 +64,7 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
         {sort_snake}_equalities: Unification<{sort}>,
         {sort_snake}_all: BTreeSet<{sort}>,
         {sort_snake}_dirty: BTreeSet<{sort}>,
+        {sort_snake}_dirty_prev: Vec<BTreeSet<{sort}>>,
     "}
 }
 
@@ -1052,6 +1053,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                         );
                     "})
                 });
+            // TODO: Need to remove element from dirty_prev?
             writedoc! {out, "
                 let tm{lhs} = self.{sort_snake}_equalities.root(tm{lhs});
                 let tm{rhs} = self.{sort_snake}_equalities.root(tm{rhs});
@@ -1206,6 +1208,7 @@ fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
         let sort_snake = sort.name.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
+        write!(out, "{sort_snake}_dirty_prev: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
     for (relation, _) in module.relations() {
