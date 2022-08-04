@@ -1242,28 +1242,9 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             let lhs = lhs.0;
             let rhs = rhs.0;
             let sort_snake = sort.to_case(Snake);
-            let arity_contains_sort =
-                |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
-            let clean_rels = module
-                .relations()
-                .filter(|(_, arity)| arity_contains_sort(arity))
-                .format_with("\n", |(relation, _), f| {
-                    let relation_snake = relation.to_case(Snake);
-                    f(&format_args! {"
-                        delta.new_{relation_snake}.extend(
-                            self.{relation_snake}.drain_with_element_{sort_snake}(tm{lhs})
-                        );
-                    "})
-                });
-            // TODO: Need to remove element from dirty_prev?
             writedoc! {out, "
-                let tm{lhs} = self.{sort_snake}_equalities.root(tm{lhs});
-                let tm{rhs} = self.{sort_snake}_equalities.root(tm{rhs});
                 if tm{lhs} != tm{rhs} {{
-                    self.{sort_snake}_equalities.union_roots_into(tm{lhs}, tm{rhs});
-                    self.{sort_snake}_all.remove(&tm{lhs});
-                    self.{sort_snake}_dirty.remove(&tm{lhs});
-                    {clean_rels}
+                    delta.new_{sort_snake}_equalities.push((tm{lhs}, tm{rhs}));
                 }}
             "}
         }
