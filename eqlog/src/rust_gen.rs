@@ -6,7 +6,7 @@ use crate::module::*;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 
@@ -1198,32 +1198,52 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
     }
 }
 
-fn write_apply_actions_fn(
+fn write_record_action_fn(
     out: &mut impl Write,
     module: &Module,
+    action_inputs: &BTreeMap<FlatTerm, String>,
+    action: &[ActionAtom],
+    axiom_index: usize,
+) -> io::Result<()> {
+    let args = action_inputs.iter().format_with("", |(tm, sort), f| {
+        let tm = tm.0;
+        f(&format_args!("tm{tm}: {sort}, "))
+    });
+
+    writedoc! {out, "
+        fn record_action_{axiom_index}(&self, delta: &mut ModelDelta, {args}) {{
+    "}?;
+    for atom in action.iter() {
+        write_action_atom(out, module, atom)?;
+    }
+    writedoc! {out, "
+        }}
+    "}
+}
+
+fn write_apply_actions_fn(
+    out: &mut impl Write,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
-    let unpack_args = query_action
+    let action_args_0 = query_action
         .action_inputs
         .iter()
         .format_with(", ", |(tm, _), f| {
             let tm = tm.0;
             f(&format_args!("tm{tm}"))
         });
+    let action_args_1 = action_args_0.clone();
     writedoc! {out, "
-        fn apply_actions_{axiom_index}(&mut self, delta: &mut ModelDelta) {{
+        fn apply_actions_{axiom_index}(&self, delta: &mut ModelDelta) {{
             let mut query_matches_{axiom_index} = Vec::new();
             std::mem::swap(&mut query_matches_{axiom_index}, &mut delta.query_matches_{axiom_index});
             for query_match in query_matches_{axiom_index} {{
-                let QueryMatch{axiom_index}{{{unpack_args}}} = query_match;
-    "}?;
-    for atom in query_action.action.iter() {
-        write_action_atom(out, module, atom)?;
-    }
-    writedoc! {out, "
+                let QueryMatch{axiom_index}{{{action_args_0}}} = query_match;
+                self.record_action_{axiom_index}(delta, {action_args_1});
             }}
         }}
+
     "}
 }
 
@@ -1477,7 +1497,14 @@ fn write_theory_impl(
 
     for (i, query_action) in query_actions.iter().enumerate() {
         write_collect_query_matches_fn(out, module, query_action, i)?;
-        write_apply_actions_fn(out, module, query_action, i)?;
+        write_record_action_fn(
+            out,
+            module,
+            &query_action.action_inputs,
+            &query_action.action,
+            i,
+        )?;
+        write_apply_actions_fn(out, query_action, i)?;
     }
     for function in module.iter_functions() {
         write_define_fn(out, function)?;
