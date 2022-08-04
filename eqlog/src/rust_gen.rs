@@ -748,9 +748,21 @@ fn write_model_delta_struct(
     let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!("    query_matches_{i}: Vec<QueryMatch{i}>,"))
     });
-    let relations_new = module.relations().format_with("\n", |(relation, _), f| {
+    let new_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
-        f(&format_args!("    {relation_snake}_new: Vec<{relation}>,"))
+        f(&format_args!("    new_{relation_snake}: Vec<{relation}>,"))
+    });
+    let new_equalities = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort = &sort.name;
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "    new_{sort_snake}_equalities: Vec<({sort}, {sort})>,"
+        ))
+    });
+    let new_element_number = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort = &sort.name;
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!("    new_{sort_snake}_number: usize,"))
     });
 
     writedoc! {out, "
@@ -758,30 +770,49 @@ fn write_model_delta_struct(
         struct ModelDelta {{
         {query_matches}
 
-        {relations_new}
+        {new_tuples}
+        {new_equalities}
+        {new_element_number}
         }}
     "}
 }
 
 fn write_model_delta_impl(
     out: &mut impl Write,
+    theory_name: &str,
     module: &Module,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!("    query_matches_{i}: Vec::new(),"))
     });
-    let relations_new = module.relations().format_with("\n", |(relation, _), f| {
+    let new_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
-        f(&format_args!("    {relation_snake}_new: Vec::new(),"))
+        f(&format_args!("    new_{relation_snake}: Vec::new(),"))
+    });
+    let new_equalities = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort = &sort.name;
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "    new_{sort_snake}_equalities: Vec::new(),"
+        ))
+    });
+    let new_element_number = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort = &sort.name;
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "    new_{sort_snake}_number: model.{sort_snake}_equalities.len(),"
+        ))
     });
 
     writedoc! {out, "
         impl ModelDelta {{
-            fn new() -> ModelDelta {{
+            fn new(model: &{theory_name}) -> ModelDelta {{
                 ModelDelta{{
         {query_matches}
-        {relations_new}
+        {new_tuples}
+        {new_equalities}
+        {new_element_number}
                 }}
             }}
         }}
@@ -1004,7 +1035,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 {{
                     let t = {relation}({args});
                     if !self.{relation_snake}.contains(&t) {{
-                        delta.{relation_snake}_new.push(t);
+                        delta.new_{relation_snake}.push(t);
                         println!(\"yes\");
                     }} else {{
                         println!(\"no\");
@@ -1094,7 +1125,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 .format_with("\n", |(relation, _), f| {
                     let relation_snake = relation.to_case(Snake);
                     f(&format_args! {"
-                        delta.{relation_snake}_new.extend(
+                        delta.new_{relation_snake}.extend(
                             self.{relation_snake}.drain_with_element_{sort_snake}(tm{lhs})
                         );
                     "})
@@ -1191,7 +1222,7 @@ fn write_insert_new_tuples_fn(out: &mut impl Write, module: &Module) -> io::Resu
         let relation_snake = relation.to_case(Snake);
         f(&format_args!(
             "
-                for t in delta.{relation_snake}_new.drain(..) {{
+                for t in delta.new_{relation_snake}.drain(..) {{
                     self.insert_{relation_snake}(t);
                 }}
             "
@@ -1280,7 +1311,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
-            let mut delta = ModelDelta::new();
+            let mut delta = ModelDelta::new(&self);
             while self.is_dirty() {{
                 loop {{
         {collect_surjective_query_matches}
@@ -1493,7 +1524,7 @@ pub fn write_module(
     }
 
     write_model_delta_struct(out, module, query_actions)?;
-    write_model_delta_impl(out, module, query_actions)?;
+    write_model_delta_impl(out, name, module, query_actions)?;
     write!(out, "\n")?;
 
     write_theory_struct(out, name, module)?;
