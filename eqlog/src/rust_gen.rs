@@ -1217,6 +1217,14 @@ fn write_retire_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()>
     "}
 }
 
+fn write_apply_delta_fn(out: &mut impl Write) -> io::Result<()> {
+    writedoc! {out, "
+        fn apply_delta(&mut self, delta: &mut ModelDelta) {{
+            self.insert_new_tuples(delta);
+        }}
+    "}
+}
+
 fn write_insert_new_tuples_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let relation_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
@@ -1320,7 +1328,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
 
         {apply_surjective_axiom_actions}
 
-                    self.insert_new_tuples(&mut delta);
+                    self.apply_delta(&mut delta);
                     if !self.is_dirty() {{
                         break;
                     }}
@@ -1329,7 +1337,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
         {collect_non_surjective_query_matches}
                 self.drop_dirt();
         {apply_non_surjective_axiom_actions}
-                self.insert_new_tuples(&mut delta);
+                self.apply_delta(&mut delta);
             }}
         }}
     "}
@@ -1450,6 +1458,7 @@ fn write_theory_impl(
 
     write_drop_dirt_fn(out, module)?;
     write_retire_dirt_fn(out, module)?;
+    write_apply_delta_fn(out)?;
     write_insert_new_tuples_fn(out, module)?;
     write_recall_previous_dirt(out, module)?;
     write_close_fn(out, query_actions)?;
