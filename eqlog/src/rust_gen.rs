@@ -321,7 +321,9 @@ fn write_table_insert_fn(
         "})
         });
 
+    // TODO: Why is this not used sometimes?
     writedoc! {out, "
+        #[allow(dead_code)]
         fn insert(&mut self, t: {relation}) -> bool {{
             if self.index_{master}.insert(Self::permute{master_order}(t)) {{
         {slave_inserts}
@@ -646,23 +648,12 @@ fn write_pub_iter_fn(out: &mut impl Write, relation: &str) -> io::Result<()> {
     "}
 }
 
-fn write_pub_insert_relation(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-) -> io::Result<()> {
+fn write_pub_insert_relation(out: &mut impl Write, relation: &str) -> io::Result<()> {
     let relation_snake = relation.to_case(Snake);
-    let assign_roots = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!(
-            "  t.{i} = self.{sort_snake}_equalities.root(t.{i});"
-        ))
-    });
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn insert_{relation_snake}(&mut self, mut t: {relation}) {{
-            {assign_roots}
-            self.{relation_snake}.insert(t);
+        pub fn insert_{relation_snake}(&mut self, t: {relation}) {{
+            self.delta.as_mut().unwrap().new_{relation_snake}.push(t);
         }}
     "}
 }
@@ -1408,9 +1399,9 @@ fn write_theory_impl(
         write_sort_root_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
-    for (rel, arity) in module.relations() {
+    for (rel, _) in module.relations() {
         write_pub_iter_fn(out, rel)?;
-        write_pub_insert_relation(out, rel, &arity)?;
+        write_pub_insert_relation(out, rel)?;
         write!(out, "\n")?;
     }
 
