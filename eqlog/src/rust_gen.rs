@@ -779,7 +779,6 @@ fn write_model_delta_struct(
 
 fn write_model_delta_impl(
     out: &mut impl Write,
-    theory_name: &str,
     module: &Module,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
@@ -800,14 +799,12 @@ fn write_model_delta_impl(
     let new_element_number = module.iter_sorts().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
-        f(&format_args!(
-            "    new_{sort_snake}_number: model.{sort_snake}_equalities.len(),"
-        ))
+        f(&format_args!("    new_{sort_snake}_number: 0,"))
     });
 
     writedoc! {out, "
         impl ModelDelta {{
-            fn new(model: &{theory_name}) -> ModelDelta {{
+            fn new() -> ModelDelta {{
                 ModelDelta{{
         {query_matches}
         {new_tuples}
@@ -1319,7 +1316,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
-            let mut delta = ModelDelta::new(&self);
+            let mut delta = ModelDelta::new();
             while self.is_dirty() {{
                 loop {{
         {collect_surjective_query_matches}
@@ -1533,7 +1530,7 @@ pub fn write_module(
     }
 
     write_model_delta_struct(out, module, query_actions)?;
-    write_model_delta_impl(out, name, module, query_actions)?;
+    write_model_delta_impl(out, module, query_actions)?;
     write!(out, "\n")?;
 
     write_theory_struct(out, name, module)?;
