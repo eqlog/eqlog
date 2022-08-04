@@ -1174,15 +1174,6 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             let relation_snake = relation.to_case(Snake);
             let arity = module.arity(relation).unwrap();
 
-            let canonicalize_in_proj_args =
-                in_projections.iter().format_with("\n", |(index, tm), f| {
-                    let tm = tm.0;
-                    let sort_snake = arity[*index].to_case(Snake);
-                    f(&format_args!(
-                        "let tm{tm} = self.{sort_snake}_equalities.root(tm{tm});"
-                    ))
-                });
-
             let query_spec = QuerySpec {
                 projections: in_projections.keys().copied().collect(),
                 diagonals: BTreeSet::new(),
@@ -1222,7 +1213,6 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 f(&format_args!("tm{tm}"))
             });
             writedoc! {out, "
-                {canonicalize_in_proj_args}
                 let existing_row = self.{iter_name}({in_proj_args}).next();
                 #[allow(unused_variables)]
                 let ({out_proj_args0}) = match existing_row {{
