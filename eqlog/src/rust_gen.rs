@@ -1229,7 +1229,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                     Some({relation}({tuple_pattern_args})) => ({out_proj_args1}),
                     None => {{
                         {new_out_proj_args}
-                        self.{relation_snake}.insert({relation}({full_tuple_args}));
+                        delta.new_{relation_snake}.push({relation}({full_tuple_args}));
                         ({out_proj_args2})
                     }},
                 }};
