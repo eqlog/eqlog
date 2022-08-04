@@ -418,7 +418,7 @@ fn write_table_is_dirty_fn(
     "}
 }
 
-fn write_table_clear_dirt_fn(
+fn write_table_retire_dirt_fn(
     out: &mut impl Write,
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
@@ -434,7 +434,7 @@ fn write_table_clear_dirt_fn(
         });
     let dirty_master_name = IndexName(dirty_master);
     writedoc! {out, "
-        fn drop_dirt(&mut self) {{
+        fn retire_dirt(&mut self) {{
             {clears}
             let mut tmp_{dirty_master_name} = BTreeSet::new();
             std::mem::swap(&mut tmp_{dirty_master_name}, &mut self.index_{dirty_master_name});
@@ -532,7 +532,7 @@ fn write_table_impl(
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_insert_dirt_fn(out, relation, index_selection)?;
-    write_table_clear_dirt_fn(out, index_selection)?;
+    write_table_retire_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
     let index_orders: BTreeSet<&[usize]> =
@@ -1095,10 +1095,10 @@ fn write_apply_actions_fn(
     "}
 }
 
-fn write_forget_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_retire_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let relations = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
-        f(&format_args!("self.{relation_snake}.drop_dirt();"))
+        f(&format_args!("self.{relation_snake}.retire_dirt();"))
     });
     let sorts = module.iter_sorts().format_with("\n", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
@@ -1109,7 +1109,7 @@ fn write_forget_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()>
         "})
     });
     writedoc! {out, "
-        fn forget_dirt(&mut self) {{
+        fn retire_dirt(&mut self) {{
             self.empty_join_is_dirty = false;
 
         {relations}
@@ -1210,7 +1210,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
             f(&format_args!("        self.apply_actions_{i}(&mut data);"))
         });
 
-    // TODO: The forget_dirt in the outer loop should also forget previous dirt.
+    // TODO: The retire_dirt in the outer loop should also drop previous dirt.
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
@@ -1219,7 +1219,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                 loop {{
         {collect_surjective_query_matches}
             
-                    self.forget_dirt();
+                    self.retire_dirt();
 
         {apply_surjective_axiom_actions}
 
@@ -1230,7 +1230,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                 }}
                 self.recall_previous_dirt();
         {collect_non_surjective_query_matches}
-                self.forget_dirt();
+                self.retire_dirt();
         {apply_non_surjective_axiom_actions}
                 self.insert_new_tuples(&mut data);
             }}
@@ -1351,7 +1351,7 @@ fn write_theory_impl(
         write_pure_query_fn(out, module, name, pure_query)?;
     }
 
-    write_forget_dirt_fn(out, module)?;
+    write_retire_dirt_fn(out, module)?;
     write_insert_new_tuples_fn(out, module)?;
     write_recall_previous_dirt(out, module)?;
     write_close_fn(out, query_actions)?;
