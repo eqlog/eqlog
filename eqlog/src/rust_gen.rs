@@ -796,6 +796,9 @@ fn write_model_delta_impl(
     for sort in module.iter_sorts() {
         write_model_delta_new_element_fn(out, &sort.name)?;
     }
+    for (relation, _) in module.relations() {
+        write_model_delta_insert_tuple_fn(out, relation)?;
+    }
 
     writedoc! {out, "
         }}
@@ -940,6 +943,18 @@ fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Res
             assert!(id <= (u32::MAX as usize));
             self.new_{sort_snake}_number += 1;
             {sort}::from(id as u32)
+        }}
+    "}
+}
+
+fn write_model_delta_insert_tuple_fn(out: &mut impl Write, relation: &str) -> io::Result<()> {
+    let relation_snake = relation.to_case(Snake);
+    writedoc! {out, "
+        fn insert_{relation_snake}(&mut self, model: &Model, t: {relation}) {{
+            if model.{relation_snake}.contains(&t) {{
+                return;
+            }}
+            self.new_{relation_snake}.push(t);
         }}
     "}
 }
