@@ -740,7 +740,7 @@ fn write_query_match_struct(
     "}
 }
 
-fn write_close_data_struct(
+fn write_model_delta_struct(
     out: &mut impl Write,
     module: &Module,
     query_actions: &[QueryAction],
@@ -755,7 +755,7 @@ fn write_close_data_struct(
 
     writedoc! {out, "
         #[derive(Debug)]
-        struct CloseData {{
+        struct ModelDelta {{
         {query_matches}
 
         {relations_new}
@@ -763,7 +763,7 @@ fn write_close_data_struct(
     "}
 }
 
-fn write_close_data_impl(
+fn write_model_delta_impl(
     out: &mut impl Write,
     module: &Module,
     query_actions: &[QueryAction],
@@ -777,9 +777,9 @@ fn write_close_data_impl(
     });
 
     writedoc! {out, "
-        impl CloseData {{
-            fn new() -> CloseData {{
-                CloseData{{
+        impl ModelDelta {{
+            fn new() -> ModelDelta {{
+                ModelDelta{{
         {query_matches}
         {relations_new}
                 }}
@@ -882,14 +882,14 @@ fn write_collect_query_matches_fn(
     axiom_index: usize,
 ) -> io::Result<()> {
     writedoc! {out, "
-        fn collect_query_matches_{axiom_index}(&self, data: &mut CloseData) {{
+        fn collect_query_matches_{axiom_index}(&self, delta: &mut ModelDelta) {{
     "}?;
 
     for query in query_action.queries.iter() {
         if query.is_empty() {
             writedoc! {out, "
                 if self.empty_join_is_dirty {{
-                    data.query_matches_{axiom_index}.push(QueryMatch{axiom_index}{{}});
+                    delta.query_matches_{axiom_index}.push(QueryMatch{axiom_index}{{}});
                 }}
             "}?;
             continue;
@@ -905,7 +905,7 @@ fn write_collect_query_matches_fn(
             });
         write!(
             out,
-            "data.query_matches_{axiom_index}.push(QueryMatch{axiom_index}{{ {action_args} }});"
+            "delta.query_matches_{axiom_index}.push(QueryMatch{axiom_index}{{ {action_args} }});"
         )?;
         write_query_loop_footers(out, query.len())?;
     }
@@ -1004,7 +1004,10 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 {{
                     let t = {relation}({args});
                     if !self.{relation_snake}.contains(&t) {{
-                        data.{relation_snake}_new.push(t);
+                        delta.{relation_snake}_new.push(t);
+                        println!(\"yes\");
+                    }} else {{
+                        println!(\"no\");
                     }}
                 }}
             "}
@@ -1014,7 +1017,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             in_projections,
             out_projections,
         } => {
-            debug_assert!(!out_projections.is_empty());
+            //debug_assert!(!out_projections.is_empty());
             let relation_snake = relation.to_case(Snake);
             let arity = module.arity(relation).unwrap();
 
@@ -1091,7 +1094,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 .format_with("\n", |(relation, _), f| {
                     let relation_snake = relation.to_case(Snake);
                     f(&format_args! {"
-                        data.{relation_snake}_new.extend(
+                        delta.{relation_snake}_new.extend(
                             self.{relation_snake}.drain_with_element_{sort_snake}(tm{lhs})
                         );
                     "})
@@ -1125,8 +1128,8 @@ fn write_apply_actions_fn(
             f(&format_args!("tm{tm}"))
         });
     writedoc! {out, "
-        fn apply_actions_{axiom_index}(&mut self, data: &mut CloseData) {{
-            for query_match in data.query_matches_{axiom_index}.drain(..) {{ 
+        fn apply_actions_{axiom_index}(&mut self, delta: &mut ModelDelta) {{
+            for query_match in delta.query_matches_{axiom_index}.drain(..) {{ 
                 let QueryMatch{axiom_index}{{{unpack_args}}} = query_match;
     "}?;
     for atom in query_action.action.iter() {
@@ -1188,14 +1191,14 @@ fn write_insert_new_tuples_fn(out: &mut impl Write, module: &Module) -> io::Resu
         let relation_snake = relation.to_case(Snake);
         f(&format_args!(
             "
-                for t in data.{relation_snake}_new.drain(..) {{
+                for t in delta.{relation_snake}_new.drain(..) {{
                     self.insert_{relation_snake}(t);
                 }}
             "
         ))
     });
     writedoc! {out, "
-        fn insert_new_tuples(&mut self, data: &mut CloseData) {{
+        fn insert_new_tuples(&mut self, delta: &mut ModelDelta) {{
         {relation_tuples}
         }}
     "}
@@ -1250,14 +1253,14 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
         .filter(is_surjective_axiom)
         .format_with("\n", |i, f| {
             f(&format_args!(
-                "            self.collect_query_matches_{i}(&mut data);"
+                "            self.collect_query_matches_{i}(&mut delta);"
             ))
         });
     let apply_surjective_axiom_actions = (0..query_actions.len())
         .filter(is_surjective_axiom)
         .format_with("\n", |i, f| {
             f(&format_args!(
-                "            self.apply_actions_{i}(&mut data);"
+                "            self.apply_actions_{i}(&mut delta);"
             ))
         });
 
@@ -1265,19 +1268,19 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
         .filter(|i| !is_surjective_axiom(i))
         .format_with("\n", |i, f| {
             f(&format_args!(
-                "            self.collect_query_matches_{i}(&mut data);"
+                "            self.collect_query_matches_{i}(&mut delta);"
             ))
         });
     let apply_non_surjective_axiom_actions = (0..query_actions.len())
         .filter(|i| !is_surjective_axiom(i))
         .format_with("\n", |i, f| {
-            f(&format_args!("        self.apply_actions_{i}(&mut data);"))
+            f(&format_args!("        self.apply_actions_{i}(&mut delta);"))
         });
 
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
-            let mut data = CloseData::new();
+            let mut delta = ModelDelta::new();
             while self.is_dirty() {{
                 loop {{
         {collect_surjective_query_matches}
@@ -1286,7 +1289,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
 
         {apply_surjective_axiom_actions}
 
-                    self.insert_new_tuples(&mut data);
+                    self.insert_new_tuples(&mut delta);
                     if !self.is_dirty() {{
                         break;
                     }}
@@ -1295,7 +1298,7 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
         {collect_non_surjective_query_matches}
                 self.drop_dirt();
         {apply_non_surjective_axiom_actions}
-                self.insert_new_tuples(&mut data);
+                self.insert_new_tuples(&mut delta);
             }}
         }}
     "}
@@ -1489,8 +1492,8 @@ pub fn write_module(
         write!(out, "\n")?;
     }
 
-    write_close_data_struct(out, module, query_actions)?;
-    write_close_data_impl(out, module, query_actions)?;
+    write_model_delta_struct(out, module, query_actions)?;
+    write_model_delta_impl(out, module, query_actions)?;
     write!(out, "\n")?;
 
     write_theory_struct(out, name, module)?;
