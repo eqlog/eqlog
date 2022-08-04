@@ -176,22 +176,6 @@ fn write_table_new_fn(
         }}
     "}
 }
-fn write_table_contains_fn(
-    out: &mut impl Write,
-    relation: &str,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let master_index = index_selection.get(&QuerySpec::all()).unwrap();
-    let master_name = IndexName(master_index);
-    let order_name = OrderName(&master_index.order);
-
-    writedoc! {out, "
-        #[allow(unused)]
-        fn contains(&self, t: &{relation}) -> bool {{
-            self.index_{master_name}.contains(&Self::permute{order_name}(*t))
-        }}
-    "}
-}
 
 fn write_table_permute_fn(
     out: &mut impl Write,
@@ -566,7 +550,6 @@ fn write_table_impl(
         impl {relation}Table {{
     "}?;
     write_table_new_fn(out, arity, index_selection)?;
-    write_table_contains_fn(out, relation, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_insert_dirt_fn(out, relation, index_selection)?;
     write_table_drop_dirt_fn(out, index_selection)?;
@@ -1147,31 +1130,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             relation,
             in_projections,
             out_projections,
-        } if out_projections.is_empty() => {
-            let relation_snake = relation.to_case(Snake);
-            debug_assert_eq!(
-                in_projections.keys().copied().collect::<Vec<usize>>(),
-                (0..module.arity(relation).unwrap().len()).collect::<Vec<usize>>(),
-            );
-            let args = in_projections.values().format_with(", ", |arg, f| {
-                let arg = arg.0;
-                f(&format_args!("tm{arg}"))
-            });
-            writedoc! {out, "
-                {{
-                    let t = {relation}({args});
-                    if !self.{relation_snake}.contains(&t) {{
-                        delta.new_{relation_snake}.push(t);
-                    }}
-                }}
-            "}
-        }
-        InsertTuple {
-            relation,
-            in_projections,
-            out_projections,
         } => {
-            debug_assert!(!out_projections.is_empty());
             let relation_snake = relation.to_case(Snake);
             let arity = module.arity(relation).unwrap();
 
