@@ -1151,11 +1151,27 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Resu
                 "self.{relation_snake}.recall_previous_dirt({args});"
             ))
         });
-    // TODO: Implement also for empty join and elements.
+
+    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+        let sort_snake = sort.name.to_case(Snake);
+        f(&formatdoc! {"
+                let mut {sort_snake}_dirty_prev_tmp = Vec::new();
+                std::mem::swap(&mut {sort_snake}_dirty_prev_tmp, &mut self.{sort_snake}_dirty_prev);
+                self.{sort_snake}_dirty =
+                    {sort_snake}_dirty_prev_tmp
+                    .into_iter()
+                    .flatten()
+                    .filter(|el| self.{sort_snake}_equalities.root(*el) == *el)
+                    .collect();
+            "})
+    });
     writedoc! {out, "
         fn recall_previous_dirt(&mut self) {{
             debug_assert!(!self.is_dirty());
+
             {relations}
+
+            {sorts}
 
             self.empty_join_is_dirty = self.empty_join_is_dirty_prev;
             self.empty_join_is_dirty_prev = false;
