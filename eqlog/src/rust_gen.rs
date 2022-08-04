@@ -785,11 +785,18 @@ fn write_model_delta_impl(
     writedoc! {out, "
         impl ModelDelta {{
     "}?;
+
     write_model_delta_new_fn(out, module, query_actions)?;
+
     write_model_delta_apply_fn(out)?;
     write_model_delta_apply_new_elements_fn(out, module)?;
     write_model_delta_apply_equalities_fn(out, module)?;
     write_model_delta_apply_tuples_fn(out, module)?;
+
+    for sort in module.iter_sorts() {
+        write_model_delta_new_element_fn(out, &sort.name)?;
+    }
+
     writedoc! {out, "
         }}
     "}?;
@@ -921,6 +928,18 @@ fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> i
     writedoc! {out, "
         fn apply_tuples(&mut self, model: &mut Model) {{
         {relation_tuples}
+        }}
+    "}
+}
+
+fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    let sort_snake = sort.to_case(Snake);
+    writedoc! {out, "
+        fn new_{sort_snake}(&mut self, model: &Model) -> {sort} {{
+            let id: usize = model.{sort_snake}_equalities.len() + self.new_{sort_snake}_number;
+            assert!(id <= (u32::MAX as usize));
+            self.new_{sort_snake}_number += 1;
+            {sort}::from(id as u32)
         }}
     "}
 }
