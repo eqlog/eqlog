@@ -672,11 +672,13 @@ fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn new_{sort_snake}(&mut self) -> {sort} {{
-            let size = self.{sort_snake}_equalities.len();
-            self.{sort_snake}_equalities.increase_size_to(size + 1);
-            let el = {sort}::from(size as u32);
-            self.{sort_snake}_dirty.insert(el);
-            self.{sort_snake}_all.insert(el);
+            let mut delta_opt = None;
+            std::mem::swap(&mut delta_opt, &mut self.delta);
+            let mut delta = delta_opt.unwrap();
+
+            let el = delta.new_{sort_snake}(self);
+
+            self.delta = Some(delta);
             el
         }}
     "}
