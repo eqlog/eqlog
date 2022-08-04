@@ -1129,6 +1129,29 @@ fn write_insert_new_tuples_fn(out: &mut impl Write, module: &Module) -> io::Resu
     "}
 }
 
+fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    let relations = module
+        .relations()
+        .format_with("\n", |(relation, arity), f| {
+            let relation_snake = relation.to_case(Snake);
+            let sorts: BTreeSet<&str> = arity.iter().copied().collect();
+            let args = sorts.into_iter().format_with(", ", |sort, f| {
+                let sort_snake = sort.to_case(Snake);
+                f(&format_args!("&mut self.{sort_snake}_equalities"))
+            });
+            f(&format_args!(
+                "self.{relation_snake}.recall_previous_dirt({args});"
+            ))
+        });
+    // TODO: Implement also for empty join and elements.
+    writedoc! {out, "
+        fn recall_previous_dirt(&mut self) {{
+            debug_assert!(!self.is_dirty());
+            {relations}
+        }}
+    "}
+}
+
 fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
     let collect_query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
         f(&format_args!(
@@ -1284,6 +1307,7 @@ fn write_theory_impl(
 
     write_forget_dirt_fn(out, module)?;
     write_insert_new_tuples_fn(out, module)?;
+    write_recall_previous_dirt(out, module)?;
     write_close_fn(out, query_actions)?;
 
     write!(out, "}}\n")?;
