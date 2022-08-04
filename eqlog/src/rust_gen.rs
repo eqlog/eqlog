@@ -680,7 +680,11 @@ fn write_sort_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn {sort_snake}_root(&mut self, el: {sort}) -> {sort} {{
-            self.{sort_snake}_equalities.root(el)
+            if el.0 as usize >= self.{sort_snake}_equalities.len() {{
+                el
+            }} else {{
+                self.{sort_snake}_equalities.root(el)
+            }}
         }}
     "}
 }
