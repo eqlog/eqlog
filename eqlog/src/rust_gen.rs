@@ -433,7 +433,7 @@ fn write_table_drain_with_element(
     "}
 }
 
-fn write_table_drain_previous_dirty(
+fn write_table_drain_previous_dirt(
     out: &mut impl Write,
     relation: &str,
     index_selection: &HashMap<QuerySpec, IndexSpec>,
@@ -442,7 +442,7 @@ fn write_table_drain_previous_dirty(
     let index_name = IndexName(index);
     let order_name = OrderName(&index.order);
     writedoc! {out, "
-        fn drain_previous_dirty(&mut self) -> impl '_ + Iterator<Item = {relation}> {{
+        fn drain_previous_dirt(&mut self) -> impl '_ + Iterator<Item = {relation}> {{
             let mut tmp_{index_name}_prev = Vec::new();
             std::mem::swap(&mut tmp_{index_name}_prev, &mut self.index_{index_name}_prev);
             tmp_{index_name}_prev
@@ -480,7 +480,7 @@ fn write_table_impl(
     for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
         write_table_drain_with_element(out, relation, index_selection, sort)?;
     }
-    write_table_drain_previous_dirty(out, relation, index_selection)?;
+    write_table_drain_previous_dirt(out, relation, index_selection)?;
     writedoc! {out, "
         }}
     "}
