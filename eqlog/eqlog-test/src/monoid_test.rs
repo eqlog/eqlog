@@ -22,27 +22,6 @@ mod test {
         mon.insert_mul(Mul(a4, a1, a5));
         mon.insert_mul(Mul(a5, a2, a1));
 
-        let mut m: Vec<M> = mon.iter_m().collect();
-        m.sort();
-        assert_eq!(m, vec![a1, a2, a3, a4, a5]);
-
-        let mut e: Vec<E> = mon.iter_e().collect();
-        e.sort();
-        assert_eq!(e, vec![]);
-
-        let mut mul: Vec<Mul> = mon.iter_mul().collect();
-        mul.sort();
-        assert_eq!(
-            mul,
-            vec![
-                Mul(a1, a1, a2),
-                Mul(a2, a1, a3),
-                Mul(a3, a1, a4),
-                Mul(a4, a1, a5),
-                Mul(a5, a2, a1),
-            ]
-        );
-
         mon.close();
 
         let mut m: Vec<M> = mon.iter_m().collect();
