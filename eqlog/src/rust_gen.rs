@@ -1148,6 +1148,9 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Resu
         fn recall_previous_dirt(&mut self) {{
             debug_assert!(!self.is_dirty());
             {relations}
+
+            self.empty_join_is_dirty = self.empty_join_is_dirty_prev;
+            self.empty_join_is_dirty_prev = false;
         }}
     "}
 }
@@ -1210,6 +1213,7 @@ fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
         write!(out, "{relation_snake}: {relation}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
+    write!(out, "empty_join_is_dirty_prev: true,\n")?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
@@ -1264,6 +1268,7 @@ fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io:
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
+    write!(out, "empty_join_is_dirty_prev: bool,\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }
