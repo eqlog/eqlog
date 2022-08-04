@@ -176,6 +176,22 @@ fn write_table_new_fn(
         }}
     "}
 }
+fn write_table_contains_fn(
+    out: &mut impl Write,
+    relation: &str,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let master_index = index_selection.get(&QuerySpec::all()).unwrap();
+    let master_name = IndexName(master_index);
+    let order_name = OrderName(&master_index.order);
+
+    writedoc! {out, "
+        #[allow(unused)]
+        fn contains(&self, t: &{relation}) -> bool {{
+            self.index_{master_name}.contains(&Self::permute{order_name}(*t))
+        }}
+    "}
+}
 
 fn write_table_permute_fn(
     out: &mut impl Write,
@@ -550,6 +566,7 @@ fn write_table_impl(
         impl {relation}Table {{
     "}?;
     write_table_new_fn(out, arity, index_selection)?;
+    write_table_contains_fn(out, relation, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_insert_dirt_fn(out, relation, index_selection)?;
     write_table_drop_dirt_fn(out, index_selection)?;
@@ -984,7 +1001,12 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 f(&format_args!("tm{arg}"))
             });
             writedoc! {out, "
-                data.{relation_snake}_new.push({relation}({args}));
+                {{
+                    let t = {relation}({args});
+                    if !self.{relation_snake}.contains(&t) {{
+                        data.{relation_snake}_new.push(t);
+                    }}
+                }}
             "}
         }
         InsertTuple {
