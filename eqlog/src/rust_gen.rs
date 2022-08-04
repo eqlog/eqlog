@@ -1102,12 +1102,18 @@ fn write_forget_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()>
     });
     let sorts = module.iter_sorts().format_with("\n", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
-        f(&format_args!("self.{sort_snake}_dirty.clear();"))
+        f(&formatdoc! {"
+            let mut {sort_snake}_dirty_tmp = BTreeSet::new();
+            std::mem::swap(&mut {sort_snake}_dirty_tmp, &mut self.{sort_snake}_dirty);
+            self.{sort_snake}_dirty_prev.push({sort_snake}_dirty_tmp);
+        "})
     });
     writedoc! {out, "
         fn forget_dirt(&mut self) {{
             self.empty_join_is_dirty = false;
+
         {relations}
+
         {sorts}
         }}
     "}
