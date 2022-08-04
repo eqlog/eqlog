@@ -379,17 +379,22 @@ fn write_table_clear_dirt_fn(
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let dirty_master = index_selection.get(&QuerySpec::all_dirty()).unwrap();
     let clears = indices
         .iter()
         .copied()
-        .filter(|index| index.only_dirty)
+        .filter(|index| index.only_dirty && *index != dirty_master)
         .format_with("\n", |index, f| {
             let index_name = IndexName(index);
             f(&format_args!("    self.index_{index_name}.clear();"))
         });
+    let dirty_master_name = IndexName(dirty_master);
     writedoc! {out, "
         fn drop_dirt(&mut self) {{
             {clears}
+            let mut tmp_{dirty_master_name} = BTreeSet::new();
+            std::mem::swap(&mut tmp_{dirty_master_name}, &mut self.index_{dirty_master_name});
+            self.index_{dirty_master_name}_prev.push(tmp_{dirty_master_name});
         }}
     "}
 }
