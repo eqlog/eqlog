@@ -7,7 +7,3 @@ members = [
   "eqlog/eqlog-util",
   "eqlog/eqlog-test",
 ]
-
-# Always optimize the cwf-theory crate, even for debug builds.
-[profile.dev.package.cwf-theory]
-opt-level = 3
