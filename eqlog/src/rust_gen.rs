@@ -702,35 +702,7 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_query_match_struct(
-    out: &mut impl Write,
-    query_action: &QueryAction,
-    axiom_index: usize,
-) -> io::Result<()> {
-    let term_decls = query_action
-        .action_inputs
-        .iter()
-        .format_with("\n", |(term, sort), f| {
-            let tm = term.0;
-            f(&format_args!("  tm{tm}: {sort},"))
-        });
-
-    writedoc! {out, "
-        #[derive(Debug)]
-        struct QueryMatch{axiom_index} {{
-        {term_decls}
-        }}
-    "}
-}
-
-fn write_model_delta_struct(
-    out: &mut impl Write,
-    module: &Module,
-    query_actions: &[QueryAction],
-) -> io::Result<()> {
-    let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
-        f(&format_args!("    query_matches_{i}: Vec<QueryMatch{i}>,"))
-    });
+fn write_model_delta_struct(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let new_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!("    new_{relation_snake}: Vec<{relation}>,"))
@@ -751,8 +723,6 @@ fn write_model_delta_struct(
     writedoc! {out, "
         #[derive(Debug)]
         struct ModelDelta {{
-        {query_matches}
-
         {new_tuples}
         {new_equalities}
         {new_element_number}
@@ -760,16 +730,12 @@ fn write_model_delta_struct(
     "}
 }
 
-fn write_model_delta_impl(
-    out: &mut impl Write,
-    module: &Module,
-    query_actions: &[QueryAction],
-) -> io::Result<()> {
+fn write_model_delta_impl(out: &mut impl Write, module: &Module) -> io::Result<()> {
     writedoc! {out, "
         impl ModelDelta {{
     "}?;
 
-    write_model_delta_new_fn(out, module, query_actions)?;
+    write_model_delta_new_fn(out, module)?;
 
     write_model_delta_apply_fn(out)?;
     write_model_delta_apply_new_elements_fn(out, module)?;
@@ -786,14 +752,7 @@ fn write_model_delta_impl(
     Ok(())
 }
 
-fn write_model_delta_new_fn(
-    out: &mut impl Write,
-    module: &Module,
-    query_actions: &[QueryAction],
-) -> io::Result<()> {
-    let query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
-        f(&format_args!("    query_matches_{i}: Vec::new(),"))
-    });
+fn write_model_delta_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let new_tuples = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
         f(&format_args!("    new_{relation_snake}: Vec::new(),"))
@@ -814,7 +773,6 @@ fn write_model_delta_new_fn(
     writedoc! {out, "
         fn new() -> ModelDelta {{
             ModelDelta{{
-        {query_matches}
         {new_tuples}
         {new_equalities}
         {new_element_number}
@@ -1016,21 +974,21 @@ fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Resul
     Ok(())
 }
 
-fn write_collect_query_matches_fn(
+fn write_query_and_record_fn(
     out: &mut impl Write,
     module: &Module,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
     writedoc! {out, "
-        fn collect_query_matches_{axiom_index}(&self, delta: &mut ModelDelta) {{
+        fn query_and_record_{axiom_index}(&self, delta: &mut ModelDelta) {{
     "}?;
 
     for query in query_action.queries.iter() {
         if query.is_empty() {
             writedoc! {out, "
                 if self.empty_join_is_dirty {{
-                    delta.query_matches_{axiom_index}.push(QueryMatch{axiom_index}{{}});
+                    self.record_action_{axiom_index}(delta);
                 }}
             "}?;
             continue;
@@ -1046,7 +1004,7 @@ fn write_collect_query_matches_fn(
             });
         write!(
             out,
-            "delta.query_matches_{axiom_index}.push(QueryMatch{axiom_index}{{ {action_args} }});"
+            "self.record_action_{axiom_index}(delta, {action_args});"
         )?;
         write_query_loop_footers(out, query.len())?;
     }
@@ -1222,32 +1180,6 @@ fn write_record_action_fn(
     "}
 }
 
-fn write_apply_actions_fn(
-    out: &mut impl Write,
-    query_action: &QueryAction,
-    axiom_index: usize,
-) -> io::Result<()> {
-    let action_args_0 = query_action
-        .action_inputs
-        .iter()
-        .format_with(", ", |(tm, _), f| {
-            let tm = tm.0;
-            f(&format_args!("tm{tm}"))
-        });
-    let action_args_1 = action_args_0.clone();
-    writedoc! {out, "
-        fn apply_actions_{axiom_index}(&self, delta: &mut ModelDelta) {{
-            let mut query_matches_{axiom_index} = Vec::new();
-            std::mem::swap(&mut query_matches_{axiom_index}, &mut delta.query_matches_{axiom_index});
-            for query_match in query_matches_{axiom_index} {{
-                let QueryMatch{axiom_index}{{{action_args_0}}} = query_match;
-                self.record_action_{axiom_index}(delta, {action_args_1});
-            }}
-        }}
-
-    "}
-}
-
 fn write_drop_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     let relations = module.relations().format_with("\n", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
@@ -1338,32 +1270,16 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Resu
 fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
     let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
 
-    let collect_surjective_query_matches = (0..query_actions.len())
+    let surjective_axioms = (0..query_actions.len())
         .filter(is_surjective_axiom)
         .format_with("\n", |i, f| {
-            f(&format_args!(
-                "            self.collect_query_matches_{i}(&mut delta);"
-            ))
-        });
-    let apply_surjective_axiom_actions = (0..query_actions.len())
-        .filter(is_surjective_axiom)
-        .format_with("\n", |i, f| {
-            f(&format_args!(
-                "            self.apply_actions_{i}(&mut delta);"
-            ))
+            f(&format_args!("self.query_and_record_{i}(&mut delta);"))
         });
 
-    let collect_non_surjective_query_matches = (0..query_actions.len())
+    let non_surjective_axioms = (0..query_actions.len())
         .filter(|i| !is_surjective_axiom(i))
         .format_with("\n", |i, f| {
-            f(&format_args!(
-                "            self.collect_query_matches_{i}(&mut delta);"
-            ))
-        });
-    let apply_non_surjective_axiom_actions = (0..query_actions.len())
-        .filter(|i| !is_surjective_axiom(i))
-        .format_with("\n", |i, f| {
-            f(&format_args!("        self.apply_actions_{i}(&mut delta);"))
+            f(&format_args!("self.query_and_record_{i}(&mut delta);"))
         });
 
     writedoc! {out, "
@@ -1372,21 +1288,19 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
             let mut delta = ModelDelta::new();
             while self.is_dirty() {{
                 loop {{
-        {collect_surjective_query_matches}
+        {surjective_axioms}
             
                     self.retire_dirt();
-
-        {apply_surjective_axiom_actions}
-
                     delta.apply(self);
+
                     if !self.is_dirty() {{
                         break;
                     }}
                 }}
+
                 self.recall_previous_dirt();
-        {collect_non_surjective_query_matches}
+        {non_surjective_axioms}
                 self.drop_dirt();
-        {apply_non_surjective_axiom_actions}
                 delta.apply(self);
             }}
         }}
@@ -1497,7 +1411,6 @@ fn write_theory_impl(
     write!(out, "\n")?;
 
     for (i, query_action) in query_actions.iter().enumerate() {
-        write_collect_query_matches_fn(out, module, query_action, i)?;
         write_record_action_fn(
             out,
             module,
@@ -1505,7 +1418,7 @@ fn write_theory_impl(
             &query_action.action,
             i,
         )?;
-        write_apply_actions_fn(out, query_action, i)?;
+        write_query_and_record_fn(out, module, query_action, i)?;
     }
     for function in module.iter_functions() {
         write_define_fn(out, function)?;
@@ -1583,15 +1496,10 @@ pub fn write_module(
     }
     write!(out, "\n")?;
 
-    for (i, qa) in query_actions.iter().enumerate() {
-        write_query_match_struct(out, qa, i)?;
-        write!(out, "\n")?;
-    }
-
-    write_model_delta_struct(out, module, query_actions)?;
+    write_model_delta_struct(out, module)?;
     write_theory_struct(out, name, module)?;
 
-    write_model_delta_impl(out, module, query_actions)?;
+    write_model_delta_impl(out, module)?;
     write!(out, "\n")?;
 
     write_theory_impl(out, name, module, query_actions, pure_queries)?;
