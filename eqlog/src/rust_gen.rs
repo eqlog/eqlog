@@ -1180,12 +1180,15 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Resu
 }
 
 fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
-    let collect_query_matches = (0..query_actions.len()).format_with("\n", |i, f| {
-        f(&format_args!(
-            "            self.collect_query_matches_{i}(&mut data);"
-        ))
-    });
     let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
+
+    let collect_surjective_query_matches = (0..query_actions.len())
+        .filter(is_surjective_axiom)
+        .format_with("\n", |i, f| {
+            f(&format_args!(
+                "            self.collect_query_matches_{i}(&mut data);"
+            ))
+        });
     let apply_surjective_axiom_actions = (0..query_actions.len())
         .filter(is_surjective_axiom)
         .format_with("\n", |i, f| {
@@ -1193,18 +1196,28 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                 "            self.apply_actions_{i}(&mut data);"
             ))
         });
+
+    let collect_non_surjective_query_matches = (0..query_actions.len())
+        .filter(|i| !is_surjective_axiom(i))
+        .format_with("\n", |i, f| {
+            f(&format_args!(
+                "            self.collect_query_matches_{i}(&mut data);"
+            ))
+        });
     let apply_non_surjective_axiom_actions = (0..query_actions.len())
         .filter(|i| !is_surjective_axiom(i))
         .format_with("\n", |i, f| {
             f(&format_args!("        self.apply_actions_{i}(&mut data);"))
         });
+
+    // TODO: The forget_dirt in the outer loop should also forget previous dirt.
     writedoc! {out, "
         #[allow(dead_code)]
         pub fn close(&mut self) {{
             let mut data = CloseData::new();
             while self.is_dirty() {{
                 loop {{
-        {collect_query_matches}
+        {collect_surjective_query_matches}
             
                     self.forget_dirt();
 
@@ -1215,6 +1228,9 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                         break;
                     }}
                 }}
+                self.recall_previous_dirt();
+        {collect_non_surjective_query_matches}
+                self.forget_dirt();
         {apply_non_surjective_axiom_actions}
                 self.insert_new_tuples(&mut data);
             }}
