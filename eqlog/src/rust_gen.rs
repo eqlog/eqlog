@@ -1161,9 +1161,6 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                     let t = {relation}({args});
                     if !self.{relation_snake}.contains(&t) {{
                         delta.new_{relation_snake}.push(t);
-                        println!(\"yes\");
-                    }} else {{
-                        println!(\"no\");
                     }}
                 }}
             "}
@@ -1173,7 +1170,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             in_projections,
             out_projections,
         } => {
-            //debug_assert!(!out_projections.is_empty());
+            debug_assert!(!out_projections.is_empty());
             let relation_snake = relation.to_case(Snake);
             let arity = module.arity(relation).unwrap();
 
