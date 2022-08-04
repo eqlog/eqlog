@@ -1300,7 +1300,9 @@ fn write_apply_actions_fn(
         });
     writedoc! {out, "
         fn apply_actions_{axiom_index}(&mut self, delta: &mut ModelDelta) {{
-            for query_match in delta.query_matches_{axiom_index}.drain(..) {{ 
+            let mut query_matches_{axiom_index} = Vec::new();
+            std::mem::swap(&mut query_matches_{axiom_index}, &mut delta.query_matches_{axiom_index});
+            for query_match in query_matches_{axiom_index} {{
                 let QueryMatch{axiom_index}{{{unpack_args}}} = query_match;
     "}?;
     for atom in query_action.action.iter() {
