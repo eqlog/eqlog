@@ -231,6 +231,49 @@ impl<'a> Display for DiagonalCheck<'a> {
     }
 }
 
+// TODO: This and write_table_insert_fn are very similar. Refactor?
+fn write_table_insert_dirt_fn(
+    out: &mut impl Write,
+    relation: &str,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let master_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
+    let master = IndexName(&master_index);
+    let master_order = OrderName(&master_index.order);
+
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let slave_inserts = indices
+        .into_iter()
+        .filter(|index| index.only_dirty && *index != master_index)
+        .format_with("\n", |index, f| {
+            let index_name = IndexName(index);
+            let order = OrderName(&index.order);
+            if index.diagonals.is_empty() {
+                f(&format_args!(
+                    "self.index_{index_name}.insert(Self::permute{order}(t));"
+                ))
+            } else {
+                let check = DiagonalCheck(&index.diagonals);
+                f(&format_args! {"
+                    if {check} {{
+                        self.index_{index_name}.insert(Self::permute{order}(t));
+                    }}
+                "})
+            }
+        });
+
+    writedoc! {out, "
+        fn insert_dirt(&mut self, t: {relation}) -> bool {{
+            if self.index_{master}.insert(Self::permute{master_order}(t)) {{
+        {slave_inserts}
+                true
+            }} else {{
+                false
+            }}
+        }}
+    "}
+}
+
 fn write_table_insert_fn(
     out: &mut impl Write,
     relation: &str,
@@ -433,22 +476,44 @@ fn write_table_drain_with_element(
     "}
 }
 
-fn write_table_drain_previous_dirt(
+fn write_table_recall_previous_dirt(
     out: &mut impl Write,
-    relation: &str,
+    arity: &[&str],
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
+    let sorts = arity.iter().copied().collect::<BTreeSet<&str>>();
+    let fn_eq_args = sorts.iter().copied().format_with("", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
+        f(&format_args!(
+            "{sort_snake}_equalities: &mut Unification<{sort}>,"
+        ))
+    });
     let index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
     let index_name = IndexName(index);
     let order_name = OrderName(&index.order);
+
+    let canonicalize_tuple =
+        arity
+            .iter()
+            .copied()
+            .enumerate()
+            .format_with("\n", |(index, sort), f| {
+                let sort_snake = sort.to_case(Snake);
+                f(&format_args!(
+                    "tuple.{index} = {sort_snake}_equalities.root(tuple.{index});"
+                ))
+            });
+
     writedoc! {out, "
-        fn drain_previous_dirt(&mut self) -> impl '_ + Iterator<Item = {relation}> {{
+        fn recall_previous_dirt(&mut self, {fn_eq_args}) {{
             let mut tmp_{index_name}_prev = Vec::new();
             std::mem::swap(&mut tmp_{index_name}_prev, &mut self.index_{index_name}_prev);
-            tmp_{index_name}_prev
-                .into_iter()
-                .flatten()
-                .map(|t| Self::permute_inverse{order_name}(t))
+
+            for tuple in tmp_{index_name}_prev.into_iter().flatten() {{
+                let mut tuple = Self::permute_inverse{order_name}(tuple);
+                {canonicalize_tuple}
+                self.insert_dirt(tuple);
+            }}
         }}
     "}
 }
@@ -465,6 +530,7 @@ fn write_table_impl(
     "}?;
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
+    write_table_insert_dirt_fn(out, relation, index_selection)?;
     write_table_clear_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
@@ -480,7 +546,7 @@ fn write_table_impl(
     for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
         write_table_drain_with_element(out, relation, index_selection, sort)?;
     }
-    write_table_drain_previous_dirt(out, relation, index_selection)?;
+    write_table_recall_previous_dirt(out, arity, index_selection)?;
     writedoc! {out, "
         }}
     "}
