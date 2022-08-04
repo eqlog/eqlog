@@ -777,7 +777,7 @@ fn write_model_delta_struct(
     "}
 }
 
-fn write_model_delta_impl(
+fn write_model_delta_new_fn(
     out: &mut impl Write,
     module: &Module,
     query_actions: &[QueryAction],
@@ -803,17 +803,30 @@ fn write_model_delta_impl(
     });
 
     writedoc! {out, "
-        impl ModelDelta {{
-            fn new() -> ModelDelta {{
-                ModelDelta{{
+        fn new() -> ModelDelta {{
+            ModelDelta{{
         {query_matches}
         {new_tuples}
         {new_equalities}
         {new_element_number}
-                }}
             }}
         }}
     "}
+}
+
+fn write_model_delta_impl(
+    out: &mut impl Write,
+    module: &Module,
+    query_actions: &[QueryAction],
+) -> io::Result<()> {
+    writedoc! {out, "
+        impl ModelDelta {{
+    "}?;
+    write_model_delta_new_fn(out, module, query_actions)?;
+    writedoc! {out, "
+        }}
+    "}?;
+    Ok(())
 }
 
 fn write_query_loop_headers<'a>(
