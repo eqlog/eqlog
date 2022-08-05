@@ -675,6 +675,16 @@ fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
+fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    let sort_snake = sort.to_case(Snake);
+    writedoc! {out, "
+        #[allow(dead_code)]
+        pub fn equate_{sort_snake}(&mut self, lhs: {sort}, rhs: {sort}) {{
+            self.delta.as_mut().unwrap().new_{sort_snake}_equalities.push((lhs, rhs));
+        }}
+    "}
+}
+
 fn write_sort_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
@@ -1406,6 +1416,7 @@ fn write_theory_impl(
     write!(out, "impl {} {{\n", name)?;
     for sort in module.iter_sorts() {
         write_new_element(out, &sort.name)?;
+        write_equate_elements(out, &sort.name)?;
         write_iter_sort_fn(out, &sort.name)?;
         write_sort_root_fn(out, &sort.name)?;
         write!(out, "\n")?;
