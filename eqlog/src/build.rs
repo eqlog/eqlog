@@ -8,6 +8,7 @@ use crate::llam::*;
 use crate::module::*;
 use crate::rust_gen::*;
 use convert_case::{Case, Casing};
+use indoc::indoc;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -149,19 +150,29 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     Ok(())
 }
 
-pub fn process_root() {
+pub fn process_root() -> io::Result<()> {
     let in_dir: PathBuf = "src".into();
-    let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
+    let out_dir: PathBuf = env::var("OUT_DIR")
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                indoc! {"
+                Failed to read $OUT_DIR environment variable.
+                eqlog::process_root must be run via cargo in a build.rs script.
+            "},
+            )
+        })?
+        .into();
 
-    for in_file in eqlog_files(&in_dir).unwrap() {
+    for in_file in eqlog_files(&in_dir)? {
         let src_rel = in_file.strip_prefix(&in_dir).unwrap();
         let out_parent = match src_rel.parent() {
             Some(parent) => out_dir.clone().join(parent),
             None => out_dir.clone(),
         };
-        std::fs::create_dir_all(&out_parent).unwrap();
+        std::fs::create_dir_all(&out_parent)?;
 
-        let name = in_file.file_stem().unwrap().to_str().unwrap();
+        let name = in_file.file_stem().unwrap().to_str()?;
         let out_file = out_parent.join(name).with_extension("rs");
         println!("Compiling {in_file:?} into {out_file:?}");
 
@@ -170,4 +181,5 @@ pub fn process_root() {
             exit(1);
         }
     }
+    Ok(())
 }

@@ -1,3 +1,3 @@
 fn main() {
-    eqlog::process_root();
+    eqlog::process_root().unwrap();
 }
