@@ -37,10 +37,18 @@ PredicateDecl: Predicate = {
 }
 
 FunctionDecl: Function = {
-    <l: @L> "Func" <name: Id> ":" <head_dom: (<Id>)?> <tail_dom: ("*" <Id>)*> "->" <cod: Id> ";" <r: @R> => {
+    <l: @L> "Func" <name: Id> ":" "*"? <head_dom: Id> <tail_dom: ("*" <Id>)*> "->" <cod: Id> ";" <r: @R> => {
         Function {
             name,
-            dom: head_dom.into_iter().chain(tail_dom).collect(),
+            dom: once(head_dom).chain(tail_dom).collect(),
+            cod,
+            location: Some(Location(l, r)),
+        }
+    },
+    <l: @L> "Func" <name: Id> ":" <cod: Id> ";" <r: @R> => {
+        Function {
+            name,
+            dom: vec![],
             cod,
             location: Some(Location(l, r)),
         }

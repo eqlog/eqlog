@@ -1,6 +1,6 @@
 Sort M;
 // The neutral element.
-Func E : -> M;
+Func E : M;
 // The multiplication operation.
 Func Mul : M * M -> M;
 

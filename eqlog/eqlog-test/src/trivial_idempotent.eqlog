@@ -1,5 +1,5 @@
 Sort M;
-Func E : -> M;
+Func E : M;
 Func Mul : M * M -> M;
 
 
