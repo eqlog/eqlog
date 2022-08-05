@@ -3,4 +3,9 @@ Func E : M;
 Func Mul : M * M -> M;
 
 
-Axiom a = Mul(a, a) & E()! => a = E();
+Axiom
+  & a = Mul(a, a)
+  & E()!
+  =>
+  & a = E()
+  ;

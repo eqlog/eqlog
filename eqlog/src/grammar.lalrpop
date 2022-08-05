@@ -92,9 +92,10 @@ Atom: Atom = {
 }
 
 Formula: Vec<Atom> = {
-    <head_atom: (<Atom>)?> <tail_atoms : ("&" <Atom>)*> => {
-        head_atom.into_iter().chain(tail_atoms).collect()
-    }
+    "&"? <head_atom: (<Atom>)> <tail_atoms : ("&" <Atom>)*> => {
+        once(head_atom).chain(tail_atoms).collect()
+    },
+    () => vec![]
 }
 
 pub Sequent: Sequent = {
