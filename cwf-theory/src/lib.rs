@@ -1,4 +1,6 @@
 extern crate eqlog_util;
 use eqlog_util::eqlog_mod;
 
-eqlog_mod!(pub cwf);
+eqlog_mod!(cwf);
+
+pub use cwf::*;
