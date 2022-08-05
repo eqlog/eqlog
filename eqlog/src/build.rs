@@ -140,9 +140,17 @@ pub fn process_root() {
     let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
 
     for in_file in eqlog_files(&in_dir).unwrap() {
-        let stem = in_file.file_stem().unwrap().to_str().unwrap();
-        let out_file = out_dir.join(stem).with_extension("rs");
+        let src_rel = in_file.strip_prefix(&in_dir).unwrap();
+        let out_parent = match src_rel.parent() {
+            Some(parent) => out_dir.clone().join(parent),
+            None => out_dir.clone(),
+        };
+        std::fs::create_dir_all(&out_parent).unwrap();
+
+        let name = in_file.file_stem().unwrap().to_str().unwrap();
+        let out_file = out_parent.join(name).with_extension("rs");
         println!("Compiling {in_file:?} into {out_file:?}");
+
         if let Err(err) = process_file(&in_file, &out_file) {
             eprintln!("{err}");
             exit(1);
