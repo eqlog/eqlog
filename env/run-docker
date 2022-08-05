@@ -19,4 +19,4 @@ docker run \
 	--env "CARGO_HOME=$repo_root/.cargo" \
 	--rm \
 	exp-epa \
-	$@
+	"$@"
