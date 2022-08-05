@@ -149,6 +149,18 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     Ok(())
 }
 
+/// Compile all eqlog files in the `src` directory into rust modules.
+///
+/// Must be called from a `build.rs` script via cargo.
+/// Output rust files are written to the cargo target out directory.
+/// Exits the process on compilation failure.
+///
+/// # Examples
+/// ```
+/// fn main() {
+///     eqlog::process_root();
+/// }
+/// ```
 pub fn process_root() {
     let in_dir: PathBuf = "src".into();
     let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
