@@ -607,7 +607,7 @@ fn write_is_dirty_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     });
 
     writedoc! {out, "
-        pub fn is_dirty(&self) -> bool {{
+        fn is_dirty(&self) -> bool {{
             self.empty_join_is_dirty ||{rels_dirty} || {sorts_dirty}
         }}
     "}
