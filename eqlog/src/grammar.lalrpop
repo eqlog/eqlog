@@ -27,6 +27,13 @@ PredicateDecl: Predicate = {
             location: Some(Location(l, r)),
         }
     },
+    <l: @L> "Pred" <name: Id> ":" "(" ")" ";" <r: @R> => {
+        Predicate {
+            name,
+            arity: vec![],
+            location: Some(Location(l, r)),
+        }
+    },
 }
 
 FunctionDecl: Function = {

@@ -14,8 +14,10 @@ use Case::Snake;
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
+        #[allow(unused)]
         use std::collections::{{BTreeSet, BTreeMap}};
         use std::fmt;
+        #[allow(unused)]
         use eqlog_util::Unification;
         use eqlog_util::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
         use std::ops::Bound;
@@ -189,6 +191,7 @@ fn write_table_permute_fn(
         .iter()
         .format_with("", |i, f| f(&format_args!("t.{i}.into(), ")));
     writedoc! {out, "
+        #[allow(unused)]
         fn permute{order_name}(t: {relation}) -> ({tuple_type_args}) {{
             ({tuple_args})
         }}
@@ -209,6 +212,7 @@ fn write_table_permute_inverse_fn(
         f(&format_args!("{sort}::from(t.{j})"))
     });
     writedoc! {out, "
+        #[allow(unused)]
         fn permute_inverse{order_name}(t: ({tuple_type_args})) -> {relation} {{
             {relation}({rel_args})
         }}
@@ -533,6 +537,7 @@ fn write_table_recall_previous_dirt(
             std::mem::swap(&mut tmp_{index_name}_prev, &mut self.index_{index_name}_prev);
 
             for tuple in tmp_{index_name}_prev.into_iter().flatten() {{
+                #[allow(unused_mut)]
                 let mut tuple = Self::permute_inverse{order_name}(tuple);
                 {canonicalize_tuple}
                 self.insert_dirt(tuple);
@@ -596,19 +601,19 @@ fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<
 }
 
 fn write_is_dirty_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let rels_dirty = module.relations().format_with(" || ", |(relation, _), f| {
+    let rels_dirty = module.relations().format_with("", |(relation, _), f| {
         let relation_snake = relation.to_case(Snake);
-        f(&format_args!("self.{relation_snake}.is_dirty()"))
+        f(&format_args!(" || self.{relation_snake}.is_dirty()"))
     });
 
-    let sorts_dirty = module.iter_sorts().format_with(" || ", |sort, f| {
+    let sorts_dirty = module.iter_sorts().format_with("", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
-        f(&format_args!("!self.{sort_snake}_dirty.is_empty()"))
+        f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
     });
 
     writedoc! {out, "
         fn is_dirty(&self) -> bool {{
-            self.empty_join_is_dirty ||{rels_dirty} || {sorts_dirty}
+            self.empty_join_is_dirty {rels_dirty} {sorts_dirty}
         }}
     "}
 }
@@ -818,6 +823,7 @@ fn write_model_delta_apply_new_elements_fn(
         "})
     });
     writedoc! {out, "
+        #[allow(unused)]
         fn apply_new_elements(&mut self, model: &mut Model) {{
         {sorts}
         }}
@@ -857,6 +863,7 @@ fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) 
         "})
     });
     writedoc! {out, "
+        #[allow(unused)]
         fn apply_equalities(&mut self, model: &mut Model) {{
         {sorts}
         }}
@@ -875,6 +882,7 @@ fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> i
                 ))
             });
             f(&formatdoc! {"
+            #[allow(unused_mut)]
             for mut t in self.new_{relation_snake}.drain(..) {{
                 {canonicalize}
                 model.{relation_snake}.insert(t);
