@@ -91,15 +91,24 @@ Atom: Atom = {
     },
 }
 
-Formula: Vec<Atom> = {
+NonEmptyFormula: Vec<Atom> = {
     "&"? <head_atom: (<Atom>)> <tail_atoms : ("&" <Atom>)*> => {
         once(head_atom).chain(tail_atoms).collect()
     },
+}
+
+Formula: Vec<Atom> = {
+    <f: NonEmptyFormula> => f,
     () => vec![]
 }
 
 pub Sequent: Sequent = {
-    <premise: Formula> "=>" <conclusion: Formula> => {
+    <facts: Formula> => {
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        Sequent::new_implication(u, vec![], facts)
+    },
+    <premise: NonEmptyFormula> "=>" <conclusion: Formula> => {
         let mut u = TermUniverse::new();
         swap(&mut u, universe);
         Sequent::new_implication(u, premise, conclusion)
@@ -110,7 +119,7 @@ pub Sequent: Sequent = {
         let seq = Sequent::new_reduction(u, Vec::new(), from, to)?;
         Ok(seq)
     },
-    <premise: Formula> "=>" <from: Term> "~>" <to: Term> =>? {
+    <premise: NonEmptyFormula> "=>" <from: Term> "~>" <to: Term> =>? {
         let mut u = TermUniverse::new();
         swap(&mut u, universe);
         let seq = Sequent::new_reduction(u, premise, from, to)?;

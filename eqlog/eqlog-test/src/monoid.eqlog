@@ -4,7 +4,7 @@ Func E : M;
 // The multiplication operation.
 Func Mul : M * M -> M;
 
-Axiom => E()!;
+Axiom E()!;
 Axiom x! & y! => Mul(x, y)!;
 Axiom y = Mul(x, E()) => x = y;
 Axiom y = Mul(E(), x) => x = y;

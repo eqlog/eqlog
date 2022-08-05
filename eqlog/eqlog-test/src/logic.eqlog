@@ -2,5 +2,5 @@ Pred Absurd : ();
 Pred Truth : ();
 Pred Undetermined : ();
 
-Axiom => Truth();
+Axiom Truth();
 Axiom Absurd() => Undetermined();
