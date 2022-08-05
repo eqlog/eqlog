@@ -2,10 +2,8 @@
 name = "exp-epa"
 version = "0.1.0"
 authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>", "Jakob Botsch Nielsen <Jakob.botsch.nielsen@gmail.com>"]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 lalrpop-util = "0"

@@ -1,12 +1,7 @@
-#[macro_use]
-extern crate lalrpop_util;
-extern crate convert_case;
-#[cfg(test)]
-extern crate indoc;
-
 mod ast;
 mod module;
 mod unification;
+use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[allow(unused)]
     grammar

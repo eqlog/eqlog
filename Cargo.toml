@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-	"exp-epa",
+  "exp-epa",
   "cwf-theory",
   "eqlog",
   "eqlog/eqlog-util",

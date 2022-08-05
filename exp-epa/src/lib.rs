@@ -1,16 +1,9 @@
-#![recursion_limit = "128"]
-extern crate indoc;
-extern crate lalrpop_util;
-#[cfg(test)]
-extern crate maplit;
 use lalrpop_util::lalrpop_mod;
-
 lalrpop_mod!(
     #[allow(unused)]
     grammar
 );
 mod ast;
-
 mod cwf_checker;
 
 use crate::cwf_checker::*;

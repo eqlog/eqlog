@@ -1,13 +1,13 @@
 [package]
 name = "eqlog-test"
-build = "build.rs"
 version = "0.1.0"
+edition = "2021"
 
 [dependencies.eqlog-util]
 path = "../eqlog-util"
 
-[build-dependencies.eqlog]
-path = "../"
-
 [dependencies]
 maplit = "1"
+
+[build-dependencies.eqlog]
+path = ".."
