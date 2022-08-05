@@ -116,12 +116,12 @@ Formula: Vec<Atom> = {
 }
 
 pub Sequent: Sequent = {
-    <facts: Formula> => {
+    <facts: NonEmptyFormula> => {
         let mut u = TermUniverse::new();
         swap(&mut u, universe);
         Sequent::new_implication(u, vec![], facts)
     },
-    <premise: NonEmptyFormula> "=>" <conclusion: Formula> => {
+    <premise: NonEmptyFormula> "=>" <conclusion: NonEmptyFormula> => {
         let mut u = TermUniverse::new();
         swap(&mut u, universe);
         Sequent::new_implication(u, premise, conclusion)
@@ -177,7 +177,7 @@ QueryDecl: UserQuery = {
         <name: Id>
         <arguments: QueryArguments>
         <result: QueryResult>
-        <where_formula: ("where" <Formula>)?>
+        <where_formula: ("where" <NonEmptyFormula>)?>
         ";"
         <r: @R> => {
 
