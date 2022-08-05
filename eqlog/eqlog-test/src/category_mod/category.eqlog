@@ -9,9 +9,9 @@ Func Id : Obj -> Mor;
 Axiom Cod(f) = Dom(g) => Comp(g, f)!;
 Axiom h = Comp(_, f) & d = Dom(f) => Dom(h) = d;
 Axiom h = Comp(g, _) & c = Cod(g) => Cod(h) = c;
-Axiom x! : Obj & y! : Obj => Id(x)! & Id(y)!;
+Axiom x : Obj & y : Obj => Id(x)! & Id(y)!;
 
 Query signature(f: Mor) -> (Dom(f), Cod(f));
-Query signature_of_first(f: Mor, g: Mor) -> (Dom(f), Cod(f)) where g! : Mor;
+Query signature_of_first(f: Mor, g: Mor) -> (Dom(f), Cod(f)) where g : Mor;
 Query hom(x: Obj, y: Obj) -> f where Dom(f) = x & Cod(f) = y;
 Query has_signature(f: Mor, dom: Obj, cod: Obj) where Dom(f) = dom & Cod(f) = cod;

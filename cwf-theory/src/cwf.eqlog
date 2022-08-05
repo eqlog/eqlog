@@ -95,7 +95,7 @@ Axiom SubstTm(ExtMor(gamma, _, s), ExtVar(gamma)) ~> s;
 // The transitive reflexive closure of context extension.
 Pred CtxExt: Ctx * Ctx;
 Axiom a = BaseCtx(b) => CtxExt(a, b);
-Axiom a!: Ctx => CtxExt(a, a);
+Axiom a: Ctx => CtxExt(a, a);
 Axiom CtxExt(a, b) & CtxExt(b, c) => CtxExt(a, c);
 
 // Iterated substitutions.

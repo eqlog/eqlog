@@ -62,32 +62,45 @@ Application: (String, Vec<Term>) = {
     }
 }
 
-Term: Term = {
+Variable: Term = {
     <l: @L> <var: Id> <r: @R> => {
         universe.new_term(TermData::Variable(var), Some(Location(l, r)))
     },
+}
+Wildcard: Term = {
     <l: @L> "_" <r: @R> => {
         universe.new_term(TermData::Wildcard, Some(Location(l, r)))
     },
+}
+ApplicationTerm: Term = {
     <l: @L> <app: Application> <r: @R> => {
         let (func, args) = app;
         universe.new_term(TermData::Application(func, args), Some(Location(l, r)))
     },
 }
 
+Term: Term = {
+    <var: Variable> => var,
+    <wildcard: Wildcard> => wildcard,
+    <application: ApplicationTerm> => application,
+}
+
 Atom: Atom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
         Atom { data: AtomData::Equal(lhs, rhs), location: Some(Location(l, r)) }
     },
-    <l: @L> <tm: Term> "!" <r: @R> => {
-        Atom { data: AtomData::Defined(tm, None), location: Some(Location(l, r)) }
-    },
-    <l: @L> <tm: Term> "!" ":" <s: Id> <r: @R> => {
-        Atom { data: AtomData::Defined(tm, Some(s)), location: Some(Location(l, r)) }
-    },
     <l: @L> <app: Application> <r: @R> => {
         let (pred, args) = app;
         Atom { data: AtomData::Predicate(pred, args), location: Some(Location(l, r)) }
+    },
+    <l: @L> <tm: ApplicationTerm> "!" <r: @R> => {
+        Atom { data: AtomData::Defined(tm, None), location: Some(Location(l, r)) }
+    },
+    <l: @L> <tm: Variable> ":" <s: Id> <r: @R> => {
+        Atom { data: AtomData::Defined(tm, Some(s)), location: Some(Location(l, r)) }
+    },
+    <l: @L> <tm: Wildcard> ":" <s: Id> <r: @R> => {
+        Atom { data: AtomData::Defined(tm, Some(s)), location: Some(Location(l, r)) }
     },
 }
 
