@@ -20,7 +20,7 @@ SortDecl: Sort = {
 }
 
 PredicateDecl: Predicate = {
-    <l: @L> "Pred" <name: Id> ":" <head: Id> <tail: ("*" <Id>)*> ";" <r: @R> => {
+    <l: @L> "Pred" <name: Id> ":" "*"? <head: Id> <tail: ("*" <Id>)*> ";" <r: @R> => {
         Predicate {
             name,
             arity: once(head).chain(tail).collect(),

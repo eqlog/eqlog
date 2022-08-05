@@ -1,5 +1,8 @@
 Sort V;
-Pred Edge: V * V ;
+Pred Edge:
+  * V
+  * V
+  ;
 
 Axiom x!: V => Edge(x, x);
 Axiom Edge(x, y) & Edge(y, z) => Edge(x, z);
