@@ -360,11 +360,14 @@ impl Module {
         );
 
         self.collect_function_application_requirements(&sequent.universe, &mut sorts)?;
-        for atom in sequent
-            .synthetic_premise()
-            .chain(sequent.synthetic_conclusion())
-        {
+        for atom in sequent.data.iter_atoms() {
             self.collect_atom_requirements(&atom, &mut sorts)?;
+        }
+        match &sequent.data {
+            SequentData::Implication { .. } => (),
+            SequentData::Reduction { from, to, .. } => {
+                sorts.union(*from, *to);
+            }
         }
 
         Self::into_unique_sorts(&sequent.universe, sorts)
