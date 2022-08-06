@@ -1289,7 +1289,7 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Resu
     "}
 }
 
-fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
+fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
     let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
 
     let surjective_axioms = (0..query_actions.len())
@@ -1306,12 +1306,18 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
 
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn close(&mut self) {{
+        pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
+        {{
             let mut delta_opt = None;
             std::mem::swap(&mut delta_opt, &mut self.delta);
             let mut delta = delta_opt.unwrap();
 
             delta.apply(self);
+            if condition(self) {{
+                self.delta = Some(delta);
+                return true;
+            }}
+
             while self.is_dirty() {{
                 loop {{
         {surjective_axioms}
@@ -1319,6 +1325,10 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
                     self.retire_dirt();
                     delta.apply(self);
 
+                    if condition(self) {{
+                        self.delta = Some(delta);
+                        return true;
+                    }}
                     if !self.is_dirty() {{
                         break;
                     }}
@@ -1328,9 +1338,23 @@ fn write_close_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Re
         {non_surjective_axioms}
                 self.drop_dirt();
                 delta.apply(self);
+                if condition(self) {{
+                    self.delta = Some(delta);
+                    return true;
+                }}
             }}
 
             self.delta = Some(delta);
+            return false;
+        }}
+    "}
+}
+
+fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
+    writedoc! {out, "
+        #[allow(dead_code)]
+        pub fn close(&mut self) {{
+            self.close_until(|_: &Self| false);
         }}
     "}
 }
@@ -1461,7 +1485,8 @@ fn write_theory_impl(
     write_drop_dirt_fn(out, module)?;
     write_retire_dirt_fn(out, module)?;
     write_recall_previous_dirt(out, module)?;
-    write_close_fn(out, query_actions)?;
+    write_close_until_fn(out, query_actions)?;
+    write_close_fn(out)?;
 
     write!(out, "}}\n")?;
     Ok(())

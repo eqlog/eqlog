@@ -17,3 +17,5 @@ mod pointed_test;
 mod trans_refl_test;
 #[cfg(test)]
 mod poset_test;
+#[cfg(test)]
+mod semilattice_test;
