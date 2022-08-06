@@ -1,0 +1,22 @@
+Sort El;
+Pred Le: El * El;
+Func Meet: El * El -> El;
+Func Join: El * El -> El;
+
+// Axioms of posets.
+Axiom x: El => Le(x, x);
+Axiom Le(x, y) & Le(y, z) => Le(x, z);
+Axiom Le(x, y) & Le(y, x) => x = y;
+
+// Axioms of meets.
+Axiom x: El & y: El => Meet(x, y)!;
+Axiom meet = Meet(x, y) => Le(meet, x) & Le(meet, y);
+Axiom Le(z, x) & Le(z, y) & meet = Meet(x, y) => Le(z, meet);
+
+// Axioms of join.
+Axiom x: El & y: El => Join(x, y)!;
+Axiom join = Join(x, y) => Le(x, join) & Le(y, join);
+Axiom Le(x, z) & Le(y, z) & join = Join(x, y) => Le(join, z);
+
+// Distributivity of joins over meets.
+Axiom Join(x, Meet(y, z)) <~> Meet(Join(x, y), Join(x, z));
