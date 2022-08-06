@@ -1,0 +1,19 @@
+Sort El;
+
+Func Mul: El * El -> El;
+Func Id: El;
+Func Inv: El -> El;
+
+// Totality.
+Axiom x: El & y: El => Mul(x, y)!;
+Axiom Id()!;
+Axiom x: El => Inv(x)!;
+
+// Associativity.
+Axiom Mul(Mul(x, y), z) <~> Mul(x, Mul(y, z));
+
+// Right identity.
+Axiom Mul(x, Id()) ~> x;
+
+// Right invertibility.
+Axiom Mul(x, Inv(x)) <~> Id();

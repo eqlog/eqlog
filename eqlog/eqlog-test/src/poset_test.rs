@@ -5,7 +5,7 @@ fn adjoin_chain(p: &mut Poset, length: usize) -> (P, P) {
 
     let first = p.new_p();
     let mut prev = first;
-    for _ in 0 .. (length - 1) {
+    for _ in 0..(length - 1) {
         let next = p.new_p();
         p.insert_le(Le(prev, next));
         prev = next;

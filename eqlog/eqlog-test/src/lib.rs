@@ -8,17 +8,20 @@ eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
 eqlog_mod!(semilattice);
 eqlog_mod!(distr_lattice);
+eqlog_mod!(group);
 
 mod category_mod;
+#[cfg(test)]
+mod distr_lattice_test;
+#[cfg(test)]
+mod group_test;
 #[cfg(test)]
 mod logic_test;
 mod monoid_test;
 mod pointed_test;
 #[cfg(test)]
-mod trans_refl_test;
-#[cfg(test)]
 mod poset_test;
 #[cfg(test)]
 mod semilattice_test;
 #[cfg(test)]
-mod distr_lattice_test;
+mod trans_refl_test;
