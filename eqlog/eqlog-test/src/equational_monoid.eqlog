@@ -4,5 +4,4 @@ Func Mul : M * M -> M;
 
 Axiom Mul(x, E()) ~> x;
 Axiom Mul(E(), x) ~> x;
-Axiom Mul(Mul(a, b), c) ~> Mul(a, Mul(b, c));
-Axiom Mul(a, Mul(b, c)) ~> Mul(Mul(a, b), c);
+Axiom Mul(Mul(a, b), c) <~> Mul(a, Mul(b, c));

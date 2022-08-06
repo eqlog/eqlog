@@ -7,9 +7,9 @@ eqlog_mod!(logic);
 eqlog_mod!(trans_refl);
 
 mod category_mod;
-mod monoid_test;
-mod pointed_test;
 #[cfg(test)]
 mod logic_test;
+mod monoid_test;
+mod pointed_test;
 #[cfg(test)]
 mod trans_refl_test;

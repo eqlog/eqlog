@@ -368,6 +368,9 @@ impl Module {
             SequentData::Reduction { from, to, .. } => {
                 sorts.union(*from, *to);
             }
+            SequentData::Bireduction { lhs, rhs, .. } => {
+                sorts.union(*lhs, *rhs);
+            }
         }
 
         Self::into_unique_sorts(&sequent.universe, sorts)
@@ -407,16 +410,36 @@ impl Module {
     // Check that the `from` term of a reduction is composite, i.e. not a reduction or wildcard.
     fn check_reduction_variables(sequent: &Sequent) -> Result<(), CompileError> {
         use SequentData::*;
+        let err = |tm| -> CompileError {
+            CompileError::ReductionFromVariableOrWildcard {
+                location: sequent.universe.location(tm),
+            }
+        };
+
         match &sequent.data {
             Implication { .. } => Ok(()),
             Reduction { from, .. } => {
                 use TermData::*;
                 match sequent.universe.data(*from) {
                     Application(_, _) => Ok(()),
-                    Wildcard | Variable(_) => Err(CompileError::ReductionFromVariableOrWildcard {
-                        location: sequent.universe.location(*from),
-                    }),
+                    Wildcard | Variable(_) => Err(err(*from)),
                 }
+            }
+            Bireduction { lhs, rhs, .. } => {
+                use TermData::*;
+                match sequent.universe.data(*lhs) {
+                    Application(_, _) => (),
+                    Wildcard | Variable(_) => {
+                        return Err(err(*lhs));
+                    }
+                }
+                match sequent.universe.data(*rhs) {
+                    Application(_, _) => (),
+                    Wildcard | Variable(_) => {
+                        return Err(err(*rhs));
+                    }
+                }
+                Ok(())
             }
         }
     }
@@ -431,7 +454,7 @@ impl Module {
                 conclusion,
                 ..
             } => (premise, conclusion),
-            SequentData::Reduction { .. } => {
+            SequentData::Reduction { .. } | SequentData::Bireduction { .. } => {
                 // Reductions are epimorphisms by construction.
                 return Ok(());
             }

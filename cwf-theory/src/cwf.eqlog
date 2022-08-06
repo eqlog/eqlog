@@ -123,45 +123,24 @@ Axiom
 
 // The equality
 //   ExtMor(gamma, f, _) o ExtWkn(gamma) = f
-// in both directions, and in a version that works for compositions of 
-// weakenings instead of just a single one.
+// in a version that works for compositions of weakenings instead of
+// just a single one.
 Axiom 
-  ActiveCtx(Cod(g))
-  & g = ExtMor(gamma, g_0, _)
-  & w = Comp(ExtWkn(gamma), w_0)
-  & Comp(g_0, w_0)!
+  & ActiveCtx(Cod(g_0))
   =>
-  Comp(g, w) = Comp(g_0, w_0)
-  ;
-Axiom 
-  ActiveCtx(Cod(g))
-  & g = ExtMor(gamma, g_0, _)
-  & w = Comp(ExtWkn(gamma), w_0)
-  & Comp(g, w)!
-  =>
-  Comp(g, w) = Comp(g_0, w_0)
+  Comp(ExtMor(gamma, g_0, _), Comp(ExtWkn(gamma), w_0))
+  <~>
+  Comp(g_0, w_0)
   ;
 
 // The equality
-//   g o ExtMor(gamma, f, s) = ExtMor(gamma, g o f, g[s])
-// in both directions.
+//   g o ExtMor(gamma, f, s) = ExtMor(gamma, g o f, g[s]).
 Axiom
-  ActiveCtx(Cod(g))
-  & Cod(f) = Dom(g)
-  & f = ExtMor(gamma, f_0, s)
-  & h = ExtMor(gamma, Comp(g, f_0), SubstTm(g, s))
+  & ActiveCtx(Cod(g))
   =>
-  h = Comp(g, f)
-  ;
-Axiom
-  ActiveCtx(Cod(g))
-  & Cod(f) = Dom(g)
-  & f = ExtMor(gamma, f_0, s)
-  & h = Comp(g, f)
-  & Comp(g, f_0)!
-  & SubstTm(g, s)!
-  =>
-  h = ExtMor(gamma, Comp(g, f_0), SubstTm(g, s))
+  ExtMor(gamma, Comp(g, f_0), SubstTm(g, s))
+  <~>
+  Comp(g, ExtMor(gamma, f_0, s))
   ;
 
 // The unit type.

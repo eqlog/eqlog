@@ -160,6 +160,11 @@ pub enum SequentData {
         from: Term,
         to: Term,
     },
+    Bireduction {
+        premise: Vec<Atom>,
+        lhs: Term,
+        rhs: Term,
+    },
 }
 
 impl SequentData {
@@ -171,6 +176,7 @@ impl SequentData {
                 conclusion,
             } => Box::new(premise.iter().chain(conclusion)),
             Reduction { premise, .. } => Box::new(premise.iter()),
+            Bireduction { premise, .. } => Box::new(premise.iter()),
         };
         result
     }

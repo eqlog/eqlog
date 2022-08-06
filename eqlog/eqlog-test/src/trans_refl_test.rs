@@ -29,7 +29,7 @@ fn test_two_discrete_elements() {
 fn test_arrow() {
     let mut m = TransRefl::new();
     let a = m.new_v();
-    let b =  m.new_v();
+    let b = m.new_v();
     m.insert_edge(Edge(a, b));
     m.close();
     assert_eq!(m.iter_v().count(), 2);
@@ -40,7 +40,7 @@ fn test_arrow() {
 fn test_bi_arrow() {
     let mut m = TransRefl::new();
     let a = m.new_v();
-    let b =  m.new_v();
+    let b = m.new_v();
     m.insert_edge(Edge(a, b));
     m.insert_edge(Edge(b, a));
     m.close();
@@ -52,8 +52,8 @@ fn test_bi_arrow() {
 fn test_arrow_arrow() {
     let mut m = TransRefl::new();
     let a = m.new_v();
-    let b =  m.new_v();
-    let c =  m.new_v();
+    let b = m.new_v();
+    let c = m.new_v();
     m.insert_edge(Edge(a, b));
     m.insert_edge(Edge(b, c));
     m.close();

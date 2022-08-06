@@ -278,16 +278,34 @@ fn flatten_reduction<'a>(
     result
 }
 
-pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequent {
+pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> Vec<FlatSequent> {
     use SequentData::*;
     let universe = &sequent.universe;
     match &sequent.data {
         Implication {
             premise,
             conclusion,
-        } => flatten_implication(universe, premise.iter(), conclusion.iter(), sorts),
+        } => {
+            vec![flatten_implication(
+                universe,
+                premise.iter(),
+                conclusion.iter(),
+                sorts,
+            )]
+        }
         Reduction { premise, from, to } => {
-            flatten_reduction(universe, premise.iter(), *from, *to, sorts)
+            vec![flatten_reduction(
+                universe,
+                premise.iter(),
+                *from,
+                *to,
+                sorts,
+            )]
+        }
+        Bireduction { premise, lhs, rhs } => {
+            let left_to_right = flatten_reduction(universe, premise.iter(), *lhs, *rhs, sorts);
+            let right_to_left = flatten_reduction(universe, premise.iter(), *rhs, *lhs, sorts);
+            return vec![left_to_right, right_to_left];
         }
     }
 }

@@ -125,11 +125,19 @@ pub SequentData: SequentData = {
     <premise: NonEmptyFormula> "=>" <conclusion: NonEmptyFormula> => {
         SequentData::Implication { premise, conclusion }
     },
+
     <from: Term> "~>" <to: Term> => {
         SequentData::Reduction { premise: Vec::new(), from, to }
     },
     <premise: NonEmptyFormula> "=>" <from: Term> "~>" <to: Term> => {
         SequentData::Reduction { premise, from, to }
+    },
+
+    <lhs: Term> "<~>" <rhs: Term> => {
+        SequentData::Bireduction { premise: Vec::new(), lhs, rhs }
+    },
+    <premise: NonEmptyFormula> "=>" <lhs: Term> "<~>" <rhs: Term> => {
+        SequentData::Bireduction { premise, lhs, rhs }
     },
 }
 
