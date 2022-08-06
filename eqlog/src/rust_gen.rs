@@ -694,11 +694,11 @@ fn write_sort_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn {sort_snake}_root(&mut self, el: {sort}) -> {sort} {{
+        pub fn {sort_snake}_root(&self, el: {sort}) -> {sort} {{
             if el.0 as usize >= self.{sort_snake}_equalities.len() {{
                 el
             }} else {{
-                self.{sort_snake}_equalities.root(el)
+                self.{sort_snake}_equalities.root_const(el)
             }}
         }}
     "}
