@@ -5,6 +5,7 @@ eqlog_mod!(pointed);
 eqlog_mod!(trivial_idempotent);
 eqlog_mod!(logic);
 eqlog_mod!(trans_refl);
+eqlog_mod!(poset);
 
 mod category_mod;
 #[cfg(test)]
@@ -13,3 +14,5 @@ mod monoid_test;
 mod pointed_test;
 #[cfg(test)]
 mod trans_refl_test;
+#[cfg(test)]
+mod poset_test;

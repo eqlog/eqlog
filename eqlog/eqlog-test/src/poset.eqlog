@@ -1,0 +1,6 @@
+Sort P;
+Pred Le: P * P;
+
+Axiom x : P => Le(x, x);
+Axiom Le(x, y) & Le(y, z) => Le(x, z);
+Axiom Le(x, y) & Le(y, x) => x = y;
