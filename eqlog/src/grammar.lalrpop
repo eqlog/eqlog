@@ -118,35 +118,29 @@ Formula: Vec<Atom> = {
     () => vec![],
 }
 
-pub Sequent: Sequent = {
+pub SequentData: SequentData = {
     <facts: NonEmptyFormula> => {
-        let mut u = TermUniverse::new();
-        swap(&mut u, universe);
-        Sequent::new_implication(u, vec![], facts)
+        SequentData::Implication { premise: Vec::new(), conclusion: facts }
     },
     <premise: NonEmptyFormula> "=>" <conclusion: NonEmptyFormula> => {
-        let mut u = TermUniverse::new();
-        swap(&mut u, universe);
-        Sequent::new_implication(u, premise, conclusion)
+        SequentData::Implication { premise, conclusion }
     },
-    <from: Term> "~>" <to: Term> =>? {
-        let mut u = TermUniverse::new();
-        swap(&mut u, universe);
-        let seq = Sequent::new_reduction(u, Vec::new(), from, to)?;
-        Ok(seq)
+    <from: Term> "~>" <to: Term> => {
+        SequentData::Reduction { premise: Vec::new(), from, to }
     },
-    <premise: NonEmptyFormula> "=>" <from: Term> "~>" <to: Term> =>? {
-        let mut u = TermUniverse::new();
-        swap(&mut u, universe);
-        let seq = Sequent::new_reduction(u, premise, from, to)?;
-        Ok(seq)
+    <premise: NonEmptyFormula> "=>" <from: Term> "~>" <to: Term> => {
+        SequentData::Reduction { premise, from, to }
     },
 }
 
 AxiomDecl: Axiom = {
-    <l: @L> "Axiom" <sequent: Sequent> ";" <r: @R> => Axiom {
-        sequent,
-        location: Some(Location(l, r)),
+    <l: @L> "Axiom" <data: SequentData> ";" <r: @R> => {
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        Axiom {
+            sequent: Sequent { universe: u, data },
+            location: Some(Location(l, r)),
+        }
     },
 }
 

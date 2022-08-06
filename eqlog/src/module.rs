@@ -289,37 +289,32 @@ impl Module {
         }
         Ok(())
     }
-    fn collect_atom_requirements<'a, AtomIterator>(
+    fn collect_atom_requirements(
         &self,
-        atoms: AtomIterator,
+        atom: &Atom,
         sorts: &mut SortMap,
-    ) -> Result<(), CompileError>
-    where
-        AtomIterator: IntoIterator<Item = &'a Atom>,
-    {
-        for atom in atoms.into_iter() {
-            match &atom.data {
-                AtomData::Equal(lhs, rhs) => {
-                    sorts.union(*lhs, *rhs);
+    ) -> Result<(), CompileError> {
+        match &atom.data {
+            AtomData::Equal(lhs, rhs) => {
+                sorts.union(*lhs, *rhs);
+            }
+            AtomData::Defined(tm, Some(sort)) => {
+                let _ = self.get_sort_at(sort, atom.location)?;
+                sorts[*tm].insert(sort.clone());
+            }
+            AtomData::Defined(_, None) => (),
+            AtomData::Predicate(p, args) => {
+                let Predicate { arity, .. } = self.get_predicate_at(p, atom.location)?;
+                if args.len() != arity.len() {
+                    return Err(CompileError::PredicateArgumentNumber {
+                        predicate: p.clone(),
+                        expected: arity.len(),
+                        got: args.len(),
+                        location: atom.location,
+                    });
                 }
-                AtomData::Defined(tm, Some(sort)) => {
-                    let _ = self.get_sort_at(sort, atom.location)?;
-                    sorts[*tm].insert(sort.clone());
-                }
-                AtomData::Defined(_, None) => (),
-                AtomData::Predicate(p, args) => {
-                    let Predicate { arity, .. } = self.get_predicate_at(p, atom.location)?;
-                    if args.len() != arity.len() {
-                        return Err(CompileError::PredicateArgumentNumber {
-                            predicate: p.clone(),
-                            expected: arity.len(),
-                            got: args.len(),
-                            location: atom.location,
-                        });
-                    }
-                    for (arg, sort) in args.iter().copied().zip(arity) {
-                        sorts[arg].insert(sort.clone());
-                    }
+                for (arg, sort) in args.iter().copied().zip(arity) {
+                    sorts[arg].insert(sort.clone());
                 }
             }
         }
@@ -365,10 +360,12 @@ impl Module {
         );
 
         self.collect_function_application_requirements(&sequent.universe, &mut sorts)?;
-        self.collect_atom_requirements(
-            sequent.premise.iter().chain(sequent.conclusion.iter()),
-            &mut sorts,
-        )?;
+        for atom in sequent
+            .synthetic_premise()
+            .chain(sequent.synthetic_conclusion())
+        {
+            self.collect_atom_requirements(&atom, &mut sorts)?;
+        }
 
         Self::into_unique_sorts(&sequent.universe, sorts)
     }
@@ -397,11 +394,29 @@ impl Module {
         self.collect_query_argument_requirements(&query.arguments, &mut sorts)?;
         self.collect_function_application_requirements(&query.universe, &mut sorts)?;
         if let Some(where_formula) = &query.where_formula {
-            self.collect_atom_requirements(where_formula, &mut sorts)?;
+            for atom in where_formula.iter() {
+                self.collect_atom_requirements(atom, &mut sorts)?;
+            }
         }
         Self::into_unique_sorts(&query.universe, sorts)
     }
 
+    // Check that the `from` term of a reduction is composite, i.e. not a reduction or wildcard.
+    fn check_reduction_variables(sequent: &Sequent) -> Result<(), CompileError> {
+        use SequentData::*;
+        match &sequent.data {
+            Implication { .. } => Ok(()),
+            Reduction { from, .. } => {
+                use TermData::*;
+                match sequent.universe.data(*from) {
+                    Application(_, _) => Ok(()),
+                    Wildcard | Variable(_) => Err(CompileError::ReductionFromVariableOrWildcard {
+                        location: sequent.universe.location(*from),
+                    }),
+                }
+            }
+        }
+    }
     // Check the following:
     // - Every variable in the conclusion also appears in the premise.
     // - Every term in the conclusion is equal to some term that occurred earlier or inside an
@@ -415,17 +430,14 @@ impl Module {
         );
 
         // Set all premise terms to have occurred.
-        for tm in sequent
-            .premise
-            .iter()
-            .map(|atom| atom.iter_subterms(universe))
-            .flatten()
-        {
-            has_occurred[tm] = true;
+        for atom in sequent.synthetic_premise() {
+            for tm in atom.iter_subterms(universe) {
+                has_occurred[tm] = true;
+            }
         }
 
         // Unify terms occuring in equalities in premise.
-        for atom in &sequent.premise {
+        for atom in sequent.synthetic_premise() {
             use AtomData::*;
             match &atom.data {
                 Equal(lhs, rhs) => {
@@ -439,30 +451,27 @@ impl Module {
 
         // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
         // premise.
-        for tm in sequent
-            .conclusion
-            .iter()
-            .map(|atom| atom.iter_subterms(universe))
-            .flatten()
-        {
-            match universe.data(tm) {
-                TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
-                TermData::Application(_, _) => (),
-                TermData::Variable(var) => {
-                    return Err(CompileError::VariableNotInPremise {
-                        var: var.clone(),
-                        location: universe.location(tm),
-                    })
-                }
-                TermData::Wildcard => {
-                    return Err(CompileError::WildcardInConclusion {
-                        location: universe.location(tm),
-                    })
+        for atom in sequent.synthetic_conclusion() {
+            for tm in atom.iter_subterms(universe) {
+                match universe.data(tm) {
+                    TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
+                    TermData::Application(_, _) => (),
+                    TermData::Variable(var) => {
+                        return Err(CompileError::VariableNotInPremise {
+                            var: var.clone(),
+                            location: universe.location(tm),
+                        })
+                    }
+                    TermData::Wildcard => {
+                        return Err(CompileError::WildcardInConclusion {
+                            location: universe.location(tm),
+                        })
+                    }
                 }
             }
         }
 
-        for atom in &sequent.conclusion {
+        for atom in sequent.synthetic_conclusion() {
             use AtomData::*;
             match &atom.data {
                 Equal(lhs, rhs) => {
@@ -596,6 +605,7 @@ impl Module {
 
     pub fn add_axiom(&mut self, axiom: Axiom) -> Result<(), CompileError> {
         let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
+        Self::check_reduction_variables(&axiom.sequent)?;
         Self::check_epimorphism(&axiom.sequent)?;
         Self::check_variable_case(&axiom.sequent.universe)?;
         Self::check_variable_occurence(&axiom.sequent.universe)?;

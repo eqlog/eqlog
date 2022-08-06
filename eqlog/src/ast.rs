@@ -1,4 +1,3 @@
-use crate::error::*;
 use std::fmt::{self, Display};
 use std::iter::once;
 use std::slice::from_ref;
@@ -152,53 +151,60 @@ impl Atom {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum SequentData {
+    Implication {
+        premise: Vec<Atom>,
+        conclusion: Vec<Atom>,
+    },
+    Reduction {
+        premise: Vec<Atom>,
+        from: Term,
+        to: Term,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Sequent {
     pub universe: TermUniverse,
-    pub premise: Vec<Atom>,
-    pub conclusion: Vec<Atom>,
+    pub data: SequentData,
 }
 
 impl Sequent {
-    pub fn new_implication(
-        universe: TermUniverse,
-        premise: Vec<Atom>,
-        conclusion: Vec<Atom>,
-    ) -> Sequent {
-        Sequent {
-            universe,
-            premise,
-            conclusion,
+    pub fn synthetic_premise<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = Atom>> {
+        use SequentData::*;
+        match &self.data {
+            Implication { premise, .. } => Box::new(premise.iter().cloned()),
+            Reduction { premise, from, to } => {
+                let from_args = match self.universe.data(*from) {
+                    TermData::Application(_, args) => args,
+                    // Must be checked earlier:
+                    _ => panic!("Reduction from a variable"),
+                };
+                let defined_atoms: Vec<Atom> = from_args
+                    .iter()
+                    .chain(once(to))
+                    .copied()
+                    .map(|tm| Atom {
+                        data: AtomData::Defined(tm, None),
+                        location: None,
+                    })
+                    .collect();
+                Box::new(premise.iter().cloned().chain(defined_atoms))
+            }
         }
     }
-    pub fn new_reduction(
-        universe: TermUniverse,
-        mut premise: Vec<Atom>,
-        from: Term,
-        to: Term,
-    ) -> Result<Sequent, CompileError> {
-        use TermData::*;
-        let from_args = match universe.data(from) {
-            Application(_, args) => args,
-            _ => {
-                return Err(CompileError::ReductionFromVariableOrWildcard {
-                    location: universe.location(from),
-                })
+    pub fn synthetic_conclusion<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = Atom>> {
+        use SequentData::*;
+        match &self.data {
+            Implication { conclusion, .. } => Box::new(conclusion.iter().cloned()),
+            Reduction { from, to, .. } => {
+                let eq = Atom {
+                    data: AtomData::Equal(*from, *to),
+                    location: None,
+                };
+                Box::new(once(eq))
             }
-        };
-
-        premise.extend(from_args.iter().copied().chain(once(to)).map(|tm| Atom {
-            data: AtomData::Defined(tm, None),
-            location: None,
-        }));
-        let conclusion = vec![Atom {
-            data: AtomData::Equal(from, to),
-            location: None,
-        }];
-        Ok(Sequent {
-            universe,
-            premise,
-            conclusion,
-        })
+        }
     }
 }
 

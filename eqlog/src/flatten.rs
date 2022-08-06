@@ -213,21 +213,21 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequen
 
     let mut emitter = Emitter::new(&sequent.universe, sorts);
 
-    for atom in sequent.premise.iter() {
+    for atom in sequent.synthetic_premise() {
         for tm in atom.iter_subterms(universe) {
             emitter.setup_premise_term(tm);
         }
-        emitter.setup_premise_atom(atom);
+        emitter.setup_premise_atom(&atom);
     }
 
     let mut premise: Vec<FlatAtom> = Vec::new();
-    for atom in &sequent.premise {
-        emitter.emit_atom(atom, &mut premise);
+    for atom in sequent.synthetic_premise() {
+        emitter.emit_atom(&atom, &mut premise);
     }
 
     let mut conclusion: Vec<FlatAtom> = Vec::new();
-    for atom in &sequent.conclusion {
-        emitter.emit_atom(atom, &mut conclusion);
+    for atom in sequent.synthetic_conclusion() {
+        emitter.emit_atom(&atom, &mut conclusion);
     }
 
     let flat_sequent = FlatSequent {
