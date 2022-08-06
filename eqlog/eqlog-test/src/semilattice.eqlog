@@ -1,0 +1,13 @@
+Sort El;
+Pred Le: El * El;
+Func Meet: El * El -> El;
+
+// Axioms of posets.
+Axiom x: El => Le(x, x);
+Axiom Le(x, y) & Le(y, z) => Le(x, z);
+Axiom Le(x, y) & Le(y, x) => x = y;
+
+// Axioms of meets.
+Axiom x: El & y: El => Meet(x, y)!;
+Axiom meet = Meet(x, y) => Le(meet, x) & Le(meet, y);
+Axiom Le(z, x) & Le(z, y) & meet = Meet(x, y) => Le(z, meet);

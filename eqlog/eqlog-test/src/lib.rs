@@ -6,6 +6,7 @@ eqlog_mod!(trivial_idempotent);
 eqlog_mod!(logic);
 eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
+eqlog_mod!(semilattice);
 
 mod category_mod;
 #[cfg(test)]
