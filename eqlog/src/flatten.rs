@@ -208,35 +208,88 @@ impl<'a> Emitter<'a> {
     }
 }
 
-pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequent {
-    let universe = &sequent.universe;
+fn flatten_implication<'a, 'b>(
+    universe: &TermUniverse,
+    premise: impl Clone + IntoIterator<Item = &'a Atom>,
+    conclusion: impl IntoIterator<Item = &'b Atom>,
+    sorts: &TermMap<String>,
+) -> FlatSequent {
+    let mut emitter = Emitter::new(&universe, sorts);
 
-    let mut emitter = Emitter::new(&sequent.universe, sorts);
-
-    for atom in sequent.synthetic_premise() {
+    for atom in premise.clone() {
         for tm in atom.iter_subterms(universe) {
             emitter.setup_premise_term(tm);
         }
         emitter.setup_premise_atom(&atom);
     }
 
-    let mut premise: Vec<FlatAtom> = Vec::new();
-    for atom in sequent.synthetic_premise() {
-        emitter.emit_atom(&atom, &mut premise);
+    let mut flat_premise: Vec<FlatAtom> = Vec::new();
+    for atom in premise {
+        emitter.emit_atom(&atom, &mut flat_premise);
     }
 
-    let mut conclusion: Vec<FlatAtom> = Vec::new();
-    for atom in sequent.synthetic_conclusion() {
-        emitter.emit_atom(&atom, &mut conclusion);
+    let mut flat_conclusion: Vec<FlatAtom> = Vec::new();
+    for atom in conclusion {
+        emitter.emit_atom(&atom, &mut flat_conclusion);
     }
 
     let flat_sequent = FlatSequent {
-        premise,
-        conclusion,
+        premise: flat_premise,
+        conclusion: flat_conclusion,
     };
     #[cfg(debug_assertions)]
     flat_sequent.check();
     flat_sequent
+}
+
+fn flatten_reduction<'a>(
+    universe: &TermUniverse,
+    premise: impl Clone + IntoIterator<Item = &'a Atom>,
+    from: Term,
+    to: Term,
+    sorts: &TermMap<String>,
+) -> FlatSequent {
+    let from_args = match universe.data(from) {
+        TermData::Application(_, args) => args,
+        // Must be checked earlier:
+        _ => panic!("Reduction from a variable"),
+    };
+    let synthetic_premise: Vec<Atom> = premise
+        .into_iter()
+        .cloned()
+        .chain(from_args.iter().copied().chain(once(to)).map(|tm| Atom {
+            data: AtomData::Defined(tm, None),
+            location: None,
+        }))
+        .collect();
+
+    let eq = Atom {
+        data: AtomData::Equal(from, to),
+        location: None,
+    };
+    let synthetic_conclusion = once(&eq);
+
+    let result = flatten_implication(
+        universe,
+        synthetic_premise.iter(),
+        synthetic_conclusion,
+        sorts,
+    );
+    result
+}
+
+pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> FlatSequent {
+    use SequentData::*;
+    let universe = &sequent.universe;
+    match &sequent.data {
+        Implication {
+            premise,
+            conclusion,
+        } => flatten_implication(universe, premise.iter(), conclusion.iter(), sorts),
+        Reduction { premise, from, to } => {
+            flatten_reduction(universe, premise.iter(), *from, *to, sorts)
+        }
+    }
 }
 
 pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {

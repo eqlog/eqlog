@@ -1,5 +1,4 @@
 use std::fmt::{self, Display};
-use std::iter::once;
 use std::slice::from_ref;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -181,45 +180,6 @@ impl SequentData {
 pub struct Sequent {
     pub universe: TermUniverse,
     pub data: SequentData,
-}
-
-impl Sequent {
-    pub fn synthetic_premise<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = Atom>> {
-        use SequentData::*;
-        match &self.data {
-            Implication { premise, .. } => Box::new(premise.iter().cloned()),
-            Reduction { premise, from, to } => {
-                let from_args = match self.universe.data(*from) {
-                    TermData::Application(_, args) => args,
-                    // Must be checked earlier:
-                    _ => panic!("Reduction from a variable"),
-                };
-                let defined_atoms: Vec<Atom> = from_args
-                    .iter()
-                    .chain(once(to))
-                    .copied()
-                    .map(|tm| Atom {
-                        data: AtomData::Defined(tm, None),
-                        location: None,
-                    })
-                    .collect();
-                Box::new(premise.iter().cloned().chain(defined_atoms))
-            }
-        }
-    }
-    pub fn synthetic_conclusion<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = Atom>> {
-        use SequentData::*;
-        match &self.data {
-            Implication { conclusion, .. } => Box::new(conclusion.iter().cloned()),
-            Reduction { from, to, .. } => {
-                let eq = Atom {
-                    data: AtomData::Equal(*from, *to),
-                    location: None,
-                };
-                Box::new(once(eq))
-            }
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
