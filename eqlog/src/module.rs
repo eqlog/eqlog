@@ -422,6 +422,17 @@ impl Module {
     // - Every term in the conclusion is equal to some term that occurred earlier or inside an
     //   Atom::Defined.
     fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
+        let (premise, conclusion) = match &sequent.data {
+            SequentData::Implication {
+                premise,
+                conclusion,
+                ..
+            } => (premise, conclusion),
+            SequentData::Reduction { .. } => {
+                // Reductions are epimorphisms by construction.
+                return Ok(());
+            }
+        };
         let universe = &sequent.universe;
         let mut has_occurred = TermUnification::new(
             universe,
@@ -430,14 +441,14 @@ impl Module {
         );
 
         // Set all premise terms to have occurred.
-        for atom in sequent.synthetic_premise() {
+        for atom in premise {
             for tm in atom.iter_subterms(universe) {
                 has_occurred[tm] = true;
             }
         }
 
         // Unify terms occuring in equalities in premise.
-        for atom in sequent.synthetic_premise() {
+        for atom in premise {
             use AtomData::*;
             match &atom.data {
                 Equal(lhs, rhs) => {
@@ -451,7 +462,7 @@ impl Module {
 
         // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
         // premise.
-        for atom in sequent.synthetic_conclusion() {
+        for atom in conclusion {
             for tm in atom.iter_subterms(universe) {
                 match universe.data(tm) {
                     TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
@@ -471,7 +482,7 @@ impl Module {
             }
         }
 
-        for atom in sequent.synthetic_conclusion() {
+        for atom in conclusion {
             use AtomData::*;
             match &atom.data {
                 Equal(lhs, rhs) => {
