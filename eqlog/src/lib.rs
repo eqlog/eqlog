@@ -14,5 +14,6 @@ mod flatten;
 mod index_selection;
 mod llam;
 mod rust_gen;
+mod source_display;
 
 pub use crate::build::process_root;

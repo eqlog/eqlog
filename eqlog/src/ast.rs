@@ -1,8 +1,6 @@
+use crate::source_display::Location;
 use std::fmt::{self, Display};
 use std::slice::from_ref;
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct Location(pub usize, pub usize);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Sort {

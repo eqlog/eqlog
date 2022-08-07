@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::error::*;
+use crate::source_display::Location;
 use crate::unification::*;
 use convert_case::{Case, Casing};
 use std::collections::{BTreeMap, BTreeSet};

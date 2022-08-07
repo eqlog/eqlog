@@ -1,8 +1,9 @@
 use crate::ast::*;
+use crate::source_display::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::error::Error;
 use std::fmt::{self, Display};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CompileError {
@@ -120,104 +121,6 @@ impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-struct DisplayLocation<'a> {
-    source_path: &'a Path,
-    source: &'a str,
-    location: Option<Location>,
-}
-
-impl<'a> Display for DisplayLocation<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let DisplayLocation {
-            source_path,
-            source,
-            location,
-        } = *self;
-        let (begin, end) = match location {
-            Some(Location(begin, end)) => (begin, end),
-            None => (0, 0),
-        };
-
-        let line_ranges = source.lines().scan(0, |len, line| {
-            let b = *len;
-            // TODO: Or line.chars().count()?
-            *len += line.len();
-            let e = *len;
-            // TODO: Doesn't work with \n\r newlines.
-            *len += 1;
-            Some((b, e))
-        });
-
-        // An iterator over (line_number: usize, (line_begin: usize , line_end: usize)) over all
-        // lines that intersect location.
-        let intersecting_line_ranges = line_ranges
-            .enumerate()
-            .skip_while(|(_, (_, e))| *e <= begin)
-            .take_while(|(_, (b, _))| *b < end)
-            .map(|(i, r)| (i + 1, r));
-
-        // Digits of the largest line number we need to display.
-        let max_line_num_digits: usize =
-            match itertools::max(intersecting_line_ranges.clone().map(|(i, _)| i)) {
-                Some(max) => max.to_string().len(),
-                None => 0,
-            };
-
-        let write_padding = |f: &mut fmt::Formatter, n: usize| -> fmt::Result {
-            for _ in 0..n {
-                write!(f, " ")?;
-            }
-            Ok(())
-        };
-
-        write_padding(f, max_line_num_digits)?;
-        write!(f, "--> {}", source_path.display())?;
-        if let Some(first_line) = intersecting_line_ranges.clone().next().map(|(i, _)| i) {
-            write!(f, ":{first_line}")?;
-        }
-        write!(f, "\n")?;
-
-        write_padding(f, max_line_num_digits)?;
-        write!(f, " | \n")?;
-
-        for (i, (b, e)) in intersecting_line_ranges {
-            let line_num_str = i.to_string();
-            write_padding(f, max_line_num_digits - line_num_str.len())?;
-            write!(f, "{line_num_str} | ")?;
-            write!(f, "{}\n", &source[b..e])?;
-
-            write_padding(f, max_line_num_digits)?;
-            write!(f, " | ")?;
-            for i in b..e {
-                if i < begin || i >= end {
-                    write!(f, " ")?;
-                } else {
-                    write!(f, "^")?;
-                }
-            }
-            write!(f, "\n")?;
-        }
-
-        write_padding(f, max_line_num_digits)?;
-        write!(f, " | \n")?;
-
-        Ok(())
-    }
-}
-
-fn display_location<'a>(
-    source_path: &'a Path,
-    source: &'a str,
-    location: Option<Location>,
-) -> impl 'a + Display + Copy {
-    DisplayLocation {
-        source_path,
-        source,
-        location,
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct CompileErrorWithContext {
     pub error: CompileError,
@@ -233,45 +136,42 @@ impl Display for CompileErrorWithContext {
             source_path,
             source,
         } = self;
+        let write_loc = |f: &mut fmt::Formatter, loc: Option<Location>| -> fmt::Result {
+            if let Some(loc) = loc {
+                let src_displ = SourceDisplay {
+                    source_path: Some(source_path),
+                    underlined: true,
+                    ..SourceDisplay::new(source, loc)
+                };
+                write!(f, "{}", src_displ)?;
+            } else {
+                write!(f, "{}", source_path_pointer(source_path))?;
+            }
+            Ok(())
+        };
         write!(f, "Error: ")?;
         match error {
             InvalidToken { location } => {
                 write!(f, "invalid token\n")?;
-                write!(
-                    f,
-                    "{}",
-                    display_location(source_path, source, Some(*location))
-                )?;
+                write_loc(f, Some(*location))?;
             }
             UnrecognizedEOF {
                 location,
                 expected: _,
             } => {
                 write!(f, "unexpected end of file\n")?;
-                write!(
-                    f,
-                    "{}",
-                    display_location(source_path, source, Some(*location))
-                )?;
+                write_loc(f, Some(*location))?;
             }
             UnrecognizedToken {
                 location,
                 expected: _,
             } => {
                 write!(f, "unrecognized token\n")?;
-                write!(
-                    f,
-                    "{}",
-                    display_location(source_path, source, Some(*location))
-                )?;
+                write_loc(f, Some(*location))?;
             }
             ExtraToken { location } => {
                 write!(f, "unexpected token\n")?;
-                write!(
-                    f,
-                    "{}",
-                    display_location(source_path, source, Some(*location))
-                )?;
+                write_loc(f, Some(*location))?;
             }
             SymbolNotCamelCase {
                 name,
@@ -279,7 +179,7 @@ impl Display for CompileErrorWithContext {
                 symbol_kind,
             } => {
                 write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
-                display_location(source_path, source, *location).fmt(f)?;
+                write_loc(f, *location)?;
             }
             SymbolNotSnakeCase {
                 name,
@@ -287,19 +187,19 @@ impl Display for CompileErrorWithContext {
                 symbol_kind,
             } => {
                 write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
-                display_location(source_path, source, *location).fmt(f)?;
+                write_loc(f, *location)?;
             }
             VariableNotSnakeCase { name, location } => {
                 write!(f, "variable {name} is not lower_snake_case\n")?;
-                display_location(source_path, source, *location).fmt(f)?;
+                write_loc(f, *location)?;
             }
             VariableOccursOnlyOnce { name, location } => {
                 write!(f, "variable {name} occurs only once\n")?;
-                display_location(source_path, source, *location).fmt(f)?;
+                write_loc(f, *location)?;
             }
             QueryVariableOnlyInOutput { name, location } => {
                 write!(f, "variable {name} occurs only as output\n")?;
-                display_location(source_path, source, *location).fmt(f)?;
+                write_loc(f, *location)?;
             }
             FunctionArgumentNumber {
                 function: _,
@@ -311,7 +211,7 @@ impl Display for CompileErrorWithContext {
                     f,
                     "function takes {expected} arguments but {got} were supplied\n"
                 )?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             PredicateArgumentNumber {
                 predicate: _,
@@ -323,11 +223,11 @@ impl Display for CompileErrorWithContext {
                     f,
                     "predicate takes {expected} arguments but {got} were supplied\n"
                 )?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             UndeclaredSymbol { name, location } => {
                 write!(f, "undeclared symbol \"{name}\"\n")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             BadSymbolKind {
                 name,
@@ -338,11 +238,11 @@ impl Display for CompileErrorWithContext {
             } => {
                 write!(f, "expected {expected}, found {found} {name}\n")?;
                 if used_location.is_some() {
-                    display_location(source_path, source, *used_location).fmt(f)?;
+                    write_loc(f, *used_location)?;
                 }
                 if declared_location.is_some() {
                     write!(f, "{name} declared as {found} here:\n")?;
-                    display_location(source_path, source, *declared_location).fmt(f)?;
+                    write_loc(f, *declared_location)?;
                 }
             }
             SymbolDeclaredTwice {
@@ -351,57 +251,49 @@ impl Display for CompileErrorWithContext {
                 second_declaration,
             } => {
                 write!(f, "symbol declared multiple times\n")?;
-                write!(
-                    f,
-                    "{}",
-                    display_location(source_path, source, *second_declaration)
-                )?;
+                write_loc(f, *second_declaration)?;
                 if first_declaration.is_some() {
                     write!(f, "Previously declared here:\n")?;
-                    write!(
-                        f,
-                        "{}\n\n",
-                        display_location(source_path, source, *first_declaration)
-                    )?;
+                    write_loc(f, *first_declaration)?;
                 }
             }
             ReductionFromVariableOrWildcard { location } => {
                 write!(f, "term before ~> cannot be variable or wildcard\n")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             NoSort { location } => {
                 write!(f, "sort of term undetermined\n")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             ConflictingSorts { sorts: _, location } => {
                 write!(f, "term has conflicting sorts\n")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             VariableNotInPremise { var: _, location } => {
                 write!(f, "variable in conclusion not used in premise\n")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             WildcardInConclusion { location } => {
                 write!(f, "wildcard in conclusion\n")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             ConclusionEqualityOfNewTerms { location } => {
                 write!(
                     f,
                     "both sides of equality in conclusion are not used earlier\n"
                 )?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             ConclusionEqualityArgNew { location } => {
                 write!(
                     f,
                     "argument of undefined term in equality in conclusion is not used earlier\n"
                 )?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
             ConclusionPredicateArgNew { location } => {
                 write!(f, "argument of predicate in conclusion is not used earlier")?;
-                write!(f, "{}", display_location(source_path, source, *location))?;
+                write_loc(f, *location)?;
             }
         }
         Ok(())
