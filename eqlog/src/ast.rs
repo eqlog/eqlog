@@ -1,4 +1,5 @@
 use crate::source_display::Location;
+use itertools::Itertools;
 use std::fmt::{self, Display};
 use std::slice::from_ref;
 
@@ -112,6 +113,44 @@ impl TermUniverse {
         SubtermIterator {
             universe: self,
             stack: vec![(tm, 0)],
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+struct TermDisplay<'a> {
+    term: Term,
+    universe: &'a TermUniverse,
+}
+
+impl<'a> Display for TermDisplay<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let TermDisplay { term, universe } = *self;
+        use TermData::*;
+        match universe.data(term) {
+            Variable(name) => f.write_str(name),
+            Wildcard => write!(f, "_{}", term.0),
+            Application(func, args) => {
+                let args_displ = args.iter().copied().format_with(", ", |arg, f| {
+                    f(&format_args!(
+                        "{}",
+                        TermDisplay {
+                            term: arg,
+                            universe
+                        }
+                    ))
+                });
+                write!(f, "{func}({args_displ})")
+            }
+        }
+    }
+}
+
+impl Term {
+    pub fn display<'a>(self, universe: &'a TermUniverse) -> impl 'a + Display + Copy + Clone {
+        TermDisplay {
+            term: self,
+            universe,
         }
     }
 }

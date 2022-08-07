@@ -1,10 +1,12 @@
 use crate::ast::*;
 use crate::error::*;
 use crate::source_display::Location;
+use crate::source_display::*;
 use crate::unification::*;
 use convert_case::{Case, Casing};
 use std::collections::{BTreeMap, BTreeSet};
-use std::iter::once;
+use std::fmt::{self, Display};
+use std::iter::{once, repeat};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Symbol {
@@ -661,5 +663,47 @@ impl Module {
             term_sorts,
         })?;
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct DumpAxiomsDisplay<'a> {
+    source: &'a str,
+    module: &'a Module,
+}
+
+impl<'a> Display for DumpAxiomsDisplay<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Self { source, module } = self;
+        let separator: String = repeat('-').take(80).chain(once('\n')).collect();
+        write!(f, "{separator}")?;
+        for (axiom, sorts) in module.iter_axioms() {
+            if let Some(location) = axiom.location {
+                write!(f, "{}", SourceDisplay::new(source, location))?;
+            } else {
+                write!(f, "<unmapped axiom>\n")?;
+            }
+
+            write!(f, "\n")?;
+
+            write!(f, "Inferred sorts:\n")?;
+            for tm in axiom.sequent.universe.iter_terms() {
+                let sort = &sorts[tm];
+                let tm = tm.display(&axiom.sequent.universe);
+                write!(f, "  {tm}: {sort}\n")?;
+            }
+            write!(f, "{separator}")?;
+        }
+        Ok(())
+    }
+}
+
+impl Module {
+    #[allow(dead_code)]
+    pub fn dump_axioms<'a>(&'a self, source: &'a str) -> impl 'a + Clone + Display {
+        DumpAxiomsDisplay {
+            module: self,
+            source,
+        }
     }
 }
