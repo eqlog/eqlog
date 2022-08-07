@@ -8,15 +8,16 @@ pub extern crate tabled;
 /// Declare an eqlog module.
 ///
 /// # Examples
-/// The follwoing simple version declares a module `foo` whose contents correspond `src/foo.eqlog`.
-/// ```
+/// The following simple version declares a module `foo` whose contents correspond `src/foo.eqlog`.
+/// ```ignore
+/// use eqlog_util::eqlog_mod;
 /// eqlog_mod!(foo);
 /// ```
 ///
 /// This variant does not work for eqlog in proper subdirectories of `src`.
 /// For example, it will not work for `src/bar/baz.eqlog`.
 /// For such eqlog files, the following invocation of the `eqlog_mod` macro must be used:
-/// ```
+/// ```ignore
 /// eqlog_mod!(baz, "/bar/baz.rs")
 /// ```
 /// This declares a submodule `baz` in the current module whose contents correspond to
@@ -30,7 +31,7 @@ pub extern crate tabled;
 /// This results in the module path `bar::baz` relative the crate root.
 ///
 /// Eqlog modules can be annotated with a visibility, or with attributes:
-/// ```
+/// ```ignore
 /// eqlog_mod!(#[cfg(test)] pub baz, "/bar/baz.rs")
 /// ```
 #[macro_export]
