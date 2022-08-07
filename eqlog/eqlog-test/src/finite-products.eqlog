@@ -1,0 +1,98 @@
+Sort Obj;
+Sort Mor;
+
+Func Dom: Mor -> Obj;
+Func Cod: Mor -> Obj;
+Func Id: Obj -> Mor;
+Func Comp: Mor * Mor -> Mor;
+
+// Product objects.
+Sort Prod;
+Func Left: Prod -> Obj;
+Func Right: Prod -> Obj;
+Func ProdObj: Prod -> Obj;
+Func LeftProj: Prod -> Mor;
+Func RightProj: Prod -> Mor;
+
+Func Tuple: Prod * Mor * Mor -> Mor;
+
+// Every morphism has a domain and a codomain.
+Axiom f: Mor => Dom(f)! & Cod(f)!;
+
+// Every object has an identity.
+Axiom x: Obj => Id(x)!;
+
+// Composition is defined if and only domain and codomain match.
+Axiom Cod(f) = Dom(g) => Comp(g, f)!;
+Axiom Comp(g, f)! => Dom(f) <~> Cod(g);
+
+// Domains and codomains of identities.
+Axiom Dom(Id(x)) ~> x;
+Axiom Cod(Id(x)) ~> x;
+
+// Domains and codomains of compositions.
+Axiom Dom(Comp(_, f)) ~> Dom(f);
+Axiom Cod(Comp(g, _)) ~> Cod(g);
+
+// All data of a prod element exists.
+Axiom
+  & prod: Prod
+  =>
+  & Left(prod)!
+  & Right(prod)!
+  & ProdObj(prod)!
+  & LeftProj(prod)!
+  & RightProj(prod)!
+  ;
+
+// A prod element is determined by its data.
+Axiom
+  & Left(prod_0) = Left(prod_1)
+  & Right(prod_0) = Right(prod_1)
+  & ProdObj(prod_0) = ProdObj(prod_1)
+  & LeftProj(prod_0) = LeftProj(prod_1)
+  & RightProj(prod_0) = RightProj(prod_1)
+  =>
+  prod_0 = prod_1
+  ;
+
+// Tuple(prod, _, _) is defined for pairs morphisms with appropriate signatures.
+Axiom
+  & Dom(l) = Dom(r)
+  & Cod(l) = Left(prod)
+  & Cod(r) = Right(prod)
+  =>
+  & Tuple(prod, l, r)!
+  ;
+Axiom
+  & Tuple(prod, l, r)!
+  & Dom(l)! & Dom(r)! & Cod(l)! & Left(prod)! & Right(prod)!
+  =>
+  & Dom(l) = Dom(r)
+  & Cod(l) = Left(prod)
+  & Cod(r) = Right(prod)
+  ;
+
+// Domain and codomain of tuple morphisms.
+Axiom Dom(Tuple(_, l, _)) ~> Dom(l);
+Axiom Cod(Tuple(prod, _, _)) ~> ProdObj(prod);
+
+// Compatibility of the tuple morphism with the projections.
+Axiom Comp(Tuple(prod, l, _), LeftProj(prod)) ~> l;
+Axiom Comp(Tuple(prod, _, r), RightProj(prod)) ~> r;
+
+// Uniqueness of the tuple morphism.
+Axiom
+  & Comp(LeftProj(prod), u) = l
+  & Comp(RightProj(prod), u) = r
+  =>
+	Tuple(prod, l, r) ~> u
+  ;
+
+Query is_iso(x: Obj, y: Obj)
+  where
+	& Dom(f) = x
+  & Cod(f) = y
+  & Comp(g, f) = Id(x)
+  & Comp(f, g) = Id(y)
+  ;
