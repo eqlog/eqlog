@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::flat_ast::*;
 use crate::unification::*;
+use std::collections::BTreeMap;
 use std::iter::once;
 
 // Various `TermUnification` types for bookkeeping during emission.
@@ -208,12 +209,19 @@ impl<'a> Emitter<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct SequentFlattening {
+    pub term_map: BTreeMap<Term, FlatTerm>,
+    pub sequent: FlatSequent,
+    pub sorts: BTreeMap<FlatTerm, String>,
+}
+
 fn flatten_implication<'a, 'b>(
     universe: &TermUniverse,
     premise: impl Clone + IntoIterator<Item = &'a Atom>,
     conclusion: impl IntoIterator<Item = &'b Atom>,
     sorts: &TermMap<String>,
-) -> FlatSequent {
+) -> SequentFlattening {
     let mut emitter = Emitter::new(&universe, sorts);
 
     for atom in premise.clone() {
@@ -239,7 +247,22 @@ fn flatten_implication<'a, 'b>(
     };
     #[cfg(debug_assertions)]
     flat_sequent.check();
-    flat_sequent
+
+    let term_map: BTreeMap<Term, FlatTerm> = universe
+        .iter_terms()
+        .map(|tm| (tm, emitter.flat_names[tm].unwrap()))
+        .collect();
+
+    let flat_sorts: BTreeMap<FlatTerm, String> = universe
+        .iter_terms()
+        .map(|tm| (*term_map.get(&tm).unwrap(), sorts[tm].to_string()))
+        .collect();
+
+    SequentFlattening {
+        term_map,
+        sequent: flat_sequent,
+        sorts: flat_sorts,
+    }
 }
 
 fn flatten_reduction<'a>(
@@ -248,7 +271,7 @@ fn flatten_reduction<'a>(
     from: Term,
     to: Term,
     sorts: &TermMap<String>,
-) -> FlatSequent {
+) -> SequentFlattening {
     let from_args = match universe.data(from) {
         TermData::Application(_, args) => args,
         // Must be checked earlier:
@@ -278,7 +301,7 @@ fn flatten_reduction<'a>(
     result
 }
 
-pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> Vec<FlatSequent> {
+pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> Vec<SequentFlattening> {
     use SequentData::*;
     let universe = &sequent.universe;
     match &sequent.data {
@@ -310,7 +333,14 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> Vec<FlatSe
     }
 }
 
-pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
+#[derive(Clone, Debug)]
+pub struct QueryFlattening {
+    pub term_map: BTreeMap<Term, FlatTerm>,
+    pub query: FlatQuery,
+    pub sorts: BTreeMap<FlatTerm, String>,
+}
+
+pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> QueryFlattening {
     let universe = &query.universe;
 
     let mut emitter = Emitter::new(&query.universe, sorts);
@@ -375,7 +405,22 @@ pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> FlatQuery {
     };
     #[cfg(debug_assertions)]
     flat_query.check();
-    flat_query
+
+    let term_map: BTreeMap<Term, FlatTerm> = universe
+        .iter_terms()
+        .map(|tm| (tm, emitter.flat_names[tm].unwrap()))
+        .collect();
+
+    let flat_sorts: BTreeMap<FlatTerm, String> = universe
+        .iter_terms()
+        .map(|tm| (*term_map.get(&tm).unwrap(), sorts[tm].to_string()))
+        .collect();
+
+    QueryFlattening {
+        query: flat_query,
+        term_map,
+        sorts: flat_sorts,
+    }
 }
 
 #[cfg(test)]

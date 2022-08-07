@@ -92,8 +92,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     let flat_axioms = module
         .iter_axioms()
         .map(|(axiom, term_sorts)| {
-            let flat_sequents = flatten_sequent(&axiom.sequent, term_sorts);
-            flat_sequents.into_iter()
+            let flattenings = flatten_sequent(&axiom.sequent, term_sorts);
+            flattenings.into_iter().map(|flattening| flattening.sequent)
         })
         .flatten();
     query_actions
@@ -101,8 +101,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     let pure_queries: Vec<(String, PureQuery)> = module
         .iter_queries()
         .map(|(query, term_sorts)| {
-            let flat_query = flatten_query(&query, term_sorts);
-            (query.name.clone(), lower_query(&module, &flat_query))
+            let flattening = flatten_query(&query, term_sorts);
+            (query.name.clone(), lower_query(&module, &flattening.query))
         })
         .collect();
     let query_atoms = query_actions

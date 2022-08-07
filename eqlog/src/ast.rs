@@ -24,7 +24,7 @@ pub struct Function {
     pub location: Option<Location>,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Term(pub usize);
 impl From<usize> for Term {
     fn from(n: usize) -> Term {
