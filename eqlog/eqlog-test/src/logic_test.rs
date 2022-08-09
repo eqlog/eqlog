@@ -12,7 +12,7 @@ fn test_close_empty() {
 #[test]
 fn test_close_undetermined() {
     let mut m = Logic::new();
-    m.insert_undetermined(Undetermined());
+    m.insert_undetermined();
     m.close();
     assert_eq!(m.iter_absurd().count(), 0);
     assert_eq!(m.iter_truth().count(), 1);
@@ -22,7 +22,7 @@ fn test_close_undetermined() {
 #[test]
 fn test_close_absurd() {
     let mut m = Logic::new();
-    m.insert_absurd(Absurd());
+    m.insert_absurd();
     m.close();
     assert_eq!(m.iter_absurd().count(), 1);
     assert_eq!(m.iter_truth().count(), 1);

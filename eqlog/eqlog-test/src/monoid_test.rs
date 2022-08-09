@@ -16,11 +16,11 @@ mod test {
         let a4 = mon.new_m();
         let a5 = mon.new_m();
 
-        mon.insert_mul(Mul(a1, a1, a2));
-        mon.insert_mul(Mul(a2, a1, a3));
-        mon.insert_mul(Mul(a3, a1, a4));
-        mon.insert_mul(Mul(a4, a1, a5));
-        mon.insert_mul(Mul(a5, a2, a1));
+        mon.insert_mul(a1, a1, a2);
+        mon.insert_mul(a2, a1, a3);
+        mon.insert_mul(a3, a1, a4);
+        mon.insert_mul(a4, a1, a5);
+        mon.insert_mul(a5, a2, a1);
 
         mon.close();
 
@@ -74,13 +74,13 @@ mod test {
 
         // Neutral element.
         let a0 = mon.new_m();
-        mon.insert_e(E(a0));
+        mon.insert_e(a0);
 
         // Generator.
         let a1 = mon.new_m();
 
         // a1 * a1 = a0
-        mon.insert_mul(Mul(a1, a1, a0));
+        mon.insert_mul(a1, a1, a0);
 
         mon.close();
 
@@ -112,21 +112,21 @@ mod test {
 
         // Neutral element.
         let a0 = mon.new_m();
-        mon.insert_e(E(a0));
+        mon.insert_e(a0);
 
         // Generator.
         let a1 = mon.new_m();
 
         // a1 * a1 = a2
         let a2 = mon.new_m();
-        mon.insert_mul(Mul(a1, a1, a2));
+        mon.insert_mul(a1, a1, a2);
 
         // a2 * a2 = a4
         let a4 = mon.new_m();
-        mon.insert_mul(Mul(a2, a2, a4));
+        mon.insert_mul(a2, a2, a4);
 
         // a4 * a1 = a0
-        mon.insert_mul(Mul(a4, a1, a0));
+        mon.insert_mul(a4, a1, a0);
 
         mon.close();
 
@@ -144,7 +144,7 @@ mod test {
 
         // Neutral element.
         let e = mon.new_m();
-        mon.insert_e(E(e));
+        mon.insert_e(e);
         let mut els = Vec::new();
         for _ in 0..n {
             els.push(mon.new_m());
@@ -154,7 +154,7 @@ mod test {
             .copied()
             .zip(els.iter().copied().skip(1).chain(once(e)))
         {
-            mon.insert_mul(Mul(a, a, b));
+            mon.insert_mul(a, a, b);
         }
 
         mon.close();
@@ -170,9 +170,9 @@ mod test {
         let mut m = TrivialIdempotent::new();
 
         let el0 = m.new_m();
-        m.insert_e(E(el0));
+        m.insert_e(el0);
         let el1 = m.new_m();
-        m.insert_mul(Mul(el1, el1, el1));
+        m.insert_mul(el1, el1, el1);
 
         m.close();
 

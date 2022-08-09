@@ -26,9 +26,9 @@ mod test {
         let mut ptd = Pointed::new();
 
         let el0 = ptd.new_p();
-        ptd.insert_pt(Pt(el0));
+        ptd.insert_pt(el0);
         let el1 = ptd.new_p();
-        ptd.insert_pt(Pt(el1));
+        ptd.insert_pt(el1);
 
         ptd.close();
 

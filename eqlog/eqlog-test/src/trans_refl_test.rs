@@ -30,7 +30,7 @@ fn test_arrow() {
     let mut m = TransRefl::new();
     let a = m.new_v();
     let b = m.new_v();
-    m.insert_edge(Edge(a, b));
+    m.insert_edge(a, b);
     m.close();
     assert_eq!(m.iter_v().count(), 2);
     assert_eq!(m.iter_edge().count(), 3);
@@ -41,8 +41,8 @@ fn test_bi_arrow() {
     let mut m = TransRefl::new();
     let a = m.new_v();
     let b = m.new_v();
-    m.insert_edge(Edge(a, b));
-    m.insert_edge(Edge(b, a));
+    m.insert_edge(a, b);
+    m.insert_edge(b, a);
     m.close();
     assert_eq!(m.iter_v().count(), 2);
     assert_eq!(m.iter_edge().count(), 4);
@@ -54,8 +54,8 @@ fn test_arrow_arrow() {
     let a = m.new_v();
     let b = m.new_v();
     let c = m.new_v();
-    m.insert_edge(Edge(a, b));
-    m.insert_edge(Edge(b, c));
+    m.insert_edge(a, b);
+    m.insert_edge(b, c);
     m.close();
     assert_eq!(m.iter_v().count(), 3);
     assert_eq!(m.iter_edge().count(), 6);

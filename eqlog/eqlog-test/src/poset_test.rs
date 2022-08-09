@@ -7,7 +7,7 @@ fn adjoin_chain(p: &mut Poset, length: usize) -> (P, P) {
     let mut prev = first;
     for _ in 0..(length - 1) {
         let next = p.new_p();
-        p.insert_le(Le(prev, next));
+        p.insert_le(prev, next);
         prev = next;
     }
     let last = prev;
@@ -23,8 +23,8 @@ fn test_collapse() {
     let (first2, last2) = adjoin_chain(&mut p, 20);
 
     // Link chains 0 and 2, forming a single loop.
-    p.insert_le(Le(last0, first2));
-    p.insert_le(Le(last2, first0));
+    p.insert_le(last0, first2);
+    p.insert_le(last2, first0);
 
     p.close();
     assert_eq!(p.iter_p().count(), 8);

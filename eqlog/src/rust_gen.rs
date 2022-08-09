@@ -653,12 +653,22 @@ fn write_pub_iter_fn(out: &mut impl Write, relation: &str) -> io::Result<()> {
     "}
 }
 
-fn write_pub_insert_relation(out: &mut impl Write, relation: &str) -> io::Result<()> {
+fn write_pub_insert_relation(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+) -> io::Result<()> {
     let relation_snake = relation.to_case(Snake);
+    let rel_fn_args = arity
+        .iter()
+        .copied()
+        .enumerate()
+        .format_with("", |(i, s), f| f(&format_args!(", arg{i}: {s}")));
+    let rel_args = (0..arity.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn insert_{relation_snake}(&mut self, t: {relation}) {{
-            self.delta.as_mut().unwrap().new_{relation_snake}.push(t);
+        pub fn insert_{relation_snake}(&mut self {rel_fn_args}) {{
+            self.delta.as_mut().unwrap().new_{relation_snake}.push({relation}({rel_args}));
         }}
     "}
 }
@@ -1413,7 +1423,7 @@ fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> 
                 return t.{cod_index};
             }}
             let result = self.new_{cod_snake}();
-            self.insert_{function_snake}({name}({insert_dom_args}result));
+            self.insert_{function_snake}({insert_dom_args}result);
             result
         }}
     "}
@@ -1455,9 +1465,9 @@ fn write_theory_impl(
         write_sort_root_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
-    for (rel, _) in module.relations() {
+    for (rel, arity) in module.relations() {
         write_pub_iter_fn(out, rel)?;
-        write_pub_insert_relation(out, rel)?;
+        write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
     }
 

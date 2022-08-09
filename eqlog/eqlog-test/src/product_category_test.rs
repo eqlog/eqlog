@@ -8,8 +8,8 @@ fn test_products_are_isomorphic() {
     let p1 = cat.new_prod();
     let p2 = cat.new_prod();
     for p in [p1, p2] {
-        cat.insert_left(Left(p, x));
-        cat.insert_right(Right(p, y));
+        cat.insert_left(p, x);
+        cat.insert_right(p, y);
     }
     let p1_obj = cat.define_prod_obj(p1);
     let p2_obj = cat.define_prod_obj(p2);
@@ -28,12 +28,12 @@ fn test_products_are_commutative() {
     let y = cat.new_obj();
 
     let xy = cat.new_prod();
-    cat.insert_left(Left(xy, x));
-    cat.insert_right(Right(xy, y));
+    cat.insert_left(xy, x);
+    cat.insert_right(xy, y);
 
     let yx = cat.new_prod();
-    cat.insert_left(Left(yx, y));
-    cat.insert_right(Right(yx, x));
+    cat.insert_left(yx, y);
+    cat.insert_right(yx, x);
 
     let xy_obj = cat.define_prod_obj(xy);
     let yx_obj = cat.define_prod_obj(yx);
@@ -50,23 +50,23 @@ fn test_products_are_associative() {
     let z = cat.new_obj();
 
     let xy = cat.new_prod();
-    cat.insert_left(Left(xy, x));
-    cat.insert_right(Right(xy, y));
+    cat.insert_left(xy, x);
+    cat.insert_right(xy, y);
     let xy_obj = cat.define_prod_obj(xy);
 
     let xy_z = cat.new_prod();
-    cat.insert_left(Left(xy_z, xy_obj));
-    cat.insert_right(Right(xy_z, z));
+    cat.insert_left(xy_z, xy_obj);
+    cat.insert_right(xy_z, z);
     let xy_z_obj = cat.define_prod_obj(xy_z);
 
     let yz = cat.new_prod();
-    cat.insert_left(Left(yz, y));
-    cat.insert_right(Right(yz, z));
+    cat.insert_left(yz, y);
+    cat.insert_right(yz, z);
     let yz_obj = cat.define_prod_obj(yz);
 
     let x_yz = cat.new_prod();
-    cat.insert_left(Left(x_yz, x));
-    cat.insert_right(Right(x_yz, yz_obj));
+    cat.insert_left(x_yz, x);
+    cat.insert_right(x_yz, yz_obj);
     let x_yz_obj = cat.define_prod_obj(x_yz);
 
     cat.close();
