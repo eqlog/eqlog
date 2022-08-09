@@ -59,13 +59,13 @@ impl Scope {
         let Self {
             cwf, context_names, ..
         } = self;
-        ctx = cwf.ctx_root(ctx);
+        ctx = cwf.root_ctx(ctx);
         once(&format!("{ctx}"))
             .chain(
                 context_names
                     .iter()
                     .filter_map(|(c, name)| {
-                        if cwf.ctx_root(*c) == ctx {
+                        if cwf.root_ctx(*c) == ctx {
                             Some(name)
                         } else {
                             None
@@ -81,13 +81,13 @@ impl Scope {
         let Self {
             cwf, type_names, ..
         } = self;
-        ty = cwf.ty_root(ty);
+        ty = cwf.root_ty(ty);
         once(&format!("{ty}"))
             .chain(
                 type_names
                     .iter()
                     .filter_map(|(t, name)| {
-                        if cwf.ty_root(*t) == ty {
+                        if cwf.root_ty(*t) == ty {
                             Some(name)
                         } else {
                             None
@@ -103,13 +103,13 @@ impl Scope {
         let Self {
             cwf, term_names, ..
         } = self;
-        tm = cwf.tm_root(tm);
+        tm = cwf.root_tm(tm);
         once(&format!("{tm}"))
             .chain(
                 term_names
                     .iter()
                     .filter_map(|(t, name)| {
-                        if cwf.tm_root(*t) == tm {
+                        if cwf.root_tm(*t) == tm {
                             Some(name)
                         } else {
                             None
@@ -207,10 +207,7 @@ impl Scope {
                 *ctx == def.base_context
             }) {
                 None => {
-                    debug_assert_eq!(
-                        self.cwf.ctx_root(self.empty_context),
-                        self.cwf.ctx_root(def.base_context)
-                    );
+                    debug_assert!(self.cwf.are_equal_ctx(self.empty_context, def.base_context));
                     self.extensions.as_slice()
                 }
                 Some(i) => &self.extensions[(i + 1)..],
@@ -234,7 +231,7 @@ impl Scope {
             if checking == Checking::Yes {
                 let arg_ty = self.cwf.define_tm_ty(arg);
                 self.cwf.close();
-                assert_eq!(self.cwf.ty_root(subst_ty), self.cwf.ty_root(arg_ty));
+                assert!(self.cwf.are_equal_ty(subst_ty, arg_ty));
             } else {
                 self.cwf.insert_tm_ty(arg, subst_ty);
             }
@@ -263,7 +260,7 @@ impl Scope {
                     let lhs_ty = self.cwf.define_tm_ty(lhs);
                     let rhs_ty = self.cwf.define_tm_ty(lhs);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(lhs_ty), self.cwf.ty_root(rhs_ty));
+                    assert!(self.cwf.are_equal_ty(lhs_ty, rhs_ty));
                 }
                 let ty = self.cwf.define_eq(lhs, rhs);
                 let lhs_displ = self.display_term(lhs);
@@ -294,7 +291,7 @@ impl Scope {
                 if checking == Checking::Yes {
                     let tm_ty = self.cwf.define_tm_ty(tm);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(tm_ty), self.cwf.ty_root(ty));
+                    assert!(self.cwf.are_equal_ty(tm_ty, ty));
                 }
                 tm
             }
@@ -341,7 +338,7 @@ impl Scope {
                 if checking == Checking::Yes {
                     let tm_ty = self.cwf.define_tm_ty(discriminee);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(unit_ty), self.cwf.ty_root(tm_ty));
+                    assert!(self.cwf.are_equal_ty(unit_ty, tm_ty));
                 } else {
                     self.cwf.insert_tm_ty(discriminee, unit_ty);
                 }
@@ -375,10 +372,7 @@ impl Scope {
                 if checking == Checking::Yes {
                     let unit_case_ty = self.cwf.define_tm_ty(unit_case);
                     self.cwf.close();
-                    assert_eq!(
-                        self.cwf.ty_root(unit_case_ty),
-                        self.cwf.ty_root(into_ty_unit_subst)
-                    );
+                    assert!(self.cwf.are_equal_ty(unit_case_ty, into_ty_unit_subst));
                 } else {
                     self.cwf.insert_tm_ty(unit_case, into_ty_unit_subst);
                 }
@@ -417,7 +411,7 @@ impl Scope {
                 if checking == Checking::Yes {
                     let tm_ty = self.cwf.define_tm_ty(discriminee);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(bool_ty), self.cwf.ty_root(tm_ty));
+                    assert!(self.cwf.are_equal_ty(bool_ty, tm_ty));
                 } else {
                     self.cwf.insert_tm_ty(discriminee, bool_ty);
                 }
@@ -457,14 +451,8 @@ impl Scope {
                     let false_case_ty = self.cwf.define_tm_ty(false_case);
                     let true_case_ty = self.cwf.define_tm_ty(true_case);
                     self.cwf.close();
-                    assert_eq!(
-                        self.cwf.ty_root(false_case_ty),
-                        self.cwf.ty_root(into_ty_false_subst)
-                    );
-                    assert_eq!(
-                        self.cwf.ty_root(true_case_ty),
-                        self.cwf.ty_root(into_ty_true_subst)
-                    );
+                    assert!(self.cwf.are_equal_ty(false_case_ty, into_ty_false_subst));
+                    assert!(self.cwf.are_equal_ty(true_case_ty, into_ty_true_subst));
                 } else {
                     self.cwf.insert_tm_ty(false_case, into_ty_false_subst);
                     self.cwf.insert_tm_ty(true_case, into_ty_true_subst);
@@ -499,7 +487,7 @@ impl Scope {
                 if checking == Checking::Yes {
                     let tm_ty = self.cwf.define_tm_ty(n);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(nat), self.cwf.ty_root(tm_ty));
+                    assert!(self.cwf.are_equal_ty(nat, tm_ty));
                 } else {
                     self.cwf.insert_tm_ty(n, nat);
                 }
@@ -566,7 +554,7 @@ impl Scope {
                 if checking == Checking::Yes {
                     let tm_ty = self.cwf.define_tm_ty(tm);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(ty), self.cwf.ty_root(tm_ty));
+                    assert!(self.cwf.are_equal_ty(ty, tm_ty));
                 } else {
                     self.cwf.insert_tm_ty(tm, ty);
                 }
@@ -590,7 +578,7 @@ impl Scope {
                     let ty = self.add_type(Checking::Yes, ty);
                     let tm_ty = self.cwf.define_tm_ty(tm);
                     self.cwf.close();
-                    assert_eq!(self.cwf.ty_root(tm_ty), self.cwf.ty_root(ty));
+                    assert!(self.cwf.are_equal_ty(tm_ty, ty));
                     *self = before_self;
                 }
 

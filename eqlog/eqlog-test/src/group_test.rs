@@ -8,7 +8,7 @@ fn left_identity_test() {
     let id = grp.define_id();
     let id_x = grp.define_mul(id, x);
 
-    assert!(grp.close_until(|grp| grp.el_root(x) == grp.el_root(id_x)));
+    assert!(grp.close_until(|grp| grp.are_equal_el(x, id_x)));
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn left_inverse_test() {
     let x_xinv = grp.define_mul(x, xinv);
     let id = grp.define_id();
 
-    assert!(grp.close_until(|grp| grp.el_root(x_xinv) == grp.el_root(id)));
+    assert!(grp.close_until(|grp| grp.are_equal_el(x_xinv, id)));
 }
 
 #[test]
@@ -37,5 +37,5 @@ fn hemd_und_jacke_test() {
     let yinv = grp.define_inv(y);
     let yinv_xinv = grp.define_mul(yinv, xinv);
 
-    assert!(grp.close_until(|grp| grp.el_root(xyinv) == grp.el_root(yinv_xinv)));
+    assert!(grp.close_until(|grp| grp.are_equal_el(xyinv, yinv_xinv)));
 }

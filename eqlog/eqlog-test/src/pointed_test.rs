@@ -34,7 +34,7 @@ mod test {
 
         assert_eq!(ptd.iter_p().count(), 1);
         assert_eq!(ptd.iter_pt().count(), 1);
-        assert_eq!(ptd.p_root(el0), ptd.p_root(el1));
+        assert!(ptd.are_equal_p(el0, el1));
     }
 
     #[test]
@@ -51,7 +51,7 @@ mod test {
             let el1 = it.next().unwrap();
             (el0, el1)
         };
-        assert_ne!(ptd.p_root(el0), ptd.p_root(el1));
+        assert!(!ptd.are_equal_p(el0, el1));
         assert_eq!(ptd.iter_pt().count(), 1);
     }
 }

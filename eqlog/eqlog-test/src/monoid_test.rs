@@ -84,8 +84,8 @@ mod test {
 
         mon.close();
 
-        let a0 = mon.m_root(a0);
-        let a1 = mon.m_root(a1);
+        let a0 = mon.root_m(a0);
+        let a1 = mon.root_m(a1);
         let els: BTreeSet<M> = mon.iter_m().collect();
         assert_eq!(els, btreeset! {a0, a1});
 
@@ -176,7 +176,7 @@ mod test {
 
         m.close();
 
-        assert_eq!(m.m_root(el0), m.m_root(el1));
+        assert!(m.are_equal_m(el0, el1));
         assert_eq!(m.iter_m().count(), 1);
     }
 }

@@ -718,16 +718,26 @@ fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_sort_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn {sort_snake}_root(&self, el: {sort}) -> {sort} {{
+        pub fn root_{sort_snake}(&self, el: {sort}) -> {sort} {{
             if el.0 as usize >= self.{sort_snake}_equalities.len() {{
                 el
             }} else {{
                 self.{sort_snake}_equalities.root_const(el)
             }}
+        }}
+    "}
+}
+
+fn write_are_equal_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
+    let sort_snake = sort.to_case(Snake);
+    writedoc! {out, "
+        #[allow(dead_code)]
+        pub fn are_equal_{sort_snake}(&self, lhs: {sort}, rhs: {sort}) -> bool {{
+            self.root_{sort_snake}(lhs) == self.root_{sort_snake}(rhs)
         }}
     "}
 }
@@ -1480,7 +1490,8 @@ fn write_theory_impl(
         write_new_element(out, &sort.name)?;
         write_equate_elements(out, &sort.name)?;
         write_iter_sort_fn(out, &sort.name)?;
-        write_sort_root_fn(out, &sort.name)?;
+        write_root_fn(out, &sort.name)?;
+        write_are_equal_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
     for (rel, arity) in module.relations() {

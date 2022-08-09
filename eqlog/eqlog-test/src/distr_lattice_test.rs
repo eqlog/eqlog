@@ -13,5 +13,5 @@ fn test_meet_over_join() {
     let x_meet_y = dl.define_meet(x, y);
     let x_meet_z = dl.define_meet(x, z);
     let rhs = dl.define_join(x_meet_y, x_meet_z);
-    assert!(dl.close_until(|dl| dl.el_root(lhs) == dl.el_root(rhs)));
+    assert!(dl.close_until(|dl| dl.are_equal_el(lhs, rhs)));
 }
