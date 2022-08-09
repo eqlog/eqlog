@@ -25,13 +25,6 @@ impl<Value> IndexMut<Term> for TermMap<Value> {
 }
 
 impl<Value> TermMap<Value> {
-    #[cfg(test)]
-    pub fn new(values: Vec<Value>) -> TermMap<Value> {
-        TermMap {
-            ids: (0..values.len()).collect(),
-            values,
-        }
-    }
     pub fn map<U>(self, f: impl FnMut(Value) -> U) -> TermMap<U> {
         let TermMap { ids, values } = self;
         let values = values.into_iter().map(f).collect();
