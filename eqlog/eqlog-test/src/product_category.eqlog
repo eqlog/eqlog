@@ -24,7 +24,7 @@ Axiom x: Obj => Id(x)!;
 
 // Composition is defined if and only domain and codomain match.
 Axiom Cod(f) = Dom(g) => Comp(g, f)!;
-Axiom Comp(g, f)! => Dom(f) <~> Cod(g);
+Axiom Comp(g, f)! => Cod(f) <~> Dom(g);
 
 // Domains and codomains of identities.
 Axiom Dom(Id(x)) ~> x;
@@ -33,6 +33,13 @@ Axiom Cod(Id(x)) ~> x;
 // Domains and codomains of compositions.
 Axiom Dom(Comp(_, f)) ~> Dom(f);
 Axiom Cod(Comp(g, _)) ~> Cod(g);
+
+// Identity morphisms are left and right identities.
+Axiom Comp(Id(Cod(f)), f) ~> f;
+Axiom Comp(f, Id(Dom(f))) ~> f;
+
+// Composition is associative.
+Axiom Comp(h, Comp(g, f)) <~> Comp(Comp(h, g), f);
 
 // All data of a prod element exists.
 Axiom
@@ -56,6 +63,12 @@ Axiom
   prod_0 = prod_1
   ;
 
+// Domain and codomains of the projections.
+Axiom Dom(LeftProj(prod)) ~> ProdObj(prod);
+Axiom Dom(RightProj(prod)) ~> ProdObj(prod);
+Axiom Cod(LeftProj(prod)) ~> Left(prod);
+Axiom Cod(RightProj(prod)) ~> Right(prod);
+
 // Tuple(prod, _, _) is defined for pairs morphisms with appropriate signatures.
 Axiom
   & Dom(l) = Dom(r)
@@ -75,11 +88,12 @@ Axiom
 
 // Domain and codomain of tuple morphisms.
 Axiom Dom(Tuple(_, l, _)) ~> Dom(l);
+Axiom Dom(Tuple(_, _, r)) ~> Dom(r);
 Axiom Cod(Tuple(prod, _, _)) ~> ProdObj(prod);
 
 // Compatibility of the tuple morphism with the projections.
-Axiom Comp(Tuple(prod, l, _), LeftProj(prod)) ~> l;
-Axiom Comp(Tuple(prod, _, r), RightProj(prod)) ~> r;
+Axiom Comp(LeftProj(prod), Tuple(prod, l, _)) ~> l;
+Axiom Comp(RightProj(prod), Tuple(prod, _, r)) ~> r;
 
 // Uniqueness of the tuple morphism.
 Axiom

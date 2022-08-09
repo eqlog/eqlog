@@ -9,6 +9,7 @@ eqlog_mod!(poset);
 eqlog_mod!(semilattice);
 eqlog_mod!(distr_lattice);
 eqlog_mod!(group);
+eqlog_mod!(product_category);
 
 mod category_mod;
 #[cfg(test)]
@@ -25,3 +26,5 @@ mod poset_test;
 mod semilattice_test;
 #[cfg(test)]
 mod trans_refl_test;
+#[cfg(test)]
+mod product_category_test;
