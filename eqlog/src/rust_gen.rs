@@ -1019,7 +1019,7 @@ fn write_query_and_record_fn(
         write_query_loop_headers(out, module, query)?;
         let action_args = query_action
             .action_inputs
-            .keys()
+            .iter()
             .format_with(", ", |tm, f| {
                 let tm = tm.0;
                 f(&format_args!("tm{tm}"))
@@ -1182,11 +1182,13 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
 fn write_record_action_fn(
     out: &mut impl Write,
     module: &Module,
-    action_inputs: &BTreeMap<FlatTerm, String>,
+    sorts: &BTreeMap<FlatTerm, String>,
+    action_inputs: &BTreeSet<FlatTerm>,
     action: &[ActionAtom],
     axiom_index: usize,
 ) -> io::Result<()> {
-    let args = action_inputs.iter().format_with("", |(tm, sort), f| {
+    let args = action_inputs.iter().format_with("", |tm, f| {
+        let sort = sorts.get(tm).unwrap();
         let tm = tm.0;
         f(&format_args!("tm{tm}: {sort}, "))
     });
@@ -1469,6 +1471,7 @@ fn write_theory_impl(
         write_record_action_fn(
             out,
             module,
+            &query_action.sorts,
             &query_action.action_inputs,
             &query_action.action,
             i,

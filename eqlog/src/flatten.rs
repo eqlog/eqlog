@@ -48,6 +48,7 @@ struct Emitter<'a> {
     added: IsAddedUnification<'a>,
     constrained: IsConstrainedUnification<'a>,
     sorts: &'a TermMap<String>,
+    term_map: BTreeMap<Term, FlatTerm>,
 }
 
 impl<'a> Emitter<'a> {
@@ -72,6 +73,7 @@ impl<'a> Emitter<'a> {
             added,
             constrained,
             sorts,
+            term_map: BTreeMap::new(),
         }
     }
 
@@ -120,6 +122,10 @@ impl<'a> Emitter<'a> {
     // constrained variables/wildcards.
     fn emit_term_structure(&mut self, term: Term, out_atoms: &mut Vec<FlatAtom>) {
         if self.added[term] {
+            let flat_term = self.flat_names[term].unwrap();
+            if let Some(prev_flat_tm) = self.term_map.insert(term, flat_term) {
+                debug_assert_eq!(prev_flat_tm, flat_term);
+            }
             return;
         }
         self.added[term] = true;
@@ -133,6 +139,7 @@ impl<'a> Emitter<'a> {
                 name
             }
         };
+        self.term_map.insert(term, name);
 
         use TermData::*;
         match self.universe.data(term) {
@@ -248,10 +255,7 @@ fn flatten_implication<'a, 'b>(
     #[cfg(debug_assertions)]
     flat_sequent.check();
 
-    let term_map: BTreeMap<Term, FlatTerm> = universe
-        .iter_terms()
-        .map(|tm| (tm, emitter.flat_names[tm].unwrap()))
-        .collect();
+    let term_map = emitter.term_map;
 
     let flat_sorts: BTreeMap<FlatTerm, String> = universe
         .iter_terms()
@@ -406,10 +410,7 @@ pub fn flatten_query(query: &UserQuery, sorts: &TermMap<String>) -> QueryFlatten
     #[cfg(debug_assertions)]
     flat_query.check();
 
-    let term_map: BTreeMap<Term, FlatTerm> = universe
-        .iter_terms()
-        .map(|tm| (tm, emitter.flat_names[tm].unwrap()))
-        .collect();
+    let term_map = emitter.term_map;
 
     let flat_sorts: BTreeMap<FlatTerm, String> = universe
         .iter_terms()

@@ -89,20 +89,19 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
                 functionality(name, &arity)
             }),
     );
-    let flat_axioms = module
+    let axiom_flattenings = module
         .iter_axioms()
-        .map(|(axiom, term_sorts)| {
-            let flattenings = flatten_sequent(&axiom.sequent, term_sorts);
-            flattenings.into_iter().map(|flattening| flattening.sequent)
-        })
+        .map(|(axiom, term_sorts)| flatten_sequent(&axiom.sequent, term_sorts).into_iter())
         .flatten();
-    query_actions
-        .extend(flat_axioms.map(|flat_sequent| lower_sequent_seminaive(&module, &flat_sequent)));
+    query_actions.extend(
+        axiom_flattenings
+            .map(|flattening| lower_sequent_seminaive(&flattening.sequent, &flattening.sorts)),
+    );
     let pure_queries: Vec<(String, PureQuery)> = module
         .iter_queries()
         .map(|(query, term_sorts)| {
             let flattening = flatten_query(&query, term_sorts);
-            (query.name.clone(), lower_query(&module, &flattening.query))
+            (query.name.clone(), lower_query(&flattening.query))
         })
         .collect();
     let query_atoms = query_actions
