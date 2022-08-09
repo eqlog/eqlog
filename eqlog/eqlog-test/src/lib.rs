@@ -23,8 +23,8 @@ mod pointed_test;
 #[cfg(test)]
 mod poset_test;
 #[cfg(test)]
+mod product_category_test;
+#[cfg(test)]
 mod semilattice_test;
 #[cfg(test)]
 mod trans_refl_test;
-#[cfg(test)]
-mod product_category_test;
