@@ -10,15 +10,15 @@ mod test {
 
         let els: BTreeSet<P> = ptd.iter_p().collect();
         assert_eq!(els, btreeset! {});
-        let pts: BTreeSet<Pt> = ptd.iter_pt().collect();
+        let pts: BTreeSet<P> = ptd.iter_pt().collect();
         assert_eq!(pts, btreeset! {});
 
         ptd.close();
 
         let els: BTreeSet<P> = ptd.iter_p().collect();
         assert_eq!(els.len(), 1);
-        let pts: BTreeSet<Pt> = ptd.iter_pt().collect();
-        assert_eq!(pts, btreeset! {Pt(els.iter().copied().next().unwrap())});
+        let pts: BTreeSet<P> = ptd.iter_pt().collect();
+        assert_eq!(pts, btreeset! {els.iter().copied().next().unwrap()});
     }
 
     #[test]

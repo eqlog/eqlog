@@ -54,9 +54,8 @@ fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -
         .copied()
         .format_with(", ", |sort, f| f(&format_args!("pub {sort}")));
     writedoc! {out, "
-        #[allow(dead_code)]
         #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-        pub struct {relation}({args});
+        struct {relation}({args});
     "}
 }
 
@@ -643,12 +642,31 @@ impl<'a> Display for IterName<'a> {
     }
 }
 
-fn write_pub_iter_fn(out: &mut impl Write, relation: &str) -> io::Result<()> {
+fn write_pub_iter_fn(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
     let rel_snake = relation.to_case(Snake);
+    let rel_type = if arity.len() == 1 {
+        arity.first().unwrap().to_string()
+    } else {
+        let args = arity
+            .iter()
+            .copied()
+            .format_with(", ", |s, f| f(&format_args!("{}", s)));
+        format!("({args})")
+    };
+
+    let tuple_unpack = match arity.len() {
+        0 => "|_| ()".to_string(),
+        1 => "|t| t.0".to_string(),
+        n => {
+            let args = (0..n).format_with(", ", |i, f| f(&format_args!("t.{i}")));
+            format!("|t| ({args})")
+        }
+    };
+
     writedoc! {out, "
         #[allow(dead_code)]
-        pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={relation}> {{
-            self.{rel_snake}.iter_all()
+        pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={rel_type}> {{
+            self.{rel_snake}.iter_all().map({tuple_unpack})
         }}
     "}
 }
@@ -1466,7 +1484,7 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
     for (rel, arity) in module.relations() {
-        write_pub_iter_fn(out, rel)?;
+        write_pub_iter_fn(out, rel, &arity)?;
         write_pub_insert_relation(out, rel, &arity)?;
         write!(out, "\n")?;
     }

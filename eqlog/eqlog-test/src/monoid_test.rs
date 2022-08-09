@@ -28,40 +28,40 @@ mod test {
         m.sort();
         assert_eq!(m, vec![a1, a2, a3, a4, a5]);
 
-        let mut e: Vec<E> = mon.iter_e().collect();
+        let mut e: Vec<M> = mon.iter_e().collect();
         e.sort();
         assert_eq!(e, vec![]);
 
-        let mut mul: Vec<Mul> = mon.iter_mul().collect();
+        let mut mul: Vec<(M, M, M)> = mon.iter_mul().collect();
         mul.sort();
         assert_eq!(
             mul,
             vec![
-                Mul(a1, a1, a2),
-                Mul(a1, a2, a3),
-                Mul(a1, a3, a4),
-                Mul(a1, a4, a5),
+                (a1, a1, a2),
+                (a1, a2, a3),
+                (a1, a3, a4),
+                (a1, a4, a5),
                 // Mul(a1, a4, E())
-                Mul(a2, a1, a3),
-                Mul(a2, a2, a4),
-                Mul(a2, a3, a5),
+                (a2, a1, a3),
+                (a2, a2, a4),
+                (a2, a3, a5),
                 // Mul(a2, a4, E()),
-                Mul(a2, a5, a1),
-                Mul(a3, a1, a4),
-                Mul(a3, a2, a5),
+                (a2, a5, a1),
+                (a3, a1, a4),
+                (a3, a2, a5),
                 //Mul(a3, a3, E()),
-                Mul(a3, a4, a1),
-                Mul(a3, a5, a2),
-                Mul(a4, a1, a5),
+                (a3, a4, a1),
+                (a3, a5, a2),
+                (a4, a1, a5),
                 //Mul(a4, a2, E()),
-                Mul(a4, a3, a1),
-                Mul(a4, a4, a2),
-                Mul(a4, a5, a3),
+                (a4, a3, a1),
+                (a4, a4, a2),
+                (a4, a5, a3),
                 //Mul(a5, a1, E()),
-                Mul(a5, a2, a1),
-                Mul(a5, a3, a2),
-                Mul(a5, a4, a3),
-                Mul(a5, a5, a4),
+                (a5, a2, a1),
+                (a5, a3, a2),
+                (a5, a4, a3),
+                (a5, a5, a4),
             ]
         );
     }
@@ -89,17 +89,17 @@ mod test {
         let els: BTreeSet<M> = mon.iter_m().collect();
         assert_eq!(els, btreeset! {a0, a1});
 
-        let e: BTreeSet<E> = mon.iter_e().collect();
-        assert_eq!(e, btreeset! {E(a0)});
+        let e: BTreeSet<M> = mon.iter_e().collect();
+        assert_eq!(e, btreeset! {a0});
 
-        let mul: BTreeSet<Mul> = mon.iter_mul().collect();
+        let mul: BTreeSet<(M, M, M)> = mon.iter_mul().collect();
         assert_eq!(
             mul,
             btreeset! {
-                Mul(a0, a0, a0),
-                Mul(a0, a1, a1),
-                Mul(a1, a0, a1),
-                Mul(a1, a1, a0),
+                (a0, a0, a0),
+                (a0, a1, a1),
+                (a1, a0, a1),
+                (a1, a1, a0),
             }
         );
     }
