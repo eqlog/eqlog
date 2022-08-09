@@ -34,7 +34,7 @@ impl Scope {
     pub fn new() -> Self {
         let mut cwf = Cwf::new();
         let empty_context = cwf.new_ctx();
-        cwf.insert_active_ctx(ActiveCtx(empty_context));
+        cwf.insert_active_ctx(empty_context);
         Scope {
             definitions: HashMap::new(),
             empty_context,
@@ -236,7 +236,7 @@ impl Scope {
                 self.cwf.close();
                 assert_eq!(self.cwf.ty_root(subst_ty), self.cwf.ty_root(arg_ty));
             } else {
-                self.cwf.insert_tm_ty(TmTy(arg, subst_ty));
+                self.cwf.insert_tm_ty(arg, subst_ty);
             }
             subst = self.cwf.define_ext_mor(ext_ctx, subst, arg);
         }
@@ -343,7 +343,7 @@ impl Scope {
                     self.cwf.close();
                     assert_eq!(self.cwf.ty_root(unit_ty), self.cwf.ty_root(tm_ty));
                 } else {
-                    self.cwf.insert_tm_ty(TmTy(discriminee, unit_ty));
+                    self.cwf.insert_tm_ty(discriminee, unit_ty);
                 }
 
                 // Check `into_ty`.
@@ -380,7 +380,7 @@ impl Scope {
                         self.cwf.ty_root(into_ty_unit_subst)
                     );
                 } else {
-                    self.cwf.insert_tm_ty(TmTy(unit_case, into_ty_unit_subst));
+                    self.cwf.insert_tm_ty(unit_case, into_ty_unit_subst);
                 }
 
                 let unit_ind = self.cwf.define_unit_ind(into_ty, unit_case);
@@ -419,7 +419,7 @@ impl Scope {
                     self.cwf.close();
                     assert_eq!(self.cwf.ty_root(bool_ty), self.cwf.ty_root(tm_ty));
                 } else {
-                    self.cwf.insert_tm_ty(TmTy(discriminee, bool_ty));
+                    self.cwf.insert_tm_ty(discriminee, bool_ty);
                 }
 
                 if checking == Checking::Yes {
@@ -466,8 +466,8 @@ impl Scope {
                         self.cwf.ty_root(into_ty_true_subst)
                     );
                 } else {
-                    self.cwf.insert_tm_ty(TmTy(false_case, into_ty_false_subst));
-                    self.cwf.insert_tm_ty(TmTy(true_case, into_ty_true_subst));
+                    self.cwf.insert_tm_ty(false_case, into_ty_false_subst);
+                    self.cwf.insert_tm_ty(true_case, into_ty_true_subst);
                 }
 
                 let bool_ind = self.cwf.define_bool_ind(into_ty, false_case, true_case);
@@ -501,7 +501,7 @@ impl Scope {
                     self.cwf.close();
                     assert_eq!(self.cwf.ty_root(nat), self.cwf.ty_root(tm_ty));
                 } else {
-                    self.cwf.insert_tm_ty(TmTy(n, nat));
+                    self.cwf.insert_tm_ty(n, nat);
                 }
                 self.cwf.define_succ(n)
             }
@@ -512,7 +512,7 @@ impl Scope {
     fn adjoin_variable(&mut self, checking: Checking, name: &str, ty: &ast::Ty) {
         let ty = self.add_type(checking, ty);
         let var = self.cwf.new_tm();
-        self.cwf.insert_tm_ty(TmTy(var, ty));
+        self.cwf.insert_tm_ty(var, ty);
         self.definitions.insert(
             name.to_string(),
             Definition {
@@ -528,8 +528,8 @@ impl Scope {
         let ty = self.add_type(checking, ty);
         let base_ctx = self.current_context();
         let ext_ctx = self.cwf.new_ctx();
-        self.cwf.insert_base_ctx(BaseCtx(ext_ctx, base_ctx));
-        self.cwf.insert_ext_ty(ExtTy(ext_ctx, ty));
+        self.cwf.insert_base_ctx(ext_ctx, base_ctx);
+        self.cwf.insert_ext_ty(ext_ctx, ty);
 
         let var = self.cwf.define_ext_var(ext_ctx);
         self.extensions.push((ty, ext_ctx));
@@ -568,7 +568,7 @@ impl Scope {
                     self.cwf.close();
                     assert_eq!(self.cwf.ty_root(ty), self.cwf.ty_root(tm_ty));
                 } else {
-                    self.cwf.insert_tm_ty(TmTy(tm, ty));
+                    self.cwf.insert_tm_ty(tm, ty);
                 }
                 self.definitions.insert(
                     name.to_string(),
@@ -604,7 +604,7 @@ impl Scope {
                 }
                 let tm = self.add_term(Checking::No, tm);
                 let ty = self.add_type(Checking::No, ty);
-                self.cwf.insert_tm_ty(TmTy(tm, ty));
+                self.cwf.insert_tm_ty(tm, ty);
 
                 self.definitions = before_definitions;
                 self.extensions = before_extensions;
