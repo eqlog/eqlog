@@ -937,12 +937,12 @@ fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> i
                 ))
             });
             f(&formatdoc! {"
-            #[allow(unused_mut)]
-            for mut t in self.new_{relation_snake}.drain(..) {{
-                {canonicalize}
-                model.{relation_snake}.insert(t);
-            }}
-        "})
+                #[allow(unused_mut)]
+                for mut t in self.new_{relation_snake}.drain(..) {{
+                    {canonicalize}
+                    model.{relation_snake}.insert(t);
+                }}
+            "})
         });
     writedoc! {out, "
         fn apply_tuples(&mut self, model: &mut Model) {{
