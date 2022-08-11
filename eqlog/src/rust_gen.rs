@@ -546,6 +546,21 @@ fn write_table_recall_previous_dirt(
     "}
 }
 
+fn write_table_weight(
+    out: &mut impl Write,
+    arity: &[&str],
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let tuple_weight = arity.len();
+    let el_lookup_weight = tuple_weight;
+    let indices_weight = indices.len() * tuple_weight;
+    let weight = el_lookup_weight + indices_weight;
+    writedoc! {out, "
+        const WEIGHT: usize = {weight};
+    "}
+}
+
 fn write_table_impl(
     out: &mut impl Write,
     relation: &str,
