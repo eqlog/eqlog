@@ -557,6 +557,7 @@ fn write_table_weight(
     let indices_weight = indices.len() * tuple_weight;
     let weight = el_lookup_weight + indices_weight;
     writedoc! {out, "
+        #[allow(unused)]
         const WEIGHT: usize = {weight};
     "}
 }
@@ -874,6 +875,9 @@ fn write_model_delta_apply_new_elements_fn(
                 model.{sort_snake}_dirty.insert(el);
                 model.{sort_snake}_all.insert(el);
             }}
+
+            model.{sort_snake}_weights.resize(new_{sort_snake}_number, 0);
+
             self.new_{sort_snake}_number = 0;
         "})
     });
@@ -895,11 +899,35 @@ fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) 
         let clean_rels = module
             .relations()
             .filter(|(_, arity)| arity_contains_sort(arity))
-            .format_with("\n", |(relation, _), f| {
+            .format_with("\n", |(relation, arity), f| {
                 let relation_snake = relation.to_case(Snake);
+                let update_weights =
+                    arity
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .format_with("\n", |(i, s), f| {
+                            let sort_snake = s.to_case(Snake);
+                            // TODO: How can it happen that we're overflowing the subtraction here?
+                            // When we inserted the tuple t, we should've added the same amount we're
+                            // subtracting here.
+                            f(&formatdoc! {"
+                            let weight{i} =
+                                model.{sort_snake}_weights
+                                .get_mut(t.{i}.0 as usize)
+                                .unwrap(); 
+                            if *weight{i} >= {relation}Table::WEIGHT {{
+                                *weight{i} -={relation}Table::WEIGHT
+                            }}
+                        "})
+                        });
                 f(&format_args! {"
                     self.new_{relation_snake}.extend(
-                        model.{relation_snake}.drain_with_element_{sort_snake}(lhs)
+                        model.{relation_snake}
+                        .drain_with_element_{sort_snake}(child)
+                        .inspect(|t| {{
+                            {update_weights}
+                        }})
                     );
                 "})
             });
@@ -908,12 +936,23 @@ fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) 
             for (mut lhs, mut rhs) in self.new_{sort_snake}_equalities.drain(..) {{
                 lhs = model.{sort_snake}_equalities.root(lhs);
                 rhs = model.{sort_snake}_equalities.root(rhs);
-                if lhs != rhs {{
-                    model.{sort_snake}_equalities.union_roots_into(lhs, rhs);
-                    model.{sort_snake}_all.remove(&lhs);
-                    model.{sort_snake}_dirty.remove(&lhs);
-                    {clean_rels}
+                if lhs == rhs {{
+                    continue;
                 }}
+
+                let lhs_weight = model.{sort_snake}_weights[lhs.0 as usize];
+                let rhs_weight = model.{sort_snake}_weights[rhs.0 as usize];
+                let (root, child) =
+                    if lhs_weight >= rhs_weight {{
+                        (lhs, rhs)
+                    }} else {{
+                        (rhs, lhs)
+                    }};
+
+                model.{sort_snake}_equalities.union_roots_into(child, root);
+                model.{sort_snake}_all.remove(&child);
+                model.{sort_snake}_dirty.remove(&child);
+                {clean_rels}
             }}
         "})
     });
@@ -936,11 +975,19 @@ fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> i
                     "t.{i} = model.{sort_snake}_equalities.root(t.{i});"
                 ))
             });
+            let update_weights = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
+                let sort_snake = sort.to_case(Snake);
+                f(&format_args!(
+                    "model.{sort_snake}_weights[t.{i}.0 as usize] += {relation}Table::WEIGHT;"
+                ))
+            });
             f(&formatdoc! {"
                 #[allow(unused_mut)]
                 for mut t in self.new_{relation_snake}.drain(..) {{
                     {canonicalize}
-                    model.{relation_snake}.insert(t);
+                    if model.{relation_snake}.insert(t) {{
+                        {update_weights}
+                    }}
                 }}
             "})
         });
