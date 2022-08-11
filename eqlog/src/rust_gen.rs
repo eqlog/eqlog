@@ -66,6 +66,7 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
         {sort_snake}_all: BTreeSet<{sort}>,
         {sort_snake}_dirty: BTreeSet<{sort}>,
         {sort_snake}_dirty_prev: Vec<BTreeSet<{sort}>>,
+        {sort_snake}_weights: Vec<usize>,
     "}
 }
 
@@ -555,6 +556,7 @@ fn write_table_impl(
     writedoc! {out, "
         impl {relation}Table {{
     "}?;
+    write_table_weight(out, arity, index_selection)?;
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_insert_dirt_fn(out, relation, index_selection)?;
@@ -1408,6 +1410,7 @@ fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
         write!(out, "{sort_snake}_dirty_prev: Vec::new(),\n")?;
+        write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
     for (relation, _) in module.relations() {
