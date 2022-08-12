@@ -477,17 +477,20 @@ fn write_table_drain_with_element(
 ) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let removes = indices.into_iter().format_with("\n", |index, f| {
-        let index_name = IndexName(index);
-        let order_name = OrderName(&index.order);
-        f(&format_args!(
-            "    self.index_{index_name}.remove(&Self::permute{order_name}(*t));"
-        ))
-    });
+    let master_index = index_selection.get(&QuerySpec::all()).unwrap();
+    let master_index_name = IndexName(master_index);
+    let master_order_name = OrderName(&master_index.order);
+    let slave_removes = indices
+        .into_iter()
+        .filter(|index| index != &master_index)
+        .format_with("\n", |index, f| {
+            let index_name = IndexName(index);
+            let order_name = OrderName(&index.order);
+            f(&format_args!(
+                "self.index_{index_name}.remove(&Self::permute{order_name}(*t));"
+            ))
+        });
 
-    // TODO: We can remove duplicates and non-canonical tuples from `ts` by deleting tuples which
-    // we can't find in the master index. We try to find all t in ts in the master index to remove
-    // them anyway.
     writedoc! {out, "
         #[allow(dead_code)]
         fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation}> {{
@@ -495,10 +498,16 @@ fn write_table_drain_with_element(
                 None => Vec::new(),
                 Some(tuples) => tuples,
             }};
-            for t in ts.iter() {{
-        {removes}
-            }}
+
             ts.into_iter()
+                .filter(|t| {{
+                    if self.index_{master_index_name}.remove(&Self::permute{master_order_name}(*t)) {{
+                        {slave_removes}
+                        true
+                    }} else {{
+                        false
+                    }}
+                }})
         }}
     "}
 }
