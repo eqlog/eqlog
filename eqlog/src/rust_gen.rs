@@ -917,18 +917,13 @@ fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) 
                         .enumerate()
                         .format_with("\n", |(i, s), f| {
                             let sort_snake = s.to_case(Snake);
-                            // TODO: How can it happen that we're overflowing the subtraction here?
-                            // When we inserted the tuple t, we should've added the same amount we're
-                            // subtracting here.
                             f(&formatdoc! {"
-                            let weight{i} =
-                                model.{sort_snake}_weights
-                                .get_mut(t.{i}.0 as usize)
-                                .unwrap(); 
-                            if *weight{i} >= {relation}Table::WEIGHT {{
-                                *weight{i} -={relation}Table::WEIGHT
-                            }}
-                        "})
+                                let weight{i} =
+                                    model.{sort_snake}_weights
+                                    .get_mut(t.{i}.0 as usize)
+                                    .unwrap(); 
+                                *weight{i} -= {relation}Table::WEIGHT;
+                            "})
                         });
                 f(&format_args! {"
                     self.new_{relation_snake}.extend(
