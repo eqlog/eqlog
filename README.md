@@ -73,11 +73,9 @@ Eqlog consists of an compiler crate, which is only needed during build, and a ru
 We can specify this in `Cargo.toml` by adding the following:
 ```toml
 [dependencies]
-...
 eqlog-runtime = "0.1"
 
 [dev-dependencies]
-...
 eqlog = "0.1"
 ```
 
