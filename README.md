@@ -214,7 +214,7 @@ Axiom <from> ~> <to>;
 where `<from>` and `<to>` are terms of the same sort and `<from>` must not be a variable.
 A reduction axiom has the following meaning:
 *If all subterms of `<from>` are defined and `<to>` is defined, then also `<from>` is defined and equal to `<to>`.*
-Accordingly, a if `<from> = <Func>(<arg_1>, ..., <arg_n>)`, then the reduction desugars to the implication
+Accordingly, if `<from> = <Func>(<arg_1>, ..., <arg_n>)`, then the reduction desugars to the implication
 ```rust
 Axiom <arg_1>! & ... & <arg_n>! & <to>! => <from> = <to>;
 ```
