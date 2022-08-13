@@ -3,8 +3,8 @@ name = "eqlog"
 version = "0.1.0"
 edition = "2021"
 authors = [
-  "Martin Bidlingmaier <martin.bidlingmaier@mbid.me>",
-  "Jakob Botsch Nielsen <jakob.botsch.nielsen@gmail.com>"
+  "Martin E. Bidlingmaier <martin.bidlingmaier@mbid.me>",
+  "Jakob Botsch Nielsen <jakob.botsch.nielsen@gmail.com>",
 ]
 license = "MIT"
 description = "Datalog with equality"
