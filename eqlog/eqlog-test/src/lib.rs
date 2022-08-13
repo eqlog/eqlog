@@ -10,12 +10,15 @@ eqlog_mod!(semilattice);
 eqlog_mod!(distr_lattice);
 eqlog_mod!(group);
 eqlog_mod!(product_category);
+eqlog_mod!(lex_category);
 
 mod category_mod;
 #[cfg(test)]
 mod distr_lattice_test;
 #[cfg(test)]
 mod group_test;
+#[cfg(test)]
+mod lex_category_test;
 #[cfg(test)]
 mod logic_test;
 mod monoid_test;

@@ -1,0 +1,112 @@
+Sort Obj;
+Sort Mor;
+
+Func Dom: Mor -> Obj;
+Func Cod: Mor -> Obj;
+Func Id: Obj -> Mor;
+Func Comp: Mor * Mor -> Mor;
+
+// Fibre products.
+Sort FibreProd;
+Func Left: FibreProd -> Mor;
+Func Right: FibreProd -> Mor;
+Func FibreProdObj: FibreProd -> Obj;
+Func LeftProj: FibreProd -> Mor;
+Func RightProj: FibreProd -> Mor;
+Func Tuple: FibreProd * Mor * Mor -> Mor;
+
+// Every morphism has a domain and a codomain.
+Axiom f: Mor => Dom(f)! & Cod(f)!;
+
+// Every object has an identity.
+Axiom x: Obj => Id(x)!;
+
+// Composition is defined if and only domain and codomain match.
+Axiom Cod(f) = Dom(g) => Comp(g, f)!;
+Axiom Comp(g, f)! => Cod(f) <~> Dom(g);
+
+// Domains and codomains of identities.
+Axiom Dom(Id(x)) ~> x;
+Axiom Cod(Id(x)) ~> x;
+
+// Domains and codomains of compositions.
+Axiom Dom(Comp(_, f)) ~> Dom(f);
+Axiom Cod(Comp(g, _)) ~> Cod(g);
+
+// Identity morphisms are left and right identities.
+Axiom Comp(Id(Cod(f)), f) ~> f;
+Axiom Comp(f, Id(Dom(f))) ~> f;
+
+// Composition is associative.
+Axiom Comp(h, Comp(g, f)) <~> Comp(Comp(h, g), f);
+
+// All data of a prod element exists.
+Axiom
+  & prod: FibreProd
+  =>
+  & Left(prod)!
+  & Right(prod)!
+  & FibreProdObj(prod)!
+  & LeftProj(prod)!
+  & RightProj(prod)!
+  ;
+
+// A fibre prod element is determined by its data.
+Axiom
+  & Left(prod_0) = Left(prod_1)
+  & Right(prod_0) = Right(prod_1)
+  & FibreProdObj(prod_0) = FibreProdObj(prod_1)
+  & LeftProj(prod_0) = LeftProj(prod_1)
+  & RightProj(prod_0) = RightProj(prod_1)
+  =>
+  & prod_0 = prod_1
+  ;
+
+// Left and Right legs of a fibre product have the same codomain.
+Axiom Cod(Left(prod)) <~> Cod(Right(prod));
+
+// Domain and codomains of the projections.
+Axiom Dom(LeftProj(prod)) ~> FibreProdObj(prod);
+Axiom Dom(RightProj(prod)) ~> FibreProdObj(prod);
+Axiom Cod(LeftProj(prod)) ~> Dom(Left(prod));
+Axiom Cod(RightProj(prod)) ~> Dom(Right(prod));
+
+// The projections commute with left and right legs.
+Axiom Comp(Left(prod), LeftProj(prod)) <~> Comp(Right(prod), RightProj(prod));
+
+// Domain and codomain of tuple morphisms.
+Axiom Dom(Tuple(_, l, _)) ~> Dom(l);
+Axiom Dom(Tuple(_, _, r)) ~> Dom(r);
+Axiom Cod(Tuple(prod, _, _)) ~> FibreProdObj(prod);
+
+// Tuple(prod, _, _) is defined for pairs morphisms which commute with Left(prod) and Right(prod).
+Axiom Comp(Left(prod), l) = Comp(Right(prod), r) => Tuple(prod, l, r)!;
+// Conversely, if Tuple(prod, l, r) is defined, then l and r commute with Left(prod) and
+// Right(prod).
+Axiom
+	& Tuple(prod, l, r)!
+  =>
+  & Comp(Left(prod), l)!
+  & Comp(Right(prod), r)!
+  & Comp(Left(prod), l) = Comp(Right(prod), r)
+  ;
+
+// Tuple(prod, l, r) commutes with l, r and the two projections.
+Axiom Comp(LeftProj(prod), Tuple(prod, l, _)) ~> l;
+Axiom Comp(RightProj(prod), Tuple(prod, _, r)) ~> r;
+
+// Uniqueness of the tuple morphism.
+Axiom
+  & Comp(LeftProj(prod), s) = l
+  & Comp(RightProj(prod), s) = r
+  =>
+  & Tuple(prod, l, r) = s
+  ;
+
+Query is_iso(x: Obj, y: Obj)
+  where
+	& Dom(f) = x
+  & Cod(f) = y
+  & Comp(g, f) = Id(x)
+  & Comp(f, g) = Id(y)
+  ;
