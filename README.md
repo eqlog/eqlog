@@ -208,30 +208,30 @@ Axiom u = Meet(x, Meet(y, z))! & Meet(x, y)! => u = Meet(Meet(x, y), z);
 #### Reductions
 Reductions are syntactic sugar for implication axioms.
 A reduction has the form
-```
+```rust
 Axiom <from> ~> <to>;
 ```
 where `<from>` and `<to>` are terms of the same sort and `<from>` must not be a variable.
 A reduction axiom has the following meaning:
 *If all subterms of `<from>` are defined and `<to>` is defined, then also `<from>` is defined and equal to `<to>`.*
 Accordingly, a if `<from> = <Func>(<arg_1>, ..., <arg_n>)`, then the reduction desugars to the implication
-```
+```rust
 Axiom <arg_1>! & ... & <arg_n>! & <to>! => <from> = <to>;
 ```
 The order of the `from` and `to` terms can be confusing at first, but consider that algorithms involving reduction usually work top-to-bottom, whereas eqlog evaluation is bottom-up.
 
 Eqlog also supports the following symmetric form
-```
+```rust
 Axiom <lhs> <~> <rhs>;
 ```
 which desugars to the two reductions
-```
+```rust
 Axiom <lhs> ~> <rhs>;
 Axiom <rhs> ~> <lhs>;
 ```
 
 Both reductions and symmetric reductions can be made conditional on a premise:
-```
+```rust
 Axiom <atom_1> & ... & <atom_n> => <lhs> ~> <rhs>;
 Axiom <atom_1> & ... & <atom_n> => <lhs> <~> <rhs>;
 ```
