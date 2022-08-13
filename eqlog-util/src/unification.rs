@@ -78,7 +78,7 @@ impl<T: Copy + PartialEq + From<u32> + Into<u32> + PartialOrd + Ord> Unification
                 let el: u32 = (*el).into();
                 el
             });
-            tabled_builder = tabled_builder.add_record(once(root).chain(children));
+            tabled_builder.add_record(once(root).chain(children));
         }
 
         tabled_builder.build()
