@@ -1,0 +1,2 @@
+Sort El;
+Func Mul: El * El -> El;

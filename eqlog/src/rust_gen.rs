@@ -669,7 +669,90 @@ impl<'a> Display for IterName<'a> {
     }
 }
 
-fn write_pub_iter_fn(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
+fn write_pub_predicate_holds_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+) -> io::Result<()> {
+    let relation_snake = relation.to_case(Snake);
+    let rel_fn_args = arity
+        .iter()
+        .copied()
+        .enumerate()
+        .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
+
+    let canonicalize = arity
+        .iter()
+        .copied()
+        .enumerate()
+        .format_with("\n", |(i, s), f| {
+            let sort_snake = s.to_case(Snake);
+            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
+        });
+
+    let rel_args0 = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+    let rel_args1 = rel_args0.clone();
+    // TODO: Use proper `contains` function here instead of linear search.
+    writedoc! {out, "
+        /// Returns `true` if `{relation}({rel_args0})` holds.
+        #[allow(dead_code)]
+        pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
+            {canonicalize}
+            self.{relation_snake}.iter_all().any(|t| t == {relation}({rel_args1}))
+        }}
+    "}
+}
+
+fn write_pub_function_eval_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+) -> io::Result<()> {
+    let relation_snake = relation.to_case(Snake);
+    let dom = &arity[..(arity.len() - 1)];
+    let cod_index = dom.len();
+    let cod = arity[cod_index];
+
+    let rel_fn_args = dom
+        .iter()
+        .copied()
+        .enumerate()
+        .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
+
+    let canonicalize = dom
+        .iter()
+        .copied()
+        .enumerate()
+        .format_with("\n", |(i, s), f| {
+            let sort_snake = s.to_case(Snake);
+            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
+        });
+
+    let query = QuerySpec {
+        projections: (0..dom.len()).collect(),
+        diagonals: BTreeSet::new(),
+        only_dirty: false,
+    };
+    let iter = IterName(relation, &query);
+    let args0 = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+    let args1 = args0.clone();
+
+    writedoc! {out, "
+        /// Evaluates `{relation}({args0})`.
+        #[allow(dead_code)]
+        pub fn {relation_snake}(&self{rel_fn_args}) -> Option<{cod}> {{
+            {canonicalize}
+            self.{iter}({args1}).next().map(|t| t.{cod_index})
+        }}
+    "}
+}
+
+fn write_pub_iter_fn(
+    out: &mut impl Write,
+    relation: &str,
+    arity: &[&str],
+    is_function: bool,
+) -> io::Result<()> {
     let rel_snake = relation.to_case(Snake);
     let rel_type = if arity.len() == 1 {
         arity.first().unwrap().to_string()
@@ -690,7 +773,37 @@ fn write_pub_iter_fn(out: &mut impl Write, relation: &str, arity: &[&str]) -> io
         }
     };
 
+    let docstring = match (is_function, arity.len()) {
+        (false, 0) => todo!("Shouldn't generate an iter_...() function for truth values."),
+        (false, 1) => {
+            formatdoc! {"
+                /// Returns an iterator over elements satisfying the `{relation}` predicate.
+            "}
+        }
+        (false, n) => {
+            debug_assert!(n > 0);
+            formatdoc! {"
+                /// Returns an iterator over tuples of elements satisfying the `{relation}` predicate.
+            "}
+        }
+        (true, 0) => panic!("Functions cannot have empty arity"),
+        (true, 1) => {
+            formatdoc! {"
+                /// Returns an iterator over `{relation}` constants.
+                /// The iterator may yield more than one element if the model is not closed.
+            "}
+        }
+        (true, n) => {
+            debug_assert!(n > 1);
+            formatdoc! {"
+                /// Returns an iterator over tuples in the graph of the `{relation}` function.
+                /// The relation yielded by the iterator need not be functional if the model is not closed.
+            "}
+        }
+    };
+
     writedoc! {out, "
+        {docstring}
         #[allow(dead_code)]
         pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={rel_type}> {{
             self.{rel_snake}.iter_all().map({tuple_unpack})
@@ -702,15 +815,42 @@ fn write_pub_insert_relation(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
+    is_function: bool,
 ) -> io::Result<()> {
     let relation_snake = relation.to_case(Snake);
     let rel_fn_args = arity
         .iter()
         .copied()
         .enumerate()
-        .format_with("", |(i, s), f| f(&format_args!(", arg{i}: {s}")));
-    let rel_args = (0..arity.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
+        .format_with("", |(i, s), f| {
+            if is_function && i == arity.len() - 1 {
+                f(&format_args!(", result: {s}"))
+            } else {
+                f(&format_args!(", arg{i}: {s}"))
+            }
+        });
+    let rel_args = (0..arity.len()).format_with("", |i, f| {
+        if is_function && i == arity.len() - 1 {
+            f(&format_args!("result,"))
+        } else {
+            f(&format_args!("arg{i},"))
+        }
+    });
+
+    let docstring = if is_function {
+        let dom = &arity[0..arity.len() - 1];
+        let args = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        formatdoc! {"
+                /// Makes the equation `{relation}({args}) = result` hold.
+            "}
+    } else {
+        let args = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        formatdoc! {"
+                /// Makes `{relation}({args})` hold.
+            "}
+    };
     writedoc! {out, "
+        {docstring}
         #[allow(dead_code)]
         pub fn insert_{relation_snake}(&mut self {rel_fn_args}) {{
             self.delta.as_mut().unwrap().new_{relation_snake}.push({relation}({rel_args}));
@@ -721,6 +861,7 @@ fn write_pub_insert_relation(
 fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
+        /// Adjoins a new element of sort `{sort}`.
         #[allow(dead_code)]
         pub fn new_{sort_snake}(&mut self) -> {sort} {{
             let mut delta_opt = None;
@@ -738,6 +879,7 @@ fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
 fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
+        /// Enforces the equality `lhs = rhs`.
         #[allow(dead_code)]
         pub fn equate_{sort_snake}(&mut self, lhs: {sort}, rhs: {sort}) {{
             self.delta.as_mut().unwrap().new_{sort_snake}_equalities.push((lhs, rhs));
@@ -748,6 +890,7 @@ fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
 fn write_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
+        /// Returns the canonical representative of the equivalence class of `el`.
         #[allow(dead_code)]
         pub fn root_{sort_snake}(&self, el: {sort}) -> {sort} {{
             if el.0 as usize >= self.{sort_snake}_equalities.len() {{
@@ -762,6 +905,7 @@ fn write_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
 fn write_are_equal_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
+        /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
         #[allow(dead_code)]
         pub fn are_equal_{sort_snake}(&self, lhs: {sort}, rhs: {sort}) -> bool {{
             self.root_{sort_snake}(lhs) == self.root_{sort_snake}(rhs)
@@ -772,6 +916,8 @@ fn write_are_equal_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
 fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
+        /// Returns and iterator over elements of sort `{sort}`.
+        /// The iterator yields canonical representatives only.
         #[allow(dead_code)]
         pub fn iter_{sort_snake}(&mut self) -> impl '_ + Iterator<Item={sort}> {{
             self.{sort_snake}_all.iter().copied()
@@ -1153,6 +1299,14 @@ fn write_pure_query_fn(
         f(&format_args!("tm{tm}: {sort}, "))
     });
 
+    let canonicalize = pure_query.inputs.iter().format_with("\n", |(tm, s), f| {
+        let tm = tm.0;
+        let sort_snake = s.to_case(Snake);
+        f(&format_args!(
+            "#[allow(unused)] let tm{tm} = self.root_{sort_snake}(tm{tm});"
+        ))
+    });
+
     use FlatQueryOutput::*;
     let output_type = match &pure_query.output {
         NoOutput => "bool".to_string(),
@@ -1193,6 +1347,7 @@ fn write_pure_query_fn(
     writedoc! {out, "
         #[allow(dead_code)] #[allow(unused_variables)]
         pub fn {name}(&self, {arg_list}) -> {output_type} {{
+            {canonicalize}
             {matches_vec_definition}
     "}?;
     assert_eq!(
@@ -1413,6 +1568,10 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
         });
 
     writedoc! {out, "
+        /// Closes the model under all axioms until `condition` is satisfied.
+        /// Depending on the axioms and `condition`, this may run indefinitely.
+        /// Returns `true` if the `condition` eventually holds.
+        /// Returns `false` if the model could be closed under all axioms but `condition` still does not hold.
         #[allow(dead_code)]
         pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
         {{
@@ -1460,6 +1619,8 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
 
 fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
+        /// Closes the model under all axioms.
+        /// Depending on the axioms and the model, this may run indefinitely.
         #[allow(dead_code)]
         pub fn close(&mut self) {{
             self.close_until(|_: &Self| false);
@@ -1468,6 +1629,7 @@ fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
 }
 
 fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+    write!(out, "/// Creates an empty model.\n")?;
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn new() -> Self {{\n")?;
     write!(out, "Self {{\n")?;
@@ -1497,7 +1659,7 @@ fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> 
     let fn_args = dom
         .iter()
         .enumerate()
-        .format_with(", ", |(i, sort), f| f(&format_args!("arg{i}: {sort}")));
+        .format_with(", ", |(i, sort), f| f(&format_args!("mut arg{i}: {sort}")));
 
     let query = QuerySpec {
         projections: (0..dom.len()).collect(),
@@ -1513,9 +1675,17 @@ fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> 
 
     let insert_dom_args = (0..dom.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
 
+    let canonicalize = dom.iter().enumerate().format_with("\n", |(i, s), f| {
+        let sort_snake = s.to_case(Snake);
+        f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
+    });
+
+    let args = iter_args.clone();
     writedoc! {out, "
+        /// Enforces that `{name}({args})` is defined, adjoining a new element if necessary.
         #[allow(dead_code)]
         pub fn define_{function_snake}(&mut self, {fn_args}) -> {cod} {{
+            {canonicalize}
             if let Some(t) = self.{iter}({iter_args}).next() {{
                 return t.{cod_index};
             }}
@@ -1527,6 +1697,7 @@ fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> 
 }
 
 fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io::Result<()> {
+    write!(out, "/// A model of the `{name}` theory.\n")?;
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
     for sort in module.iter_sorts() {
@@ -1555,6 +1726,13 @@ fn write_theory_impl(
     pure_queries: &[(String, PureQuery)],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
+
+    write_new_fn(out, module)?;
+    write!(out, "\n")?;
+
+    write_close_fn(out)?;
+    write_close_until_fn(out, query_actions)?;
+
     for sort in module.iter_sorts() {
         write_new_element(out, &sort.name)?;
         write_equate_elements(out, &sort.name)?;
@@ -1564,13 +1742,29 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
     for (rel, arity) in module.relations() {
-        write_pub_iter_fn(out, rel, &arity)?;
-        write_pub_insert_relation(out, rel, &arity)?;
+        let is_function = match module.get_symbol_at(rel, None).unwrap() {
+            Symbol::Function(function) => {
+                write_pub_function_eval_fn(out, rel, &arity)?;
+                write_define_fn(out, function)?;
+                true
+            }
+            Symbol::Predicate(_) => {
+                write_pub_predicate_holds_fn(out, rel, &arity)?;
+                false
+            }
+            _ => panic!("Not a relation"),
+        };
+
+        if arity.len() > 0 {
+            write_pub_iter_fn(out, rel, &arity, is_function)?;
+        }
+        write_pub_insert_relation(out, rel, &arity, is_function)?;
         write!(out, "\n")?;
     }
 
-    write_new_fn(out, module)?;
-    write!(out, "\n")?;
+    for (name, pure_query) in pure_queries.iter() {
+        write_pure_query_fn(out, module, name, pure_query)?;
+    }
 
     write_is_dirty_fn(out, module)?;
     write!(out, "\n")?;
@@ -1586,18 +1780,10 @@ fn write_theory_impl(
         )?;
         write_query_and_record_fn(out, module, query_action, i)?;
     }
-    for function in module.iter_functions() {
-        write_define_fn(out, function)?;
-    }
-    for (name, pure_query) in pure_queries.iter() {
-        write_pure_query_fn(out, module, name, pure_query)?;
-    }
 
     write_drop_dirt_fn(out, module)?;
     write_retire_dirt_fn(out, module)?;
     write_recall_previous_dirt(out, module)?;
-    write_close_until_fn(out, query_actions)?;
-    write_close_fn(out)?;
 
     write!(out, "}}\n")?;
     Ok(())

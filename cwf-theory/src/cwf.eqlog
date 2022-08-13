@@ -4,9 +4,7 @@ Sort Mor;
 
 // Domains and codomains of morphisms.
 Func Dom: Mor -> Ctx;
-Query dom(f) -> Dom(f);
 Func Cod: Mor -> Ctx;
-Query cod(f) -> Cod(f);
 // Compositions of morphisms.
 Func Comp: Mor * Mor -> Mor;
 // Identity morphisms.
@@ -39,8 +37,6 @@ Sort Tm;
 Func TyCtx : Ty -> Ctx;
 // The type of a term.
 Func TmTy : Tm -> Ty;
-Query ty_ctx(ty: Ty) -> TyCtx(ty);
-Query tm_ctx(tm: Tm) -> TyCtx(TmTy(tm));
 
 // Substituting types and terms.
 Func SubstTy: Mor * Ty-> Ty;

@@ -150,8 +150,8 @@ impl Scope {
 
     #[allow(dead_code)]
     fn display_morphism(&mut self, mor: Mor) -> impl Display {
-        let dom = self.display_context(self.cwf.dom(mor).next().unwrap());
-        let cod = self.display_context(self.cwf.cod(mor).next().unwrap());
+        let dom = self.display_context(self.cwf.dom(mor).unwrap());
+        let cod = self.display_context(self.cwf.cod(mor).unwrap());
         format!("{mor} : {dom} -> {cod}")
 
         //let signature = format!("{mor} : {dom} -> {cod}");
