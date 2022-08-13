@@ -12,7 +12,7 @@ repository = "https://github.com/eqlog/eqlog/"
 readme = "README.md"
 
 [dependencies]
-lalrpop_util = "0.19.8"
+lalrpop-util = "0.19.8"
 regex = "1"
 maplit = "1"
 itertools = "0"
