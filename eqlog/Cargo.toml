@@ -1,11 +1,11 @@
 [package]
 name = "eqlog"
 version = "0.1.0"
+edition = "2021"
 authors = [
   "Martin Bidlingmaier <martin.bidlingmaier@mbid.me>",
   "Jakob Botsch Nielsen <jakob.botsch.nielsen@gmail.com>"
 ]
-edition = "2021"
 license = "MIT"
 description = "Datalog with equality"
 repository = "https://github.com/eqlog/eqlog/"
