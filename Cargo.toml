@@ -4,6 +4,6 @@ members = [
   "exp-epa",
   "cwf-theory",
   "eqlog",
-  "eqlog/eqlog-util",
-  "eqlog/eqlog-test",
+  "eqlog-util",
+  "eqlog-test",
 ]
