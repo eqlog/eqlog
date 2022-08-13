@@ -34,10 +34,10 @@ fn test_fibre_products_are_associative() {
 
     let left_proj_f1_g = cat.define_left_proj(prod_f1_g);
 
-    let prod_f0_f1_g = cat.new_fibre_prod();
-    cat.insert_left(prod_f0_f1_g, f0);
-    cat.insert_right(prod_f0_f1_g, left_proj_f1_g);
-    let prod_f0_f1_g_obj = cat.define_fibre_prod_obj(prod_f0_f1_g);
+    let prod_f1_f0_g = cat.new_fibre_prod();
+    cat.insert_left(prod_f1_f0_g, f0);
+    cat.insert_right(prod_f1_f0_g, left_proj_f1_g);
+    let prod_f1_f0_g_obj = cat.define_fibre_prod_obj(prod_f1_f0_g);
 
     let prod_f_g = cat.new_fibre_prod();
     cat.insert_left(prod_f_g, f);
@@ -45,5 +45,5 @@ fn test_fibre_products_are_associative() {
     let prod_f_g_obj = cat.define_fibre_prod_obj(prod_f_g);
 
     cat.close();
-    assert!(cat.is_iso(prod_f_g_obj, prod_f0_f1_g_obj));
+    assert!(cat.is_iso(prod_f_g_obj, prod_f1_f0_g_obj));
 }
