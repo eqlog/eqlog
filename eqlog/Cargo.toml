@@ -1,8 +1,15 @@
 [package]
 name = "eqlog"
 version = "0.1.0"
-authors = ["Martin Bidlingmaier <martin.bidlingmaier@mbid.me>"]
+authors = [
+  "Martin Bidlingmaier <martin.bidlingmaier@mbid.me>",
+  "Jakob Botsch Nielsen <jakob.botsch.nielsen@gmail.com>"
+]
 edition = "2021"
+license = "MIT"
+description = "Datalog with equality"
+repository = "https://github.com/eqlog/eqlog/"
+readme = "README.md"
 
 [dependencies]
 lalrpop-util = "0"
