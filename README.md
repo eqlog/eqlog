@@ -34,7 +34,7 @@ Axiom m = Meet(x, y) => Le(m, x) & Le(m, y);
 Axiom Le(z, x) & Le(z, y) & m = Meet(x, y) => Le(z, m);
 ```
 
-Eqlog translates this eqlog file to a rust module that allows computations on models of the semilattice theory.
+Eqlog translates this eqlog file to a rust module that allows computations on models of the semilattice theory, i.e. semilattices.
 For example, we can verify that the meet function in a semilattice is associative:
 ```rust
 // main.rs
@@ -75,8 +75,8 @@ fn main() {
 ## Integration into rust projects
 
 A full sample project can be found in [examples/semilattice](https://github.com/eqlog/eqlog/tree/master/examples/semilattice).
-Eqlog consists of an compiler crate, which is only needed during build, and a runtime crate.
-We can specify this in `Cargo.toml` by adding the following:
+Eqlog consists of the compiler crate `eqlog`, which is only needed during build, and the runtime crate `eqlog-runtime`.
+We can specify them as dependencies in `Cargo.toml` by adding the following lines:
 ```toml
 [dependencies]
 eqlog-runtime = "0"
@@ -92,8 +92,8 @@ fn main() {
     eqlog::process_root();
 }
 ```
-Cargo automatically executes [`build.rs` files](https://doc.rust-lang.org/cargo/reference/build-scripts.html) before building.
-`eqlog::process_root()` searches for `.eqlog` files under the `src` directory and generates a rust module for each eqlog file.
+Cargo automatically executes the [`build.rs` file](https://doc.rust-lang.org/cargo/reference/build-scripts.html) before building.
+`eqlog::process_root()` searches for files under the `src` directory and generates a rust module for each `.eqlog` file.
 To declare the rust module generated from an eqlog file, we use the `eqlog_mod!` macro:
 ```rust
 use eqlog_runtime::eqlog_mod;
@@ -109,8 +109,8 @@ cargo doc --document-private-items --open
 
 ## Language
 
-Each eqlog module consists of a sequence of sort, predicate, function and axiom declarations.
-Mathematically, eqlog modules are a way to specify [essentially algebraic theories](https://ncatlab.org/nlab/show/essentially+algebraic+theory#definition).
+Each eqlog file consists of a sequence of sort, predicate, function and axiom declarations.
+Mathematically, eqlog is a way to specify [essentially algebraic theories](https://ncatlab.org/nlab/show/essentially+algebraic+theory#definition).
 
 ### Sorts
 Sorts represent the different carrier sets of models of our theory.
@@ -144,20 +144,20 @@ Constants are declared as follows:
 Func <ConstantName> : <Sort>;
 ```
 
-In the context of eqlog, functions are synonymous with *partial* functions; they need not be total.
+To eqlog, functions are synonymous to *partial* functions; they need not be total.
 
 ### Axioms
-The simplest but most general form of axiom is the *implication*.
+The simplest but most general type of axiom is the *implication*.
 Implications are of the form
 ```rust
 Axiom <Premise> => <Conclusion>;
 ```
 where `<Premise>` and `<Conclusion>` are conjunctions of *atoms*.
 
-Most atoms are built from *terms*.
+Most atoms contain *terms*.
 A term is either a variable or an application of a function symbol to terms.
 Variables names must be `lower_snake_case`.
-Variables that are used only once in a premise should be replaced with a wildcard `_`.
+Variables that are used only once should be replaced with a wildcard `_`.
 
 Eqlog supports the following atoms:
 * Atoms of the form `<PredName>(<arg_1>, ..., <arg_n>)`.
@@ -166,10 +166,10 @@ Eqlog supports the following atoms:
   Note the exclamation mark.
   Such atoms assert that `<term>` is defined, i.e. that the involved functions are defined on their arguments.
 * Atoms of the form `<tm_1> = <tm_2>`.
-  Such atoms assert that the terms `<tm_1>` and `<tm_2>` are defined and equal.
+  Such atoms assert that the terms `<tm_1>` and `<tm_2>` are both defined and equal.
 * Atoms of the form `<var_name> : <SortName>`.
   Such atoms assert that `<var_name>` is a variable of type `<SortName>`.
-  They can only appear in a premise.
+  They can only appear in premises.
 
 Every variable occuring in an implication must be used at least once in the premise.
 Thus no additional variables may be introduced in the conclusion.
@@ -220,12 +220,12 @@ Axiom <from> ~> <to>;
 ```
 where `<from>` and `<to>` are terms of the same sort and `<from>` must not be a variable.
 A reduction axiom has the following meaning:
-*If all subterms of `<from>` are defined and `<to>` is defined, then also `<from>` is defined and equal to `<to>`.*
+*If all subterms of `<from>` are defined and `<to>` is defined, then also `<from>` is defined and equals `<to>`.*
 Accordingly, if `<from> = <Func>(<arg_1>, ..., <arg_n>)`, then the reduction desugars to the implication
 ```rust
 Axiom <arg_1>! & ... & <arg_n>! & <to>! => <from> = <to>;
 ```
-The order of the `from` and `to` terms can be confusing at first, but consider that algorithms involving reduction usually work top-to-bottom, whereas eqlog evaluation is bottom-up.
+The order of the `from` and `to` terms can be confusing at first, but consider that algorithms involving reduction usually work top-down, whereas eqlog evaluates bottom-up.
 
 Eqlog also supports the following symmetric form
 ```rust
@@ -241,4 +241,104 @@ Both reductions and symmetric reductions can be made conditional on a premise:
 ```rust
 Axiom <atom_1> & ... & <atom_n> => <lhs> ~> <rhs>;
 Axiom <atom_1> & ... & <atom_n> => <lhs> <~> <rhs>;
+```
+
+## Data model and algorithms
+
+### Standard datalog features
+The theory model structures generated by eqlog can be thought of as in-memory SQL databases, with schema given by sort, predicate and function declarations.
+Elements of a given sort are simple integer ids, and the model structure maintains a list of valid ids for each sort.
+Every predicate `P` is represented as a table whose rows are the tuples of elements for which the predicate holds.
+Functions are represented as [graphs](https://www.google.com/search?client=firefox-b-e&q=wikipedia+graph+of+function).
+For example, if F is a function in one argument, then the internal table for F will consist of rows of the form `(x, F(x))`.
+
+The `close` function repeatedly enumerates all instances of premises of axioms and adjoins their conclusion to the model.
+Eventually, a [fixed point](https://en.wikipedia.org/wiki/Fixed_point_(mathematics)) is reached (unless the theory contains non-surjective axioms, see below) and the algorithm stops.
+For example, for the transitivity axiom
+```rust
+Axiom Le(x, y) & Le(y, z) => Le(x, z);
+```
+the the close function enumerates all rows `(x, y_0)` and `(y_1, z)` in the `Le` table such that `y_0 = y_1`, and then adds the row `(x, z)` to `Le`.
+Eventually, the `Le` table will already contain all the new rows `(x, z)` we find, which means that we have reached the fixed point and can stop:
+The `Le` predicate is transitive now.
+
+The enumeration of instances of premises is known as [(inner) join](https://en.wikipedia.org/wiki/Join_(SQL)#Inner_join) in SQL terminology.
+SQL databases speed up inner joins using indices, and eqlog automatically selects and maintains indices to speed up the joins required to enumerate the axioms listed in the eqlog file.
+In each iteration, it is not necessary to enumerate premises that were already enumerated in the previous iteration.
+This optimization is known as *semi-naive evaluation*, and is again something that eqlog uses to speed up the `close` function.
+
+### Equalities
+In addition to the standard datalog features discussed so far, eqlog supports equalities in conclusions.
+One example is the antisymmetry axiom of partial orders:
+```rust
+Axiom Le(x, y) & Le(y, x) => x = y;
+```
+Another source of equality in conclusions are the implicit functionality axioms for functions:
+For functions `F`, if we find both `(x_1, ..., x_n, y)` and `(x1, , ..., x_n, z)` in the graph of `F`, then we must derive `y = z`.
+If we denote the graph of `F` by `G_F`, then the implicit functionality axiom can be stated as follows:
+```rust
+Axiom G_F(x_1, ..., x_n, y) & G_F(x_1, ..., x_n, z) => y = z
+```
+Note, however, that graphs of functions cannot be referred to directly in eqlog files.
+
+To account for derived equalities, eqlog model structures maintain [union-find data structures](https://en.wikipedia.org/wiki/Disjoint-set_data_structure) for each sort.
+When an equality `x = y` is derived during a call to `close`, eqlog merges the equivalence classes of `x` and `y`.
+
+To speed up computation of the joins required when matching axiom premises, eqlog maintains indices for each table.
+However, these indices can only be used if element ids can be compared for equality directly instead of consulting a union find data structure.
+Eqlog thus maintains the invariant that all predicate and function graph tables contain canonical sort elements only, i.e. only elements whose ids are root nodes with respect to the corresponding union find data structure.
+
+This invariant is temporarily violated when adding merging the equivalence classes of some element `x` into that of an element `y`.
+To restore the invariant, eqlog removes all rows from tables that contain `x`, replaces `x` by the new root id `y`, and reinserts the rows.
+To speed up this process, eqlog maintains a list of rows containing a given root id `x`.
+
+### Non-surjective axioms and non-termination
+Recall that eqlog axioms need to be surjective unless the exclamation mark operator `!` is used:
+Every element in the conclusion must be equal to some element in the premise.
+Closing model structures under surjective axioms does not increase the number of elements in the model, which guarantees that the `close` function eventually terminates.
+
+If there are non-surjective axioms, then this is not guaranteed.
+Consider the following eqlog theory that formalizes natural numbers:
+```
+Sort N;
+Zero: N;
+Succ: N -> N;
+
+Axiom Zero()!;
+Axiom n: N => Succ(n)!;
+```
+Closing the empty model structure will first add an element `Zero` to the model, then the element `Succ(N)`, then `Succ(Succ(N))` and so forth.
+However, the presence of non-surjective axioms does not necessarily mean that the close function must run indefinitely.
+For example, the semilattice theory contains the non-surjective axiom
+```rust
+Axiom x: El & y : El => Meet(x, y)!;
+```
+but `close` nevertheless terminates.
+
+If a theory contains non-surjective axioms, the generated `close` function will consist of nested close loops:
+The outer loop is responsible for non-surjective axioms, and the inner loop is responsible for surjective axioms.
+In pseudo-code, the `close` function looks a bit like this:
+```rust
+// Match axiom premise and change the model such that the conclusion holds.
+// Returns true if the model was changed, i.e. if not all conclusions were
+// already true.
+fn adjoin_conclusions(ax: Axiom) -> bool {
+  ...
+}
+
+fn close() {
+  loop {
+    loop {
+      let model_changed = surjective_axioms.iter().any(adjoin_conclusion);
+      if !model_changed {
+        break;
+      }
+    }
+
+    let model_changed = non_surjective_axioms.iter().any(adjoin_conclusion);
+    if !model_changed {
+      break;
+    }
+  }
+}
 ```
