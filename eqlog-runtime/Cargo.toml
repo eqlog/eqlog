@@ -9,6 +9,7 @@ authors = [
 license = "MIT"
 description = "Datalog with equality"
 repository = "https://github.com/eqlog/eqlog/"
+readme = "../README.md"
 
 [dependencies]
 tabled = "0.7"
