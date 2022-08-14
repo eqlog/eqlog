@@ -74,6 +74,7 @@ fn main() {
 
 ## Integration into rust projects
 
+A full sample project can be found in [examples/semilattice](https://github.com/eqlog/eqlog/tree/master/examples/semilattice).
 Eqlog consists of an compiler crate, which is only needed during build, and a runtime crate.
 We can specify this in `Cargo.toml` by adding the following:
 ```toml
