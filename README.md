@@ -359,9 +359,9 @@ To speed up computation of the joins required when matching axiom premises, eqlo
 However, these indices can only be used if element ids can be compared for equality directly instead of consulting a union find data structure.
 Eqlog thus maintains the invariant that all predicate and function graph tables contain canonical sort elements only, i.e. only elements whose ids are root nodes with respect to the corresponding union find data structure.
 
-This invariant is temporarily violated when adding merging the equivalence classes of some element `x` into that of an element `y`.
-To restore the invariant, eqlog removes all rows from tables that contain `x`, replaces `x` by the new root id `y`, and reinserts the rows.
-To speed up this process, eqlog maintains a list of rows containing a given root id `x`.
+This invariant is temporarily violated when eqlog merges the equivalence class of some element `x` into that of an element `y`.
+To restore the invariant, eqlog removes all rows from tables that contain `x`, replaces `x` by the new root id `y`, and inserts the rows again.
+To speed up this process, eqlog maintains a list for each root id that contains all rows in which the root id appears.
 
 ### Non-surjective axioms and non-termination
 Recall that eqlog axioms need to be surjective unless the exclamation mark operator `!` is used:
