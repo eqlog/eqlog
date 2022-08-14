@@ -12,6 +12,7 @@ eqlog_mod!(group);
 eqlog_mod!(product_category);
 eqlog_mod!(lex_category);
 eqlog_mod!(partial_magma);
+eqlog_mod!(pca);
 
 mod category_mod;
 #[cfg(test)]
@@ -25,6 +26,8 @@ mod lex_category_test;
 #[cfg(test)]
 mod logic_test;
 mod monoid_test;
+#[cfg(test)]
+mod pca_test;
 mod pointed_test;
 #[cfg(test)]
 mod poset_test;

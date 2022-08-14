@@ -1,0 +1,21 @@
+Sort El;
+Func App: El * El -> El;
+Func K: El;
+Func S: El;
+
+// K and S exist.
+Axiom K()!;
+Axiom S()!;
+
+// K x y is defined and equal to x for all x and y.
+Axiom x: El & y: El => App(App(K(), x), y)!;
+Axiom App(App(K(), x), _) ~> x;
+
+// S x y is defined for all x and y.
+Axiom x: El & y: El => App(App(S(), x), y)!;
+
+// S x y z is defined and equal to (x z) (y z) if either side exists.
+// Note that the second axiom is necessary because the reduction in the
+// direction <~ kicks in only if App(x, z) and App(y, z) are defined.
+Axiom App(App(App(S(), x), y), z) <~> App(App(x, z), App(y, z));
+Axiom App(App(App(S(), x), y), z)! => App(x, z)! & App(y, z)!;
