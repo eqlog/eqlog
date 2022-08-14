@@ -219,7 +219,7 @@ name = "cwf-theory"
 version = "0.1.0"
 dependencies = [
  "eqlog",
- "eqlog-util",
+ "eqlog-runtime",
 ]
 
 [[package]]
@@ -278,19 +278,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "eqlog-runtime"
+version = "0.1.0"
+dependencies = [
+ "tabled",
+]
+
+[[package]]
 name = "eqlog-test"
 version = "0.1.0"
 dependencies = [
  "eqlog",
- "eqlog-util",
+ "eqlog-runtime",
  "maplit",
-]
-
-[[package]]
-name = "eqlog-util"
-version = "0.1.0"
-dependencies = [
- "tabled",
 ]
 
 [[package]]

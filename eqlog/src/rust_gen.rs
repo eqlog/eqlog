@@ -18,8 +18,8 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         use std::collections::{{BTreeSet, BTreeMap}};
         use std::fmt;
         #[allow(unused)]
-        use eqlog_util::Unification;
-        use eqlog_util::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
+        use eqlog_runtime::Unification;
+        use eqlog_runtime::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
         use std::ops::Bound;
     "}
 }

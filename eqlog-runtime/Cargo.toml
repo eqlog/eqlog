@@ -1,5 +1,5 @@
 [package]
-name = "eqlog-util"
+name = "eqlog-runtime"
 version = "0.1.0"
 edition = "2021"
 authors = [
@@ -11,4 +11,4 @@ description = "Datalog with equality"
 repository = "https://github.com/eqlog/eqlog/"
 
 [dependencies]
-tabled = "0"
+tabled = "0.7"

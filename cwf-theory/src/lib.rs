@@ -1,4 +1,4 @@
-use eqlog_util::eqlog_mod;
+use eqlog_runtime::eqlog_mod;
 eqlog_mod!(cwf);
 
 pub use cwf::*;

@@ -10,7 +10,7 @@ pub extern crate tabled;
 /// # Examples
 /// The following simple version declares a module `foo` whose contents correspond `src/foo.eqlog`.
 /// ```ignore
-/// use eqlog_util::eqlog_mod;
+/// use eqlog_runtime::eqlog_mod;
 /// eqlog_mod!(foo);
 /// ```
 ///

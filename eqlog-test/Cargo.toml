@@ -3,8 +3,8 @@ name = "eqlog-test"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies.eqlog-util]
-path = "../eqlog-util"
+[dependencies.eqlog-runtime]
+path = "../eqlog-runtime"
 
 [dependencies]
 maplit = "1"
