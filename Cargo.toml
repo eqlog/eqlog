@@ -7,3 +7,9 @@ members = [
   "eqlog-runtime",
   "eqlog-test",
 ]
+
+# Keep examples out of workspace. It should be possible to build them without a
+# local eqlog checkout.
+exclude = [
+  "examples/semilattice",
+]

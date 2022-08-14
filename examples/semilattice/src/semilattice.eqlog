@@ -1,0 +1,23 @@
+// semilattice.eqlog
+
+// The carrier set.
+Sort El;
+// The less-equal relation.
+Pred Le: El * El;
+
+// Reflexivity.
+Axiom x: El => Le(x, x);
+// Transitivity.
+Axiom Le(x, y) & Le(y, z) => Le(x, z);
+// Antisymmetry.
+Axiom Le(x, y) & Le(y, x) => x = y;
+
+// A function assigning binary meets, i.e. binary greatest lower bound.
+Func Meet: El * El -> El;
+
+// The meet function is total, i.e. defined for all elements x, y.
+Axiom x: El & y: El => Meet(x, y)!;
+// The meet is a lower bound.
+Axiom m = Meet(x, y) => Le(m, x) & Le(m, y);
+// All lower bounds are smaller or equal to the meet.
+Axiom Le(z, x) & Le(z, y) & m = Meet(x, y) => Le(z, m);

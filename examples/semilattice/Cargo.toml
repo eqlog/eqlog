@@ -1,0 +1,10 @@
+[package]
+name = "semilattice"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eqlog-runtime = "0"
+
+[build-dependencies]
+eqlog = "0"
