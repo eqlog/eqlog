@@ -101,12 +101,6 @@ eqlog_mod!(<filename without extension>);
 ```
 Note that a special invocation that specifies the full path is needed for eqlog files in nested subdirectories of `src`.
 
-Eqlog generates documented rust code.
-To build and view this documentation, run
-```sh
-cargo doc --document-private-items --open
-```
-
 ## Language
 
 Each eqlog file consists of a sequence of sort, predicate, function and axiom declarations.
@@ -241,6 +235,83 @@ Both reductions and symmetric reductions can be made conditional on a premise:
 ```rust
 Axiom <atom_1> & ... & <atom_n> => <lhs> ~> <rhs>;
 Axiom <atom_1> & ... & <atom_n> => <lhs> <~> <rhs>;
+```
+
+## Generated rust interfaces
+Eqlog translates each `.eqlog` to an `.rs` file.
+The rust file must be declared inside a module of the `src` directory (e.g. `lib.rs` or `main.rs`) using the `eqlog_runtime::eqlog_mod!` macro.
+
+Eqlog generates documented rust code.
+To build and view this documentation, run
+```sh
+cargo doc --document-private-items --open
+```
+
+The public API of the generated rust module consists of the following symbols:
+* For each sort, a type `<SortName>` of element ids for this sort.
+* The model structure.
+  Its name is derived by converting the file name to upper camel case.
+  For example, for `semi_group.eqlog`, this would be `SemiGroup`.
+
+The model structure has the following member functions:
+* `fn new() -> Self`  
+  Creates an empty model structure.
+* `fn close(&mut self)`  
+  Close the model under all axioms.
+* `pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool`  
+  Close the model under all axioms until a condition is satisfied.
+  Returns false if the model could be closed under all axioms but the condition still does not hold.
+* For each sort:
+  - `fn new_<sort_name>(&mut self) -> <SortName>`  
+    Adjoins a new element to the model structure.
+  - `fn equate_<sort_name>(&mut self, lhs: <SortName>, rhs: <SortName>)`  
+    Enforces the equality `lhs = rhs` in the model structure.
+  - `fn are_equal_<sort_name>(&self, lhs: <SortName>, rhs: <SortName>) -> bool`  
+    Returns true if `lhs` and `rhs` represent the same element.
+  - `fn root_<sort_name>(&self, el: <SortName>) -> <SortName>`    
+    Returns the canonical/root element of the equivalence class of an element.
+* For each predicate:
+  - `fn <pred_name>(&self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>)`  
+    Checks whether the predicate holds on the given arguments.
+  - `fn iter_<pred_name>(&self) -> impl '_ + Iterator<Item = <arity>>`  
+    Returns an iterator over tuples satisfying the predicate.
+    The item type yielded by the iterator is a tuple type determined by the arity.
+  - `fn insert_<pred_name>(&mut self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>)`  
+    Enforces that the predicate holds for the given arguments.
+* For each function:
+  - `fn <func_name>(&self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>) -> Option<<ResultSort>>`  
+    Evaluates the function on the given arguments.
+  - `fn iter_<func_name>(&self) -> impl '_ + Iterator<Item = <arity>>`  
+    Returns an iterator over tuples in the graph of the function.
+    The item type yielded by the iterator is a tuple type determined by the arity.
+  - `fn define_<func_name>(&mut self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>) -> <ResultSort>`  
+    Enforces that the function is defined on the given arguments, adjoining a new element if necessary.
+  - `fn insert_<func_name>(&mut self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>, result: <ResultSort>)`  
+    Insert a tuple into the graph of the function.
+
+For example, these are the public declarations of the rust module generated from the semilattice theory:
+```rust
+struct El;
+struct Semilattice;
+impl Semilattice {
+  fn new() -> Self;
+  fn close(&mut self);
+  fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool;
+
+  fn new_el(&mut self) -> El;
+  fn equate_el(&mut self, lhs: El, rhs: El);
+  fn are_equal_el(&self, lhs: El, rhs: El) -> bool;
+  fn root_el(&self, el: El) -> El;
+
+  fn le(&self, arg0: El, arg1: El) -> bool;
+  fn iter_le(&self) -> impl '_ + Iterator<Item = (El, El)>;
+  fn insert_le(&mut self, arg0: El, arg1: El);
+
+  fn meet(&self, arg0: El, arg1: El) -> Option<El>;
+  fn iter_meet(&self) -> impl '_ + Iterator<Item = (El, El, El)>;
+  fn define_meet(&mut self, arg0: El, arg1: El) -> El;
+  fn insert_meet(&mut self, arg0: El, arg1: El, result: El);
+}
 ```
 
 ## Data model and algorithms
