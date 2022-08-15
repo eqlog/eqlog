@@ -1198,32 +1198,33 @@ fn write_query_loop_headers<'a>(
                     projections: in_projections.keys().copied().collect(),
                     only_dirty: *only_dirty,
                 };
-                write!(out, "#[allow(unused_variables)]\n")?;
-                write!(out, "for {}(", relation)?;
-                for i in 0..arity_len {
+
+                let iter_name = IterName(relation, &query_spec);
+                let iter_in_args = in_projections.values().copied().format_with(", ", |tm, f| {
+                    let tm = tm.0;
+                    f(&format_args!("tm{tm}"))
+                });
+                let iter_out_args = (0..arity_len).format_with("", |i, f| {
                     if let Some(tm) = out_projections.get(&i) {
+                        let tm = tm.0;
                         if let Some(diag) = diagonals.iter().find(|diag| diag.contains(&i)) {
                             if *diag.iter().next().unwrap() == i {
-                                write!(out, "tm{}", tm.0)?;
+                                f(&format_args!("tm{tm}, "))
                             } else {
-                                write!(out, "_")?;
+                                f(&format_args!("_, "))
                             }
                         } else {
-                            write!(out, "tm{}", tm.0)?;
+                            f(&format_args!("tm{tm}, "))
                         }
                     } else {
-                        write!(out, "_")?;
+                        f(&format_args!("_, "))
                     }
-                    write!(out, ", ")?;
-                }
-                write!(out, ") in self.")?;
-                let iter_name = IterName(relation, &query_spec);
-                write!(out, "{iter_name}")?;
-                write!(out, "(")?;
-                for tm in in_projections.values().copied() {
-                    write!(out, "tm{}, ", tm.0)?;
-                }
-                write!(out, ") {{\n")?;
+                });
+
+                writedoc! {out, "
+                    #[allow(unused_variables)]
+                    self.{iter_name}({iter_in_args}).for_each(|{relation}({iter_out_args})| {{
+                "}?;
             }
             Sort {
                 sort,
@@ -1235,7 +1236,7 @@ fn write_query_loop_headers<'a>(
                 let sort_snake = sort.to_case(Snake);
                 writedoc! {out, "
                     #[allow(unused_variables)]
-                    for tm{result} in self.{sort_snake}_{dirty_str}.iter().copied() {{
+                    self.{sort_snake}_{dirty_str}.iter().copied().for_each(|tm{result}| {{
                 "}?;
             }
         }
@@ -1245,7 +1246,7 @@ fn write_query_loop_headers<'a>(
 
 fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Result<()> {
     for _ in 0..query_len {
-        write!(out, "}}\n")?;
+        write!(out, "}});\n")?;
     }
     Ok(())
 }
@@ -1322,12 +1323,12 @@ fn write_pure_query_fn(
     };
 
     let matches_vec_definition: &str = match &pure_query.output {
-        NoOutput => "",
+        NoOutput => "let mut success = false;",
         SingleOutput(_, _) | TupleOutput(_) => "let mut matches = Vec::new();",
     };
 
     let match_found_statement = match &pure_query.output {
-        NoOutput => format!("return true;"),
+        NoOutput => format!("success = true;"),
         SingleOutput(tm, _) => {
             let tm = tm.0;
             format!("matches.push(tm{tm});")
@@ -1342,7 +1343,7 @@ fn write_pure_query_fn(
     };
 
     let result: &str = match &pure_query.output {
-        NoOutput => "false",
+        NoOutput => "success",
         SingleOutput(_, _) | TupleOutput(_) => "matches.into_iter()",
     };
 
