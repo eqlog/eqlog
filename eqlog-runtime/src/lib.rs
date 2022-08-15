@@ -3,6 +3,8 @@ mod unification;
 #[doc(hidden)]
 pub use crate::unification::Unification;
 #[doc(hidden)]
+pub extern crate rayon;
+#[doc(hidden)]
 pub extern crate tabled;
 
 /// Declare an eqlog module.

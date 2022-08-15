@@ -20,6 +20,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         #[allow(unused)]
         use eqlog_runtime::Unification;
         use eqlog_runtime::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
+        use eqlog_runtime::rayon::iter::{{ParallelIterator, ParallelBridge}};
         use std::ops::Bound;
         use std::sync::Mutex;
     "}
@@ -1168,7 +1169,8 @@ fn write_query_loop_headers<'a>(
     module: &Module,
     query: impl IntoIterator<Item = &'a QueryAtom>,
 ) -> io::Result<()> {
-    for atom in query.into_iter() {
+    for (atom_index, atom) in query.into_iter().enumerate() {
+        let par_bridge = if atom_index == 0 { ".par_bridge()" } else { "" };
         use QueryAtom::*;
         match atom {
             Equal(lhs, rhs) => {
@@ -1223,7 +1225,7 @@ fn write_query_loop_headers<'a>(
 
                 writedoc! {out, "
                     #[allow(unused_variables)]
-                    self.{iter_name}({iter_in_args}).for_each(|{relation}({iter_out_args})| {{
+                    self.{iter_name}({iter_in_args}){par_bridge}.for_each(|{relation}({iter_out_args})| {{
                 "}?;
             }
             Sort {
@@ -1236,7 +1238,7 @@ fn write_query_loop_headers<'a>(
                 let sort_snake = sort.to_case(Snake);
                 writedoc! {out, "
                     #[allow(unused_variables)]
-                    self.{sort_snake}_{dirty_str}.iter().copied().for_each(|tm{result}| {{
+                    self.{sort_snake}_{dirty_str}.iter().copied(){par_bridge}.for_each(|tm{result}| {{
                 "}?;
             }
         }
@@ -1323,28 +1325,28 @@ fn write_pure_query_fn(
     };
 
     let matches_vec_definition: &str = match &pure_query.output {
-        NoOutput => "let mut success = false;",
-        SingleOutput(_, _) | TupleOutput(_) => "let mut matches = Vec::new();",
+        NoOutput => "let success = Mutex::new(false);",
+        SingleOutput(_, _) | TupleOutput(_) => "let matches = Mutex::new(Vec::new());",
     };
 
     let match_found_statement = match &pure_query.output {
-        NoOutput => format!("success = true;"),
+        NoOutput => format!("*success.lock().unwrap() = true;"),
         SingleOutput(tm, _) => {
             let tm = tm.0;
-            format!("matches.push(tm{tm});")
+            format!("matches.lock().unwrap().push(tm{tm});")
         }
         TupleOutput(tm_sorts) => {
             let tm_list = tm_sorts.iter().format_with("", |(tm, _), f| {
                 let tm = tm.0;
                 f(&format_args!("tm{}, ", tm))
             });
-            format!("matches.push(({tm_list}));")
+            format!("matches.lock().unwrap().push(({tm_list}));")
         }
     };
 
     let result: &str = match &pure_query.output {
-        NoOutput => "success",
-        SingleOutput(_, _) | TupleOutput(_) => "matches.into_iter()",
+        NoOutput => "success.into_inner().unwrap()",
+        SingleOutput(_, _) | TupleOutput(_) => "matches.into_inner().unwrap().into_iter()",
     };
 
     writedoc! {out, "

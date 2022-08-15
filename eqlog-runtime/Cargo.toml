@@ -13,3 +13,4 @@ readme = "../README.md"
 
 [dependencies]
 tabled = "0.7"
+rayon = "1.5"
