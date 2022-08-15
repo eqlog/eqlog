@@ -412,11 +412,28 @@ fn write_table_iter_fn(
     "}
 }
 
+fn write_table_contains_fn(
+    out: &mut impl Write,
+    relation: &str,
+    index_selection: &HashMap<QuerySpec, IndexSpec>,
+) -> io::Result<()> {
+    let master = index_selection.get(&QuerySpec::all()).unwrap();
+    let master_name = IndexName(master);
+    let order_name = OrderName(&master.order);
+    writedoc! {out, "
+        #[allow(dead_code)]
+        fn contains(&self, t: {relation}) -> bool {{
+            self.index_{master_name}.contains(&Self::permute{order_name}(t))
+        }}
+    "}
+}
+
 fn write_table_is_dirty_fn(
     out: &mut impl Write,
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let master_dirty = IndexName(index_selection.get(&QuerySpec::all_dirty()).unwrap());
+
     writedoc! {out, "
         fn is_dirty(&self) -> bool {{
             !self.index_{master_dirty}.is_empty()
@@ -586,6 +603,7 @@ fn write_table_impl(
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
     write_table_insert_dirt_fn(out, relation, index_selection)?;
+    write_table_contains_fn(out, relation, index_selection)?;
     write_table_drop_dirt_fn(out, index_selection)?;
     write_table_retire_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
@@ -693,13 +711,12 @@ fn write_pub_predicate_holds_fn(
 
     let rel_args0 = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
     let rel_args1 = rel_args0.clone();
-    // TODO: Use proper `contains` function here instead of linear search.
     writedoc! {out, "
         /// Returns `true` if `{relation}({rel_args0})` holds.
         #[allow(dead_code)]
         pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
             {canonicalize}
-            self.{relation_snake}.iter_all().any(|t| t == {relation}({rel_args1}))
+            self.{relation_snake}.contains({relation}({rel_args1}))
         }}
     "}
 }
