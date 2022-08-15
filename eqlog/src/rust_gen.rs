@@ -528,15 +528,15 @@ fn write_table_recall_previous_dirt(
     let index_name = IndexName(index);
     let order_name = OrderName(&index.order);
 
-    let canonicalize_tuple =
+    let is_canonical_checks =
         arity
             .iter()
             .copied()
             .enumerate()
-            .format_with("\n", |(index, sort), f| {
+            .format_with("", |(index, sort), f| {
                 let sort_snake = sort.to_case(Snake);
                 f(&format_args!(
-                    "tuple.{index} = {sort_snake}_equalities.root(tuple.{index});"
+                    "&& tuple.{index} == {sort_snake}_equalities.root(tuple.{index})"
                 ))
             });
 
@@ -548,8 +548,9 @@ fn write_table_recall_previous_dirt(
             for tuple in tmp_{index_name}_prev.into_iter().flatten() {{
                 #[allow(unused_mut)]
                 let mut tuple = Self::permute_inverse{order_name}(tuple);
-                {canonicalize_tuple}
-                self.insert_dirt(tuple);
+                if true {is_canonical_checks} {{
+                    self.insert_dirt(tuple);
+                }}
             }}
         }}
     "}
