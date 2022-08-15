@@ -26,8 +26,9 @@ mod lex_category_test;
 #[cfg(test)]
 mod logic_test;
 mod monoid_test;
-#[cfg(test)]
-mod pca_test;
+// Disabled by default because it takes a while to run in debug mode.
+//#[cfg(test)]
+//mod pca_test;
 mod pointed_test;
 #[cfg(test)]
 mod poset_test;

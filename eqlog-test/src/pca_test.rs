@@ -30,14 +30,13 @@ fn define_second(pca: &mut Pca) -> El {
     ki
 }
 
-// Tests are not active by default because they take a while to run in debug mode.
-//#[test]
+#[test]
 fn test_pca_identity_is_defined() {
     let mut pca = Pca::new();
     assert!(pca.close_until(|pca| id(pca).is_some()));
 }
 
-//#[test]
+#[test]
 fn test_pca_identity() {
     let mut pca = Pca::new();
     let x = pca.new_el();
@@ -52,13 +51,13 @@ fn test_pca_identity() {
     }));
 }
 
-//#[test]
+#[test]
 fn test_pca_second_is_defined() {
     let mut pca = Pca::new();
     assert!(pca.close_until(|pca| second(pca).is_some()));
 }
 
-//#[test]
+#[test]
 fn test_pca_second() {
     let mut pca = Pca::new();
     let x = pca.new_el();
