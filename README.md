@@ -1,7 +1,7 @@
 # Eqlog
 
 An extension of datalog with function symbols and equality.
-Subsumes datalog, congruence closure and e-graphs.
+Combines datalog with congruence closure.
 Compiles to specialized rust code that easily integrates into rust projects.
 
 ## Example: Semilattices
