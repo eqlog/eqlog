@@ -21,6 +21,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         use eqlog_runtime::Unification;
         use eqlog_runtime::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
         use std::ops::Bound;
+        use std::sync::Mutex;
     "}
 }
 
@@ -1256,7 +1257,7 @@ fn write_query_and_record_fn(
     axiom_index: usize,
 ) -> io::Result<()> {
     writedoc! {out, "
-        fn query_and_record_{axiom_index}(&self, delta: &mut ModelDelta) {{
+        fn query_and_record_{axiom_index}(&self, delta: &Mutex<Box<ModelDelta>>) {{
     "}?;
 
     for query in query_action.queries.iter() {
@@ -1421,6 +1422,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
                 let ({out_proj_args0}) = match existing_row {{
                     Some({relation}({tuple_pattern_args})) => ({out_proj_args1}),
                     None => {{
+                        let mut delta = delta.lock().unwrap();
                         {new_out_proj_args}
                         delta.new_{relation_snake}.push({relation}({full_tuple_args}));
                         ({out_proj_args2})
@@ -1434,7 +1436,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             let sort_snake = sort.to_case(Snake);
             writedoc! {out, "
                 if tm{lhs} != tm{rhs} {{
-                    delta.new_{sort_snake}_equalities.push((tm{lhs}, tm{rhs}));
+                    delta.lock().unwrap().new_{sort_snake}_equalities.push((tm{lhs}, tm{rhs}));
                 }}
             "}
         }
@@ -1456,7 +1458,7 @@ fn write_record_action_fn(
     });
 
     writedoc! {out, "
-        fn record_action_{axiom_index}(&self, delta: &mut ModelDelta, {args}) {{
+        fn record_action_{axiom_index}(&self, delta: &Mutex<Box<ModelDelta>>, {args}) {{
     "}?;
     for atom in action.iter() {
         write_action_atom(out, module, atom)?;
@@ -1578,11 +1580,11 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
         {{
             let mut delta_opt = None;
             std::mem::swap(&mut delta_opt, &mut self.delta);
-            let mut delta = delta_opt.unwrap();
+            let mut delta = Mutex::new(delta_opt.unwrap());
 
-            delta.apply(self);
+            delta.get_mut().unwrap().apply(self);
             if condition(self) {{
-                self.delta = Some(delta);
+                self.delta = Some(delta.into_inner().unwrap());
                 return true;
             }}
 
@@ -1591,10 +1593,10 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
         {surjective_axioms}
             
                     self.retire_dirt();
-                    delta.apply(self);
+                    delta.get_mut().unwrap().apply(self);
 
                     if condition(self) {{
-                        self.delta = Some(delta);
+                        self.delta = Some(delta.into_inner().unwrap());
                         return true;
                     }}
                     if !self.is_dirty() {{
@@ -1605,14 +1607,14 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
                 self.recall_previous_dirt();
         {non_surjective_axioms}
                 self.drop_dirt();
-                delta.apply(self);
+                delta.get_mut().unwrap().apply(self);
                 if condition(self) {{
-                    self.delta = Some(delta);
+                    self.delta = Some(delta.into_inner().unwrap());
                     return true;
                 }}
             }}
 
-            self.delta = Some(delta);
+            self.delta = Some(delta.into_inner().unwrap());
             return false;
         }}
     "}
