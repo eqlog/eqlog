@@ -105,7 +105,7 @@ impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
             ParseError::InvalidToken { location } => CompileError::InvalidToken {
                 location: Location(location, location + 1),
             },
-            ParseError::UnrecognizedEOF { location, expected } => CompileError::UnrecognizedEOF {
+            ParseError::UnrecognizedEof { location, expected } => CompileError::UnrecognizedEOF {
                 location: Location(location, location + 1),
                 expected,
             },
