@@ -1,0 +1,64 @@
+Sort Ty;
+Sort Tm;
+
+// A function assigning to each term its type.
+Func TmTy : Tm -> Ty;
+
+// Every term has a type.
+Axiom s: Tm => TmTy(s)!;
+
+// Populated iff a term has contradictory types.
+Pred Absurd: ();
+
+
+// The type of booleans.
+Func Bool : Ty;
+
+// The `true` and `false` constants of type `Bool`.
+Func TrueTm : Tm;
+Func FalseTm : Tm;
+
+// Types of boolean constants.
+Axiom Bool() ~> TmTy(TrueTm());
+Axiom Bool() ~> TmTy(FalseTm());
+
+// The recursion principle for `Bool`:
+// `IfTm(a, b, c)` corresponds to `if a then b else c`.
+Func IfTm : Tm * Tm * Tm -> Tm;
+
+// Typing rules for `IfTm`.
+Axiom IfTm(cond, _, _)! => Bool() ~> TmTy(cond);
+Axiom TmTy(IfTm(_, true_case, _)) ~> TmTy(true_case);
+Axiom TmTy(IfTm(_, _, false_case)) ~> TmTy(false_case);
+
+
+// `Fun(a, b)` is the type of functions a -> b.
+Func Fun : Ty * Ty -> Ty;
+
+// Domain and codomain of function types.
+Func Dom : Ty -> Ty;
+Func Cod : Ty -> Ty;
+
+// Fun and (Dom, Cod) form a bijection Ty * Ty <--> Ty. In particular, Fun(-, -) is injective.
+Axiom Dom(Fun(sigma, _)) ~> sigma;
+Axiom Cod(Fun(_, tau)) ~> tau;
+Axiom Fun(Dom(kappa), Cod(kappa)) ~> kappa;
+
+// Dom and Cod are define on the same set of types.
+Axiom Dom(kappa)! => Cod(kappa)!;
+Axiom Cod(kappa)! => Dom(kappa)!;
+
+// App(f, t) is the function application f(t).
+Func App : Tm * Tm -> Tm;
+// Lambda(v, t) is the lambda expression \v -> t.
+Func Lambda : Tm * Tm -> Tm;
+
+// Typing rules for function application.
+Axiom App(s, t)! => Dom(TmTy(s)) ~> TmTy(t);
+Axiom Cod(TmTy(s)) ~> TmTy(App(s, _));
+
+// The type of a lambda abstraction.
+Axiom Fun(TmTy(v), TmTy(t)) ~> TmTy(Lambda(v, t));
+
+// The type of booleans is not a function type.
+Axiom Fun(_, _) = Bool() => Absurd();

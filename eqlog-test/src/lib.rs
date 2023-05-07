@@ -13,6 +13,7 @@ eqlog_mod!(product_category);
 eqlog_mod!(lex_category);
 eqlog_mod!(partial_magma);
 eqlog_mod!(pca);
+eqlog_mod!(inference);
 
 mod category_mod;
 #[cfg(test)]
@@ -29,6 +30,8 @@ mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]
 //mod pca_test;
+#[cfg(test)]
+mod inference_test;
 mod pointed_test;
 #[cfg(test)]
 mod poset_test;
