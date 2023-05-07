@@ -27,7 +27,7 @@ fn test_boolean_typing() {
     assert!(stlc.are_equal_ty(stlc.tm_ty(true_tm).unwrap(), bool_ty));
     assert!(stlc.are_equal_ty(stlc.tm_ty(false_tm).unwrap(), bool_ty));
 
-    // Check that sigma and bool_ty are unified due. This should have happened because of the
+    // Check that sigma and bool_ty are unified. This should have happened because of the
     // `id_or_const_true` tm.
     assert!(stlc.are_equal_ty(bool_ty, sigma));
 

@@ -72,6 +72,10 @@ fn main() {
 }
 ```
 
+The [eqlog-test/src](https://github.com/eqlog/eqlog/tree/master/eqlog-test/src) contains more examples:
+- type inference [[eqlog](https://github.com/eqlog/eqlog/tree/master/eqlog-test/src/inference.eqlog)] [[rust](https://github.com/eqlog/eqlog/tree/master/eqlog-test/src/inference_test.rs)]
+- proving facts about categories [[eqlog](https://github.com/eqlog/eqlog/tree/master/eqlog-test/src/lex_category.eqlog)] [[rust](https://github.com/eqlog/eqlog/tree/master/eqlog-test/src/lex_category_test.rs)]
+
 ## Integration into rust projects
 
 A full sample project can be found in [examples/semilattice](https://github.com/eqlog/eqlog/tree/master/examples/semilattice).
@@ -418,8 +422,8 @@ fn close() {
 
 For a more thorough explanation of how Eqlog works, have a look at these papers:
 
-- *An Evaluation Algorithm for Datalog with Equality* [[Web]](https://www.mbid.me/eqlog-algorithm) [[PDF]](https://arxiv.org/pdf/2302.05792.pdf)
-- *Algebraic Semantics of Datalog with Equality* [[Web]](https://www.mbid.me/eqlog-semantics) [[PDF]](https://arxiv.org/pdf/2302.03167.pdf)
+- *An Evaluation Algorithm for Datalog with Equality* [[Web](https://www.mbid.me/eqlog-algorithm)] [[PDF](https://arxiv.org/pdf/2302.05792.pdf)]
+- *Algebraic Semantics of Datalog with Equality* [[Web](https://www.mbid.me/eqlog-semantics)] [[PDF](https://arxiv.org/pdf/2302.03167.pdf)]
 
 Also have a look at the [egglog project](https://github.com/egraphs-good/egglog) and the corresponding [paper](https://arxiv.org/pdf/2304.04332.pdf).
-Even though its surface language looks a bit different, Egglog is based on very similar ideas as those underlying Eqlog.
+Even though its surface language looks a bit different, Egglog is based on very similar ideas as those underlying Eqlog, and can be used for many of the same applications.
