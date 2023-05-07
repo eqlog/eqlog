@@ -413,3 +413,13 @@ fn close() {
   }
 }
 ```
+
+## Background
+
+For a more thorough explanation of how Eqlog works, have a look at these papers:
+
+- *An Evaluation Algorithm for Datalog with Equality* [[Web]](https://www.mbid.me/eqlog-algorithm) [[PDF]](https://arxiv.org/pdf/2302.05792.pdf)
+- *Algebraic Semantics of Datalog with Equality* [[Web]](https://www.mbid.me/eqlog-semantics) [[PDF]](https://arxiv.org/pdf/2302.03167.pdf)
+
+Also have a look at the [egglog project](https://github.com/egraphs-good/egglog) and the corresponding [paper](https://arxiv.org/pdf/2304.04332.pdf).
+Even though its surface language looks a bit different, Egglog is based on very similar ideas as those underlying Eqlog.
