@@ -1,0 +1,13 @@
+[package]
+name = "inference-poc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lalrpop-util = { version = "0", features = [ "lexer" ] }
+regex = { version = "1", features = ["unicode-perl"] }
+
+[build-dependencies]
+lalrpop = { version = "0", features = [ "lexer" ] }
