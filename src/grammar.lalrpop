@@ -50,7 +50,7 @@ Type: Type = {
 }
 
 Function: Function = {
-    "function" <name: Id?> "(" <args: Intersperse<FunctionArg, ",">> ")" ":" <codomain: Type> "{" <body: Stmt*> "}" => {
+    "function" <name: Id?> "(" <args: Intersperse<FunctionArg, ",">> ")" <codomain: PairSecond<":", Type>?> "{" <body: Stmt*> "}" => {
         Function { name, args, codomain, body }
     },
 }

@@ -3,5 +3,5 @@ function asdf(): void {
 }
 
 function xyz(): number {
-  asdf('abc', function(): void {}, 123);
+  asdf('abc', function() {}, 123);
 }

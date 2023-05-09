@@ -18,7 +18,7 @@ pub enum Type {
 pub struct Function {
     pub name: Option<String>,
     pub args: Vec<FunctionArg>,
-    pub codomain: Type,
+    pub codomain: Option<Type>,
     pub body: Vec<Stmt>,
 }
 
