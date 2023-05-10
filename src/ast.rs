@@ -23,7 +23,7 @@ pub struct Function {
 }
 
 pub enum Expr {
-    Var(String),
+    Variable(String),
     False,
     True,
     StringLiteral(String),

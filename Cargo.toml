@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 lalrpop-util = { version = "0", features = [ "lexer" ] }
 regex = { version = "1", features = ["unicode-perl"] }
+eqlog-runtime = "0"
 
 [build-dependencies]
 lalrpop = { version = "0", features = [ "lexer" ] }
+eqlog = "0"

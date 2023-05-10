@@ -1,0 +1,51 @@
+Sort Ty;
+Sort Var;
+Sort Expr;
+Sort Stmt;
+
+Sort TyList;
+Func NilTyList : TyList;
+Func ConsTyList : Ty * TyList -> TyList;
+
+Sort VarList;
+Func NilVarList : VarList;
+Func ConsVarList : Var * VarList -> VarList;
+
+Sort ExprList;
+Func NilExprList : ExprList;
+Func ConsExprList : Expr * ExprList -> ExprList;
+
+Sort StmtList;
+Func NilStmtList : StmtList;
+Func ConsStmtList : Stmt * StmtList -> StmtList;
+
+Sort Function;
+
+Func FunctionDef: VarList * StmtList -> Function;
+
+Func ExprTy : Expr -> Ty;
+
+// Populated iff a term has contradictory types.
+Pred Conflict: ();
+
+Func VoidTy: Ty;
+Func BooleanTy: Ty;
+Func StringTy: Ty;
+Func ProductTy: TyList -> Ty;
+Func FunctionTy: TyList -> Ty;
+
+Func VariableExpr: Var -> Expr;
+Func FalseExpr: Expr;
+Func TrueExpr: Expr;
+Func StringLiteral: Expr;
+Func NumberLiteral: Expr;
+Func Tuple: ExprList -> Expr;
+Func App: Expr * ExprList -> Expr;
+Func FunctionExpr: Function -> Expr;
+
+Func ExprStmt: Expr -> Stmt;
+Func LetStmt: Var * Expr -> Stmt;
+Func ReturnStmt: Expr -> Stmt;
+Func FunctionStmt: Function -> Stmt;
+Func IfStmt: Expr * StmtList * StmtList -> Stmt;
+Func WhileStmt: Expr * StmtList -> Stmt;

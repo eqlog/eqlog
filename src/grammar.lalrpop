@@ -56,7 +56,7 @@ Function: Function = {
 }
 
 SimpleExpr: Expr = {
-    <id: Id> => Expr::Var(id),
+    <id: Id> => Expr::Variable(id),
     "false" => Expr::False,
     "true" => Expr::True,
     "[" <exprs: Intersperse<Expr, ",">> "]" => Expr::Tuple(exprs),
