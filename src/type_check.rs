@@ -9,13 +9,14 @@ fn populate_function(
     sys: &mut TypeSystem,
     bindings: &mut Bindings,
     func: &ast::Function,
-) -> type_system::Function {
-    if let Some(name) = &func.name {
+) -> (type_system::Function, Option<type_system::Var>) {
+    let func_var: Option<type_system::Var> = func.name.as_ref().map(|name| {
         let func_var = sys.new_var();
         bindings.insert(name.to_string(), func_var);
-    }
+        func_var
+    });
 
-    // Clone bindings before inserting function body-local names (parameters,
+    // Clone bindings before inserting function body-local names.
     let mut bindings: Bindings = bindings.clone();
 
     let arg_vars: Vec<type_system::Var> = func
@@ -33,8 +34,9 @@ fn populate_function(
         arg_var_list = sys.define_cons_var_list(var, arg_var_list);
     }
 
-    let body: type_system::StmtList = populate_stmts(sys, &mut bindings, func.body.as_slice());
-    sys.define_function_def(arg_var_list, body)
+    let body = populate_stmts(sys, &mut bindings, func.body.as_slice());
+    let func = sys.define_function_def(arg_var_list, body);
+    (func, func_var)
 }
 
 fn populate_stmt(
@@ -58,9 +60,14 @@ fn populate_stmt(
             let expr = populate_expr(sys, bindings, expr);
             sys.define_return_stmt(expr)
         }
+        ReturnVoid => sys.define_return_void_stmt(),
         Function(func) => {
-            let func = populate_function(sys, bindings, func);
-            sys.define_function_stmt(func)
+            let (func, func_var) = populate_function(sys, bindings, func);
+            let func_var: type_system::Var = match func_var {
+                Some(func_var) => func_var,
+                None => panic!("Function without name used as statement"),
+            };
+            sys.define_function_stmt(func_var, func)
         }
         If {
             cond,
@@ -80,10 +87,10 @@ fn populate_stmt(
     }
 }
 
-pub fn populate_stmts(
+pub fn populate_stmts<'a>(
     sys: &mut TypeSystem,
     bindings: &mut Bindings,
-    stmts: &[ast::Stmt],
+    stmts: impl IntoIterator<Item = &'a ast::Stmt>,
 ) -> type_system::StmtList {
     let mut stmt_list: type_system::StmtList = sys.define_nil_stmt_list();
     for stmt in stmts {
@@ -120,8 +127,8 @@ fn populate_expr(sys: &mut TypeSystem, bindings: &Bindings, expr: &ast::Expr) ->
         }
         Function(function) => {
             let mut bindings = bindings.clone();
-            let function = populate_function(sys, &mut bindings, function);
-            sys.define_function_expr(function)
+            let (func, _) = populate_function(sys, &mut bindings, function);
+            sys.define_function_expr(func)
         }
     }
 }

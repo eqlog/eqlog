@@ -43,6 +43,7 @@ pub enum Stmt {
         value: Expr,
     },
     Return(Expr),
+    ReturnVoid,
     Function(Function),
     If {
         cond: Expr,

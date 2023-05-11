@@ -1,7 +1,13 @@
-function asdf(): void {
-  return -10;
+let k = 5;
+
+function asdf() {
+  if (true) { 
+    return 'xyz';
+  } else {
+    return 'abc';
+  }
 }
 
-function xyz(): number {
-  asdf('abc', function() {}, 123);
+function void_func() {
+  let asdf = 5;
 }

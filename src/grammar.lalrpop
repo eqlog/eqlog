@@ -78,6 +78,7 @@ Stmt: Stmt = {
     "let" <name: Id> "=" <value: Expr> ";" => Stmt::Let { name, value },
     <function: Function> => Stmt::Function(function),
     "return" <expr: Expr> ";" => Stmt::Return(expr),
+    "return" ";" => Stmt::ReturnVoid,
     "if" "(" <cond: Expr> ")" "{" <true_branch: Stmt*> "}" "else" "{" <false_branch: Stmt*> "}" => {
         Stmt::If { cond, true_branch, false_branch}
     },
