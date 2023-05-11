@@ -61,6 +61,7 @@ SimpleExpr: Expr = {
     "true" => Expr::True,
     "[" <exprs: Intersperse<Expr, ",">> "]" => Expr::Tuple(exprs),
     "(" <expr: Expr> ")" => expr,
+    "(" ")" => Expr::Void,
     <lit: StringLiteral> => Expr::StringLiteral(lit),
     <num: NumberLiteral> => Expr::NumberLiteral(num),
     <function: SimpleExpr> "(" <args: Intersperse<Expr, ",">> ")" => {

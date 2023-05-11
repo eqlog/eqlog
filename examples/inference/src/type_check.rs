@@ -112,6 +112,7 @@ fn populate_expr(sys: &mut TypeSystem, bindings: &Bindings, expr: &ast::Expr) ->
             };
             sys.define_variable_expr(var)
         }
+        Void => sys.define_void_expr(),
         False => sys.define_false_expr(),
         True => sys.define_true_expr(),
         StringLiteral(_) => sys.define_string_literal(),

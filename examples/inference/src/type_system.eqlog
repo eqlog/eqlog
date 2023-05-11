@@ -41,6 +41,7 @@ Func Codomain: Ty -> Ty;
 
 Func VariableExpr: Var -> Expr;
 Func VariablesExprs: VarList -> ExprList;
+Func VoidExpr: Expr;
 Func FalseExpr: Expr;
 Func TrueExpr: Expr;
 Func StringLiteral: Expr;
@@ -101,6 +102,8 @@ Axiom LetStmt(var, init)! => ExprTy(VariableExpr(var)) ~> ExprTy(init);
 Axiom FunctionStmt(var, func)! => ExprTy(VariableExpr(var)) ~> ExprTy(FunctionExpr(func));
 
 Axiom func: Function => FunctionExpr(func)!;
+
+Axiom VoidTy() ~> ExprTy(VoidExpr());
 
 Axiom BooleanTy() ~> ExprTy(FalseExpr());
 Axiom BooleanTy() ~> ExprTy(TrueExpr());

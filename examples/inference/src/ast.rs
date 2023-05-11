@@ -24,6 +24,7 @@ pub struct Function {
 
 pub enum Expr {
     Variable(String),
+    Void,
     False,
     True,
     StringLiteral(String),
