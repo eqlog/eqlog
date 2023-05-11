@@ -12,4 +12,5 @@ members = [
 # local eqlog checkout.
 exclude = [
   "examples/semilattice",
+  "examples/inference",
 ]
