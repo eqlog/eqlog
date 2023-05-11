@@ -1,0 +1,90 @@
+use crate::ast::*;
+
+grammar;
+
+Id: String = {
+    <id: r"[A-Za-z][A-Za-z0-9_]*"> => id.to_string(),
+}
+
+NumberLiteral: String = {
+    <num: r"0|(-?[1-9][0-9]*)"> => num.to_string(),
+}
+
+StringLiteral: String = {
+    <lit: r"'[^']*'"> => lit[1..lit.len() - 1].to_string(),
+}
+
+PairFirst<First, Second>: First = {
+    <first: First> <second: Second> => first,
+}
+
+PairSecond<First, Second>: Second = {
+    <first: First> <second: Second> => second,
+}
+
+NonEmptyIntersperse<Item, Separator>: Vec<Item> = {
+    <mut init: PairFirst<Item, Separator>*> <last: Item> => {
+        init.push(last);
+        init
+    },
+}
+
+Intersperse<Item, Separator>: Vec<Item> = {
+    <non_empty: NonEmptyIntersperse<Item, Separator>> => non_empty,
+    () => vec![],
+}
+
+FunctionArg: FunctionArg = {
+    <name: Id> <ty: PairSecond<":", Type>?> => FunctionArg { name, ty },
+}
+
+Type: Type = {
+    "void" => Type::Void,
+    "boolean" => Type::Boolean,
+    "number" => Type::Number,
+    "string" => Type::String,
+    "[" <tys: Intersperse<Type, ",">> "]" => Type::Product(tys),
+    "(" <domain: Intersperse<FunctionArg, ",">> ")" "=>" <codomain: Type> => {
+        Type::Function { domain, codomain: Box::new(codomain) }
+    },
+}
+
+Function: Function = {
+    "function" <name: Id?> "(" <args: Intersperse<FunctionArg, ",">> ")" <codomain: PairSecond<":", Type>?> "{" <body: Stmt*> "}" => {
+        Function { name, args, codomain, body }
+    },
+}
+
+SimpleExpr: Expr = {
+    <id: Id> => Expr::Variable(id),
+    "false" => Expr::False,
+    "true" => Expr::True,
+    "[" <exprs: Intersperse<Expr, ",">> "]" => Expr::Tuple(exprs),
+    "(" <expr: Expr> ")" => expr,
+    <lit: StringLiteral> => Expr::StringLiteral(lit),
+    <num: NumberLiteral> => Expr::NumberLiteral(num),
+    <function: SimpleExpr> "(" <args: Intersperse<Expr, ",">> ")" => {
+        Expr::App { function: Box::new(function), args }
+    },
+}
+
+Expr: Expr = {
+    <expr: SimpleExpr> => expr,
+    <function: Function> => Expr::Function(function),
+}
+
+Stmt: Stmt = {
+    <expr: SimpleExpr> ";" => Stmt::Expr(expr),
+    "let" <name: Id> "=" <value: Expr> ";" => Stmt::Let { name, value },
+    <function: Function> => Stmt::Function(function),
+    "return" <expr: Expr> ";" => Stmt::Return(expr),
+    "return" ";" => Stmt::ReturnVoid,
+    "if" "(" <cond: Expr> ")" "{" <true_branch: Stmt*> "}" "else" "{" <false_branch: Stmt*> "}" => {
+        Stmt::If { cond, true_branch, false_branch}
+    },
+    "while" "(" <cond: Expr> ")" "{" <body: Stmt*> "}" => Stmt::While { cond, body },
+}
+
+pub Program: Vec<Stmt> = {
+    <stmts: Stmt*> => stmts,
+}
