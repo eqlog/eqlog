@@ -93,6 +93,8 @@ Axiom ProductTy(_) = FunctionTy(_, _) => Conflict();
 Axiom es: ExprList => ExprsTys(es)!;
 Axiom NilTyList() ~> ExprsTys(NilExprList());
 Axiom ConsTyList(ExprTy(head), ExprsTys(tail)) ~> ExprsTys(ConsExprList(head, tail));
+Axiom NilTyList() = ConsTyList(_, _) => Conflict();
+Axiom ConsTyList(head_0, tail_0) = ConsTyList(head_1, tail_1) => head_0 = head_1 & tail_0 = tail_1;
 
 Axiom vs: VarList => VariablesExprs(vs)!;
 Axiom NilExprList() ~> VariablesExprs(NilVarList());
