@@ -10,7 +10,7 @@ fn populate_function(
     bindings: &mut Bindings,
     func: &ast::Function,
 ) -> (type_system::Function, Option<type_system::Var>) {
-    let func_var: Option<type_system::Var> = func.name.as_ref().map(|name| {
+    let func_var: Option<type_system::Var> = func.signature.name.as_ref().map(|name| {
         let func_var = sys.new_var();
         bindings.insert(name.to_string(), func_var);
         func_var
@@ -20,6 +20,7 @@ fn populate_function(
     let mut bindings: Bindings = bindings.clone();
 
     let arg_vars: Vec<type_system::Var> = func
+        .signature
         .args
         .iter()
         .map(|arg| {
@@ -68,6 +69,36 @@ fn populate_stmt(
                 None => panic!("Function without name used as statement"),
             };
             sys.define_function_stmt(func_var, func)
+        }
+        FunctionDecl(ast::FunctionSignature {
+            name,
+            args,
+            codomain,
+        }) => {
+            let mut domain_tys: type_system::TyList = sys.define_nil_ty_list();
+            for ast::FunctionArg { name: _, ty } in args {
+                let ty: type_system::Ty = match ty {
+                    None => sys.new_ty(),
+                    Some(ty) => populate_ty(sys, ty),
+                };
+                domain_tys = sys.define_cons_ty_list(ty, domain_tys);
+            }
+
+            let codomain_ty = match codomain {
+                None => sys.new_ty(),
+                Some(codomain) => populate_ty(sys, codomain),
+            };
+            let function_ty = sys.define_function_ty(domain_tys, codomain_ty);
+
+            let function_var = sys.new_var();
+            let function_expr = sys.define_variable_expr(function_var);
+            sys.insert_expr_ty(function_expr, function_ty);
+
+            if let Some(name) = name {
+                bindings.insert(name.to_string(), function_var);
+            }
+
+            sys.define_decl_stmt(function_var, function_ty)
         }
         If {
             cond,
@@ -145,4 +176,40 @@ fn populate_exprs(
         expr_list = sys.define_cons_expr_list(expr, expr_list);
     }
     expr_list
+}
+
+fn populate_ty(sys: &mut TypeSystem, ty: &ast::Type) -> type_system::Ty {
+    use ast::Type::*;
+    match ty {
+        Void => sys.define_void_ty(),
+        Boolean => sys.define_boolean_ty(),
+        Number => sys.define_number_ty(),
+        String => sys.define_string_ty(),
+        Product(tys) => {
+            let tys = populate_tys(sys, tys.as_slice());
+            sys.define_product_ty(tys)
+        }
+        Function { domain, codomain } => {
+            let mut domain_tys: type_system::TyList = sys.define_nil_ty_list();
+            for ast::FunctionArg { name: _, ty } in domain {
+                let ty: type_system::Ty = match ty {
+                    None => sys.new_ty(),
+                    Some(ty) => populate_ty(sys, ty),
+                };
+                domain_tys = sys.define_cons_ty_list(ty, domain_tys);
+            }
+
+            let codomain_ty = populate_ty(sys, codomain.as_ref());
+            sys.define_function_ty(domain_tys, codomain_ty)
+        }
+    }
+}
+
+fn populate_tys(sys: &mut TypeSystem, tys: &[ast::Type]) -> type_system::TyList {
+    let mut ty_list: type_system::TyList = sys.define_nil_ty_list();
+    for ty in tys {
+        let ty = populate_ty(sys, ty);
+        ty_list = sys.define_cons_ty_list(ty, ty_list);
+    }
+    ty_list
 }

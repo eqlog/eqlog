@@ -15,10 +15,14 @@ pub enum Type {
     },
 }
 
-pub struct Function {
+pub struct FunctionSignature {
     pub name: Option<String>,
     pub args: Vec<FunctionArg>,
     pub codomain: Option<Type>,
+}
+
+pub struct Function {
+    pub signature: FunctionSignature,
     pub body: Vec<Stmt>,
 }
 
@@ -46,6 +50,7 @@ pub enum Stmt {
     Return(Expr),
     ReturnVoid,
     Function(Function),
+    FunctionDecl(FunctionSignature),
     If {
         cond: Expr,
         true_branch: Vec<Stmt>,

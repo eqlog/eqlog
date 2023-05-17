@@ -21,3 +21,7 @@ function id(x) {
 }
 
 id(function () { return 5; });
+
+function test_decl(x: number): void;
+
+test_decl(3);

@@ -55,6 +55,7 @@ Func LetStmt: Var * Expr -> Stmt;
 Func ReturnStmt: Expr -> Stmt;
 Func ReturnVoidStmt: Stmt;
 Func FunctionStmt: Var * Function -> Stmt;
+Func DeclStmt: Var * Ty -> Stmt;
 Func IfStmt: Expr * StmtList * StmtList -> Stmt;
 Func WhileStmt: Expr * StmtList -> Stmt;
 
@@ -129,6 +130,7 @@ Axiom stmt = LetStmt(_, _) => CanProceedStmt(stmt);
 // ReturnStmt does not proceed.
 // ReturnVoidStmt does not proceed.
 Axiom stmt = FunctionStmt(_, _) => CanProceedStmt(stmt);
+Axiom stmt = DeclStmt(_, _) => CanProceedStmt(stmt);
 Axiom stmt = IfStmt(_, true_branch, _) & CanProceedStmts(true_branch)=> CanProceedStmt(stmt);
 Axiom stmt = IfStmt(_, _, false_branch) & CanProceedStmts(false_branch) => CanProceedStmt(stmt);
 Axiom stmt = WhileStmt(_, _) => CanProceedStmt(stmt);
