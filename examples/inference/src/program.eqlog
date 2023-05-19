@@ -51,10 +51,10 @@ Pred WhileStmtNode : StmtNode * ExprNode * StmtNodeList;
 Pred Function : FunctionNode * Var * ArgList * TypeNodeOpt * StmtNodeList;
 
 // ## <Sort>NodeList operators.
-Func NilExprNodeList : ExprNodeList;
+Pred NilExprNodeList : ExprNodeList;
 Func ConsExprNodeList : ExprNode * ExprNodeList -> ExprNodeList;
 
-Func NilStmtNodeList : StmtNodeList;
+Pred NilStmtNodeList : StmtNodeList;
 Func ConsStmtNodeList : StmtNode * StmtNodeList -> StmtNodeList;
 
 // ## TypeNodeOpt operators.
@@ -62,7 +62,7 @@ Func NoneTypeNodeOpt : TypeNodeOpt;
 Func SomeTypeNodeOpt : TypeNode -> TypeNodeOpt;
 
 // ## ArgList operators.
-Func NilArgList : ArgList;
+Pred NilArgList : ArgList;
 Func ConsArgList : Var * TypeNodeOpt * ArgList -> ArgList;
 
 
@@ -108,7 +108,7 @@ Axiom
 Axiom tno : TypeNodeOpt => SemanticTypeOpt(tno)!;
 Axiom SemanticTypeOpt(SomeTypeNodeOpt(tn)) ~> SemanticType(tn);
 
-Axiom al = NilArgList() => NilTypeList()! & SemanticArgTypes(al) = NilTypeList();
+Axiom NilArgList(al) => NilTypeList()! & SemanticArgTypes(al) = NilTypeList();
 Axiom
     al = ConsArgList(_, head, tail)
     & head_type = SemanticTypeOpt(head)
@@ -117,3 +117,51 @@ Axiom
     ConsTypeList(head_type, tail_types)!
     & SemanticArgTypes(al) = ConsTypeList(head_type, tail_types)
     ;
+
+// # Variable resolution. VarTypeInStmt(var, stmt) is defined iff `var` is in scope before `stmt`
+// (so not for a `let` statement introducing the variable), and similarly for the other
+// functions.
+Func VarTypeInStmts : Var * StmtNodeList -> Type;
+Func VarTypeInArgList : Var * ArgList -> Type;
+Func VarTypeInExpr : Var * ExprNode * Var -> Type;
+Func VarTypeInExprs : Var * ExprNodeList * Var -> Type;
+
+// If a variable is in scope for some statement `head`, then also for all statements `tail` after
+// it statement.
+Axiom VarTypeInStmts(var, ConsStmtNodeList(_, tail)) = sigma => VarTypeInStmts(var, tail) = sigma;
+
+// A variable is in scope after a `let` statement introducing the variable.
+Axiom ConsStmtNodeList(head, tail)! & LetStmtNode(head, var, _) => VarTypeInStmts(var, tail)!;
+// It is an error if a variable is already in scope for a `let` statement that introduces the
+// variable.
+Axiom LetStmtNode(head, var, _) & VarTypeInStmts(var, ConsStmtNodeList(head, _))! => Absurd();
+
+// Same as the previous two axioms concerning `LetStmtNode` and `VarTypeInStmts`, but for
+// `FunctionStmtNode`.
+Axiom
+	ConsStmtNodeList(head, tail)!
+	& FunctionStmtNode(head, func)
+  & Function(func, var, _, _ ,_)
+  =>
+  VarTypeInStmts(var, tail)!
+  ;
+Axiom
+	FunctionStmtNode(head, func)
+	& Function(func, var, _, _ ,_)
+	& VarTypeInStmts(var, ConsStmtNodeList(head, _))!
+	=>
+	Absurd()
+  ;
+
+// `VarTypeInArgList` behaves similarly to `VarTypeInStmts` for a list of `let` statements.
+Axiom VarTypeInArgList(var, ConsArgList(_, _, tail)) = sigma => VarTypeInArgList(var, tail) = sigma;
+Axiom VarTypeInArgList(var, ConsArgList(var, opt_type_node, tail))! => VarTypeInArgList(var, tail) ~> SemanticTypeOpt(opt_type_node);
+
+// An argument of a function is in scope of the body of the function.
+Axiom Function(_, _, args, _, body) & VarTypeInArgList(var, args) = sigma => VarTypeInStmts(var, body) = sigma;
+Axiom Function(_, _, args, _, body) & VarTypeInArgList(var, args) = sigma => VarTypeInStmts(var, body) = sigma;
+
+// TODO:
+// - Variables that are in scope of function statement are in scope for the body.
+// - If and While statements.
+// - Expressions.
