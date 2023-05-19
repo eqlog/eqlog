@@ -1,17 +1,46 @@
-use crate::ast::*;
+use crate::grammar_util::*;
+use crate::program::*;
 
-grammar;
+grammar(p: &mut Program, literals: &mut Literals);
 
-Id: String = {
-    <id: r"[A-Za-z][A-Za-z0-9_]*"> => id.to_string(),
+Var: Var = {
+    <s: r"[A-Za-z][A-Za-z0-9_]*"> => {
+        match literals.vars.get(s) {
+            Some(v) => *v,
+            None => {
+                let v = p.new_var();
+                literals.vars.insert(s.to_string(), v);
+                v
+            },
+        }
+    },
 }
 
-NumberLiteral: String = {
-    <num: r"0|(-?[1-9][0-9]*)"> => num.to_string(),
+NumberLiteral: NumberLiteral = {
+    <s: r"0|(-?[1-9][0-9]*)"> => {
+        match literals.numbers.get(s) {
+            Some(num) => *num,
+            None => {
+                let num = p.new_number_literal();
+                literals.numbers.insert(s.to_string(), num);
+                num
+            },
+        }
+    }
 }
 
-StringLiteral: String = {
-    <lit: r"'[^']*'"> => lit[1..lit.len() - 1].to_string(),
+StringLiteral: StringLiteral = {
+    <s: r"'[^']*'"> => {
+        let s = &s[1..s.len() - 1];
+        match literals.strings.get(s) {
+            Some(string) => *string,
+            None => {
+                let string = p.new_string_literal();
+                literals.strings.insert(s.to_string(), string);
+                string
+            },
+        }
+    }
 }
 
 PairFirst<First, Second>: First = {
@@ -34,65 +63,153 @@ Intersperse<Item, Separator>: Vec<Item> = {
     () => vec![],
 }
 
-FunctionArg: FunctionArg = {
-    <name: Id> <ty: PairSecond<":", Type>?> => FunctionArg { name, ty },
+Arg: (Var, TypeNodeOpt) = {
+    <var: Var> <ty: PairSecond<":", Type>?> => {
+        let ty: TypeNodeOpt = type_node_opt(ty, p);
+        (var, ty)
+    }
 }
-
-Type: Type = {
-    "void" => Type::Void,
-    "boolean" => Type::Boolean,
-    "number" => Type::Number,
-    "string" => Type::String,
-    "[" <tys: Intersperse<Type, ",">> "]" => Type::Product(tys),
-    "(" <domain: Intersperse<FunctionArg, ",">> ")" "=>" <codomain: Type> => {
-        Type::Function { domain, codomain: Box::new(codomain) }
-    },
-}
-
-FunctionSignature: FunctionSignature = {
-    "function" <name: Id?> "(" <args: Intersperse<FunctionArg, ",">> ")" <codomain: PairSecond<":", Type>?> => {
-        FunctionSignature { name, args, codomain }
+ArgList: ArgList = {
+    "(" <args: Intersperse<Arg, ",">> ")" => {
+        arg_list(args.as_slice(), p)
     }
 }
 
-Function: Function = {
-    <signature: FunctionSignature> "{" <body: Stmt*> "}" => {
-        Function { signature, body }
+Type: TypeNode = {
+    "void" => {
+        let ty = p.new_type_node();
+        p.insert_void_type_node(ty);
+        ty
+    },
+    "boolean" => {
+        let ty = p.new_type_node();
+        p.insert_boolean_type_node(ty);
+        ty
+    },
+    "number" => {
+        let ty = p.new_type_node();
+        p.insert_number_type_node(ty);
+        ty
+    },
+    "string" => {
+        let ty = p.new_type_node();
+        p.insert_string_type_node(ty);
+        ty
+    },
+    <domain: ArgList> "=>" <codomain: Type> => {
+        let ty = p.new_type_node();
+        p.insert_function_type_node(ty, domain, codomain);
+        ty
     },
 }
 
-SimpleExpr: Expr = {
-    <id: Id> => Expr::Variable(id),
-    "false" => Expr::False,
-    "true" => Expr::True,
-    "[" <exprs: Intersperse<Expr, ",">> "]" => Expr::Tuple(exprs),
-    "(" <expr: Expr> ")" => expr,
-    "(" ")" => Expr::Void,
-    <lit: StringLiteral> => Expr::StringLiteral(lit),
-    <num: NumberLiteral> => Expr::NumberLiteral(num),
+Function: FunctionNode = {
+    "function" <name: Var> <domain: ArgList> <codomain: PairSecond<":", Type>?> "{" <body: Stmt*> "}" => {
+        let body = stmt_node_list(body.as_slice(), p);
+        let codomain = type_node_opt(codomain, p);
+        let function_node = p.new_function_node();
+        p.insert_function(function_node, name, domain, codomain, body);
+        function_node
+    },
+}
+
+SimpleExpr: ExprNode = {
+    <var: Var> => {
+        let expr = p.new_expr_node();
+        p.insert_variable_expr_node(expr, var);
+        expr
+    },
+    "(" ")" => {
+        let expr = p.new_expr_node();
+        p.insert_void_expr_node(expr);
+        expr
+    },
+    "true" => {
+        let expr = p.new_expr_node();
+        p.insert_true_expr_node(expr);
+        expr
+    },
+    "false" => {
+        let expr = p.new_expr_node();
+        p.insert_false_expr_node(expr);
+        expr
+    },
+    <string: StringLiteral> => {
+        let expr = p.new_expr_node();
+        p.insert_string_literal_expr_node(expr, string);
+        expr
+    },
+    <num: NumberLiteral> => {
+        let expr = p.new_expr_node();
+        p.insert_number_literal_expr_node(expr, num);
+        expr
+    },
+    // This would result in a shift-reduce conflict if we made `function` an `Expr` instead of a
+    // `SimpleExpr`:
     <function: SimpleExpr> "(" <args: Intersperse<Expr, ",">> ")" => {
-        Expr::App { function: Box::new(function), args }
+        let args = expr_node_list(args.as_slice(), p);
+        let expr = p.new_expr_node();
+        p.insert_app_expr_node(expr, function, args);
+        expr
     },
+    "(" <expr: Expr> ")" => expr,
 }
 
-Expr: Expr = {
+Expr: ExprNode = {
     <expr: SimpleExpr> => expr,
-    <function: Function> => Expr::Function(function),
+    <function: Function> => {
+        let expr = p.new_expr_node();
+        p.insert_function_expr_node(expr, function);
+        expr
+    }
 }
 
-Stmt: Stmt = {
-    <expr: SimpleExpr> ";" => Stmt::Expr(expr),
-    "let" <name: Id> "=" <value: Expr> ";" => Stmt::Let { name, value },
-    <function: Function> => Stmt::Function(function),
-    <signature: FunctionSignature> ";" => Stmt::FunctionDecl(signature),
-    "return" <expr: Expr> ";" => Stmt::Return(expr),
-    "return" ";" => Stmt::ReturnVoid,
-    "if" "(" <cond: Expr> ")" "{" <true_branch: Stmt*> "}" "else" "{" <false_branch: Stmt*> "}" => {
-        Stmt::If { cond, true_branch, false_branch}
+Block: StmtNodeList = {
+    "{" <stmts: Stmt*> "}" => {
+        stmt_node_list(stmts.as_slice(), p)
+    }
+}
+
+Stmt: StmtNode = {
+    <expr: Expr> ";" => {
+        let stmt = p.new_stmt_node();
+        p.insert_expr_stmt_node(stmt, expr);
+        stmt
     },
-    "while" "(" <cond: Expr> ")" "{" <body: Stmt*> "}" => Stmt::While { cond, body },
+    "let" <var: Var> "=" <value: Expr> ";" => {
+        let stmt = p.new_stmt_node();
+        p.insert_let_stmt_node(stmt, var, value);
+        stmt
+    },
+    "return" <expr: Expr> ";" => {
+        let stmt = p.new_stmt_node();
+        p.insert_return_stmt_node(stmt, expr);
+        stmt
+    },
+    "return" ";" => {
+        let stmt = p.new_stmt_node();
+        p.insert_return_void_stmt_node(stmt);
+        stmt
+    },
+    <function: Function> => {
+        let stmt = p.new_stmt_node();
+        p.insert_function_stmt_node(stmt, function);
+        stmt
+    },
+    "if" "(" <cond: Expr> ")" <true_branch: Block> "else" <false_branch: Block> => {
+        let stmt = p.new_stmt_node();
+        p.insert_if_stmt_node(stmt, cond, true_branch, false_branch);
+        stmt
+    },
+    "while" "(" <cond: Expr> ")" <body: Block> => {
+        let stmt = p.new_stmt_node();
+        p.insert_while_stmt_node(stmt, cond, body);
+        stmt
+    },
 }
 
-pub Program: Vec<Stmt> = {
-    <stmts: Stmt*> => stmts,
+pub Program: StmtNodeList = {
+    <stmts: Stmt*> => {
+        stmt_node_list(stmts.as_slice(), p)
+    }
 }

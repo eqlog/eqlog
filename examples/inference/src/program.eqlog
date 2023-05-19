@@ -1,0 +1,69 @@
+Pred Absurd: ();
+
+Sort TypeNode;
+Sort TypeNodeList;
+Sort TypeNodeOpt;
+
+Sort ExprNode;
+Sort ExprNodeList;
+
+Sort StmtNode;
+Sort StmtNodeList;
+
+Sort FunctionNode;
+
+Sort Var;
+Sort StringLiteral;
+Sort NumberLiteral;
+
+Sort ArgList;
+
+Pred VoidTypeNode : TypeNode;
+Pred BooleanTypeNode : TypeNode;
+Pred NumberTypeNode : TypeNode;
+Pred StringTypeNode : TypeNode;
+// FunctionTypeNode(node, domain, codomain)
+Pred FunctionTypeNode : TypeNode * ArgList * TypeNode;
+
+Pred VariableExprNode : ExprNode * Var;
+Pred VoidExprNode : ExprNode;
+Pred FalseExprNode : ExprNode;
+Pred TrueExprNode : ExprNode;
+Pred StringLiteralExprNode : ExprNode * StringLiteral;
+Pred NumberLiteralExprNode : ExprNode * NumberLiteral;
+// AppExprNode(node, func, args)
+Pred AppExprNode : ExprNode * ExprNode * ExprNodeList;
+Pred FunctionExprNode : ExprNode * FunctionNode;
+
+Pred ExprStmtNode : StmtNode * ExprNode;
+// LetStmtNode(node, var, initial_value)
+Pred LetStmtNode : StmtNode * Var * ExprNode;
+// ReturnStmtNode(node, return_value)
+Pred ReturnStmtNode : StmtNode * ExprNode;
+Pred ReturnVoidStmtNode : StmtNode;
+Pred FunctionStmtNode : StmtNode * FunctionNode;
+// IfStmtNode(node, condition, true_branch, false_branch)
+Pred IfStmtNode : StmtNode * ExprNode * StmtNodeList * StmtNodeList;
+// WhileStmtNode(node, condition, body)
+Pred WhileStmtNode : StmtNode * ExprNode * StmtNodeList;
+
+// Function(node, function_name, domain, codomain, body)
+Pred Function : FunctionNode * Var * ArgList * TypeNodeOpt * StmtNodeList;
+
+// # <Sort>NodeList operators.
+Func NilTypeNodeList : TypeNodeList;
+Func ConsTypeNodeList : TypeNode * TypeNodeList -> TypeNodeList;
+
+Func NilExprNodeList : ExprNodeList;
+Func ConsExprNodeList : ExprNode * ExprNodeList -> ExprNodeList;
+
+Func NilStmtNodeList : StmtNodeList;
+Func ConsStmtNodeList : StmtNode * StmtNodeList -> StmtNodeList;
+
+// # TypeNodeOpt operators.
+Func NoneTypeNodeOpt : TypeNodeOpt;
+Func SomeTypeNodeOpt : TypeNode -> TypeNodeOpt;
+
+// # ArgList operators.
+Func NilArgList : ArgList;
+Func ConsArgList : Var * TypeNodeOpt * ArgList -> ArgList;
