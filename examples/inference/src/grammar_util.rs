@@ -18,14 +18,6 @@ impl Literals {
     }
 }
 
-pub fn type_node_list(nodes: &[TypeNode], p: &mut Program) -> TypeNodeList {
-    let mut l = p.define_nil_type_node_list();
-    for node in nodes {
-        l = p.define_cons_type_node_list(*node, l);
-    }
-    l
-}
-
 pub fn expr_node_list(nodes: &[ExprNode], p: &mut Program) -> ExprNodeList {
     let mut l = p.define_nil_expr_node_list();
     for node in nodes {

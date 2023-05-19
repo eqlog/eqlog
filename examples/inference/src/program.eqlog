@@ -1,7 +1,7 @@
 Pred Absurd: ();
 
+// # The AST, encoded algebraically/relationally.
 Sort TypeNode;
-Sort TypeNodeList;
 Sort TypeNodeOpt;
 
 Sort ExprNode;
@@ -50,20 +50,70 @@ Pred WhileStmtNode : StmtNode * ExprNode * StmtNodeList;
 // Function(node, function_name, domain, codomain, body)
 Pred Function : FunctionNode * Var * ArgList * TypeNodeOpt * StmtNodeList;
 
-// # <Sort>NodeList operators.
-Func NilTypeNodeList : TypeNodeList;
-Func ConsTypeNodeList : TypeNode * TypeNodeList -> TypeNodeList;
-
+// ## <Sort>NodeList operators.
 Func NilExprNodeList : ExprNodeList;
 Func ConsExprNodeList : ExprNode * ExprNodeList -> ExprNodeList;
 
 Func NilStmtNodeList : StmtNodeList;
 Func ConsStmtNodeList : StmtNode * StmtNodeList -> StmtNodeList;
 
-// # TypeNodeOpt operators.
+// ## TypeNodeOpt operators.
 Func NoneTypeNodeOpt : TypeNodeOpt;
 Func SomeTypeNodeOpt : TypeNode -> TypeNodeOpt;
 
-// # ArgList operators.
+// ## ArgList operators.
 Func NilArgList : ArgList;
 Func ConsArgList : Var * TypeNodeOpt * ArgList -> ArgList;
+
+
+// # Semantic types.
+Sort Type;
+Sort TypeList;
+
+// ## Semantic type operators.
+Func VoidType : Type;
+Func BooleanType : Type;
+Func NumberType : Type;
+Func StringType : Type;
+// FunctionType(node, domain, codomain)
+Func FunctionType : TypeList * Type -> Type;
+
+// ## TypeList operators.
+// We're equating TypeList elements sometimes. In well-typed programs, this is only possible if the
+// type lists have the same length and are made up of the same Types.
+Func NilTypeList : TypeList;
+Func ConsTypeList : Type * TypeList -> TypeList;
+Axiom NilTypeList() = ConsTypeList(_, _) => Absurd();
+Axiom ConsTypeList(head_0, tail_0) = ConsTypeList(head_1, tail_1) => head_0 = head_1 & tail_0 = tail_1;
+
+// ## Functions assigning to node elements their corresponding semantic Type elements.
+Func SemanticType : TypeNode -> Type;
+Func SemanticTypeOpt : TypeNodeOpt -> Type;
+Func SemanticArgTypes : ArgList -> TypeList;
+
+Axiom VoidTypeNode(tn) => VoidType()! & SemanticType(tn) = VoidType();
+Axiom BooleanTypeNode(tn) => BooleanType()! & SemanticType(tn) = BooleanType();
+Axiom NumberTypeNode(tn) => NumberType()! & SemanticType(tn) = NumberType();
+Axiom StringTypeNode(tn) => StringType()! & SemanticType(tn) = StringType();
+Axiom
+    FunctionTypeNode(tn, args, codomain)
+    & domain_types = SemanticArgTypes(args)
+    & codomain_type = SemanticType(codomain)
+    =>
+    FunctionType(domain_types, codomain_type)!
+    & SemanticType(tn) = FunctionType(domain_types, codomain_type);
+
+// SemanticTypeOpt is always defined, but only for SomeTypeNodeOpt elements do they have a
+// determined type.
+Axiom tno : TypeNodeOpt => SemanticTypeOpt(tno)!;
+Axiom SemanticTypeOpt(SomeTypeNodeOpt(tn)) ~> SemanticType(tn);
+
+Axiom al = NilArgList() => NilTypeList()! & SemanticArgTypes(al) = NilTypeList();
+Axiom
+    al = ConsArgList(_, head, tail)
+    & head_type = SemanticTypeOpt(head)
+    & tail_types = SemanticArgTypes(tail)
+    =>
+    ConsTypeList(head_type, tail_types)!
+    & SemanticArgTypes(al) = ConsTypeList(head_type, tail_types)
+    ;
