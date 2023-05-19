@@ -20,8 +20,6 @@ function id(x) {
   }
 }
 
-id(function () { return 5; });
+id(3);
 
-function test_decl(x: number): void;
-
-test_decl(3);
+id(function asdfasdf () { return 5; });
