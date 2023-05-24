@@ -42,6 +42,12 @@ fn main() -> ExitCode {
         }
     };
 
+    p.close();
+
+    if p.absurd() {
+        eprintln!("Variable scope error");
+    }
+
     //let mut ts = TypeSystem::new();
     //let mut bindings: Bindings = Bindings::new();
     //populate_stmts(&mut ts, &mut bindings, stmts.as_slice());

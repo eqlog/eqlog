@@ -9,7 +9,7 @@ function asdf() {
 }
 
 function void_func() {
-  let asdf = 5;
+  let asdffff = 5;
 }
 
 function id(x) {

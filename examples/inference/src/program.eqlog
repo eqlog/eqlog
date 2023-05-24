@@ -118,9 +118,10 @@ Axiom
     & SemanticArgTypes(al) = ConsTypeList(head_type, tail_types)
     ;
 
-// # Variable resolution. VarTypeInStmt(var, stmt) is defined iff `var` is in scope before `stmt`
-// (so not for a `let` statement introducing the variable), and similarly for the other
-// functions.
+// # Variable resolution.
+//
+// VarTypeInStmt(var, stmt) is defined iff `var` is in scope before `stmt` (so not for a `let`
+// statement introducing the variable), and similarly for the other functions.
 Func VarTypeInStmts : Var * StmtNodeList -> Type;
 Func VarTypeInArgList : Var * ArgList -> Type;
 Func VarTypeInExpr : Var * ExprNode * Var -> Type;
@@ -159,9 +160,18 @@ Axiom VarTypeInArgList(var, ConsArgList(var, opt_type_node, tail))! => VarTypeIn
 
 // An argument of a function is in scope of the body of the function.
 Axiom Function(_, _, args, _, body) & VarTypeInArgList(var, args) = sigma => VarTypeInStmts(var, body) = sigma;
-Axiom Function(_, _, args, _, body) & VarTypeInArgList(var, args) = sigma => VarTypeInStmts(var, body) = sigma;
+
+// If a variable is in scope in the statement that defines a function, then the variable is also in
+// scope in the function.
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & FunctionStmtNode(head, func)
+    & Function(func, _, _, _ ,body)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInStmts(var, body) = sigma
+    ;
 
 // TODO:
-// - Variables that are in scope of function statement are in scope for the body.
 // - If and While statements.
 // - Expressions.
