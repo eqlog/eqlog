@@ -124,8 +124,8 @@ Axiom
 // statement introducing the variable), and similarly for the other functions.
 Func VarTypeInStmts : Var * StmtNodeList -> Type;
 Func VarTypeInArgList : Var * ArgList -> Type;
-Func VarTypeInExpr : Var * ExprNode * Var -> Type;
-Func VarTypeInExprs : Var * ExprNodeList * Var -> Type;
+Func VarTypeInExpr : Var * ExprNode -> Type;
+Func VarTypeInExprs : Var * ExprNodeList -> Type;
 
 // If a variable is in scope for some statement `head`, then also for all statements `tail` after
 // it statement.
@@ -172,6 +172,80 @@ Axiom
     VarTypeInStmts(var, body) = sigma
     ;
 
-// TODO:
-// - If and While statements.
-// - Expressions.
+// Variables are in scope in the two branches of an if statement.
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & IfStmtNode(head, _, true_branch, false_branch)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInStmts(var, true_branch) = sigma
+    & VarTypeInStmts(var, false_branch) = sigma
+    ;
+
+// Variables are in scope in the body of a while statement.
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & WhileStmtNode(head, _, body)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInStmts(var, body) = sigma
+    ;
+
+// Propagate variables into expressions occuring in statements.
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & ExprStmtNode(head, expr)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInExpr(var, expr) = sigma
+    ;
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & LetStmtNode(head, _, expr)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInExpr(var, expr) = sigma
+    ;
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & ReturnStmtNode(head, expr)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInExpr(var, expr) = sigma
+    ;
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & IfStmtNode(head, cond, _, _)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInExpr(var, cond) = sigma
+    ;
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & WhileStmtNode(head, cond, _)
+    & VarTypeInStmts(var, stmts) = sigma
+    =>
+    VarTypeInExpr(var, cond) = sigma
+    ;
+
+// Propagate variable bindings through expressions.
+Axiom
+    VarTypeInExprs(var, ConsExprNodeList(head, tail)) = sigma
+    => 
+    VarTypeInExpr(var, head) = sigma
+    & VarTypeInExprs(var, tail) = sigma
+    ;
+Axiom
+    AppExprNode(expr, func, args)
+    & VarTypeInExpr(var, expr) = sigma
+    => 
+    VarTypeInExpr(var, func) = sigma
+    & VarTypeInExprs(var, args) = sigma
+    ;
+Axiom
+    FunctionExprNode(expr, func)
+    & Function(func, _, _, _ ,body)
+    & VarTypeInExpr(var, expr) = sigma
+    => 
+    VarTypeInStmts(var, body) = sigma
+    ;

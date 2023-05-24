@@ -10,6 +10,9 @@ function asdf() {
 
 function void_func() {
   let asdffff = 5;
+  while (true) {
+    let fkljskljdslk = 'asd';
+  }
 }
 
 function id(x) {
