@@ -139,19 +139,19 @@ Axiom LetStmtNode(head, var, _) & VarTypeInStmts(var, ConsStmtNodeList(head, _))
 // Same as the previous two axioms concerning `LetStmtNode` and `VarTypeInStmts`, but for
 // `FunctionStmtNode`.
 Axiom
-	ConsStmtNodeList(head, tail)!
-	& FunctionStmtNode(head, func)
-  & Function(func, var, _, _ ,_)
-  =>
-  VarTypeInStmts(var, tail)!
-  ;
+    ConsStmtNodeList(head, tail)!
+    & FunctionStmtNode(head, func)
+    & Function(func, var, _, _ ,_)
+    =>
+    VarTypeInStmts(var, tail)!
+    ;
 Axiom
-	FunctionStmtNode(head, func)
-	& Function(func, var, _, _ ,_)
-	& VarTypeInStmts(var, ConsStmtNodeList(head, _))!
-	=>
-	Absurd()
-  ;
+    FunctionStmtNode(head, func)
+    & Function(func, var, _, _ ,_)
+    & VarTypeInStmts(var, ConsStmtNodeList(head, _))!
+    =>
+    Absurd()
+    ;
 
 // `VarTypeInArgList` behaves similarly to `VarTypeInStmts` for a list of `let` statements.
 Axiom VarTypeInArgList(var, ConsArgList(_, _, tail)) = sigma => VarTypeInArgList(var, tail) = sigma;
