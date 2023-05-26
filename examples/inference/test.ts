@@ -19,10 +19,6 @@ function id(x) {
   if (true) {
     return x;
   } else {
-    return x;
+    return k;
   }
 }
-
-id(3);
-
-id(function asdfasdf () { return 5; });
