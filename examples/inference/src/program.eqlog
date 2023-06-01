@@ -58,7 +58,7 @@ Pred NilStmtNodeList : StmtNodeList;
 Func ConsStmtNodeList : StmtNode * StmtNodeList -> StmtNodeList;
 
 // ## TypeNodeOpt operators.
-Func NoneTypeNodeOpt : TypeNodeOpt;
+Pred NoneTypeNodeOpt : TypeNodeOpt;
 Func SomeTypeNodeOpt : TypeNode -> TypeNodeOpt;
 
 // ## ArgList operators.
@@ -151,6 +151,7 @@ Axiom
     & SemanticArgTypes(al) = ConsTypeList(head_type, tail_types)
     ;
 
+
 // # Variable resolution.
 //
 // VarTypeInStmt(var, stmt) is defined iff `var` is in scope before `stmt` (so not for a `let`
@@ -160,25 +161,18 @@ Func VarTypeInArgList : Var * ArgList -> Type;
 Func VarTypeInExpr : Var * ExprNode -> Type;
 Func VarTypeInExprs : Var * ExprNodeList -> Type;
 
-// If a variable is in scope for some statement `head`, then also for all statements `tail` after
-// it statement.
+// Forward declaration of the function assigning semantic types to expression and function
+// literals.
+Func ExprType : ExprNode -> Type;
+Func FunctionNodeType : FunctionNode -> Type;
+
+// If a variable is in scope for some statement, then it is also in scope for all succeeding
+// statements.
 Axiom VarTypeInStmts(var, ConsStmtNodeList(_, tail)) = sigma => VarTypeInStmts(var, tail) = sigma;
 
-// A variable is in scope after a `let` statement introducing the variable.
-Axiom ConsStmtNodeList(head, tail)! & LetStmtNode(head, var, _) => VarTypeInStmts(var, tail)!;
-// It is an error if a variable is already in scope for a `let` statement that introduces the
+// It is an error if a variable is already in scope before a statement that introduces the
 // variable.
 Axiom LetStmtNode(head, var, _) & VarTypeInStmts(var, ConsStmtNodeList(head, _))! => Absurd();
-
-// Same as the previous two axioms concerning `LetStmtNode` and `VarTypeInStmts`, but for
-// `FunctionStmtNode`.
-Axiom
-    ConsStmtNodeList(head, tail)!
-    & FunctionStmtNode(head, func)
-    & Function(func, var, _, _ ,_)
-    =>
-    VarTypeInStmts(var, tail)!
-    ;
 Axiom
     FunctionStmtNode(head, func)
     & Function(func, var, _, _ ,_)
@@ -187,9 +181,21 @@ Axiom
     Absurd()
     ;
 
+// A variable is in scope after a `let` statement or a function statement introducing the variable.
+Axiom ConsStmtNodeList(head, tail)! & LetStmtNode(head, var, expr) => VarTypeInStmts(var, tail) ~> ExprType(expr);
+Axiom
+    ConsStmtNodeList(head, tail)!
+    & FunctionStmtNode(head, func)
+    & Function(func, var, _, _ ,_)
+    =>
+    VarTypeInStmts(var, tail)
+    ~>
+    FunctionNodeType(func)
+    ;
+
 // `VarTypeInArgList` behaves similarly to `VarTypeInStmts` for a list of `let` statements.
 Axiom VarTypeInArgList(var, ConsArgList(_, _, tail)) = sigma => VarTypeInArgList(var, tail) = sigma;
-Axiom VarTypeInArgList(var, ConsArgList(var, opt_type_node, tail))! => VarTypeInArgList(var, tail) ~> SemanticTypeOpt(opt_type_node);
+Axiom VarTypeInArgList(var, ConsArgList(var, opt_type_node, _)) ~> SemanticTypeOpt(opt_type_node); 
 
 // An argument of a function is in scope of the body of the function.
 Axiom Function(_, _, args, _, body) & VarTypeInArgList(var, args) = sigma => VarTypeInStmts(var, body) = sigma;
@@ -284,7 +290,6 @@ Axiom
     ;
 
 // # Expression typing.
-Func ExprType : ExprNode -> Type;
 Func ExprTypes : ExprNodeList -> TypeList;
 
 // Both ExprType and ExprTypes are total. For ExprType we explicitly enforce totality. For
@@ -343,12 +348,20 @@ Axiom WhileStmtNode(stmt, _, _) => CanProceedStmt(stmt);
 
 Func ReturnsType : StmtNodeList -> Type;
 Axiom stmts = ConsStmtNodeList(_, tail) => ReturnsType(stmts) ~> ReturnsType(tail);
+
 Axiom
     stmts = ConsStmtNodeList(head, _)
     & ReturnStmtNode(head, return_value)
     =>
     ReturnsType(stmts) ~> ExprType(return_value)
     ;
+Axiom
+    stmts = ConsStmtNodeList(head, _)
+    & ReturnVoidStmtNode(head)
+    =>
+    VoidType()!
+    & ReturnsType(stmts) = VoidType();
+
 Axiom
     stmts = ConsStmtNodeList(head, _)
     & IfStmtNode(head, _, true_branch, _)
@@ -368,15 +381,7 @@ Axiom
     ReturnsType(stmts) ~> ReturnsType(body)
     ;
 
-Axiom
-    stmts = ConsStmtNodeList(head, _)
-    & ReturnVoidStmtNode(head)
-    =>
-    VoidType()!
-    & ReturnsType(stmts) = VoidType();
-
 // ## Typing constraints from function definitions.
-Func FunctionNodeType : FunctionNode -> Type;
 Axiom
     func: FunctionNode
     =>
@@ -384,7 +389,18 @@ Axiom
     & DomainTypes(FunctionNodeType(func))!
     & CodomainType(FunctionNodeType(func))!
     ;
+
+// Axioms relating FunctionNodeType with ExprType (if the function node occurs
+// as part of FunctionExprNode) and VarTypeInStmts (if the function node occurs
+// as part of a FunctionStmtNode).
 Axiom FunctionExprNode(expr, func) => FunctionNodeType(func) ~> ExprType(expr);
+Axiom
+    ConsStmtNodeList(head, tail)!
+    & FunctionStmtNode(head, func)
+    & Function(func, var, _, _ ,_)
+    =>
+    FunctionNodeType(func) ~> VarTypeInStmts(var, tail)
+    ;
  
 // Typing constraints due to an explicit codomain annotation.
 Axiom

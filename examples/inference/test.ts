@@ -22,3 +22,10 @@ function id(x) {
     return k;
   }
 }
+
+function id2(y) {
+  return y;
+}
+
+id(xyz);
+id2(5);

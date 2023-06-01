@@ -39,7 +39,11 @@ pub fn stmt_node_list(nodes: &[StmtNode], p: &mut Program) -> StmtNodeList {
 pub fn type_node_opt(node: Option<TypeNode>, p: &mut Program) -> TypeNodeOpt {
     match node {
         Some(node) => p.define_some_type_node_opt(node),
-        None => p.define_none_type_node_opt(),
+        None => {
+            let tno = p.new_type_node_opt();
+            p.insert_none_type_node_opt(tno);
+            tno
+        }
     }
 }
 
