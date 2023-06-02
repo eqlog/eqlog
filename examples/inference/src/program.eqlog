@@ -169,7 +169,7 @@ Axiom
 // node n. sigma can be an opaque Type element. That var must be in scope for n means that var must
 // have been introduced *before* n; it is not sufficient for n to introduce the variable.
 //
-// For X = StmtNodeList and X = ArgList, note that that n = ConsX(head, tail), then head appears
+// For X = StmtNodeList and X = ArgList, note that if n = ConsX(head, tail), then head appears
 // before tail in source code. For example, if body is the StmtNodeList representing the body of a
 // function, then none of the variables introduced in the body will be in scope for body. Instead,
 // all of those variables are in scope at the NilStmtNodeList of body. Similarly, if args is the
