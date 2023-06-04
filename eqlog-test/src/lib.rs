@@ -14,6 +14,7 @@ eqlog_mod!(lex_category);
 eqlog_mod!(partial_magma);
 eqlog_mod!(pca);
 eqlog_mod!(inference);
+eqlog_mod!(reduction_from_nullary);
 
 mod category_mod;
 #[cfg(test)]

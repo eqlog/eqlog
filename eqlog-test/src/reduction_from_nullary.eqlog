@@ -1,0 +1,5 @@
+Sort S;
+Func Nullary: S;
+Func Binary: S * S -> S;
+
+Axiom Nullary() ~> Binary(_, Nullary());
