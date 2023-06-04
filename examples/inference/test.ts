@@ -27,5 +27,5 @@ function id2(y) {
   return y;
 }
 
-id(5);
+id2(5);
 id2('xyz');

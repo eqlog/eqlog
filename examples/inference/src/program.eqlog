@@ -389,6 +389,42 @@ Axiom
     VarTypeInExpr(var, expr)
     ;
 
+// # Type substitution
+Sort TypeSubst;
+
+Func SubstType : TypeSubst * Type -> Type;
+Func SubstTypes : TypeSubst * TypeList -> TypeList;
+
+Axiom NilTypeList() ~> SubstTypes(_, NilTypeList());
+Axiom
+    ConsTypeList(SubstType(subst, head), SubstTypes(subst, tail))
+    ~>
+    SubstTypes(subst, ConsTypeList(head, tail))
+    ;
+Axiom
+    SubstTypes(subst, ConsTypeList(head, tail))!
+    =>
+    SubstType(subst, head)!
+    & SubstTypes(subst, tail)!
+    ;
+
+Axiom VoidType() ~> SubstType(_, VoidType());
+Axiom BooleanType() ~> SubstType(_, BooleanType());
+Axiom NumberType() ~> SubstType(_, NumberType());
+Axiom StringType() ~> SubstType(_, StringType());
+
+Axiom
+    FunctionType(SubstTypes(subst, domain), SubstType(subst, codomain))
+    ~>
+    SubstType(subst, FunctionType(domain, codomain))
+    ;
+Axiom
+    SubstType(subst, FunctionType(domain, codomain))!
+    =>
+    SubstTypes(subst, domain)!
+    & SubstType(subst, codomain)!
+    ;
+
 // # Expression typing.
 // Declared earlier:
 // Func ExprType : ExprNode -> Type;
@@ -412,21 +448,41 @@ Axiom
 Axiom IfStmtNode(_, cond, _, _) => BooleanType() ~> ExprType(cond);
 Axiom WhileStmtNode(_, cond, _) => BooleanType() ~> ExprType(cond);
 
-// ## Typing constraints of expression from usages in other expression.
+// ## Typing constraint from a function literal
+Axiom FunctionExprNode(expr, func) => FunctionNodeType(func) ~> ExprType(expr);
+
+// ## Typing constraints due to function application
+
+// This should be defined precisely for app expresions:
+Func SubstForAppExpr : ExprNode -> TypeSubst;
+Axiom AppExprNode(expr, _, _) => SubstForAppExpr(expr)!;
+Axiom
+    AppExprNode(expr, func, args)
+    & expr_type = ExprType(expr)
+    & func_type = ExprType(func)
+    & arg_types = ExprTypes(args)
+    =>
+    ConsTypeList(CodomainType(func_type), DomainTypes(func_type))!
+    & ConsTypeList(expr_type, arg_types)!
+    ;
+
+Axiom
+    AppExprNode(expr, func, args)
+    & subst = SubstForAppExpr(expr)
+    & into_types = ConsTypeList(ExprType(expr), ExprTypes(args))
+    & func_type = ExprType(func)
+    & from_types = ConsTypeList(CodomainType(func_type), DomainTypes(func_type))
+    =>
+    SubstTypes(subst, from_types) ~> into_types
+    ;
+
+// ## Typing constraints of expression from usages in other expression
 Axiom VariableExprNode(expr, var) & VarTypeInExpr(var, expr) = sigma => ExprType(expr) = sigma;
 Axiom VoidExprNode(expr) => VoidType() ~> ExprType(expr);
 Axiom FalseExprNode(expr) => BooleanType() ~> ExprType(expr);
 Axiom TrueExprNode(expr) => BooleanType() ~> ExprType(expr);
 Axiom StringLiteralExprNode(expr, _) => StringType() ~> ExprType(expr);
 Axiom NumberLiteralExprNode(expr, _) => NumberType() ~> ExprType(expr);
-
-// The conclusions of these axioms assert that DomainTypes or CodomainType are defined on some
-// types tau. By the axioms relating these functions to FunctionType, this means that such types
-// tau must be function types.
-Axiom AppExprNode(_, func, args) => DomainTypes(ExprType(func)) ~> ExprTypes(args);
-Axiom AppExprNode(expr, func, _) => CodomainType(ExprType(func)) ~> ExprType(expr);
-
-Axiom FunctionExprNode(expr, func) => FunctionNodeType(func) ~> ExprType(expr);
 
 // # Type analysis of function definitions
 //
