@@ -689,8 +689,8 @@ impl<'a> Display for DumpAxiomsDisplay<'a> {
             write!(f, "Inferred sorts:\n")?;
             for tm in axiom.sequent.universe.iter_terms() {
                 let sort = &sorts[tm];
-                let tm = tm.display(&axiom.sequent.universe);
-                write!(f, "  {tm}: {sort}\n")?;
+                let tm = tm.debug(&axiom.sequent.universe);
+                write!(f, "  {tm:?}: {sort}\n")?;
             }
             write!(f, "{separator}")?;
         }

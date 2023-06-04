@@ -1,6 +1,6 @@
 use crate::source_display::Location;
 use itertools::Itertools;
-use std::fmt::{self, Display};
+use std::fmt::{self, Debug, Display};
 use std::slice::from_ref;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -117,44 +117,6 @@ impl TermUniverse {
     }
 }
 
-#[derive(Copy, Clone)]
-struct TermDisplay<'a> {
-    term: Term,
-    universe: &'a TermUniverse,
-}
-
-impl<'a> Display for TermDisplay<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let TermDisplay { term, universe } = *self;
-        use TermData::*;
-        match universe.data(term) {
-            Variable(name) => f.write_str(name),
-            Wildcard => write!(f, "_{}", term.0),
-            Application(func, args) => {
-                let args_displ = args.iter().copied().format_with(", ", |arg, f| {
-                    f(&format_args!(
-                        "{}",
-                        TermDisplay {
-                            term: arg,
-                            universe
-                        }
-                    ))
-                });
-                write!(f, "{func}({args_displ})")
-            }
-        }
-    }
-}
-
-impl Term {
-    pub fn display<'a>(self, universe: &'a TermUniverse) -> impl 'a + Display + Copy + Clone {
-        TermDisplay {
-            term: self,
-            universe,
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum AtomData {
     Equal(Term, Term),
@@ -219,7 +181,7 @@ impl SequentData {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Sequent {
     pub universe: TermUniverse,
     pub data: SequentData,
@@ -292,5 +254,148 @@ impl Display for SymbolKind {
             Function => "function",
             Query => "query",
         })
+    }
+}
+
+// Debug printing of AST. Each AST node type N that is relative to a TermUniverse gets a struct
+// NDebug that bundles the node with the TermUniverse it belongs to, and this struct implements
+// Debug such that it will recursively print the whole tree structure of the node .
+
+#[derive(Copy, Clone)]
+struct TermDebug<'a> {
+    term: Term,
+    universe: &'a TermUniverse,
+}
+
+impl<'a> Debug for TermDebug<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let TermDebug { term, universe } = *self;
+        use TermData::*;
+        match universe.data(term) {
+            Variable(name) => f.write_str(name),
+            Wildcard => write!(f, "_{}", term.0),
+            Application(func, args) => {
+                let args_displ = args.iter().copied().format_with(", ", |arg, f| {
+                    f(&format_args!(
+                        "{:?}",
+                        TermDebug {
+                            term: arg,
+                            universe
+                        }
+                    ))
+                });
+                write!(f, "{func}({args_displ})")
+            }
+        }
+    }
+}
+
+impl Term {
+    #[allow(dead_code)]
+    pub fn debug<'a>(self, universe: &'a TermUniverse) -> impl 'a + Debug + Copy + Clone {
+        TermDebug {
+            term: self,
+            universe,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AtomDebug<'a> {
+    atom: &'a Atom,
+    universe: &'a TermUniverse,
+}
+
+impl<'a> Debug for AtomDebug<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let AtomDebug { atom, universe } = self;
+        use AtomData::*;
+        match &atom.data {
+            Equal(lhs, rhs) => {
+                let lhs = lhs.debug(universe);
+                let rhs = rhs.debug(universe);
+                write!(f, "{lhs:?} = {rhs:?}")?;
+            }
+            Defined(tm, sort) => {
+                let tm = tm.debug(universe);
+                match sort {
+                    Some(sort) => write!(f, "{tm:?}: {sort}")?,
+                    None => write!(f, "{tm:?}!")?,
+                }
+            }
+            Predicate(pred, args) => {
+                let args_displ = args.iter().copied().format_with(", ", |arg, f| {
+                    f(&format_args!(
+                        "{:?}",
+                        TermDebug {
+                            term: arg,
+                            universe
+                        }
+                    ))
+                });
+                write!(f, "{pred}({args_displ})")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Atom {
+    #[allow(dead_code)]
+    pub fn debug<'a>(&'a self, universe: &'a mut TermUniverse) -> AtomDebug<'a> {
+        AtomDebug {
+            atom: self,
+            universe,
+        }
+    }
+}
+
+pub struct FormulaDebug<'a> {
+    atoms: &'a [Atom],
+    universe: &'a TermUniverse,
+}
+
+impl<'a> Debug for FormulaDebug<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let FormulaDebug { atoms, universe } = self;
+        let atoms = atoms.into_iter().format_with(" & ", |atom, f| {
+            f(&format_args!("{:?}", AtomDebug { atom, universe }))
+        });
+        write!(f, "{atoms}")?;
+        Ok(())
+    }
+}
+
+fn formula_debug<'a>(atoms: &'a [Atom], universe: &'a TermUniverse) -> FormulaDebug<'a> {
+    FormulaDebug { atoms, universe }
+}
+
+impl Debug for Sequent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Sequent { universe, data } = self;
+        use SequentData::*;
+        match data {
+            Implication {
+                premise,
+                conclusion,
+            } => {
+                let premise = formula_debug(premise.as_slice(), universe);
+                let conclusion = formula_debug(conclusion.as_slice(), universe);
+                write!(f, "{premise:?} => {conclusion:?}")?;
+            }
+            Reduction { premise, from, to } => {
+                let premise = formula_debug(premise.as_slice(), universe);
+                let from = from.debug(universe);
+                let to = to.debug(universe);
+                write!(f, "{premise:?} => {from:?} ~> {to:?}")?;
+            }
+            Bireduction { premise, lhs, rhs } => {
+                let premise = formula_debug(premise.as_slice(), universe);
+                let lhs = lhs.debug(universe);
+                let rhs = rhs.debug(universe);
+                write!(f, "{premise:?} => {lhs:?} <~> {rhs:?}")?;
+            }
+        }
+        Ok(())
     }
 }
