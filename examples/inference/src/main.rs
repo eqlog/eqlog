@@ -3,7 +3,10 @@ use lalrpop_util::lalrpop_mod;
 eqlog_mod!(program);
 mod grammar_util;
 lalrpop_mod!(grammar);
+#[allow(dead_code)]
+mod debugging;
 
+use crate::debugging::*;
 use crate::grammar::ProgramParser;
 use crate::grammar_util::Literals;
 use crate::program::*;
@@ -58,6 +61,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+
+    let id3_type = var_type(*literals.vars.get("id3").unwrap(), &p);
+    println!("id3 type:");
+    print_type(id3_type, &p, Indent(0));
+
+    let u_type = var_type(*literals.vars.get("u").unwrap(), &p);
+    println!("u type:");
+    print_type(u_type, &p, Indent(0));
 
     ExitCode::SUCCESS
 }

@@ -15,7 +15,7 @@ function void_func() {
   }
 }
 
-function id(x) {
+function id_number(x) {
   if (true) {
     return x;
   } else {
@@ -23,8 +23,20 @@ function id(x) {
   }
 }
 
-function id2(y) {
+function id(y) {
   return y;
+}
+
+function id2(z) {
+  return id2(id)(z);
+}
+
+function id3(u) {
+  if (true) {
+    return u;
+  } else {
+    return id3(id3)(u);
+  }
 }
 
 id2(5);
