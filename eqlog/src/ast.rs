@@ -366,7 +366,7 @@ impl<'a> Debug for FormulaDebug<'a> {
     }
 }
 
-fn formula_debug<'a>(atoms: &'a [Atom], universe: &'a TermUniverse) -> FormulaDebug<'a> {
+pub fn formula_debug<'a>(atoms: &'a [Atom], universe: &'a TermUniverse) -> FormulaDebug<'a> {
     FormulaDebug { atoms, universe }
 }
 

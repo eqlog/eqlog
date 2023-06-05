@@ -168,28 +168,24 @@ impl<'a> Emitter<'a> {
                 let lhs = *lhs;
                 let rhs = *rhs;
 
-                // Save names of lhs and rhs in case both names already exist and are not equal.
-                // If that is the case, we must explicitly emit a `FlatAtom::Equal` later. If at
-                // least one name did not exist or both names existed, we unify the names of `lhs`
-                // and `rhs` *before* adding `lhs` and `rhs` to save the `FlatAtom::Equal`.
-                let emit_equal_names: Option<(FlatTerm, FlatTerm)> =
-                    match (self.flat_names[lhs], self.flat_names[rhs]) {
-                        (Some(lhs_name), Some(rhs_name)) if lhs_name != rhs_name => {
-                            Some((lhs_name, rhs_name))
-                        }
-                        _ => None,
-                    };
-
-                // Unify the names of lhs and rhs before emitting term structure. In case at least
-                // one of the names did not exist already, we can then omit adding an equality.
-                self.flat_names.union(lhs, rhs);
-                for tm in atom.iter_subterms(&self.universe) {
-                    self.emit_term_structure(tm, out_atoms);
-                }
-
-                // If both lhs and rhs have already had names, we must explictly equalize them now.
-                if let Some((lhs_name, rhs_name)) = emit_equal_names {
-                    out_atoms.push(FlatAtom::Equal(lhs_name, rhs_name));
+                if self.added[lhs] && self.added[rhs] {
+                    let lhs_name = self.flat_names[lhs].unwrap();
+                    let rhs_name = self.flat_names[rhs].unwrap();
+                    // Both terms have already been added. If they do not have the same flat name,
+                    // then we must emit an explicit equality atom. Otherwise, nothing needs to be
+                    // done.
+                    if lhs_name != rhs_name {
+                        out_atoms.push(FlatAtom::Equal(lhs_name, rhs_name));
+                        self.flat_names.union(lhs, rhs);
+                    }
+                } else {
+                    // At least one term has not been added up until now. We unify the (future)
+                    // flat names of the two terms before emitting their structure. This way, no
+                    // explicit equality atom is necessary.
+                    self.flat_names.union(lhs, rhs);
+                    for tm in atom.iter_subterms(&self.universe) {
+                        self.emit_term_structure(tm, out_atoms);
+                    }
                 }
 
                 self.added.union(lhs, rhs);
@@ -259,7 +255,11 @@ fn flatten_implication<'a, 'b>(
 
     let flat_sorts: BTreeMap<FlatTerm, String> = universe
         .iter_terms()
-        .map(|tm| (*term_map.get(&tm).unwrap(), sorts[tm].to_string()))
+        .filter_map(|tm| {
+            term_map
+                .get(&tm)
+                .map(|flat_tm| (*flat_tm, sorts[tm].to_string()))
+        })
         .collect();
 
     SequentFlattening {
