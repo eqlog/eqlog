@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "eqlog"
-version = "0.1.4"
+version = "0.1.3"
 dependencies = [
  "convert_case",
  "indoc",
@@ -273,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "eqlog-runtime"
-version = "0.1.4"
+version = "0.1.3"
 dependencies = [
  "tabled",
 ]
@@ -391,17 +391,6 @@ name = "indoc"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
-
-[[package]]
-name = "inference"
-version = "0.1.0"
-dependencies = [
- "eqlog",
- "eqlog-runtime",
- "lalrpop",
- "lalrpop-util",
- "regex",
-]
 
 [[package]]
 name = "io-lifetimes"

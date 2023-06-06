@@ -8,12 +8,8 @@ edition = "2021"
 [dependencies]
 lalrpop-util = { version = "0", features = [ "lexer" ] }
 regex = { version = "1", features = ["unicode-perl"] }
-
-[dependencies.eqlog-runtime]
-path = "../../eqlog-runtime"
+eqlog-runtime = "0"
 
 [build-dependencies]
 lalrpop = { version = "0", features = [ "lexer" ] }
-
-[build-dependencies.eqlog]
-path = "../../eqlog"
+eqlog = "0"

@@ -6,13 +6,11 @@ members = [
   "eqlog",
   "eqlog-runtime",
   "eqlog-test",
-	# TODO: Remove examples/inference here and add to exclude. It should be
-	# possible to build this using the crates.io version of eqlog.
-  "examples/inference",
 ]
 
 # Keep examples out of workspace. It should be possible to build them without a
 # local eqlog checkout.
 exclude = [
   "examples/semilattice",
+  "examples/inference",
 ]
