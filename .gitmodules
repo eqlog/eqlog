@@ -1,0 +1,3 @@
+[submodule "examples/inference"]
+	path = examples/inference
+	url = https://github.com/eqlog/examples-inference
