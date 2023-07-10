@@ -937,7 +937,7 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
         /// Returns and iterator over elements of sort `{sort}`.
         /// The iterator yields canonical representatives only.
         #[allow(dead_code)]
-        pub fn iter_{sort_snake}(&mut self) -> impl '_ + Iterator<Item={sort}> {{
+        pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
             self.{sort_snake}_all.iter().copied()
         }}
     "}
