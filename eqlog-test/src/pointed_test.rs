@@ -35,6 +35,9 @@ mod test {
         assert_eq!(ptd.iter_p().count(), 1);
         assert_eq!(ptd.iter_pt().count(), 1);
         assert!(ptd.are_equal_p(el0, el1));
+        assert!(ptd
+            .iter_pt()
+            .all(|lhs_el| ptd.iter_pt().all(|rhs_el| ptd.are_equal_p(lhs_el, rhs_el))));
     }
 
     #[test]
