@@ -4,7 +4,7 @@ mod unification;
 use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[allow(unused)]
-    grammar
+    grammar_v1
 );
 mod build;
 mod error;

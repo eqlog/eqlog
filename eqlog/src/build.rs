@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::error::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
-use crate::grammar::*;
+use crate::grammar_v1::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
