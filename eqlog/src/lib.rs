@@ -1,4 +1,4 @@
-mod ast;
+mod ast_v1;
 mod module;
 mod unification;
 use lalrpop_util::lalrpop_mod;

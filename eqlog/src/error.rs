@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::ast_v1::*;
 use crate::source_display::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::error::Error;
