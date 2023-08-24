@@ -1,0 +1,144 @@
+use crate::ast::*;
+use crate::error::*;
+use crate::module::*;
+use crate::source_display::Location;
+use std::iter::once;
+use convert_case::{Case, Casing};
+use std::mem::swap;
+
+grammar(context: &mut TermContext);
+
+extern {
+    type Error = CompileError;
+}
+
+Id: String = {
+    r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(),
+}
+
+PairFirst<First, Second>: First = {
+    <first: First> <second: Second> => first,
+}
+
+NonEmptyIntersperse<Item, Separator>: Vec<Item> = {
+    <mut init: PairFirst<Item, Separator>*> <last: Item> => {
+        init.push(last);
+        init
+    },
+}
+
+Intersperse<Item, Separator>: Vec<Item> = {
+    <non_empty: NonEmptyIntersperse<Item, Separator>> => non_empty,
+    () => vec![],
+}
+
+Variable: Term = {
+    <l: @L> <var: Id> <r: @R> => {
+        context.new_term(TermData::Variable(var), Some(Location(l, r)))
+    },
+}
+Wildcard: Term = {
+    <l: @L> "_" <r: @R> => {
+        context.new_term(TermData::Wildcard, Some(Location(l, r)))
+    },
+}
+ApplicationTerm: Term = {
+    <l: @L> <func: Id> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
+        context.new_term(TermData::Application(func, args), Some(Location(l, r)))
+    },
+}
+
+Term: Term = {
+    <var: Variable> => var,
+    <wildcard: Wildcard> => wildcard,
+    <application: ApplicationTerm> => application,
+}
+
+ArgList: Vec<Term> = {
+    <l: @L> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
+        args
+    },
+}
+
+IfAtom: IfAtom = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
+        IfAtom { data: IfAtomData::Equal(lhs, rhs), location: Location(l, r) }
+    },
+    <l: @L> <tm: Term> "!" <r: @R> => {
+        IfAtom { data: IfAtomData::Defined(tm), location: Location(l, r) }
+    },
+    <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
+        IfAtom { data: IfAtomData::Predicate { pred, args }, location: Location(l, r) }
+    },
+    <l: @L> <var: Term> ":" <id: Id> <r: @R> => {
+        IfAtom { data: IfAtomData::Var { pred, args }, location: Location(l, r) }
+    },
+}
+
+ThenAtom: ThenAtom = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
+        ThenAtom { data: ThenAtomData::Equal(lhs, rhs), location: Location(l, r) }
+    },
+    <l: @L> <var: PairFirst<Term, "=">?> <term: Term> "!" <r: @R> => {
+        ThenAtom { data: ThenAtomData::Defined { var, term }, location: Location(l, r) }
+    },
+    <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
+        ThenAtom { data: ThenAtomData::Pred { pred, args }, location: Location(l, r) }
+    },
+}
+
+Stmt: Stmt = {
+    <l: @L> "if" <atom: IfAtom> ";" <r: @R> => {
+        Stmt { data: StmtData::If(IfAtom), location: Location(l, r) }
+    },
+    <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => {
+        Stmt { data: StmtData::Then(ThenAtom), location: Location(l, r) }
+    },
+}
+
+RuleDecl: RuleDecl = {
+    <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => {
+        RuleDecl { name, body, location: Location(l, r) }
+    },
+}
+
+TypeDecl: Type = {
+    <l: @L>  "type" <name: Id> ";" <r: @R> => {
+        Type{name, location: Location(l, r)}
+    },
+}
+
+pub ArgDecl: ArgDecl = {
+    <l: @L> <name: Id> ":" <typ: Id> <r: @R> => {
+        ArgDecl { name, typ, location: Location(l, r) }
+    },
+}
+
+ArgDeclList: ArgDeclList = {
+    <l: @L> "(" <args: Intersperse<ArgDecl, ",">> ")" <r: @R> => {
+        ArgDeclList { args, location: Location(l, r) }
+    },
+}
+
+PredDecl: PredDecl = {
+    <l: @L> "pred" <name: Id> <args: ArgDeclList> ";" <r: @R> => {
+        PredDecl { name, args, location: Location(l, r) }
+    },
+}
+
+FuncDecl: FuncDecl = {
+    <l: @L> "func" <name: Id> <args: ArgDeclList> "->" <result: Id> ";" <r: @R> => {
+        FuncDecl { name, args, result, location: Location(l, r) }
+    },
+}
+
+Decl: Decl = {
+    <typ: TypeDecl> => Decl::Type(typ),
+    <func: FuncDecl> => Decl::Func(func),
+    <pred: PredDecl> => Decl::Pred(pred),
+    <rule: RuleDecl> => Decl::Rule(rule),
+}
+
+Module: Module = {
+    <decls: Decl*> => Module(decls),
+}

@@ -1,3 +1,4 @@
+mod ast;
 mod ast_v1;
 mod module;
 mod unification;
