@@ -130,13 +130,6 @@ impl<'a> SymbolTable<'a> {
         })
     }
 
-    pub fn iter_preds<'b>(&'b self) -> impl 'b + Iterator<Item = &'a PredDecl> {
-        self.0.values().filter_map(|sym| match sym {
-            SymbolRef::Pred(pred) => Some(*pred),
-            _ => None,
-        })
-    }
-
     pub fn iter_funcs<'b>(&'b self) -> impl 'b + Iterator<Item = &'a FuncDecl> {
         self.0.values().filter_map(|sym| match sym {
             SymbolRef::Func(func) => Some(*func),

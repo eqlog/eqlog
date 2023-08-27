@@ -61,9 +61,3 @@ impl QueryAction {
         })
     }
 }
-
-pub struct PureQuery {
-    pub inputs: Vec<(FlatTerm, String)>,
-    pub output: FlatQueryOutput,
-    pub queries: Vec<Vec<QueryAtom>>,
-}

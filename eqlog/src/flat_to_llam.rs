@@ -240,20 +240,6 @@ pub fn lower_sequent_seminaive(
     }
 }
 
-pub fn lower_query(flat_query: &FlatQuery) -> PureQuery {
-    let mut fixed_terms: HashSet<FlatTerm> = flat_query.inputs.iter().map(|(tm, _)| *tm).collect();
-    let query = flat_query
-        .atoms
-        .iter()
-        .map(|atom| translate_query_atom(&mut fixed_terms, atom))
-        .collect();
-    PureQuery {
-        inputs: flat_query.inputs.clone(),
-        output: flat_query.output.clone(),
-        queries: vec![query],
-    }
-}
-
 pub fn functionality(relation: &str, arity: &[&str]) -> QueryAction {
     assert!(!arity.is_empty());
     let sorts: BTreeMap<FlatTerm, String> = arity

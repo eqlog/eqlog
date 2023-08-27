@@ -457,49 +457,6 @@ impl<'a> ModuleWrapper<'a> {
         Ok(())
     }
 
-    // Check whether every variable occuring in the output of a query also occurs as argument or in
-    // the where clause.
-    fn check_query_output_variables(query: &UserQuery) -> Result<(), CompileError> {
-        let universe = &query.universe;
-        let mut occured_vars = BTreeSet::new();
-        let mut insert_occured_if_var = |term: Term| {
-            use TermData::*;
-            match universe.data(term) {
-                Variable(name) => {
-                    occured_vars.insert(name);
-                }
-                Wildcard | Application { .. } => (),
-            };
-        };
-        for QueryArgument { variable, .. } in query.arguments.iter() {
-            insert_occured_if_var(*variable);
-        }
-        if let Some(where_formula) = &query.where_formula {
-            for atom in where_formula.iter() {
-                for tm in atom.iter_subterms(universe) {
-                    insert_occured_if_var(tm);
-                }
-            }
-        }
-
-        for tm in query.result.iter_subterms(universe) {
-            use TermData::*;
-            match universe.data(tm) {
-                Variable(name) => {
-                    if !occured_vars.contains(name) {
-                        return Err(CompileError::QueryVariableOnlyInOutput {
-                            name: name.clone(),
-                            location: Some(universe.loc(tm)),
-                        });
-                    }
-                }
-                Wildcard | Application { .. } => (),
-            };
-        }
-
-        Ok(())
-    }
-
     fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
         let axiom = rule_to_axiom(rule);
         let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
