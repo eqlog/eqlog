@@ -1,4 +1,7 @@
-use crate::ast::{FuncDecl, Module, PredDecl, TermContext};
+use crate::ast::{
+    Decl, FuncDecl, IfAtom, IfAtomData, Module, PredDecl, RuleDecl, StmtData, TermContext,
+    ThenAtom, ThenAtomData,
+};
 use crate::ast_v1::*;
 use crate::error::*;
 use crate::source_display::Location;
@@ -16,11 +19,90 @@ pub struct ModuleWrapper<'a> {
     axioms: Vec<(Axiom, TermMap<String>)>,
 }
 
+fn if_atom_to_v1_atom(if_atom: IfAtomData) -> AtomData {
+    match if_atom {
+        IfAtomData::Equal(lhs, rhs) => AtomData::Equal(lhs, rhs),
+        IfAtomData::Defined(tm) => AtomData::Defined(tm, None),
+        IfAtomData::Pred { pred, args } => AtomData::Predicate(pred, args),
+        IfAtomData::Var { term, typ } => AtomData::Defined(term, Some(typ)),
+    }
+}
+
+fn then_atom_to_v1_atom(then_atom: ThenAtomData) -> AtomData {
+    match then_atom {
+        ThenAtomData::Equal(lhs, rhs) => AtomData::Equal(lhs, rhs),
+        ThenAtomData::Defined { var, term } => {
+            assert!(
+                var.is_none(),
+                "Variables for then defined atoms not supported yet"
+            );
+            AtomData::Defined(term, None)
+        }
+        ThenAtomData::Pred { pred, args } => AtomData::Predicate(pred, args),
+    }
+}
+
+fn rule_to_axiom(rule: RuleDecl) -> Axiom {
+    let RuleDecl {
+        term_context,
+        body,
+        loc,
+        ..
+    } = rule;
+
+    let mut premise: Vec<Atom> = Vec::new();
+    let mut conclusion: Vec<Atom> = Vec::new();
+
+    for stmt in body {
+        match stmt.data {
+            StmtData::If(IfAtom { loc, data }) => {
+                assert!(
+                    conclusion.is_empty(),
+                    "Mixing if and then statements not supported yet"
+                );
+                let v1_atom = Atom {
+                    data: if_atom_to_v1_atom(data),
+                    location: Some(loc),
+                };
+                premise.push(v1_atom);
+            }
+            StmtData::Then(ThenAtom { loc, data }) => {
+                let v1_atom = Atom {
+                    data: then_atom_to_v1_atom(data),
+                    location: Some(loc),
+                };
+                conclusion.push(v1_atom);
+            }
+        }
+    }
+
+    let sequent = Sequent {
+        data: SequentData::Implication {
+            premise,
+            conclusion,
+        },
+        universe: term_context,
+    };
+
+    Axiom {
+        sequent,
+        location: Some(loc),
+    }
+}
+
 impl<'a> ModuleWrapper<'a> {
     pub fn new(module: &'a Module) -> Result<Self, CompileError> {
         let symbols = SymbolTable::from_module(module)?;
-        let axioms = Vec::new(); // TODO
-        Ok(ModuleWrapper { symbols, axioms })
+        let mut module_wrapper = ModuleWrapper {
+            symbols,
+            axioms: Vec::new(),
+        };
+        for decl in module.0.iter() {
+            if let Decl::Rule(rule) = decl {
+                module_wrapper.add_rule(rule.clone());
+            }
+        }
+        Ok(module_wrapper)
     }
 
     pub fn iter_axioms(&'a self) -> impl 'a + Iterator<Item = (&'a Axiom, &'a TermMap<String>)> {
@@ -418,7 +500,8 @@ impl<'a> ModuleWrapper<'a> {
         Ok(())
     }
 
-    pub fn add_axiom(&mut self, axiom: Axiom) -> Result<(), CompileError> {
+    fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
+        let axiom = rule_to_axiom(rule);
         let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
         Self::check_reduction_variables(&axiom.sequent)?;
         Self::check_epimorphism(&axiom.sequent)?;
