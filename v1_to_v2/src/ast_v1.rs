@@ -1,8 +1,7 @@
 use crate::source_display::Location;
 use askama::Template;
 use itertools::Itertools;
-use std::fmt::{self, Debug, Display};
-use std::slice::from_ref;
+use std::fmt::{self, Debug};
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
 #[template(source = r#"type {{ name }};"#, ext = "txt")]
@@ -82,15 +81,6 @@ impl TermUniverse {
     pub fn data_ref(&self, tm: &Term) -> &TermData {
         self.data(*tm)
     }
-    pub fn location(&self, tm: Term) -> Option<Location> {
-        self.0[tm.0].1
-    }
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-    pub fn iter_terms(&self) -> impl Iterator<Item = Term> {
-        (0..self.0.len()).map(Term)
-    }
 }
 
 struct SubtermIterator<'a> {
@@ -128,15 +118,6 @@ impl<'a> Iterator for SubtermIterator<'a> {
             }
         }
         Some(child)
-    }
-}
-
-impl TermUniverse {
-    pub fn iter_subterms(&self, tm: Term) -> impl '_ + Iterator<Item = Term> {
-        SubtermIterator {
-            universe: self,
-            stack: vec![(tm, 0)],
-        }
     }
 }
 
@@ -184,51 +165,38 @@ pub struct Atom {
     pub location: Option<Location>,
 }
 
-impl Atom {
-    pub fn iter_subterms<'a>(
-        &'a self,
-        universe: &'a TermUniverse,
-    ) -> impl 'a + Iterator<Item = Term> {
-        use AtomData::*;
-        let top_tms = match &self.data {
-            Equal(lhs, rhs) => vec![*lhs, *rhs],
-            Defined(tm, _) => vec![*tm],
-            Predicate(_, args) => args.clone(),
-        };
-        top_tms
-            .into_iter()
-            .map(move |tm| universe.iter_subterms(tm))
-            .flatten()
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
 #[template(
     source = r#"{%- match self.atom.data -%}
   {%- when AtomData::Equal with (lhs, rhs) -%}
-    if {{ TermWithUniverse::new(lhs, self.universe) }} = {{ TermWithUniverse::new(rhs, self.universe) }};
+    {{ TermWithUniverse::new(lhs, self.universe) }} = {{ TermWithUniverse::new(rhs, self.universe) }}
   {%- when AtomData::Defined with (tm, opt_sort) -%}
-    if {{ TermWithUniverse::new(tm, self.universe) }}
+    {{ TermWithUniverse::new(tm, self.universe) }}
     {%- match opt_sort -%}
       {%- when Some with (sort) -%}
         : {{sort}}
       {%- when None -%}
         !
     {%- endmatch -%}
-    ;
   {%- when AtomData::Predicate with (pred, args) -%}
-    if {{ pred }}(
+    {{ pred }}(
     {%- for arg in args -%}
       {{ TermWithUniverse::new(arg, self.universe) }}
       {%- if !loop.last -%}, {% endif -%}
     {%- endfor -%}
-    );
+    )
 {%- endmatch -%}"#,
     ext = "txt"
 )]
-pub struct PremiseAtomWithUniverse<'a> {
+pub struct AtomWithUniverse<'a> {
     atom: &'a Atom,
     universe: &'a TermUniverse,
+}
+
+impl<'a> AtomWithUniverse<'a> {
+    fn new(atom: &'a Atom, universe: &'a TermUniverse) -> Self {
+        AtomWithUniverse { atom, universe }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -249,28 +217,55 @@ pub enum SequentData {
     },
 }
 
-impl SequentData {
-    pub fn iter_atoms<'a>(&'a self) -> impl 'a + Iterator<Item = &'a Atom> {
-        use SequentData::*;
-        let result: Box<dyn 'a + Iterator<Item = &'a Atom>> = match self {
-            Implication {
-                premise,
-                conclusion,
-            } => Box::new(premise.iter().chain(conclusion)),
-            Reduction { premise, .. } => Box::new(premise.iter()),
-            Bireduction { premise, .. } => Box::new(premise.iter()),
-        };
-        result
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Sequent {
     pub universe: TermUniverse,
     pub data: SequentData,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
+#[template(
+    source = r#"rule {
+{%- match self.sequent.data -%}
+{%- when SequentData::Implication with {premise, conclusion} -%}
+{%- for atom in premise %}
+  if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
+{%- endfor -%}
+{%- for atom in conclusion %}
+  then {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
+{%- endfor -%}
+{%- when SequentData::Reduction with {premise, from, to} -%}
+{%- for atom in premise %}
+  if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
+{%- endfor -%}
+{%- match self.sequent.universe.data_ref(from) -%}
+{%- when TermData::Application with (func, args) -%}
+{%- for arg in args %}
+  if t_{{loop.index0}} = {{ TermWithUniverse::new(arg, self.sequent.universe) }};
+{%- endfor -%}
+{%- when TermData::Variable with (name) -%}
+{%- when TermData::Wildcard -%}
+{%- endmatch %}
+  if to = {{ TermWithUniverse::new(to, self.sequent.universe) }};
+{%- match self.sequent.universe.data_ref(from) -%}
+{%- when TermData::Application with (func, args) %}
+  then {{ func }}(
+{%- for arg in args -%}
+t_{{loop.index0}}
+{%- if !loop.last -%}, {% endif -%}
+{%- endfor -%}
+) = to;
+{%- when TermData::Variable with (name) %}
+  then {{ name }} = to;
+{%- when TermData::Wildcard %}
+  then _ = to;
+{%- endmatch -%}
+{%- when SequentData::Bireduction with {premise, lhs, rhs} -%}
+BIREDUCTIONS ARE NOT SUPPORTED
+{%- endmatch %}
+}"#,
+    ext = "txt"
+)]
 pub struct Axiom {
     pub sequent: Sequent,
     pub location: Option<Location>,
@@ -288,26 +283,6 @@ pub enum QueryResult {
     NoResult,
     SingleResult(Term),
     TupleResult(Vec<Term>),
-}
-
-impl QueryResult {
-    pub fn iter_result_terms(&self) -> impl Iterator<Item = Term> + '_ {
-        use QueryResult::*;
-        let slice: &[Term] = match self {
-            NoResult => &[],
-            SingleResult(tm) => from_ref(tm),
-            TupleResult(tms) => tms.as_slice(),
-        };
-        slice.iter().copied()
-    }
-    pub fn iter_subterms<'a>(
-        &'a self,
-        universe: &'a TermUniverse,
-    ) -> impl Iterator<Item = Term> + 'a {
-        self.iter_result_terms()
-            .map(move |tm| universe.iter_subterms(tm))
-            .flatten()
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -329,7 +304,9 @@ pub struct UserQuery {
     {{ func }}
   {%- when Decl::Pred with (pred) -%}
     {{ pred }}
-  {%- else -%}
+  {%- when Decl::Axiom with (axiom) -%}
+    {{ axiom }}
+  {%- when Decl::Query with (query) -%}
     NOT SUPPORTED
 {%- endmatch -%}"#,
     ext = "txt"
@@ -342,23 +319,15 @@ pub enum Decl {
     Query(UserQuery),
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum SymbolKind {
-    Sort,
-    Predicate,
-    Function,
-    Query,
-}
-
-impl Display for SymbolKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use SymbolKind::*;
-        f.write_str(match self {
-            Sort => "sort",
-            Predicate => "predicate",
-            Function => "function",
-            Query => "query",
-        })
+impl Decl {
+    pub fn location(&self) -> Option<Location> {
+        match self {
+            Decl::Sort(sort) => sort.location,
+            Decl::Func(func) => func.location,
+            Decl::Pred(pred) => pred.location,
+            Decl::Axiom(axiom) => axiom.location,
+            Decl::Query(query) => query.location,
+        }
     }
 }
 
