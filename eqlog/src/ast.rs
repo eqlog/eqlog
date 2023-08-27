@@ -148,7 +148,7 @@ pub struct TypeDecl {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ArgDecl {
-    pub name: String,
+    pub name: Option<String>,
     pub typ: String,
     pub loc: Location,
 }

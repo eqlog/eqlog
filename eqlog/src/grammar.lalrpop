@@ -111,7 +111,7 @@ TypeDecl: TypeDecl = {
 }
 
 ArgDecl: ArgDecl = {
-    <l: @L> <name: Id> ":" <typ: Id> <r: @R> => {
+    <l: @L> <name: PairFirst<Id, ":">?> <typ: Id> <r: @R> => {
         ArgDecl { name, typ, loc: Location(l, r) }
     },
 }
