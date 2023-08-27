@@ -135,6 +135,7 @@ pub struct Stmt {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct RuleDecl {
     pub name: Option<String>,
+    pub term_context: TermContext,
     pub body: Vec<Stmt>,
     pub loc: Location,
 }

@@ -98,7 +98,9 @@ Stmt: Stmt = {
 
 RuleDecl: RuleDecl = {
     <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => {
-        RuleDecl { name, body, loc: Location(l, r) }
+        let mut term_context = TermContext::new();
+        swap(&mut term_context, context);
+        RuleDecl { name, body, term_context, loc: Location(l, r) }
     },
 }
 
