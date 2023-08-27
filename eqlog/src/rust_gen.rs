@@ -1657,7 +1657,7 @@ fn write_define_fn(out: &mut impl Write, function: &FuncDecl) -> io::Result<()> 
         .iter()
         .enumerate()
         .format_with("\n", |(i, arg_decl), f| {
-            let sort_snake = arg_decl.name.to_case(Snake);
+            let sort_snake = arg_decl.typ.to_case(Snake);
             f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
         });
 
@@ -1704,7 +1704,6 @@ fn write_theory_impl(
     name: &str,
     module: &ModuleWrapper,
     query_actions: &[QueryAction],
-    pure_queries: &[(String, PureQuery)],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
 
@@ -1741,10 +1740,6 @@ fn write_theory_impl(
         }
         write_pub_insert_relation(out, rel, &arity, is_function)?;
         write!(out, "\n")?;
-    }
-
-    for (name, pure_query) in pure_queries.iter() {
-        write_pure_query_fn(out, module, name, pure_query)?;
     }
 
     write_is_dirty_fn(out, module)?;
