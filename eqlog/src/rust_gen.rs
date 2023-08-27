@@ -1,8 +1,10 @@
-use crate::ast_v1::*;
+use crate::ast::*;
 use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
+use crate::source_display::Location;
+use crate::symbol_table::SymbolRef;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
@@ -645,13 +647,16 @@ fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<
     "}
 }
 
-fn write_is_dirty_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let rels_dirty = module.relations().format_with("", |(relation, _), f| {
-        let relation_snake = relation.to_case(Snake);
-        f(&format_args!(" || self.{relation_snake}.is_dirty()"))
-    });
+fn write_is_dirty_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
+    let rels_dirty = module
+        .symbols
+        .relations()
+        .format_with("", |(relation, _), f| {
+            let relation_snake = relation.to_case(Snake);
+            f(&format_args!(" || self.{relation_snake}.is_dirty()"))
+        });
 
-    let sorts_dirty = module.iter_sorts().format_with("", |sort, f| {
+    let sorts_dirty = module.symbols.iter_types().format_with("", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
         f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
     });
@@ -943,19 +948,22 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_model_delta_struct(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let new_tuples = module.relations().format_with("\n", |(relation, _), f| {
-        let relation_snake = relation.to_case(Snake);
-        f(&format_args!("    new_{relation_snake}: Vec<{relation}>,"))
-    });
-    let new_equalities = module.iter_sorts().format_with("\n", |sort, f| {
+fn write_model_delta_struct(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
+    let new_tuples = module
+        .symbols
+        .relations()
+        .format_with("\n", |(relation, _), f| {
+            let relation_snake = relation.to_case(Snake);
+            f(&format_args!("    new_{relation_snake}: Vec<{relation}>,"))
+        });
+    let new_equalities = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
         f(&format_args!(
             "    new_{sort_snake}_equalities: Vec<({sort}, {sort})>,"
         ))
     });
-    let new_element_number = module.iter_sorts().format_with("\n", |sort, f| {
+    let new_element_number = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
         f(&format_args!("    new_{sort_snake}_number: usize,"))
@@ -971,7 +979,7 @@ fn write_model_delta_struct(out: &mut impl Write, module: &Module) -> io::Result
     "}
 }
 
-fn write_model_delta_impl(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_model_delta_impl(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     writedoc! {out, "
         impl ModelDelta {{
     "}?;
@@ -983,7 +991,7 @@ fn write_model_delta_impl(out: &mut impl Write, module: &Module) -> io::Result<(
     write_model_delta_apply_equalities_fn(out, module)?;
     write_model_delta_apply_tuples_fn(out, module)?;
 
-    for sort in module.iter_sorts() {
+    for sort in module.symbols.iter_types() {
         write_model_delta_new_element_fn(out, &sort.name)?;
     }
 
@@ -993,19 +1001,22 @@ fn write_model_delta_impl(out: &mut impl Write, module: &Module) -> io::Result<(
     Ok(())
 }
 
-fn write_model_delta_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let new_tuples = module.relations().format_with("\n", |(relation, _), f| {
-        let relation_snake = relation.to_case(Snake);
-        f(&format_args!("    new_{relation_snake}: Vec::new(),"))
-    });
-    let new_equalities = module.iter_sorts().format_with("\n", |sort, f| {
+fn write_model_delta_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
+    let new_tuples = module
+        .symbols
+        .relations()
+        .format_with("\n", |(relation, _), f| {
+            let relation_snake = relation.to_case(Snake);
+            f(&format_args!("    new_{relation_snake}: Vec::new(),"))
+        });
+    let new_equalities = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
         f(&format_args!(
             "    new_{sort_snake}_equalities: Vec::new(),"
         ))
     });
-    let new_element_number = module.iter_sorts().format_with("\n", |sort, f| {
+    let new_element_number = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
         f(&format_args!("    new_{sort_snake}_number: 0,"))
@@ -1034,9 +1045,9 @@ fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
 
 fn write_model_delta_apply_new_elements_fn(
     out: &mut impl Write,
-    module: &Module,
+    module: &ModuleWrapper,
 ) -> io::Result<()> {
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
         f(&formatdoc! {"
@@ -1062,14 +1073,18 @@ fn write_model_delta_apply_new_elements_fn(
     "}
 }
 
-fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+fn write_model_delta_apply_equalities_fn(
+    out: &mut impl Write,
+    module: &ModuleWrapper,
+) -> io::Result<()> {
+    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
         let sort_snake = sort.to_case(Snake);
 
         let arity_contains_sort =
             |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
         let clean_rels = module
+            .symbols
             .relations()
             .filter(|(_, arity)| arity_contains_sort(arity))
             .format_with("\n", |(relation, arity), f| {
@@ -1132,8 +1147,12 @@ fn write_model_delta_apply_equalities_fn(out: &mut impl Write, module: &Module) 
     "}
 }
 
-fn write_model_delta_apply_tuples_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_model_delta_apply_tuples_fn(
+    out: &mut impl Write,
+    module: &ModuleWrapper,
+) -> io::Result<()> {
     let relations = module
+        .symbols
         .relations()
         .format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
@@ -1181,7 +1200,7 @@ fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Res
 
 fn write_query_loop_headers<'a>(
     out: &mut impl Write,
-    module: &Module,
+    module: &ModuleWrapper,
     query: impl IntoIterator<Item = &'a QueryAtom>,
 ) -> io::Result<()> {
     for atom in query.into_iter() {
@@ -1204,6 +1223,7 @@ fn write_query_loop_headers<'a>(
                     "Only Quantifier::All is implemented"
                 );
                 let arity_len = module
+                    .symbols
                     .relations()
                     .find(|(rel, _)| rel == relation)
                     .unwrap()
@@ -1268,7 +1288,7 @@ fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Resul
 
 fn write_query_and_record_fn(
     out: &mut impl Write,
-    module: &Module,
+    module: &ModuleWrapper,
     query_action: &QueryAction,
     axiom_index: usize,
 ) -> io::Result<()> {
@@ -1308,7 +1328,7 @@ fn write_query_and_record_fn(
 
 fn write_pure_query_fn(
     out: &mut impl Write,
-    module: &Module,
+    module: &ModuleWrapper,
     name: &str,
     pure_query: &PureQuery,
 ) -> io::Result<()> {
@@ -1383,7 +1403,11 @@ fn write_pure_query_fn(
     "}
 }
 
-fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -> io::Result<()> {
+fn write_action_atom(
+    out: &mut impl Write,
+    module: &ModuleWrapper,
+    atom: &ActionAtom,
+) -> io::Result<()> {
     use ActionAtom::*;
     match atom {
         InsertTuple {
@@ -1392,7 +1416,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
             out_projections,
         } => {
             let relation_snake = relation.to_case(Snake);
-            let arity = module.arity(relation).unwrap();
+            let arity = module.symbols.arity(relation).unwrap();
 
             let query_spec = QuerySpec {
                 projections: in_projections.keys().copied().collect(),
@@ -1460,7 +1484,7 @@ fn write_action_atom(out: &mut impl Write, module: &Module, atom: &ActionAtom) -
 
 fn write_record_action_fn(
     out: &mut impl Write,
-    module: &Module,
+    module: &ModuleWrapper,
     sorts: &BTreeMap<FlatTerm, String>,
     action_inputs: &BTreeSet<FlatTerm>,
     action: &[ActionAtom],
@@ -1483,12 +1507,15 @@ fn write_record_action_fn(
     "}
 }
 
-fn write_drop_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let relations = module.relations().format_with("\n", |(relation, _), f| {
-        let relation_snake = relation.to_case(Snake);
-        f(&format_args!("self.{relation_snake}.drop_dirt();"))
-    });
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+fn write_drop_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
+    let relations = module
+        .symbols
+        .relations()
+        .format_with("\n", |(relation, _), f| {
+            let relation_snake = relation.to_case(Snake);
+            f(&format_args!("self.{relation_snake}.drop_dirt();"))
+        });
+    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
         f(&format_args!("self.{sort_snake}_dirty.clear();"))
     });
@@ -1504,12 +1531,15 @@ fn write_drop_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     "}
 }
 
-fn write_retire_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
-    let relations = module.relations().format_with("\n", |(relation, _), f| {
-        let relation_snake = relation.to_case(Snake);
-        f(&format_args!("self.{relation_snake}.retire_dirt();"))
-    });
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+fn write_retire_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
+    let relations = module
+        .symbols
+        .relations()
+        .format_with("\n", |(relation, _), f| {
+            let relation_snake = relation.to_case(Snake);
+            f(&format_args!("self.{relation_snake}.retire_dirt();"))
+        });
+    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
         f(&formatdoc! {"
             let mut {sort_snake}_dirty_tmp = BTreeSet::new();
@@ -1528,8 +1558,9 @@ fn write_retire_dirt_fn(out: &mut impl Write, module: &Module) -> io::Result<()>
     "}
 }
 
-fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_recall_previous_dirt(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let relations = module
+        .symbols
         .relations()
         .format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
@@ -1543,7 +1574,7 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &Module) -> io::Resu
             ))
         });
 
-    let sorts = module.iter_sorts().format_with("\n", |sort, f| {
+    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort_snake = sort.name.to_case(Snake);
         f(&formatdoc! {"
                 let mut {sort_snake}_dirty_prev_tmp = Vec::new();
@@ -1646,12 +1677,12 @@ fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
     "}
 }
 
-fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
+fn write_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     write!(out, "/// Creates an empty model.\n")?;
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn new() -> Self {{\n")?;
     write!(out, "Self {{\n")?;
-    for sort in module.iter_sorts() {
+    for sort in module.symbols.iter_types() {
         let sort_snake = sort.name.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
@@ -1659,7 +1690,7 @@ fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
-    for (relation, _) in module.relations() {
+    for (relation, _) in module.symbols.relations() {
         let relation_snake = relation.to_case(Snake);
         write!(out, "{relation_snake}: {relation}Table::new(),")?;
     }
@@ -1671,38 +1702,47 @@ fn write_new_fn(out: &mut impl Write, module: &Module) -> io::Result<()> {
     Ok(())
 }
 
-fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> {
-    let Function { name, dom, cod, .. } = function;
+fn write_define_fn(out: &mut impl Write, function: &FuncDecl) -> io::Result<()> {
+    let FuncDecl {
+        name,
+        arg_decls,
+        result,
+        ..
+    } = function;
     let function_snake = name.to_case(Snake);
-    let fn_args = dom
+    let fn_args = arg_decls
         .iter()
+        .map(|arg_decl| &arg_decl.typ)
         .enumerate()
-        .format_with(", ", |(i, sort), f| f(&format_args!("mut arg{i}: {sort}")));
+        .format_with(", ", |(i, typ), f| f(&format_args!("mut arg{i}: {typ}")));
 
     let query = QuerySpec {
-        projections: (0..dom.len()).collect(),
+        projections: (0..arg_decls.len()).collect(),
         diagonals: BTreeSet::new(),
         only_dirty: false,
     };
     let iter = IterName(&name, &query);
-    let iter_args = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+    let iter_args = (0..arg_decls.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
 
-    let cod_index = dom.len();
+    let cod_index = arg_decls.len();
 
-    let cod_snake = cod.to_case(Snake);
+    let cod_snake = result.to_case(Snake);
 
-    let insert_dom_args = (0..dom.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
+    let insert_dom_args = (0..arg_decls.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
 
-    let canonicalize = dom.iter().enumerate().format_with("\n", |(i, s), f| {
-        let sort_snake = s.to_case(Snake);
-        f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
-    });
+    let canonicalize = arg_decls
+        .iter()
+        .enumerate()
+        .format_with("\n", |(i, arg_decl), f| {
+            let sort_snake = arg_decl.name.to_case(Snake);
+            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
+        });
 
     let args = iter_args.clone();
     writedoc! {out, "
         /// Enforces that `{name}({args})` is defined, adjoining a new element if necessary.
         #[allow(dead_code)]
-        pub fn define_{function_snake}(&mut self, {fn_args}) -> {cod} {{
+        pub fn define_{function_snake}(&mut self, {fn_args}) -> {result} {{
             {canonicalize}
             if let Some(t) = self.{iter}({iter_args}).next() {{
                 return t.{cod_index};
@@ -1714,16 +1754,16 @@ fn write_define_fn(out: &mut impl Write, function: &Function) -> io::Result<()> 
     "}
 }
 
-fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io::Result<()> {
+fn write_theory_struct(out: &mut impl Write, name: &str, module: &ModuleWrapper) -> io::Result<()> {
     write!(out, "/// A model of the `{name}` theory.\n")?;
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
-    for sort in module.iter_sorts() {
+    for sort in module.symbols.iter_types() {
         write_sort_fields(out, &sort.name)?;
         write!(out, "\n")?;
     }
 
-    for (relation, _) in module.relations() {
+    for (relation, _) in module.symbols.relations() {
         let relation_snake = relation.to_case(Snake);
         write!(out, "  {relation_snake}: {relation}Table,")?;
     }
@@ -1739,7 +1779,7 @@ fn write_theory_struct(out: &mut impl Write, name: &str, module: &Module) -> io:
 fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
-    module: &Module,
+    module: &ModuleWrapper,
     query_actions: &[QueryAction],
     pure_queries: &[(String, PureQuery)],
 ) -> io::Result<()> {
@@ -1751,7 +1791,7 @@ fn write_theory_impl(
     write_close_fn(out)?;
     write_close_until_fn(out, query_actions)?;
 
-    for sort in module.iter_sorts() {
+    for sort in module.symbols.iter_types() {
         write_new_element(out, &sort.name)?;
         write_equate_elements(out, &sort.name)?;
         write_iter_sort_fn(out, &sort.name)?;
@@ -1759,14 +1799,14 @@ fn write_theory_impl(
         write_are_equal_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
-    for (rel, arity) in module.relations() {
-        let is_function = match module.get_symbol_at(rel, None).unwrap() {
-            Symbol::Function(function) => {
+    for (rel, arity) in module.symbols.relations() {
+        let is_function = match module.symbols.get_symbol(rel, Location(0, 0)).unwrap() {
+            SymbolRef::Func(function) => {
                 write_pub_function_eval_fn(out, rel, &arity)?;
                 write_define_fn(out, function)?;
                 true
             }
-            Symbol::Predicate(_) => {
+            SymbolRef::Pred(_) => {
                 write_pub_predicate_holds_fn(out, rel, &arity)?;
                 false
             }
@@ -1807,8 +1847,12 @@ fn write_theory_impl(
     Ok(())
 }
 
-fn write_theory_display_impl(out: &mut impl Write, name: &str, module: &Module) -> io::Result<()> {
-    let els = module.iter_sorts().format_with("", |sort, f| {
+fn write_theory_display_impl(
+    out: &mut impl Write,
+    name: &str,
+    module: &ModuleWrapper,
+) -> io::Result<()> {
+    let els = module.symbols.iter_types().format_with("", |sort, f| {
         let sort_camel = &sort.name;
         let sort_snake = sort.name.to_case(Snake);
         let modify_table = formatdoc! {"
@@ -1825,7 +1869,7 @@ fn write_theory_display_impl(out: &mut impl Write, name: &str, module: &Module) 
             "self.{sort_snake}_equalities.class_table().{modify_table}.fmt(f)?;"
         ))
     });
-    let rels = module.relations().format_with("", |(rel, _), f| {
+    let rels = module.symbols.relations().format_with("", |(rel, _), f| {
         let rel_snake = rel.to_case(Snake);
         f(&format_args!("self.{rel_snake}.fmt(f)?;"))
     });
@@ -1844,21 +1888,19 @@ fn write_theory_display_impl(out: &mut impl Write, name: &str, module: &Module) 
 pub fn write_module(
     out: &mut impl Write,
     name: &str,
-    module: &Module,
-    query_actions: &[QueryAction],
-    pure_queries: &[(String, PureQuery)],
+    module: &ModuleWrapper,
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for sort in module.iter_sorts() {
+    for sort in module.symbols.iter_types() {
         write_sort_struct(out, &sort.name)?;
         write_sort_impl(out, &sort.name)?;
     }
     write!(out, "\n")?;
 
-    for (rel, arity) in module.relations() {
+    for (rel, arity) in module.symbols.relations() {
         write_relation_struct(out, rel, &arity)?;
         let index = index_selection.get(rel).unwrap();
         write_table_struct(out, rel, &arity, index)?;
@@ -1873,7 +1915,6 @@ pub fn write_module(
     write_model_delta_impl(out, module)?;
     write!(out, "\n")?;
 
-    write_theory_impl(out, name, module, query_actions, pure_queries)?;
     write_theory_display_impl(out, name, module)?;
 
     Ok(())

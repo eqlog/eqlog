@@ -130,9 +130,9 @@ impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
             dirty = false;
             let mut apps: HashMap<(&str, Vec<Term>), Term> = HashMap::new();
             for tm in self.universe.iter_terms() {
-                if let TermData::Application(f, args) = self.universe.data(tm) {
+                if let TermData::Application { func, args } = self.universe.data(tm) {
                     let arg_roots = args.iter().map(|arg| self.root(*arg)).collect();
-                    let prev_tm = apps.insert((f, arg_roots), tm);
+                    let prev_tm = apps.insert((func, arg_roots), tm);
                     if let Some(prev_tm) = prev_tm {
                         let tm_root = self.root(tm);
                         let prev_tm_root = self.root(prev_tm);

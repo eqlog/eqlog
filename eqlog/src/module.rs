@@ -1,7 +1,9 @@
+use crate::ast::{FuncDecl, Module, PredDecl, TermContext};
 use crate::ast_v1::*;
 use crate::error::*;
 use crate::source_display::Location;
 use crate::source_display::*;
+use crate::symbol_table::SymbolTable;
 use crate::unification::*;
 use convert_case::{Case, Casing};
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,247 +11,48 @@ use std::fmt::{self, Display};
 use std::iter::{once, repeat};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Symbol {
-    Sort(Sort),
-    Predicate(Predicate),
-    Function(Function),
-    Query {
-        ast: UserQuery,
-        term_sorts: TermMap<String>,
-    },
-}
-
-impl Symbol {
-    pub fn kind(&self) -> SymbolKind {
-        match self {
-            Symbol::Sort(_) => SymbolKind::Sort,
-            Symbol::Predicate(_) => SymbolKind::Predicate,
-            Symbol::Function(_) => SymbolKind::Function,
-            Symbol::Query { .. } => SymbolKind::Query,
-        }
-    }
-    pub fn name(&self) -> &str {
-        use Symbol::*;
-        match self {
-            Sort(s) => &s.name,
-            Predicate(p) => &p.name,
-            Function(f) => &f.name,
-            Query { ast, .. } => &ast.name,
-        }
-    }
-    pub fn location(&self) -> Option<Location> {
-        match self {
-            Symbol::Sort(Sort { location, .. }) => *location,
-            Symbol::Predicate(Predicate { location, .. }) => *location,
-            Symbol::Function(Function { location, .. }) => *location,
-            Symbol::Query { ast, .. } => ast.location,
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Module {
-    symbols: BTreeMap<String, Symbol>,
+pub struct ModuleWrapper<'a> {
+    pub symbols: SymbolTable<'a>,
     axioms: Vec<(Axiom, TermMap<String>)>,
 }
 
-impl Module {
-    pub fn new() -> Self {
-        Module {
-            symbols: BTreeMap::new(),
-            axioms: Vec::new(),
-        }
+impl<'a> ModuleWrapper<'a> {
+    pub fn new(module: &'a Module) -> Result<Self, CompileError> {
+        let symbols = SymbolTable::from_module(module)?;
+        let axioms = Vec::new(); // TODO
+        Ok(ModuleWrapper { symbols, axioms })
     }
 
-    pub fn get_symbol_at(
-        &self,
-        name: &str,
-        location: Option<Location>,
-    ) -> Result<&Symbol, CompileError> {
-        self.symbols
-            .get(name)
-            .ok_or_else(|| CompileError::UndeclaredSymbol {
-                name: name.into(),
-                location,
-            })
-    }
-    fn bad_symbol_kind(
-        symbol: &Symbol,
-        expected: SymbolKind,
-        used_location: Option<Location>,
-    ) -> CompileError {
-        CompileError::BadSymbolKind {
-            name: symbol.name().into(),
-            expected,
-            found: symbol.kind(),
-            used_location: used_location,
-            declared_location: symbol.location(),
-        }
-    }
-    pub fn get_sort_at(
-        &self,
-        name: &str,
-        location: Option<Location>,
-    ) -> Result<&Sort, CompileError> {
-        let symbol = self.get_symbol_at(name, location)?;
-        if let Symbol::Sort(s) = symbol {
-            Ok(s)
-        } else {
-            Err(Self::bad_symbol_kind(symbol, SymbolKind::Sort, location))
-        }
-    }
-    pub fn get_predicate_at(
-        &self,
-        name: &str,
-        location: Option<Location>,
-    ) -> Result<&Predicate, CompileError> {
-        let symbol = self.get_symbol_at(name, location)?;
-        if let Symbol::Predicate(p) = symbol {
-            Ok(p)
-        } else {
-            Err(Self::bad_symbol_kind(
-                symbol,
-                SymbolKind::Predicate,
-                location,
-            ))
-        }
-    }
-    pub fn get_function_at(
-        &self,
-        name: &str,
-        location: Option<Location>,
-    ) -> Result<&Function, CompileError> {
-        let symbol = self.get_symbol_at(name, location)?;
-        if let Symbol::Function(f) = symbol {
-            Ok(f)
-        } else {
-            Err(Self::bad_symbol_kind(
-                symbol,
-                SymbolKind::Function,
-                location,
-            ))
-        }
+    pub fn iter_axioms(&'a self) -> impl 'a + Iterator<Item = (&'a Axiom, &'a TermMap<String>)> {
+        self.axioms.iter().map(|(axiom, types)| (axiom, types))
     }
 
-    pub fn iter_sorts(&self) -> impl Iterator<Item = &Sort> {
-        self.symbols.values().filter_map(|symbol| match symbol {
-            Symbol::Sort(s) => Some(s),
-            _ => None,
-        })
-    }
-    pub fn iter_predicates(&self) -> impl Iterator<Item = &Predicate> {
-        self.symbols.values().filter_map(|symbol| match symbol {
-            Symbol::Predicate(p) => Some(p),
-            _ => None,
-        })
-    }
-    pub fn iter_functions(&self) -> impl Iterator<Item = &Function> {
-        self.symbols.values().filter_map(|symbol| match symbol {
-            Symbol::Function(f) => Some(f),
-            _ => None,
-        })
-    }
-
-    pub fn iter_queries(&self) -> impl Iterator<Item = (&UserQuery, &TermMap<String>)> {
-        self.symbols.values().filter_map(|symbol| match symbol {
-            Symbol::Query { ast, term_sorts } => Some((ast, term_sorts)),
-            _ => None,
-        })
-    }
-
-    pub fn iter_axioms(&self) -> impl Iterator<Item = &(Axiom, TermMap<String>)> {
-        self.axioms.iter()
-    }
-
-    pub fn relations(&self) -> impl Iterator<Item = (&str, Vec<&str>)> {
-        let pred_rels = self.iter_predicates().map(|pred| {
-            let name = pred.name.as_str();
-            let arity: Vec<&str> = pred.arity.iter().map(|s| s.as_str()).collect();
-            (name, arity)
-        });
-        let func_rels = self.iter_functions().map(|func| {
-            let name = func.name.as_str();
-            let arity: Vec<&str> = func
-                .dom
-                .iter()
-                .chain(once(&func.cod))
-                .map(|s| s.as_str())
-                .collect();
-            (name, arity)
-        });
-        pred_rels.chain(func_rels)
-    }
-
-    pub fn arity(&self, relation: &str) -> Option<Vec<&str>> {
-        match self.symbols.get(relation)? {
-            Symbol::Sort(_) => None,
-            Symbol::Predicate(Predicate { arity, .. }) => {
-                Some(arity.iter().map(|s| s.as_str()).collect())
-            }
-            Symbol::Function(Function { dom, cod, .. }) => {
-                Some(dom.iter().chain(once(cod)).map(|s| s.as_str()).collect())
-            }
-            Symbol::Query { .. } => None,
-        }
-    }
-
-    fn check_symbol_case(symbol: &Symbol) -> Result<(), CompileError> {
-        let name = symbol.name();
-        let kind = symbol.kind();
-        use SymbolKind::*;
-        match kind {
-            Sort | Predicate | Function => {
-                if name.to_case(Case::UpperCamel) != *name {
-                    return Err(CompileError::SymbolNotCamelCase {
-                        name: name.to_string(),
-                        location: symbol.location(),
-                        symbol_kind: kind,
-                    });
-                }
-            }
-            Query => {
-                if name.to_case(Case::Snake) != *name {
-                    return Err(CompileError::SymbolNotSnakeCase {
-                        name: name.to_string(),
-                        location: symbol.location(),
-                        symbol_kind: kind,
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn insert_symbol(&mut self, symbol: Symbol) -> Result<(), CompileError> {
-        Self::check_symbol_case(&symbol)?;
-
-        let second_location = symbol.location();
-        if let Some(prev_symbol) = self.symbols.insert(symbol.name().into(), symbol) {
-            return Err(CompileError::SymbolDeclaredTwice {
-                name: prev_symbol.name().into(),
-                first_declaration: prev_symbol.location(),
-                second_declaration: second_location,
-            });
-        }
-
-        Ok(())
-    }
-
-    pub fn add_sort(&mut self, sort: Sort) -> Result<(), CompileError> {
-        self.insert_symbol(Symbol::Sort(sort))
-    }
-    pub fn add_predicate(&mut self, pred: Predicate) -> Result<(), CompileError> {
-        for s in pred.arity.iter() {
-            self.get_sort_at(s, pred.location)?;
-        }
-        self.insert_symbol(Symbol::Predicate(pred))
-    }
-    pub fn add_function(&mut self, func: Function) -> Result<(), CompileError> {
-        for s in func.dom.iter().chain(once(&func.cod)) {
-            self.get_sort_at(s, func.location)?;
-        }
-        self.insert_symbol(Symbol::Function(func))
-    }
+    //fn check_symbol_case(symbol: &Symbol) -> Result<(), CompileError> {
+    //    let name = symbol.name();
+    //    let kind = symbol.kind();
+    //    use SymbolKind::*;
+    //    match kind {
+    //        Sort | Predicate | Function => {
+    //            if name.to_case(Case::UpperCamel) != *name {
+    //                return Err(CompileError::SymbolNotCamelCase {
+    //                    name: name.to_string(),
+    //                    location: symbol.location(),
+    //                    symbol_kind: kind,
+    //                });
+    //            }
+    //        }
+    //        Query => {
+    //            if name.to_case(Case::Snake) != *name {
+    //                return Err(CompileError::SymbolNotSnakeCase {
+    //                    name: name.to_string(),
+    //                    location: symbol.location(),
+    //                    symbol_kind: kind,
+    //                });
+    //            }
+    //        }
+    //    }
+    //    Ok(())
+    //}
 }
 
 // The term unification used for sort inference and checking. For each term, we infer a set of
@@ -263,29 +66,31 @@ impl MergeFn<BTreeSet<String>> for SortMerge {
 }
 type SortMap<'a> = TermUnification<'a, BTreeSet<String>, SortMerge>;
 
-impl Module {
+impl<'a> ModuleWrapper<'a> {
     fn collect_function_application_requirements(
         &self,
-        universe: &TermUniverse,
+        universe: &TermContext,
         sorts: &mut SortMap,
     ) -> Result<(), CompileError> {
         for tm in universe.iter_terms() {
             match universe.data(tm) {
-                TermData::Application(f, args) => {
-                    let loc = universe.location(tm);
-                    let Function { dom, cod, .. } = self.get_function_at(f, loc)?;
-                    if args.len() != dom.len() {
+                TermData::Application { func, args } => {
+                    let loc = universe.loc(tm);
+                    let FuncDecl {
+                        arg_decls, result, ..
+                    } = self.symbols.get_func(func, loc)?;
+                    if args.len() != arg_decls.len() {
                         return Err(CompileError::FunctionArgumentNumber {
-                            function: f.clone(),
-                            expected: dom.len(),
+                            function: func.clone(),
+                            expected: arg_decls.len(),
                             got: args.len(),
-                            location: universe.location(tm),
+                            location: universe.loc(tm),
                         });
                     }
-                    for (arg, sort) in args.iter().copied().zip(dom) {
-                        sorts[arg].insert(sort.clone());
+                    for (arg, arg_decl) in args.iter().copied().zip(arg_decls) {
+                        sorts[arg].insert(arg_decl.typ.clone());
                     }
-                    sorts[tm].insert(cod.clone());
+                    sorts[tm].insert(result.clone());
                 }
                 TermData::Wildcard | TermData::Variable(_) => (),
             }
@@ -302,22 +107,23 @@ impl Module {
                 sorts.union(*lhs, *rhs);
             }
             AtomData::Defined(tm, Some(sort)) => {
-                let _ = self.get_sort_at(sort, atom.location)?;
+                let _ = self.symbols.get_type(sort, atom.location.unwrap())?;
                 sorts[*tm].insert(sort.clone());
             }
             AtomData::Defined(_, None) => (),
             AtomData::Predicate(p, args) => {
-                let Predicate { arity, .. } = self.get_predicate_at(p, atom.location)?;
-                if args.len() != arity.len() {
+                let PredDecl { arg_decls, .. } =
+                    self.symbols.get_pred(p, atom.location.unwrap())?;
+                if args.len() != arg_decls.len() {
                     return Err(CompileError::PredicateArgumentNumber {
                         predicate: p.clone(),
-                        expected: arity.len(),
+                        expected: arg_decls.len(),
                         got: args.len(),
                         location: atom.location,
                     });
                 }
-                for (arg, sort) in args.iter().copied().zip(arity) {
-                    sorts[arg].insert(sort.clone());
+                for (arg, arg_decl) in args.iter().copied().zip(arg_decls) {
+                    sorts[arg].insert(arg_decl.typ.clone());
                 }
             }
         }
@@ -326,7 +132,7 @@ impl Module {
     // Check that all terms have precisely one assigned sort, and return a map assigning to each
     // term its unique sort.
     fn into_unique_sorts(
-        universe: &TermUniverse,
+        universe: &TermContext,
         mut sorts: SortMap,
     ) -> Result<TermMap<String>, CompileError> {
         // Merge all syntactically equal terms (i.e. variables with the same name and all terms
@@ -337,13 +143,13 @@ impl Module {
             match sorts[tm].len() {
                 0 => {
                     return Err(CompileError::NoSort {
-                        location: universe.location(tm),
+                        location: Some(universe.loc(tm)),
                     })
                 }
                 1 => (),
                 _ => {
                     return Err(CompileError::ConflictingSorts {
-                        location: universe.location(tm),
+                        location: Some(universe.loc(tm)),
                         sorts: sorts[tm].iter().cloned().collect(),
                     })
                 }
@@ -379,43 +185,12 @@ impl Module {
         Self::into_unique_sorts(&sequent.universe, sorts)
     }
 
-    fn collect_query_argument_requirements<'a>(
-        &self,
-        arguments: &[QueryArgument],
-        sorts: &mut SortMap,
-    ) -> Result<(), CompileError> {
-        for arg in arguments.iter() {
-            if let Some(sort) = &arg.sort {
-                let _ = self.get_sort_at(sort, arg.location)?;
-                sorts[arg.variable].insert(sort.clone());
-            }
-        }
-        Ok(())
-    }
-
-    fn infer_query_sorts(&self, query: &UserQuery) -> Result<TermMap<String>, CompileError> {
-        let mut sorts = SortMap::new(
-            &query.universe,
-            vec![BTreeSet::new(); query.universe.len()],
-            SortMerge {},
-        );
-
-        self.collect_query_argument_requirements(&query.arguments, &mut sorts)?;
-        self.collect_function_application_requirements(&query.universe, &mut sorts)?;
-        if let Some(where_formula) = &query.where_formula {
-            for atom in where_formula.iter() {
-                self.collect_atom_requirements(atom, &mut sorts)?;
-            }
-        }
-        Self::into_unique_sorts(&query.universe, sorts)
-    }
-
     // Check that the `from` term of a reduction is composite, i.e. not a reduction or wildcard.
     fn check_reduction_variables(sequent: &Sequent) -> Result<(), CompileError> {
         use SequentData::*;
         let err = |tm| -> CompileError {
             CompileError::ReductionFromVariableOrWildcard {
-                location: sequent.universe.location(tm),
+                location: Some(sequent.universe.loc(tm)),
             }
         };
 
@@ -424,20 +199,20 @@ impl Module {
             Reduction { from, .. } => {
                 use TermData::*;
                 match sequent.universe.data(*from) {
-                    Application(_, _) => Ok(()),
+                    Application { .. } => Ok(()),
                     Wildcard | Variable(_) => Err(err(*from)),
                 }
             }
             Bireduction { lhs, rhs, .. } => {
                 use TermData::*;
                 match sequent.universe.data(*lhs) {
-                    Application(_, _) => (),
+                    Application { .. } => (),
                     Wildcard | Variable(_) => {
                         return Err(err(*lhs));
                     }
                 }
                 match sequent.universe.data(*rhs) {
-                    Application(_, _) => (),
+                    Application { .. } => (),
                     Wildcard | Variable(_) => {
                         return Err(err(*rhs));
                     }
@@ -495,16 +270,16 @@ impl Module {
             for tm in atom.iter_subterms(universe) {
                 match universe.data(tm) {
                     TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
-                    TermData::Application(_, _) => (),
+                    TermData::Application { .. } => (),
                     TermData::Variable(var) => {
                         return Err(CompileError::VariableNotInPremise {
                             var: var.clone(),
-                            location: universe.location(tm),
+                            location: Some(universe.loc(tm)),
                         })
                     }
                     TermData::Wildcard => {
                         return Err(CompileError::WildcardInConclusion {
-                            location: universe.location(tm),
+                            location: Some(universe.loc(tm)),
                         })
                     }
                 }
@@ -531,10 +306,10 @@ impl Module {
                                 // Variables or Wildcards should've been checked earlier.
                                 debug_assert!(has_occurred[new]);
                             }
-                            Application(_, args) => {
+                            Application { args, .. } => {
                                 if let Some(arg) = args.iter().find(|arg| !has_occurred[**arg]) {
                                     return Err(CompileError::ConclusionEqualityArgNew {
-                                        location: universe.location(*arg),
+                                        location: Some(universe.loc(*arg)),
                                     });
                                 }
                             }
@@ -548,7 +323,7 @@ impl Module {
                 Predicate(_, args) => {
                     if let Some(arg) = args.iter().copied().find(|arg| !has_occurred[*arg]) {
                         return Err(CompileError::ConclusionPredicateArgNew {
-                            location: universe.location(arg),
+                            location: Some(universe.loc(arg)),
                         });
                     }
                 }
@@ -562,13 +337,13 @@ impl Module {
     }
 
     // Check that all variables are snake_case.
-    fn check_variable_case(universe: &TermUniverse) -> Result<(), CompileError> {
+    fn check_variable_case(universe: &TermContext) -> Result<(), CompileError> {
         for tm in universe.iter_terms() {
             if let TermData::Variable(v) = universe.data(tm) {
                 if *v != v.to_case(Case::Snake) {
                     return Err(CompileError::VariableNotSnakeCase {
                         name: v.into(),
-                        location: universe.location(tm),
+                        location: universe.loc(tm),
                     });
                 }
             }
@@ -577,15 +352,15 @@ impl Module {
     }
 
     // Check that every variable occurs at least twice.
-    fn check_variable_occurence(universe: &TermUniverse) -> Result<(), CompileError> {
+    fn check_variable_occurence(universe: &TermContext) -> Result<(), CompileError> {
         let mut occ_nums: BTreeMap<&str, (usize, Option<Location>)> = BTreeMap::new();
         for tm in universe.iter_terms() {
             if let TermData::Variable(v) = universe.data(tm) {
                 if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {
                     *n += 1;
                 } else {
-                    let loc = universe.location(tm);
-                    occ_nums.insert(v, (1, loc));
+                    let loc = universe.loc(tm);
+                    occ_nums.insert(v, (1, Some(loc)));
                 }
             }
         }
@@ -611,7 +386,7 @@ impl Module {
                 Variable(name) => {
                     occured_vars.insert(name);
                 }
-                Wildcard | Application(_, _) => (),
+                Wildcard | Application { .. } => (),
             };
         };
         for QueryArgument { variable, .. } in query.arguments.iter() {
@@ -632,11 +407,11 @@ impl Module {
                     if !occured_vars.contains(name) {
                         return Err(CompileError::QueryVariableOnlyInOutput {
                             name: name.clone(),
-                            location: universe.location(tm),
+                            location: Some(universe.loc(tm)),
                         });
                     }
                 }
-                Wildcard | Application(_, _) => (),
+                Wildcard | Application { .. } => (),
             };
         }
 
@@ -652,24 +427,12 @@ impl Module {
         self.axioms.push((axiom, sorts));
         Ok(())
     }
-
-    pub fn add_query(&mut self, query: UserQuery) -> Result<(), CompileError> {
-        let term_sorts = self.infer_query_sorts(&query)?;
-        Self::check_variable_case(&query.universe)?;
-        Self::check_variable_occurence(&query.universe)?;
-        Self::check_query_output_variables(&query)?;
-        self.insert_symbol(Symbol::Query {
-            ast: query,
-            term_sorts,
-        })?;
-        Ok(())
-    }
 }
 
 #[derive(Clone)]
 struct DumpAxiomsDisplay<'a> {
     source: &'a str,
-    module: &'a Module,
+    module: &'a ModuleWrapper<'a>,
 }
 
 impl<'a> Display for DumpAxiomsDisplay<'a> {
@@ -698,9 +461,9 @@ impl<'a> Display for DumpAxiomsDisplay<'a> {
     }
 }
 
-impl Module {
+impl<'a> ModuleWrapper<'a> {
     #[allow(dead_code)]
-    pub fn dump_axioms<'a>(&'a self, source: &'a str) -> impl 'a + Clone + Display {
+    pub fn dump_axioms<'b>(&'b self, source: &'b str) -> impl 'b + Clone + Display {
         DumpAxiomsDisplay {
             module: self,
             source,

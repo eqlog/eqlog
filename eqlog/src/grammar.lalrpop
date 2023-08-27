@@ -34,17 +34,17 @@ Intersperse<Item, Separator>: Vec<Item> = {
 
 Variable: Term = {
     <l: @L> <var: Id> <r: @R> => {
-        context.new_term(TermData::Variable(var), Some(Location(l, r)))
+        context.new_term(TermData::Variable(var), Location(l, r))
     },
 }
 Wildcard: Term = {
     <l: @L> "_" <r: @R> => {
-        context.new_term(TermData::Wildcard, Some(Location(l, r)))
+        context.new_term(TermData::Wildcard, Location(l, r))
     },
 }
 ApplicationTerm: Term = {
     <l: @L> <func: Id> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
-        context.new_term(TermData::Application(func, args), Some(Location(l, r)))
+        context.new_term(TermData::Application { func, args }, Location(l, r))
     },
 }
 
@@ -62,73 +62,73 @@ ArgList: Vec<Term> = {
 
 IfAtom: IfAtom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
-        IfAtom { data: IfAtomData::Equal(lhs, rhs), location: Location(l, r) }
+        IfAtom { data: IfAtomData::Equal(lhs, rhs), loc: Location(l, r) }
     },
     <l: @L> <tm: Term> "!" <r: @R> => {
-        IfAtom { data: IfAtomData::Defined(tm), location: Location(l, r) }
+        IfAtom { data: IfAtomData::Defined(tm), loc: Location(l, r) }
     },
     <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
-        IfAtom { data: IfAtomData::Predicate { pred, args }, location: Location(l, r) }
+        IfAtom { data: IfAtomData::Pred { pred, args }, loc: Location(l, r) }
     },
-    <l: @L> <var: Term> ":" <id: Id> <r: @R> => {
-        IfAtom { data: IfAtomData::Var { pred, args }, location: Location(l, r) }
+    <l: @L> <term: Term> ":" <typ: Id> <r: @R> => {
+        IfAtom { data: IfAtomData::Var { term, typ }, loc: Location(l, r) }
     },
 }
 
 ThenAtom: ThenAtom = {
     <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
-        ThenAtom { data: ThenAtomData::Equal(lhs, rhs), location: Location(l, r) }
+        ThenAtom { data: ThenAtomData::Equal(lhs, rhs), loc: Location(l, r) }
     },
-    <l: @L> <var: PairFirst<Term, "=">?> <term: Term> "!" <r: @R> => {
-        ThenAtom { data: ThenAtomData::Defined { var, term }, location: Location(l, r) }
+    <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
+        ThenAtom { data: ThenAtomData::Defined { var, term }, loc: Location(l, r) }
     },
     <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
-        ThenAtom { data: ThenAtomData::Pred { pred, args }, location: Location(l, r) }
+        ThenAtom { data: ThenAtomData::Pred { pred, args }, loc: Location(l, r) }
     },
 }
 
 Stmt: Stmt = {
     <l: @L> "if" <atom: IfAtom> ";" <r: @R> => {
-        Stmt { data: StmtData::If(IfAtom), location: Location(l, r) }
+        Stmt { data: StmtData::If(atom), loc: Location(l, r) }
     },
     <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => {
-        Stmt { data: StmtData::Then(ThenAtom), location: Location(l, r) }
+        Stmt { data: StmtData::Then(atom), loc: Location(l, r) }
     },
 }
 
 RuleDecl: RuleDecl = {
     <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => {
-        RuleDecl { name, body, location: Location(l, r) }
+        RuleDecl { name, body, loc: Location(l, r) }
     },
 }
 
-TypeDecl: Type = {
+TypeDecl: TypeDecl = {
     <l: @L>  "type" <name: Id> ";" <r: @R> => {
-        Type{name, location: Location(l, r)}
+        TypeDecl{name, loc: Location(l, r)}
     },
 }
 
-pub ArgDecl: ArgDecl = {
+ArgDecl: ArgDecl = {
     <l: @L> <name: Id> ":" <typ: Id> <r: @R> => {
-        ArgDecl { name, typ, location: Location(l, r) }
+        ArgDecl { name, typ, loc: Location(l, r) }
     },
 }
 
-ArgDeclList: ArgDeclList = {
-    <l: @L> "(" <args: Intersperse<ArgDecl, ",">> ")" <r: @R> => {
-        ArgDeclList { args, location: Location(l, r) }
+ArgDeclList: Vec<ArgDecl> = {
+    "(" <arg_decls: Intersperse<ArgDecl, ",">> ")" => {
+        arg_decls
     },
 }
 
 PredDecl: PredDecl = {
-    <l: @L> "pred" <name: Id> <args: ArgDeclList> ";" <r: @R> => {
-        PredDecl { name, args, location: Location(l, r) }
+    <l: @L> "pred" <name: Id> <arg_decls: ArgDeclList> ";" <r: @R> => {
+        PredDecl { name, arg_decls, loc: Location(l, r) }
     },
 }
 
 FuncDecl: FuncDecl = {
-    <l: @L> "func" <name: Id> <args: ArgDeclList> "->" <result: Id> ";" <r: @R> => {
-        FuncDecl { name, args, result, location: Location(l, r) }
+    <l: @L> "func" <name: Id> <arg_decls: ArgDeclList> "->" <result: Id> ";" <r: @R> => {
+        FuncDecl { name, arg_decls, result, loc: Location(l, r) }
     },
 }
 
@@ -139,6 +139,6 @@ Decl: Decl = {
     <rule: RuleDecl> => Decl::Rule(rule),
 }
 
-Module: Module = {
+pub Module: Module = {
     <decls: Decl*> => Module(decls),
 }

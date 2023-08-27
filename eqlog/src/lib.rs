@@ -1,13 +1,18 @@
 mod ast;
 mod ast_v1;
 mod module;
+mod symbol_table;
 mod unification;
 use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[allow(unused)]
-    grammar_v1
+    grammar
 );
 mod build;
+//lalrpop_mod!(
+//    #[allow(unused)]
+//    grammar_v1
+//);
 mod error;
 mod flat_ast;
 mod flat_to_llam;

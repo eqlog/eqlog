@@ -83,7 +83,7 @@ impl<'a> Emitter<'a> {
         use TermData::*;
         match self.universe.data(term) {
             Variable(_) | Wildcard => (),
-            Application(_, args) => {
+            Application { args, .. } => {
                 for arg in args.iter().copied() {
                     self.constrained[arg] = true;
                 }
@@ -148,14 +148,14 @@ impl<'a> Emitter<'a> {
                     out_atoms.push(FlatAtom::Unconstrained(name, self.sorts[term].clone()));
                 }
             }
-            Application(func_name, args) => {
+            Application { func, args } => {
                 let args: Vec<FlatTerm> = args
                     .iter()
                     .copied()
                     .map(|arg| self.flat_names[arg].unwrap())
                     .chain(once(name))
                     .collect();
-                out_atoms.push(FlatAtom::Relation(func_name.clone(), args));
+                out_atoms.push(FlatAtom::Relation(func.clone(), args));
             }
         };
     }
@@ -277,7 +277,7 @@ fn flatten_reduction<'a>(
     sorts: &TermMap<String>,
 ) -> SequentFlattening {
     let from_args = match universe.data(from) {
-        TermData::Application(_, args) => args,
+        TermData::Application { args, .. } => args,
         // Must be checked earlier:
         _ => panic!("Reduction from a variable"),
     };

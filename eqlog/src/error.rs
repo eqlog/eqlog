@@ -1,9 +1,26 @@
-use crate::ast_v1::*;
 use crate::source_display::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum SymbolKind {
+    Type,
+    Pred,
+    Func,
+}
+
+impl Display for SymbolKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use SymbolKind::*;
+        f.write_str(match self {
+            Type => "type",
+            Pred => "pred",
+            Func => "func",
+        })
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum CompileError {
@@ -33,7 +50,7 @@ pub enum CompileError {
     },
     VariableNotSnakeCase {
         name: String,
-        location: Option<Location>,
+        location: Location,
     },
     VariableOccursOnlyOnce {
         name: String,
@@ -47,7 +64,7 @@ pub enum CompileError {
         function: String,
         expected: usize,
         got: usize,
-        location: Option<Location>,
+        location: Location,
     },
     PredicateArgumentNumber {
         predicate: String,
@@ -57,19 +74,19 @@ pub enum CompileError {
     },
     UndeclaredSymbol {
         name: String,
-        location: Option<Location>,
+        used_at: Location,
     },
     BadSymbolKind {
         name: String,
         expected: SymbolKind,
         found: SymbolKind,
-        used_location: Option<Location>,
-        declared_location: Option<Location>,
+        used_at: Location,
+        declared_at: Location,
     },
     SymbolDeclaredTwice {
         name: String,
-        first_declaration: Option<Location>,
-        second_declaration: Option<Location>,
+        first_declaration: Location,
+        second_declaration: Location,
     },
     ReductionFromVariableOrWildcard {
         location: Option<Location>,
@@ -191,7 +208,7 @@ impl Display for CompileErrorWithContext {
             }
             VariableNotSnakeCase { name, location } => {
                 write!(f, "variable {name} is not lower_snake_case\n")?;
-                write_loc(f, *location)?;
+                write_loc(f, Some(*location))?;
             }
             VariableOccursOnlyOnce { name, location } => {
                 write!(f, "variable {name} occurs only once\n")?;
@@ -211,7 +228,7 @@ impl Display for CompileErrorWithContext {
                     f,
                     "function takes {expected} arguments but {got} were supplied\n"
                 )?;
-                write_loc(f, *location)?;
+                write_loc(f, Some(*location))?;
             }
             PredicateArgumentNumber {
                 predicate: _,
@@ -225,25 +242,21 @@ impl Display for CompileErrorWithContext {
                 )?;
                 write_loc(f, *location)?;
             }
-            UndeclaredSymbol { name, location } => {
+            UndeclaredSymbol { name, used_at } => {
                 write!(f, "undeclared symbol \"{name}\"\n")?;
-                write_loc(f, *location)?;
+                write_loc(f, Some(*used_at))?;
             }
             BadSymbolKind {
                 name,
                 expected,
                 found,
-                used_location,
-                declared_location,
+                used_at,
+                declared_at,
             } => {
                 write!(f, "expected {expected}, found {found} {name}\n")?;
-                if used_location.is_some() {
-                    write_loc(f, *used_location)?;
-                }
-                if declared_location.is_some() {
-                    write!(f, "{name} declared as {found} here:\n")?;
-                    write_loc(f, *declared_location)?;
-                }
+                write_loc(f, Some(*used_at))?;
+                write!(f, "{name} declared as {found} here:\n")?;
+                write_loc(f, Some(*declared_at))?;
             }
             SymbolDeclaredTwice {
                 name: _,
@@ -251,11 +264,9 @@ impl Display for CompileErrorWithContext {
                 second_declaration,
             } => {
                 write!(f, "symbol declared multiple times\n")?;
-                write_loc(f, *second_declaration)?;
-                if first_declaration.is_some() {
-                    write!(f, "Previously declared here:\n")?;
-                    write_loc(f, *first_declaration)?;
-                }
+                write_loc(f, Some(*second_declaration))?;
+                write!(f, "Previously declared here:\n")?;
+                write_loc(f, Some(*first_declaration))?;
             }
             ReductionFromVariableOrWildcard { location } => {
                 write!(f, "term before ~> cannot be variable or wildcard\n")?;

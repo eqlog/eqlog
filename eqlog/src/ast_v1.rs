@@ -1,7 +1,11 @@
+use crate::ast::TermContext;
+pub use crate::ast::{Term, TermData};
 use crate::source_display::Location;
 use itertools::Itertools;
 use std::fmt::{self, Debug, Display};
 use std::slice::from_ref;
+
+pub type TermUniverse = TermContext;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Sort {
@@ -22,99 +26,6 @@ pub struct Function {
     pub dom: Vec<String>,
     pub cod: String,
     pub location: Option<Location>,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Term(pub usize);
-impl From<usize> for Term {
-    fn from(n: usize) -> Term {
-        Term(n)
-    }
-}
-impl Into<usize> for Term {
-    fn into(self) -> usize {
-        self.0
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum TermData {
-    Variable(String),
-    Wildcard,
-    Application(String, Vec<Term>),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct TermUniverse(Vec<(TermData, Option<Location>)>);
-
-impl TermUniverse {
-    pub fn new() -> TermUniverse {
-        TermUniverse(Vec::new())
-    }
-    pub fn new_term(&mut self, data: TermData, location: Option<Location>) -> Term {
-        let tm = Term(self.0.len());
-        self.0.push((data, location));
-        tm
-    }
-    pub fn data(&self, tm: Term) -> &TermData {
-        &self.0[tm.0].0
-    }
-    pub fn location(&self, tm: Term) -> Option<Location> {
-        self.0[tm.0].1
-    }
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-    pub fn iter_terms(&self) -> impl Iterator<Item = Term> {
-        (0..self.0.len()).map(Term)
-    }
-}
-
-struct SubtermIterator<'a> {
-    universe: &'a TermUniverse,
-    stack: Vec<(Term, usize)>,
-}
-
-impl<'a> Iterator for SubtermIterator<'a> {
-    type Item = Term;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (tm, next_child) = match self.stack.pop() {
-            Some(top) => top,
-            None => return None,
-        };
-
-        use TermData::*;
-        let mut child = match self.universe.data(tm) {
-            Variable(_) | Wildcard => return Some(tm),
-            Application(_, args) if args.len() == next_child => return Some(tm),
-            Application(_, args) => {
-                debug_assert!(next_child < args.len());
-                args[next_child]
-            }
-        };
-
-        self.stack.push((tm, next_child + 1));
-        while let Application(_, args) = self.universe.data(child) {
-            match args.first() {
-                None => break,
-                Some(arg) => {
-                    self.stack.push((child, 1));
-                    child = *arg;
-                }
-            }
-        }
-        Some(child)
-    }
-}
-
-impl TermUniverse {
-    pub fn iter_subterms(&self, tm: Term) -> impl '_ + Iterator<Item = Term> {
-        SubtermIterator {
-            universe: self,
-            stack: vec![(tm, 0)],
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -274,7 +185,7 @@ impl<'a> Debug for TermDebug<'a> {
         match universe.data(term) {
             Variable(name) => f.write_str(name),
             Wildcard => write!(f, "_{}", term.0),
-            Application(func, args) => {
+            Application { func, args } => {
                 let args_displ = args.iter().copied().format_with(", ", |arg, f| {
                     f(&format_args!(
                         "{:?}",

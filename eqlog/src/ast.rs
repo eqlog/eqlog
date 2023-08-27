@@ -27,15 +27,15 @@ impl TermContext {
     pub fn new() -> TermContext {
         TermContext(Vec::new())
     }
-    pub fn new_term(&mut self, data: TermData, location: Location) -> Term {
+    pub fn new_term(&mut self, data: TermData, loc: Location) -> Term {
         let tm = Term(self.0.len());
-        self.0.push((data, location));
+        self.0.push((data, loc));
         tm
     }
     pub fn data(&self, tm: Term) -> &TermData {
         &self.0[tm.0].0
     }
-    pub fn location(&self, tm: Term) -> Location {
+    pub fn loc(&self, tm: Term) -> Location {
         self.0[tm.0].1
     }
     pub fn len(&self) -> usize {
@@ -105,7 +105,7 @@ pub enum IfAtomData {
 pub enum ThenAtomData {
     Equal(Term, Term),
     Defined { var: Option<Term>, term: Term },
-    Pred { name: String, args: Vec<Term> },
+    Pred { pred: String, args: Vec<Term> },
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
@@ -153,22 +153,16 @@ pub struct ArgDecl {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct ArgDeclList {
-    pub arg_decls: Vec<ArgDecl>,
-    pub loc: Location,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct PredDecl {
     pub name: String,
-    pub args: ArgDeclList,
+    pub arg_decls: Vec<ArgDecl>,
     pub loc: Location,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct FuncDecl {
     pub name: String,
-    pub args: ArgDeclList,
+    pub arg_decls: Vec<ArgDecl>,
     pub result: String,
     pub loc: Location,
 }
@@ -182,4 +176,4 @@ pub enum Decl {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Module(Vec<Decl>);
+pub struct Module(pub Vec<Decl>);

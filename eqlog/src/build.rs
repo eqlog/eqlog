@@ -1,8 +1,8 @@
-use crate::ast_v1::*;
+use crate::ast::*;
 use crate::error::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
-use crate::grammar_v1::*;
+use crate::grammar::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
@@ -12,7 +12,6 @@ use std::env;
 use std::error::Error;
 use std::fs;
 use std::io;
-use std::iter::once;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
@@ -36,7 +35,7 @@ fn whipe_comments(source: &str) -> String {
 
 fn parse(source: &str) -> Result<Module, CompileError> {
     ModuleParser::new()
-        .parse(&mut TermUniverse::new(), source)
+        .parse(&mut TermContext::new(), source)
         .map_err(CompileError::from)
 }
 
@@ -76,20 +75,24 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     let source_without_comments = whipe_comments(&source);
     let module = parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
         error,
+        source: source.clone(),
+        source_path: in_file.into(),
+    })?;
+
+    let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
+        error,
         source,
         source_path: in_file.into(),
     })?;
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
-    query_actions.extend(
-        module
-            .iter_functions()
-            .map(|Function { name, dom, cod, .. }| {
-                let arity: Vec<&str> = dom.iter().chain(once(cod)).map(|s| s.as_str()).collect();
-                functionality(name, &arity)
-            }),
-    );
-    let axiom_flattenings = module
+    query_actions.extend(module_wrapper.symbols.iter_funcs().map(|func| {
+        functionality(
+            &func.name,
+            module_wrapper.symbols.arity(&func.name).unwrap().as_slice(),
+        )
+    }));
+    let axiom_flattenings = module_wrapper
         .iter_axioms()
         .map(|(axiom, term_sorts)| flatten_sequent(&axiom.sequent, term_sorts).into_iter())
         .flatten();
@@ -97,25 +100,12 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         axiom_flattenings
             .map(|flattening| lower_sequent_seminaive(&flattening.sequent, &flattening.sorts)),
     );
-    let pure_queries: Vec<(String, PureQuery)> = module
-        .iter_queries()
-        .map(|(query, term_sorts)| {
-            let flattening = flatten_query(&query, term_sorts);
-            (query.name.clone(), lower_query(&flattening.query))
-        })
-        .collect();
     let query_atoms = query_actions
         .iter()
         .map(|qa| qa.queries.iter().flatten())
-        .flatten()
-        .chain(
-            pure_queries
-                .iter()
-                .map(|(_, pq)| pq.queries.iter().flatten())
-                .flatten(),
-        );
+        .flatten();
     let action_atoms = query_actions.iter().map(|qa| qa.action.iter()).flatten();
-    let index_selection = select_indices(&module, query_atoms, action_atoms);
+    let index_selection = select_indices(&module_wrapper, query_atoms, action_atoms);
     let theory_name = in_file
         .file_stem()
         .unwrap()
@@ -123,14 +113,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .unwrap()
         .to_case(Case::UpperCamel);
     let mut result: Vec<u8> = Vec::new();
-    write_module(
-        &mut result,
-        &theory_name,
-        &module,
-        &query_actions,
-        &pure_queries,
-        &index_selection,
-    )?;
+    // TODO: write_module needs query_actions.
+    write_module(&mut result, &theory_name, &module_wrapper, &index_selection)?;
     fs::write(&out_file, &result)?;
     match Command::new("rustfmt").arg(&out_file).status() {
         Err(_) => {
