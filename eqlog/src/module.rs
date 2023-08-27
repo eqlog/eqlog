@@ -99,7 +99,7 @@ impl<'a> ModuleWrapper<'a> {
         };
         for decl in module.0.iter() {
             if let Decl::Rule(rule) = decl {
-                module_wrapper.add_rule(rule.clone());
+                module_wrapper.add_rule(rule.clone())?;
             }
         }
         Ok(module_wrapper)
