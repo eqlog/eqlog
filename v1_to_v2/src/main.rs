@@ -3,6 +3,8 @@ mod error;
 mod source_display;
 use askama::Template;
 use lalrpop_util::lalrpop_mod;
+use std::fmt::Write;
+use std::fs;
 lalrpop_mod!(
     #[allow(unused)]
     grammar_v1
@@ -95,18 +97,20 @@ fn main() -> ExitCode {
         }
     };
 
+    let mut out_string = String::new();
+
     let end_locs = once(0).chain(decls.iter().map(|decl| decl.location().unwrap().1));
     let mut exit_code: ExitCode = ExitCode::SUCCESS;
     for (decl, prev_end_loc) in decls.iter().zip(end_locs) {
         let Location(decl_begin, decl_end) = decl.location().unwrap();
-        print!("{}", &v1_source[prev_end_loc..decl_begin]);
+        write!(out_string, "{}", &v1_source[prev_end_loc..decl_begin]).unwrap();
 
         match decl {
             Decl::Query(_) => {
                 let err_msg = "WARNING: Unsupported Query declaration";
                 eprintln!("{err_msg}");
-                println!("// {err_msg}:");
-                print!("{}", &v1_source[decl_begin..decl_end]);
+                writeln!(out_string, "// {err_msg}:").unwrap();
+                write!(out_string, "{}", &v1_source[decl_begin..decl_end]).unwrap();
                 exit_code = ExitCode::FAILURE;
                 continue;
             }
@@ -119,8 +123,8 @@ fn main() -> ExitCode {
                 SequentData::Bireduction { .. } => {
                     let err_msg = "WARNING: Unsupported <~> Axiom declaration";
                     eprintln!("{err_msg}");
-                    println!("// {err_msg}:");
-                    print!("{}", &v1_source[decl_begin..decl_end]);
+                    writeln!(out_string, "// {err_msg}:").unwrap();
+                    write!(out_string, "{}", &v1_source[decl_begin..decl_end]).unwrap();
                     exit_code = ExitCode::FAILURE;
                     continue;
                 }
@@ -140,20 +144,22 @@ fn main() -> ExitCode {
         if !orphaned_comments.is_empty() {
             let err_msg = "WARNING: Orphaned comments";
             eprintln!("{err_msg}");
-            println!("// {err_msg}:");
+            writeln!(out_string, "// {err_msg}:").unwrap();
             for orphan in orphaned_comments {
-                println!("{orphan}");
+                writeln!(out_string, "{orphan}").unwrap();
             }
             exit_code = ExitCode::FAILURE;
         }
 
-        print!("{}", decl.render().unwrap());
+        write!(out_string, "{}", decl.render().unwrap()).unwrap();
     }
 
     if let Some(decl) = decls.last() {
         let Location(_, decl_end) = decl.location().unwrap();
-        print!("{}", &v1_source[decl_end..]);
+        write!(out_string, "{}", &v1_source[decl_end..]).unwrap();
     }
+
+    fs::write(file_path, out_string).unwrap();
 
     exit_code
 }
