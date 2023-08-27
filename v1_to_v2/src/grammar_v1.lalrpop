@@ -1,0 +1,207 @@
+use crate::ast_v1::*;
+use crate::error::*;
+use crate::source_display::Location;
+use std::iter::once;
+use convert_case::{Case, Casing};
+use std::mem::swap;
+
+grammar(universe: &mut TermUniverse);
+
+extern {
+    type Error = CompileError;
+}
+
+Id: String = { r"[A-Za-z][A-Za-z0-9'_]*" => <>.to_string(), }
+
+SortDecl: Sort = {
+    <l: @L>  "Sort" <name: Id> ";" <r: @R> => {
+        Sort{name, location: Some(Location(l, r))}
+    }
+}
+
+PairFirst<First, Second>: First = {
+    <first: First> <second: Second> => first
+}
+
+NonEmptyIntersperse<Item, Separator>: Vec<Item> = {
+    <mut init: PairFirst<Item, Separator>*> <last: Item> => {
+        init.push(last);
+        init
+    }
+}
+
+Intersperse<Item, Separator>: Vec<Item> = {
+    <non_empty: NonEmptyIntersperse<Item, Separator>> => non_empty,
+    () => vec![],
+}
+
+PredicateDecl: Predicate = {
+    <l: @L> "Pred" <name: Id> ":" "*"? <arity: NonEmptyIntersperse<Id, "*">> ";" <r: @R> => {
+        Predicate { name, arity, location: Some(Location(l, r)) }
+    },
+    <l: @L> "Pred" <name: Id> ":" "(" ")" ";" <r: @R> => {
+        Predicate {
+            name,
+            arity: vec![],
+            location: Some(Location(l, r)),
+        }
+    },
+}
+
+FunctionDecl: Function = {
+    <l: @L> "Func" <name: Id> ":" "*"? <dom: NonEmptyIntersperse<Id, "*">> "->" <cod: Id> ";" <r: @R> => {
+        Function {
+            name,
+            dom,
+            cod,
+            location: Some(Location(l, r)),
+        }
+    },
+    <l: @L> "Func" <name: Id> ":" <cod: Id> ";" <r: @R> => {
+        Function {
+            name,
+            dom: vec![],
+            cod,
+            location: Some(Location(l, r)),
+        }
+    },
+}
+
+Variable: Term = {
+    <l: @L> <var: Id> <r: @R> => {
+        universe.new_term(TermData::Variable(var), Some(Location(l, r)))
+    },
+}
+Wildcard: Term = {
+    <l: @L> "_" <r: @R> => {
+        universe.new_term(TermData::Wildcard, Some(Location(l, r)))
+    },
+}
+ApplicationTerm: Term = {
+    <l: @L> <func: Id> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
+        universe.new_term(TermData::Application(func, args), Some(Location(l, r)))
+    },
+}
+
+Term: Term = {
+    <var: Variable> => var,
+    <wildcard: Wildcard> => wildcard,
+    <application: ApplicationTerm> => application,
+}
+
+Atom: Atom = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
+        Atom { data: AtomData::Equal(lhs, rhs), location: Some(Location(l, r)) }
+    },
+    <l: @L> <pred: Id> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
+        Atom { data: AtomData::Predicate(pred, args), location: Some(Location(l, r)) }
+    },
+    <l: @L> <tm: ApplicationTerm> "!" <r: @R> => {
+        Atom { data: AtomData::Defined(tm, None), location: Some(Location(l, r)) }
+    },
+    <l: @L> <tm: Variable> ":" <s: Id> <r: @R> => {
+        Atom { data: AtomData::Defined(tm, Some(s)), location: Some(Location(l, r)) }
+    },
+    <l: @L> <tm: Wildcard> ":" <s: Id> <r: @R> => {
+        Atom { data: AtomData::Defined(tm, Some(s)), location: Some(Location(l, r)) }
+    },
+}
+
+NonEmptyFormula: Vec<Atom> = {
+    "&"? <atoms: NonEmptyIntersperse<Atom, "&">> => {
+        atoms
+    },
+}
+
+Formula: Vec<Atom> = {
+    <non_empty: NonEmptyFormula> => non_empty,
+    () => vec![],
+}
+
+pub SequentData: SequentData = {
+    <facts: NonEmptyFormula> => {
+        SequentData::Implication { premise: Vec::new(), conclusion: facts }
+    },
+    <premise: NonEmptyFormula> "=>" <conclusion: NonEmptyFormula> => {
+        SequentData::Implication { premise, conclusion }
+    },
+
+    <from: Term> "~>" <to: Term> => {
+        SequentData::Reduction { premise: Vec::new(), from, to }
+    },
+    <premise: NonEmptyFormula> "=>" <from: Term> "~>" <to: Term> => {
+        SequentData::Reduction { premise, from, to }
+    },
+
+    <lhs: Term> "<~>" <rhs: Term> => {
+        SequentData::Bireduction { premise: Vec::new(), lhs, rhs }
+    },
+    <premise: NonEmptyFormula> "=>" <lhs: Term> "<~>" <rhs: Term> => {
+        SequentData::Bireduction { premise, lhs, rhs }
+    },
+}
+
+AxiomDecl: Axiom = {
+    <l: @L> "Axiom" <data: SequentData> ";" <r: @R> => {
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        Axiom {
+            sequent: Sequent { universe: u, data },
+            location: Some(Location(l, r)),
+        }
+    },
+}
+
+QueryArgument: QueryArgument = {
+    <l: @L> <var: Id> <r0: @R> <sort: (":" <Id>)?> <r1: @R> => QueryArgument {
+        variable: universe.new_term(TermData::Variable(var), Some(Location(l, r0))),
+        sort,
+        location: Some(Location(l, r1)),
+    }
+}
+
+QueryResult: QueryResult = {
+    () => QueryResult::NoResult,
+    "->" <term: Term> => QueryResult::SingleResult(term),
+    "->" "(" <head_result: (<Term>)?> <tail_results: ("," <Term>)*> ")" => {
+        let results: Vec<Term> = head_result.into_iter().chain(tail_results).collect();
+        QueryResult::TupleResult(results)
+    }
+}
+
+QueryDecl: UserQuery = {
+    <l: @L>
+        "Query"
+        <name: Id>
+        "("
+        <arguments: Intersperse<QueryArgument, ",">>
+        ")"
+        <result: QueryResult>
+        <where_formula: ("where" <NonEmptyFormula>)?>
+        ";"
+        <r: @R> => {
+
+        let mut u = TermUniverse::new();
+        swap(&mut u, universe);
+        UserQuery {
+            universe: u,
+            name,
+            arguments,
+            result,
+            where_formula,
+            location: Some(Location(l, r)),
+        }
+    }
+}
+
+Decl: Decl = {
+    <sort: SortDecl> => Decl::Sort(sort),
+    <pred: PredicateDecl> => Decl::Pred(pred),
+    <func: FunctionDecl> => Decl::Func(func),
+    <axiom: AxiomDecl> => Decl::Axiom(axiom),
+    <query: QueryDecl> => Decl::Query(query),
+}
+
+pub Module: Vec<Decl> = {
+    <decls: Decl*> => decls,
+}
