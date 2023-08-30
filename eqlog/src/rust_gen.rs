@@ -1807,6 +1807,7 @@ pub fn write_module(
     out: &mut impl Write,
     name: &str,
     module: &ModuleWrapper,
+    query_actions: &[QueryAction],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
@@ -1833,6 +1834,7 @@ pub fn write_module(
     write_model_delta_impl(out, module)?;
     write!(out, "\n")?;
 
+    write_theory_impl(out, name, module, query_actions)?;
     write_theory_display_impl(out, name, module)?;
 
     Ok(())

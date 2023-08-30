@@ -114,7 +114,13 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .to_case(Case::UpperCamel);
     let mut result: Vec<u8> = Vec::new();
     // TODO: write_module needs query_actions.
-    write_module(&mut result, &theory_name, &module_wrapper, &index_selection)?;
+    write_module(
+        &mut result,
+        &theory_name,
+        &module_wrapper,
+        &query_actions,
+        &index_selection,
+    )?;
     fs::write(&out_file, &result)?;
     match Command::new("rustfmt").arg(&out_file).status() {
         Err(_) => {
