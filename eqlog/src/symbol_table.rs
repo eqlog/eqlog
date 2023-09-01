@@ -15,6 +15,7 @@ pub enum SymbolRef<'a> {
         func: &'a FuncDecl,
         arity: Vec<&'a str>,
     },
+    Rule(&'a RuleDecl),
 }
 
 impl<'a> SymbolRef<'a> {
@@ -39,7 +40,10 @@ impl<'a> SymbolRef<'a> {
 
                 Some(SymbolRef::Pred { pred, arity })
             }
-            Decl::Rule(_) => None,
+            Decl::Rule(rule) => match rule.name.as_ref() {
+                Some(_) => Some(SymbolRef::Rule(rule)),
+                None => None,
+            },
         }
     }
 
@@ -49,6 +53,7 @@ impl<'a> SymbolRef<'a> {
             Type(typ) => &typ.name,
             Pred { pred, .. } => pred.name.as_str(),
             Func { func, .. } => func.name.as_str(),
+            Rule(rule) => rule.name.as_ref().unwrap().as_str(),
         }
     }
 
@@ -58,6 +63,7 @@ impl<'a> SymbolRef<'a> {
             Type(typ) => typ.loc,
             Pred { pred, .. } => pred.loc,
             Func { func, .. } => func.loc,
+            Rule(rule) => rule.loc,
         }
     }
 
@@ -67,6 +73,7 @@ impl<'a> SymbolRef<'a> {
             Type(_) => SymbolKind::Type,
             Pred { .. } => SymbolKind::Pred,
             Func { .. } => SymbolKind::Func,
+            Rule(_) => SymbolKind::Rule,
         }
     }
 }
@@ -176,6 +183,7 @@ impl<'a> SymbolTable<'a> {
             SymbolRef::Type(_) => None,
             SymbolRef::Pred { arity, .. } => Some(arity),
             SymbolRef::Func { arity, .. } => Some(arity),
+            SymbolRef::Rule(_) => None,
         }
     }
 

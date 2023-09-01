@@ -9,6 +9,7 @@ pub enum SymbolKind {
     Type,
     Pred,
     Func,
+    Rule,
 }
 
 impl Display for SymbolKind {
@@ -18,6 +19,7 @@ impl Display for SymbolKind {
             Type => "type",
             Pred => "pred",
             Func => "func",
+            Rule => "rule",
         })
     }
 }
