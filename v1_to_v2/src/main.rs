@@ -61,7 +61,6 @@ fn parse(source: &str) -> Result<Vec<Decl>, CompileError> {
         .map_err(CompileError::from)
 }
 
-/// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {

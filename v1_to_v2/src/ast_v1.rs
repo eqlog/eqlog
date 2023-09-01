@@ -1,5 +1,6 @@
 use crate::source_display::Location;
 use askama::Template;
+use convert_case::{Case::Snake, Casing};
 use itertools::Itertools;
 use std::fmt::{self, Debug};
 
@@ -12,7 +13,7 @@ pub struct Sort {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
 #[template(
-    source = r#"pred {{ name }}(
+    source = r#"pred {{ name.to_case(Snake) }}(
 {%- for sort in arity -%}
     {{ sort }}
     {%- if !loop.last -%}, {% endif -%}
@@ -28,7 +29,7 @@ pub struct Predicate {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
 #[template(
-    source = r#"func {{ name }}(
+    source = r#"func {{ name.to_case(Snake) }}(
 {%- for sort in dom -%}
     {{ sort }}
     {%- if !loop.last -%}, {% endif -%}
@@ -129,7 +130,7 @@ impl<'a> Iterator for SubtermIterator<'a> {
   {%- when TermData::Wildcard -%}
     _
   {%- when TermData::Application with (func, args) -%}
-    {{ func }}(
+    {{ func.to_case(Snake) }}(
     {%- for arg in args -%}
       {{ TermWithUniverse::new(arg, self.universe) }}
       {%- if !loop.last -%}, {% endif -%}
@@ -179,7 +180,7 @@ pub struct Atom {
         !
     {%- endmatch -%}
   {%- when AtomData::Predicate with (pred, args) -%}
-    {{ pred }}(
+    {{ pred.to_case(Snake) }}(
     {%- for arg in args -%}
       {{ TermWithUniverse::new(arg, self.universe) }}
       {%- if !loop.last -%}, {% endif -%}
