@@ -171,7 +171,7 @@ impl<'a> SymbolTable<'a> {
         })
     }
 
-    pub fn arity(&'a self, relation: &str) -> Option<&'a [&'a str]> {
+    pub fn get_arity(&'a self, relation: &str) -> Option<&'a [&'a str]> {
         match self.0.get(relation)? {
             SymbolRef::Type(_) => None,
             SymbolRef::Pred { arity, .. } => Some(arity),
@@ -179,10 +179,10 @@ impl<'a> SymbolTable<'a> {
         }
     }
 
-    pub fn relations(&'a self) -> impl Iterator<Item = (&str, &[&'a str])> {
+    pub fn iter_rels(&'a self) -> impl Iterator<Item = (&str, &[&'a str])> {
         self.0.values().filter_map(|sym| {
             let name = sym.name();
-            if let Some(arity) = self.arity(name) {
+            if let Some(arity) = self.get_arity(name) {
                 Some((name, arity))
             } else {
                 None

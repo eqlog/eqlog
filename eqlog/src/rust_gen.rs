@@ -3,7 +3,6 @@ use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
-use crate::source_display::Location;
 use crate::symbol_table::SymbolRef;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
@@ -661,7 +660,7 @@ fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<
 fn write_is_dirty_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let rels_dirty = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!(" || self.{relation_snake}.is_dirty()"))
@@ -964,7 +963,7 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
 fn write_model_delta_struct(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let new_tuples = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             let relation_camel = relation.to_case(UpperCamel);
@@ -1020,7 +1019,7 @@ fn write_model_delta_impl(out: &mut impl Write, module: &ModuleWrapper) -> io::R
 fn write_model_delta_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let new_tuples = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!("    new_{relation_snake}: Vec::new(),"))
@@ -1101,7 +1100,7 @@ fn write_model_delta_apply_equalities_fn(
             |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
         let clean_rels = module
             .symbols
-            .relations()
+            .iter_rels()
             .filter(|(_, arity)| arity_contains_sort(arity))
             .format_with("\n", |(relation, arity), f| {
                 let relation_snake = relation.to_case(Snake);
@@ -1170,7 +1169,7 @@ fn write_model_delta_apply_tuples_fn(
 ) -> io::Result<()> {
     let relations = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
             let relation_camel = relation.to_case(UpperCamel);
@@ -1242,7 +1241,7 @@ fn write_query_loop_headers<'a>(
                 );
                 let arity_len = module
                     .symbols
-                    .relations()
+                    .iter_rels()
                     .find(|(rel, _)| rel == relation)
                     .unwrap()
                     .1
@@ -1359,7 +1358,7 @@ fn write_action_atom(
         } => {
             let relation_snake = relation.to_case(Snake);
             let relation_camel = relation.to_case(UpperCamel);
-            let arity = module.symbols.arity(relation).unwrap();
+            let arity = module.symbols.get_arity(relation).unwrap();
 
             let query_spec = QuerySpec {
                 projections: in_projections.keys().copied().collect(),
@@ -1453,7 +1452,7 @@ fn write_record_action_fn(
 fn write_drop_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let relations = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!("self.{relation_snake}.drop_dirt();"))
@@ -1477,7 +1476,7 @@ fn write_drop_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Resul
 fn write_retire_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let relations = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!("self.{relation_snake}.retire_dirt();"))
@@ -1504,7 +1503,7 @@ fn write_retire_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Res
 fn write_recall_previous_dirt(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     let relations = module
         .symbols
-        .relations()
+        .iter_rels()
         .format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
             let sorts: BTreeSet<&str> = arity.iter().copied().collect();
@@ -1633,7 +1632,7 @@ fn write_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> 
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
-    for (relation, _) in module.symbols.relations() {
+    for (relation, _) in module.symbols.iter_rels() {
         let relation_snake = relation.to_case(Snake);
         let relation_camel = relation.to_case(UpperCamel);
         write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
@@ -1707,7 +1706,7 @@ fn write_theory_struct(out: &mut impl Write, name: &str, module: &ModuleWrapper)
         write!(out, "\n")?;
     }
 
-    for (relation, _) in module.symbols.relations() {
+    for (relation, _) in module.symbols.iter_rels() {
         let relation_snake = relation.to_case(Snake);
         let relation_camel = relation.to_case(UpperCamel);
         write!(out, "  {relation_snake}: {relation_camel}Table,")?;
@@ -1745,7 +1744,7 @@ fn write_theory_impl(
     }
 
     for func in module.symbols.iter_funcs() {
-        let arity = module.symbols.arity(&func.name).unwrap();
+        let arity = module.symbols.get_arity(&func.name).unwrap();
         write_pub_function_eval_fn(out, &func.name, &arity)?;
         write_define_fn(out, func)?;
         write_pub_iter_fn(out, &func.name, &arity, true)?;
@@ -1754,7 +1753,7 @@ fn write_theory_impl(
     }
 
     for pred in module.symbols.iter_preds() {
-        let arity = module.symbols.arity(&pred.name).unwrap();
+        let arity = module.symbols.get_arity(&pred.name).unwrap();
         write_pub_predicate_holds_fn(out, &pred.name, &arity)?;
         if arity.len() > 0 {
             write_pub_iter_fn(out, &pred.name, &arity, false)?;
@@ -1808,7 +1807,7 @@ fn write_theory_display_impl(
             "self.{sort_snake}_equalities.class_table().{modify_table}.fmt(f)?;"
         ))
     });
-    let rels = module.symbols.relations().format_with("", |(rel, _), f| {
+    let rels = module.symbols.iter_rels().format_with("", |(rel, _), f| {
         let rel_snake = rel.to_case(Snake);
         f(&format_args!("self.{rel_snake}.fmt(f)?;"))
     });
@@ -1840,7 +1839,7 @@ pub fn write_module(
     }
     write!(out, "\n")?;
 
-    for (rel, arity) in module.symbols.relations() {
+    for (rel, arity) in module.symbols.iter_rels() {
         write_relation_struct(out, rel, &arity)?;
         let index = index_selection.get(rel).unwrap();
         write_table_struct(out, rel, &arity, index)?;

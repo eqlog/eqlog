@@ -120,7 +120,7 @@ where
     // tuples.
     let mut query_specs: HashMap<String, HashSet<QuerySpec>> = module
         .symbols
-        .relations()
+        .iter_rels()
         .map(|(rel, _)| {
             (
                 rel.to_string(),
@@ -177,7 +177,7 @@ where
                 .into_iter()
                 .flat_map(|queries| {
                     let index = IndexSpec::from_query_spec_chain(
-                        module.symbols.arity(&rel).unwrap().len(),
+                        module.symbols.get_arity(&rel).unwrap().len(),
                         &queries,
                     );
                     queries.into_iter().zip(repeat(index))
