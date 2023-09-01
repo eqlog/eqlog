@@ -2,8 +2,7 @@ use crate::ast::TermContext;
 pub use crate::ast::{Term, TermData};
 use crate::source_display::Location;
 use itertools::Itertools;
-use std::fmt::{self, Debug, Display};
-use std::slice::from_ref;
+use std::fmt::{self, Debug};
 
 pub type TermUniverse = TermContext;
 
@@ -65,16 +64,6 @@ pub enum SequentData {
         premise: Vec<Atom>,
         conclusion: Vec<Atom>,
     },
-    Reduction {
-        premise: Vec<Atom>,
-        from: Term,
-        to: Term,
-    },
-    Bireduction {
-        premise: Vec<Atom>,
-        lhs: Term,
-        rhs: Term,
-    },
 }
 
 impl SequentData {
@@ -85,8 +74,6 @@ impl SequentData {
                 premise,
                 conclusion,
             } => Box::new(premise.iter().chain(conclusion)),
-            Reduction { premise, .. } => Box::new(premise.iter()),
-            Bireduction { premise, .. } => Box::new(premise.iter()),
         };
         result
     }
@@ -109,63 +96,6 @@ pub struct QueryArgument {
     pub variable: Term,
     pub sort: Option<String>,
     pub location: Option<Location>,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum QueryResult {
-    NoResult,
-    SingleResult(Term),
-    TupleResult(Vec<Term>),
-}
-
-impl QueryResult {
-    pub fn iter_result_terms(&self) -> impl Iterator<Item = Term> + '_ {
-        use QueryResult::*;
-        let slice: &[Term] = match self {
-            NoResult => &[],
-            SingleResult(tm) => from_ref(tm),
-            TupleResult(tms) => tms.as_slice(),
-        };
-        slice.iter().copied()
-    }
-    pub fn iter_subterms<'a>(
-        &'a self,
-        universe: &'a TermUniverse,
-    ) -> impl Iterator<Item = Term> + 'a {
-        self.iter_result_terms()
-            .map(move |tm| universe.iter_subterms(tm))
-            .flatten()
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct UserQuery {
-    pub universe: TermUniverse,
-    pub name: String,
-    pub arguments: Vec<QueryArgument>,
-    pub result: QueryResult,
-    pub where_formula: Option<Vec<Atom>>,
-    pub location: Option<Location>,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum SymbolKind {
-    Sort,
-    Predicate,
-    Function,
-    Query,
-}
-
-impl Display for SymbolKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use SymbolKind::*;
-        f.write_str(match self {
-            Sort => "sort",
-            Predicate => "predicate",
-            Function => "function",
-            Query => "query",
-        })
-    }
 }
 
 // Debug printing of AST. Each AST node type N that is relative to a TermUniverse gets a struct
@@ -293,18 +223,6 @@ impl Debug for Sequent {
                 let premise = formula_debug(premise.as_slice(), universe);
                 let conclusion = formula_debug(conclusion.as_slice(), universe);
                 write!(f, "{premise:?} => {conclusion:?}")?;
-            }
-            Reduction { premise, from, to } => {
-                let premise = formula_debug(premise.as_slice(), universe);
-                let from = from.debug(universe);
-                let to = to.debug(universe);
-                write!(f, "{premise:?} => {from:?} ~> {to:?}")?;
-            }
-            Bireduction { premise, lhs, rhs } => {
-                let premise = formula_debug(premise.as_slice(), universe);
-                let lhs = lhs.debug(universe);
-                let rhs = rhs.debug(universe);
-                write!(f, "{premise:?} => {lhs:?} <~> {rhs:?}")?;
             }
         }
         Ok(())

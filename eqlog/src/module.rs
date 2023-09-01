@@ -256,53 +256,11 @@ impl<'a> ModuleWrapper<'a> {
         }
         match &sequent.data {
             SequentData::Implication { .. } => (),
-            SequentData::Reduction { from, to, .. } => {
-                sorts.union(*from, *to);
-            }
-            SequentData::Bireduction { lhs, rhs, .. } => {
-                sorts.union(*lhs, *rhs);
-            }
         }
 
         Self::into_unique_sorts(&sequent.universe, sorts)
     }
 
-    // Check that the `from` term of a reduction is composite, i.e. not a reduction or wildcard.
-    fn check_reduction_variables(sequent: &Sequent) -> Result<(), CompileError> {
-        use SequentData::*;
-        let err = |tm| -> CompileError {
-            CompileError::ReductionFromVariableOrWildcard {
-                location: Some(sequent.universe.loc(tm)),
-            }
-        };
-
-        match &sequent.data {
-            Implication { .. } => Ok(()),
-            Reduction { from, .. } => {
-                use TermData::*;
-                match sequent.universe.data(*from) {
-                    Application { .. } => Ok(()),
-                    Wildcard | Variable(_) => Err(err(*from)),
-                }
-            }
-            Bireduction { lhs, rhs, .. } => {
-                use TermData::*;
-                match sequent.universe.data(*lhs) {
-                    Application { .. } => (),
-                    Wildcard | Variable(_) => {
-                        return Err(err(*lhs));
-                    }
-                }
-                match sequent.universe.data(*rhs) {
-                    Application { .. } => (),
-                    Wildcard | Variable(_) => {
-                        return Err(err(*rhs));
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
     // Check the following:
     // - Every variable in the conclusion also appears in the premise.
     // - Every term in the conclusion is equal to some term that occurred earlier or inside an
@@ -314,10 +272,6 @@ impl<'a> ModuleWrapper<'a> {
                 conclusion,
                 ..
             } => (premise, conclusion),
-            SequentData::Reduction { .. } | SequentData::Bireduction { .. } => {
-                // Reductions are epimorphisms by construction.
-                return Ok(());
-            }
         };
         let universe = &sequent.universe;
         let mut has_occurred = TermUnification::new(
@@ -460,7 +414,6 @@ impl<'a> ModuleWrapper<'a> {
     fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
         let axiom = rule_to_axiom(rule);
         let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
-        Self::check_reduction_variables(&axiom.sequent)?;
         Self::check_epimorphism(&axiom.sequent)?;
         Self::check_variable_case(&axiom.sequent.universe)?;
         Self::check_variable_occurence(&axiom.sequent.universe)?;

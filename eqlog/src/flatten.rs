@@ -269,42 +269,6 @@ fn flatten_implication<'a, 'b>(
     }
 }
 
-fn flatten_reduction<'a>(
-    universe: &TermUniverse,
-    premise: impl Clone + IntoIterator<Item = &'a Atom>,
-    from: Term,
-    to: Term,
-    sorts: &TermMap<String>,
-) -> SequentFlattening {
-    let from_args = match universe.data(from) {
-        TermData::Application { args, .. } => args,
-        // Must be checked earlier:
-        _ => panic!("Reduction from a variable"),
-    };
-    let synthetic_premise: Vec<Atom> = premise
-        .into_iter()
-        .cloned()
-        .chain(from_args.iter().copied().chain(once(to)).map(|tm| Atom {
-            data: AtomData::Defined(tm, None),
-            location: None,
-        }))
-        .collect();
-
-    let eq = Atom {
-        data: AtomData::Equal(from, to),
-        location: None,
-    };
-    let synthetic_conclusion = once(&eq);
-
-    let result = flatten_implication(
-        universe,
-        synthetic_premise.iter(),
-        synthetic_conclusion,
-        sorts,
-    );
-    result
-}
-
 pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> Vec<SequentFlattening> {
     use SequentData::*;
     let universe = &sequent.universe;
@@ -319,20 +283,6 @@ pub fn flatten_sequent(sequent: &Sequent, sorts: &TermMap<String>) -> Vec<Sequen
                 conclusion.iter(),
                 sorts,
             )]
-        }
-        Reduction { premise, from, to } => {
-            vec![flatten_reduction(
-                universe,
-                premise.iter(),
-                *from,
-                *to,
-                sorts,
-            )]
-        }
-        Bireduction { premise, lhs, rhs } => {
-            let left_to_right = flatten_reduction(universe, premise.iter(), *lhs, *rhs, sorts);
-            let right_to_left = flatten_reduction(universe, premise.iter(), *rhs, *lhs, sorts);
-            return vec![left_to_right, right_to_left];
         }
     }
 }

@@ -38,25 +38,21 @@ pub enum CompileError {
     ExtraToken {
         location: Location,
     },
-    SymbolNotCamelCase {
-        name: String,
-        location: Option<Location>,
-        symbol_kind: SymbolKind,
-    },
-    SymbolNotSnakeCase {
-        name: String,
-        location: Option<Location>,
-        symbol_kind: SymbolKind,
-    },
+    //SymbolNotCamelCase {
+    //    name: String,
+    //    location: Option<Location>,
+    //    symbol_kind: SymbolKind,
+    //},
+    //SymbolNotSnakeCase {
+    //    name: String,
+    //    location: Option<Location>,
+    //    symbol_kind: SymbolKind,
+    //},
     VariableNotSnakeCase {
         name: String,
         location: Location,
     },
     VariableOccursOnlyOnce {
-        name: String,
-        location: Option<Location>,
-    },
-    QueryVariableOnlyInOutput {
         name: String,
         location: Option<Location>,
     },
@@ -87,9 +83,6 @@ pub enum CompileError {
         name: String,
         first_declaration: Location,
         second_declaration: Location,
-    },
-    ReductionFromVariableOrWildcard {
-        location: Option<Location>,
     },
     NoSort {
         location: Option<Location>,
@@ -190,32 +183,28 @@ impl Display for CompileErrorWithContext {
                 write!(f, "unexpected token\n")?;
                 write_loc(f, Some(*location))?;
             }
-            SymbolNotCamelCase {
-                name,
-                location,
-                symbol_kind,
-            } => {
-                write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
-                write_loc(f, *location)?;
-            }
-            SymbolNotSnakeCase {
-                name,
-                location,
-                symbol_kind,
-            } => {
-                write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
-                write_loc(f, *location)?;
-            }
+            //SymbolNotCamelCase {
+            //    name,
+            //    location,
+            //    symbol_kind,
+            //} => {
+            //    write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
+            //    write_loc(f, *location)?;
+            //}
+            //SymbolNotSnakeCase {
+            //    name,
+            //    location,
+            //    symbol_kind,
+            //} => {
+            //    write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
+            //    write_loc(f, *location)?;
+            //}
             VariableNotSnakeCase { name, location } => {
                 write!(f, "variable {name} is not lower_snake_case\n")?;
                 write_loc(f, Some(*location))?;
             }
             VariableOccursOnlyOnce { name, location } => {
                 write!(f, "variable {name} occurs only once\n")?;
-                write_loc(f, *location)?;
-            }
-            QueryVariableOnlyInOutput { name, location } => {
-                write!(f, "variable {name} occurs only as output\n")?;
                 write_loc(f, *location)?;
             }
             FunctionArgumentNumber {
@@ -267,10 +256,6 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, Some(*second_declaration))?;
                 write!(f, "Previously declared here:\n")?;
                 write_loc(f, Some(*first_declaration))?;
-            }
-            ReductionFromVariableOrWildcard { location } => {
-                write!(f, "term before ~> cannot be variable or wildcard\n")?;
-                write_loc(f, *location)?;
             }
             NoSort { location } => {
                 write!(f, "sort of term undetermined\n")?;
