@@ -89,7 +89,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     query_actions.extend(module_wrapper.symbols.iter_funcs().map(|func| {
         functionality(
             &func.name,
-            module_wrapper.symbols.arity(&func.name).unwrap().as_slice(),
+            module_wrapper.symbols.arity(&func.name).unwrap(),
         )
     }));
     let axiom_flattenings = module_wrapper

@@ -1743,24 +1743,23 @@ fn write_theory_impl(
         write_are_equal_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
-    for (rel, arity) in module.symbols.relations() {
-        let is_function = match module.symbols.get_symbol(rel, Location(0, 0)).unwrap() {
-            SymbolRef::Func(function) => {
-                write_pub_function_eval_fn(out, rel, &arity)?;
-                write_define_fn(out, function)?;
-                true
-            }
-            SymbolRef::Pred(_) => {
-                write_pub_predicate_holds_fn(out, rel, &arity)?;
-                false
-            }
-            _ => panic!("Not a relation"),
-        };
 
+    for func in module.symbols.iter_funcs() {
+        let arity = module.symbols.arity(&func.name).unwrap();
+        write_pub_function_eval_fn(out, &func.name, &arity)?;
+        write_define_fn(out, func)?;
+        write_pub_iter_fn(out, &func.name, &arity, true)?;
+        write_pub_insert_relation(out, &func.name, &arity, true)?;
+        write!(out, "\n")?;
+    }
+
+    for pred in module.symbols.iter_preds() {
+        let arity = module.symbols.arity(&pred.name).unwrap();
+        write_pub_predicate_holds_fn(out, &pred.name, &arity)?;
         if arity.len() > 0 {
-            write_pub_iter_fn(out, rel, &arity, is_function)?;
+            write_pub_iter_fn(out, &pred.name, &arity, false)?;
         }
-        write_pub_insert_relation(out, rel, &arity, is_function)?;
+        write_pub_insert_relation(out, &pred.name, &arity, false)?;
         write!(out, "\n")?;
     }
 
