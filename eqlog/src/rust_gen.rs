@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 
-use Case::Snake;
+use Case::{Snake, UpperCamel};
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
@@ -51,13 +51,14 @@ fn write_sort_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
 fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
+    let relation_camel = relation.to_case(UpperCamel);
     let args = arity
         .iter()
         .copied()
         .format_with(", ", |sort, f| f(&format_args!("pub {sort}")));
     writedoc! {out, "
         #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-        struct {relation}({args});
+        struct {relation_camel}({args});
     "}
 }
 
@@ -127,16 +128,17 @@ fn write_table_struct(
     let prev_dirty_field = format!("index_{dirty_index_name}_prev: Vec<BTreeSet<{tuple_type}>>,");
 
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
+    let relation_camel = relation.to_case(UpperCamel);
     let element_index_fields = sorts.iter().copied().format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
         f(&format_args!(
-            "    element_index_{sort_snake}: BTreeMap<{sort}, Vec<{relation}>>,"
+            "    element_index_{sort_snake}: BTreeMap<{sort}, Vec<{relation_camel}>>,"
         ))
     });
 
     writedoc! {out, "
         #[derive(Clone, Hash, Debug)]
-        struct {relation}Table {{
+        struct {relation_camel}Table {{
         {index_fields}
 
         {prev_dirty_field}
@@ -192,9 +194,10 @@ fn write_table_permute_fn(
     let tuple_args = order
         .iter()
         .format_with("", |i, f| f(&format_args!("t.{i}.into(), ")));
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(unused)]
-        fn permute{order_name}(t: {relation}) -> ({tuple_type_args}) {{
+        fn permute{order_name}(t: {relation_camel}) -> ({tuple_type_args}) {{
             ({tuple_args})
         }}
     "}
@@ -213,10 +216,11 @@ fn write_table_permute_inverse_fn(
         let j = order.iter().copied().position(|j| j == i).unwrap();
         f(&format_args!("{sort}::from(t.{j})"))
     });
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(unused)]
-        fn permute_inverse{order_name}(t: ({tuple_type_args})) -> {relation} {{
-            {relation}({rel_args})
+        fn permute_inverse{order_name}(t: ({tuple_type_args})) -> {relation_camel} {{
+            {relation_camel}({rel_args})
         }}
     "}
 }
@@ -269,8 +273,9 @@ fn write_table_insert_dirt_fn(
             }
         });
 
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
-        fn insert_dirt(&mut self, t: {relation}) -> bool {{
+        fn insert_dirt(&mut self, t: {relation_camel}) -> bool {{
             if self.index_{master}.insert(Self::permute{master_order}(t)) {{
         {slave_inserts}
                 true
@@ -327,10 +332,11 @@ fn write_table_insert_fn(
         "})
         });
 
+    let relation_camel = relation.to_case(UpperCamel);
     // TODO: Why is this not used sometimes?
     writedoc! {out, "
         #[allow(dead_code)]
-        fn insert(&mut self, t: {relation}) -> bool {{
+        fn insert(&mut self, t: {relation_camel}) -> bool {{
             if self.index_{master}.insert(Self::permute{master_order}(t)) {{
         {slave_inserts}
         {element_inserts}
@@ -400,9 +406,10 @@ fn write_table_iter_fn(
     let open_args_min = (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MIN, ")));
     let open_args_max = (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MAX, ")));
 
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(dead_code)]
-        fn iter_{query_name}(&self, {fn_args}) -> impl '_ + Iterator<Item = {relation}> {{
+        fn iter_{query_name}(&self, {fn_args}) -> impl '_ + Iterator<Item = {relation_camel}> {{
         {unalias_args}
             let min = ({fixed_args_min}{open_args_min});
             let max = ({fixed_args_max}{open_args_max});
@@ -422,9 +429,10 @@ fn write_table_contains_fn(
     let master = index_selection.get(&QuerySpec::all()).unwrap();
     let master_name = IndexName(master);
     let order_name = OrderName(&master.order);
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(dead_code)]
-        fn contains(&self, t: {relation}) -> bool {{
+        fn contains(&self, t: {relation_camel}) -> bool {{
             self.index_{master_name}.contains(&Self::permute{order_name}(t))
         }}
     "}
@@ -510,9 +518,10 @@ fn write_table_drain_with_element(
             ))
         });
 
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(dead_code)]
-        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation}> {{
+        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation_camel}> {{
             let ts = match self.element_index_{sort_snake}.remove(&tm) {{
                 None => Vec::new(),
                 Some(tuples) => tuples,
@@ -598,8 +607,9 @@ fn write_table_impl(
     index_selection: &HashMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
-        impl {relation}Table {{
+        impl {relation_camel}Table {{
     "}?;
     write_table_weight(out, arity, index_selection)?;
     write_table_new_fn(out, arity, index_selection)?;
@@ -629,8 +639,9 @@ fn write_table_impl(
 }
 
 fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<()> {
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
-        impl fmt::Display for {relation}Table {{
+        impl fmt::Display for {relation_camel}Table {{
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
                 Table::new(self.iter_all())
                     .with(Extract::segment(1.., ..))
@@ -716,12 +727,13 @@ fn write_pub_predicate_holds_fn(
 
     let rel_args0 = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
     let rel_args1 = rel_args0.clone();
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         /// Returns `true` if `{relation}({rel_args0})` holds.
         #[allow(dead_code)]
         pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
             {canonicalize}
-            self.{relation_snake}.contains({relation}({rel_args1}))
+            self.{relation_snake}.contains({relation_camel}({rel_args1}))
         }}
     "}
 }
@@ -872,11 +884,12 @@ fn write_pub_insert_relation(
                 /// Makes `{relation}({args})` hold.
             "}
     };
+    let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         {docstring}
         #[allow(dead_code)]
         pub fn insert_{relation_snake}(&mut self {rel_fn_args}) {{
-            self.delta.as_mut().unwrap().new_{relation_snake}.push({relation}({rel_args}));
+            self.delta.as_mut().unwrap().new_{relation_snake}.push({relation_camel}({rel_args}));
         }}
     "}
 }
@@ -954,7 +967,10 @@ fn write_model_delta_struct(out: &mut impl Write, module: &ModuleWrapper) -> io:
         .relations()
         .format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
-            f(&format_args!("    new_{relation_snake}: Vec<{relation}>,"))
+            let relation_camel = relation.to_case(UpperCamel);
+            f(&format_args!(
+                "    new_{relation_snake}: Vec<{relation_camel}>,"
+            ))
         });
     let new_equalities = module.symbols.iter_types().format_with("\n", |sort, f| {
         let sort = &sort.name;
@@ -1089,6 +1105,7 @@ fn write_model_delta_apply_equalities_fn(
             .filter(|(_, arity)| arity_contains_sort(arity))
             .format_with("\n", |(relation, arity), f| {
                 let relation_snake = relation.to_case(Snake);
+                let relation_camel = relation.to_case(UpperCamel);
                 let update_weights =
                     arity
                         .iter()
@@ -1101,7 +1118,7 @@ fn write_model_delta_apply_equalities_fn(
                                     model.{sort_snake}_weights
                                     .get_mut(t.{i}.0 as usize)
                                     .unwrap(); 
-                                *weight{i} -= {relation}Table::WEIGHT;
+                                *weight{i} -= {relation_camel}Table::WEIGHT;
                             "})
                         });
                 f(&format_args! {"
@@ -1156,6 +1173,7 @@ fn write_model_delta_apply_tuples_fn(
         .relations()
         .format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
+            let relation_camel = relation.to_case(UpperCamel);
             let canonicalize = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
                 let sort_snake = sort.to_case(Snake);
                 f(&format_args!(
@@ -1165,7 +1183,7 @@ fn write_model_delta_apply_tuples_fn(
             let update_weights = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
                 let sort_snake = sort.to_case(Snake);
                 f(&format_args!(
-                    "model.{sort_snake}_weights[t.{i}.0 as usize] += {relation}Table::WEIGHT;"
+                    "model.{sort_snake}_weights[t.{i}.0 as usize] += {relation_camel}Table::WEIGHT;"
                 ))
             });
             f(&formatdoc! {"
@@ -1234,8 +1252,9 @@ fn write_query_loop_headers<'a>(
                     projections: in_projections.keys().copied().collect(),
                     only_dirty: *only_dirty,
                 };
+                let relation_camel = relation.to_case(UpperCamel);
                 write!(out, "#[allow(unused_variables)]\n")?;
-                write!(out, "for {}(", relation)?;
+                write!(out, "for {relation_camel}(")?;
                 for i in 0..arity_len {
                     if let Some(tm) = out_projections.get(&i) {
                         if let Some(diag) = diagonals.iter().find(|diag| diag.contains(&i)) {
@@ -1339,6 +1358,7 @@ fn write_action_atom(
             out_projections,
         } => {
             let relation_snake = relation.to_case(Snake);
+            let relation_camel = relation.to_case(UpperCamel);
             let arity = module.symbols.arity(relation).unwrap();
 
             let query_spec = QuerySpec {
@@ -1383,10 +1403,10 @@ fn write_action_atom(
                 let existing_row = self.{iter_name}({in_proj_args}).next();
                 #[allow(unused_variables)]
                 let ({out_proj_args0}) = match existing_row {{
-                    Some({relation}({tuple_pattern_args})) => ({out_proj_args1}),
+                    Some({relation_camel}({tuple_pattern_args})) => ({out_proj_args1}),
                     None => {{
                         {new_out_proj_args}
-                        delta.new_{relation_snake}.push({relation}({full_tuple_args}));
+                        delta.new_{relation_snake}.push({relation_camel}({full_tuple_args}));
                         ({out_proj_args2})
                     }},
                 }};
@@ -1615,7 +1635,8 @@ fn write_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> 
     }
     for (relation, _) in module.symbols.relations() {
         let relation_snake = relation.to_case(Snake);
-        write!(out, "{relation_snake}: {relation}Table::new(),")?;
+        let relation_camel = relation.to_case(UpperCamel);
+        write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
     write!(out, "empty_join_is_dirty_prev: true,\n")?;
@@ -1688,7 +1709,8 @@ fn write_theory_struct(out: &mut impl Write, name: &str, module: &ModuleWrapper)
 
     for (relation, _) in module.symbols.relations() {
         let relation_snake = relation.to_case(Snake);
-        write!(out, "  {relation_snake}: {relation}Table,")?;
+        let relation_camel = relation.to_case(UpperCamel);
+        write!(out, "  {relation_snake}: {relation_camel}Table,")?;
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
