@@ -3,7 +3,6 @@ use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
-use crate::symbol_table::SymbolRef;
 use convert_case::{Case, Casing};
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
