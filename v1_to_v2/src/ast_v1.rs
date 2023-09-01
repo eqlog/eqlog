@@ -230,36 +230,36 @@ pub struct Sequent {
 {%- match self.sequent.data -%}
 {%- when SequentData::Implication with {premise, conclusion} -%}
 {%- for atom in premise %}
-  if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
+    if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
 {%- endfor -%}
 {%- for atom in conclusion %}
-  then {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
+    then {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
 {%- endfor -%}
 {%- when SequentData::Reduction with {premise, from, to} -%}
 {%- for atom in premise %}
-  if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
+    if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
 {%- endfor -%}
 {%- match self.sequent.universe.data_ref(from) -%}
 {%- when TermData::Application with (func, args) -%}
 {%- for arg in args %}
-  if t_{{loop.index0}} = {{ TermWithUniverse::new(arg, self.sequent.universe) }};
+    if t_{{loop.index0}} = {{ TermWithUniverse::new(arg, self.sequent.universe) }};
 {%- endfor -%}
 {%- when TermData::Variable with (name) -%}
 {%- when TermData::Wildcard -%}
 {%- endmatch %}
-  if to = {{ TermWithUniverse::new(to, self.sequent.universe) }};
+    if to = {{ TermWithUniverse::new(to, self.sequent.universe) }};
 {%- match self.sequent.universe.data_ref(from) -%}
 {%- when TermData::Application with (func, args) %}
-  then {{ func }}(
+    then {{ func }}(
 {%- for arg in args -%}
 t_{{loop.index0}}
 {%- if !loop.last -%}, {% endif -%}
 {%- endfor -%}
 ) = to;
 {%- when TermData::Variable with (name) %}
-  then {{ name }} = to;
+    then {{ name }} = to;
 {%- when TermData::Wildcard %}
-  then _ = to;
+    then _ = to;
 {%- endmatch -%}
 {%- when SequentData::Bireduction with {premise, lhs, rhs} -%}
 BIREDUCTIONS ARE NOT SUPPORTED
