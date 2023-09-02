@@ -3,6 +3,8 @@ mod symbol_table;
 mod type_inference;
 
 use check_epic::*;
+use convert_case::Case;
+use convert_case::Casing;
 pub use symbol_table::*;
 use type_inference::*;
 
@@ -36,6 +38,25 @@ pub fn check_then_defined_var<'a>(rule: &'a RuleDecl) -> Result<(), CompileError
     Ok(())
 }
 
+pub fn check_var_case(rule: &RuleDecl) -> Result<(), CompileError> {
+    let context = &rule.term_context;
+    for tm in context.iter_terms() {
+        match context.data(tm) {
+            TermData::Variable(name) => {
+                if name != &name.to_case(Case::Snake) {
+                    return Err(CompileError::VariableNotSnakeCase {
+                        name: name.into(),
+                        location: context.loc(tm),
+                    });
+                }
+            }
+            TermData::Wildcard | TermData::Application { .. } => {}
+        }
+    }
+
+    Ok(())
+}
+
 pub fn check_rule<'a>(
     symbols: &'a SymbolTable<'a>,
     rule: &'a RuleDecl,
@@ -43,5 +64,6 @@ pub fn check_rule<'a>(
     check_then_defined_var(rule)?;
     check_epic(rule)?;
     let types = infer_types(symbols, rule)?;
+    check_var_case(rule)?;
     Ok(types)
 }
