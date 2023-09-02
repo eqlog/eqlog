@@ -109,6 +109,9 @@ pub enum CompileError {
     ConclusionPredicateArgNew {
         location: Option<Location>,
     },
+    ThenDefinedNotVar {
+        location: Location,
+    },
     ThenDefinedVarNotNew {
         location: Location,
     },
@@ -295,6 +298,10 @@ impl Display for CompileErrorWithContext {
             ConclusionPredicateArgNew { location } => {
                 write!(f, "argument of predicate in conclusion is not used earlier")?;
                 write_loc(f, *location)?;
+            }
+            ThenDefinedNotVar { location } => {
+                write!(f, "expected a variable")?;
+                write_loc(f, Some(*location))?;
             }
             ThenDefinedVarNotNew { location } => {
                 write!(f, "variable has already been introduced earlier")?;
