@@ -1,17 +1,9 @@
 use std::collections::BTreeSet;
 
+use super::symbol_table::*;
 use crate::ast::*;
 use crate::error::*;
-use crate::symbol_table::*;
 use crate::unification::*;
-
-pub fn check_rule<'a>(
-    symbols: &'a SymbolTable<'a>,
-    rule: &'a RuleDecl,
-) -> Result<TermMap<&'a str>, CompileError> {
-    let types = check_types(symbols, rule)?;
-    Ok(types)
-}
 
 // The term unification used for type inference and checking. For each term, we infer a set of
 // types that the term must have, and in the end check that the set has precisely one element.
@@ -153,7 +145,7 @@ fn into_unique_types<'a>(
 }
 
 /// Infers types for terms appearing in a rule.
-fn check_types<'a>(
+pub fn infer_types<'a>(
     symbols: &'a SymbolTable<'a>,
     rule: &'a RuleDecl,
 ) -> Result<TermMap<&'a str>, CompileError> {

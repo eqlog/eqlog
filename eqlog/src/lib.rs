@@ -1,8 +1,7 @@
 mod ast;
 mod ast_v1;
 mod module;
-mod rule_check;
-mod symbol_table;
+mod semantics;
 mod unification;
 use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(

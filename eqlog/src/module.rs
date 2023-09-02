@@ -1,10 +1,9 @@
 use crate::ast::*;
 use crate::ast_v1::*;
 use crate::error::*;
-use crate::rule_check::*;
+use crate::semantics::*;
 use crate::source_display::Location;
 use crate::source_display::*;
-use crate::symbol_table::SymbolTable;
 use crate::unification::*;
 use convert_case::{Case, Casing};
 use std::collections::BTreeMap;
