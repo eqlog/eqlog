@@ -1,15 +1,13 @@
-use crate::ast::{
-    Decl, FuncDecl, IfAtom, IfAtomData, Module, PredDecl, RuleDecl, StmtData, TermContext,
-    ThenAtom, ThenAtomData,
-};
+use crate::ast::*;
 use crate::ast_v1::*;
 use crate::error::*;
+use crate::rule_check::*;
 use crate::source_display::Location;
 use crate::source_display::*;
 use crate::symbol_table::SymbolTable;
 use crate::unification::*;
 use convert_case::{Case, Casing};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 use std::iter::{once, repeat};
 
@@ -137,130 +135,7 @@ impl<'a> ModuleWrapper<'a> {
     //}
 }
 
-// The term unification used for sort inference and checking. For each term, we infer a set of
-// sorts that the term must have, and in the end check that the set has precisely one element.
-struct SortMerge {}
-impl MergeFn<BTreeSet<String>> for SortMerge {
-    fn merge(&mut self, mut lhs: BTreeSet<String>, rhs: BTreeSet<String>) -> BTreeSet<String> {
-        lhs.extend(rhs);
-        lhs
-    }
-}
-type SortMap<'a> = TermUnification<'a, BTreeSet<String>, SortMerge>;
-
 impl<'a> ModuleWrapper<'a> {
-    fn collect_function_application_requirements(
-        &self,
-        universe: &TermContext,
-        sorts: &mut SortMap,
-    ) -> Result<(), CompileError> {
-        for tm in universe.iter_terms() {
-            match universe.data(tm) {
-                TermData::Application { func, args } => {
-                    let loc = universe.loc(tm);
-                    let FuncDecl {
-                        arg_decls, result, ..
-                    } = self.symbols.get_func(func, loc)?;
-                    if args.len() != arg_decls.len() {
-                        return Err(CompileError::FunctionArgumentNumber {
-                            function: func.clone(),
-                            expected: arg_decls.len(),
-                            got: args.len(),
-                            location: universe.loc(tm),
-                        });
-                    }
-                    for (arg, arg_decl) in args.iter().copied().zip(arg_decls) {
-                        sorts[arg].insert(arg_decl.typ.clone());
-                    }
-                    sorts[tm].insert(result.clone());
-                }
-                TermData::Wildcard | TermData::Variable(_) => (),
-            }
-        }
-        Ok(())
-    }
-    fn collect_atom_requirements(
-        &self,
-        atom: &Atom,
-        sorts: &mut SortMap,
-    ) -> Result<(), CompileError> {
-        match &atom.data {
-            AtomData::Equal(lhs, rhs) => {
-                sorts.union(*lhs, *rhs);
-            }
-            AtomData::Defined(tm, Some(sort)) => {
-                let _ = self.symbols.get_type(sort, atom.location.unwrap())?;
-                sorts[*tm].insert(sort.clone());
-            }
-            AtomData::Defined(_, None) => (),
-            AtomData::Predicate(p, args) => {
-                let PredDecl { arg_decls, .. } =
-                    self.symbols.get_pred(p, atom.location.unwrap())?;
-                if args.len() != arg_decls.len() {
-                    return Err(CompileError::PredicateArgumentNumber {
-                        predicate: p.clone(),
-                        expected: arg_decls.len(),
-                        got: args.len(),
-                        location: atom.location,
-                    });
-                }
-                for (arg, arg_decl) in args.iter().copied().zip(arg_decls) {
-                    sorts[arg].insert(arg_decl.typ.clone());
-                }
-            }
-        }
-        Ok(())
-    }
-    // Check that all terms have precisely one assigned sort, and return a map assigning to each
-    // term its unique sort.
-    fn into_unique_sorts(
-        universe: &TermContext,
-        mut sorts: SortMap,
-    ) -> Result<TermMap<String>, CompileError> {
-        // Merge all syntactically equal terms (i.e. variables with the same name and all terms
-        // implied by functionality/right-uniqueness of functions.
-        sorts.congruence_closure();
-
-        for tm in universe.iter_terms() {
-            match sorts[tm].len() {
-                0 => {
-                    return Err(CompileError::NoSort {
-                        location: Some(universe.loc(tm)),
-                    })
-                }
-                1 => (),
-                _ => {
-                    return Err(CompileError::ConflictingSorts {
-                        location: Some(universe.loc(tm)),
-                        sorts: sorts[tm].iter().cloned().collect(),
-                    })
-                }
-            }
-        }
-        let sorts = sorts
-            .freeze()
-            .map(|sorts| sorts.into_iter().next().unwrap());
-        Ok(sorts)
-    }
-
-    fn infer_sequent_sorts(&self, sequent: &Sequent) -> Result<TermMap<String>, CompileError> {
-        let mut sorts = TermUnification::new(
-            &sequent.universe,
-            vec![BTreeSet::new(); sequent.universe.len()],
-            SortMerge {},
-        );
-
-        self.collect_function_application_requirements(&sequent.universe, &mut sorts)?;
-        for atom in sequent.data.iter_atoms() {
-            self.collect_atom_requirements(&atom, &mut sorts)?;
-        }
-        match &sequent.data {
-            SequentData::Implication { .. } => (),
-        }
-
-        Self::into_unique_sorts(&sequent.universe, sorts)
-    }
-
     // Check the following:
     // - Every variable in the conclusion also appears in the premise.
     // - Every term in the conclusion is equal to some term that occurred earlier or inside an
@@ -412,8 +287,8 @@ impl<'a> ModuleWrapper<'a> {
     }
 
     fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
+        let sorts = check_rule(&self.symbols, &rule)?.map(|typ| typ.to_string());
         let axiom = rule_to_axiom(rule);
-        let sorts = self.infer_sequent_sorts(&axiom.sequent)?;
         Self::check_epimorphism(&axiom.sequent)?;
         Self::check_variable_case(&axiom.sequent.universe)?;
         Self::check_variable_occurence(&axiom.sequent.universe)?;

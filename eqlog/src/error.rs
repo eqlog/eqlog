@@ -89,8 +89,8 @@ pub enum CompileError {
     NoSort {
         location: Option<Location>,
     },
-    ConflictingSorts {
-        sorts: Vec<String>,
+    ConflictingTypes {
+        types: Vec<String>,
         location: Option<Location>,
     },
     VariableNotInPremise {
@@ -263,8 +263,8 @@ impl Display for CompileErrorWithContext {
                 write!(f, "sort of term undetermined\n")?;
                 write_loc(f, *location)?;
             }
-            ConflictingSorts { sorts: _, location } => {
-                write!(f, "term has conflicting sorts\n")?;
+            ConflictingTypes { types: _, location } => {
+                write!(f, "term has conflicting types\n")?;
                 write_loc(f, *location)?;
             }
             VariableNotInPremise { var: _, location } => {

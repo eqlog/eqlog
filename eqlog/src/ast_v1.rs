@@ -66,19 +66,6 @@ pub enum SequentData {
     },
 }
 
-impl SequentData {
-    pub fn iter_atoms<'a>(&'a self) -> impl 'a + Iterator<Item = &'a Atom> {
-        use SequentData::*;
-        let result: Box<dyn 'a + Iterator<Item = &'a Atom>> = match self {
-            Implication {
-                premise,
-                conclusion,
-            } => Box::new(premise.iter().chain(conclusion)),
-        };
-        result
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Sequent {
     pub universe: TermUniverse,
