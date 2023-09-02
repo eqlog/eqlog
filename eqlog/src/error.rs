@@ -93,11 +93,11 @@ pub enum CompileError {
         types: Vec<String>,
         location: Option<Location>,
     },
-    VariableNotInPremise {
+    VariableIntroducedInThenStmt {
         var: String,
         location: Option<Location>,
     },
-    WildcardInConclusion {
+    WildcardInThenStmt {
         location: Option<Location>,
     },
     ConclusionEqualityOfNewTerms {
@@ -108,6 +108,9 @@ pub enum CompileError {
     },
     ConclusionPredicateArgNew {
         location: Option<Location>,
+    },
+    ThenDefinedVarNotNew {
+        location: Location,
     },
 }
 
@@ -267,12 +270,12 @@ impl Display for CompileErrorWithContext {
                 write!(f, "term has conflicting types\n")?;
                 write_loc(f, *location)?;
             }
-            VariableNotInPremise { var: _, location } => {
-                write!(f, "variable in conclusion not used in premise\n")?;
+            VariableIntroducedInThenStmt { var: _, location } => {
+                write!(f, "variable introduced in then statement\n")?;
                 write_loc(f, *location)?;
             }
-            WildcardInConclusion { location } => {
-                write!(f, "wildcard in conclusion\n")?;
+            WildcardInThenStmt { location } => {
+                write!(f, "wildcards must not appear in then statements\n")?;
                 write_loc(f, *location)?;
             }
             ConclusionEqualityOfNewTerms { location } => {
@@ -292,6 +295,10 @@ impl Display for CompileErrorWithContext {
             ConclusionPredicateArgNew { location } => {
                 write!(f, "argument of predicate in conclusion is not used earlier")?;
                 write_loc(f, *location)?;
+            }
+            ThenDefinedVarNotNew { location } => {
+                write!(f, "variable has already been introduced earlier")?;
+                write_loc(f, Some(*location))?;
             }
         }
         Ok(())

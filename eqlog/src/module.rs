@@ -135,117 +135,6 @@ impl<'a> ModuleWrapper<'a> {
 }
 
 impl<'a> ModuleWrapper<'a> {
-    // Check the following:
-    // - Every variable in the conclusion also appears in the premise.
-    // - Every term in the conclusion is equal to some term that occurred earlier or inside an
-    //   Atom::Defined.
-    fn check_epimorphism(sequent: &Sequent) -> Result<(), CompileError> {
-        let (premise, conclusion) = match &sequent.data {
-            SequentData::Implication {
-                premise,
-                conclusion,
-                ..
-            } => (premise, conclusion),
-        };
-        let universe = &sequent.universe;
-        let mut has_occurred = TermUnification::new(
-            universe,
-            vec![false; universe.len()],
-            |lhs_occured, rhs_occured| lhs_occured || rhs_occured,
-        );
-
-        // Set all premise terms to have occurred.
-        for atom in premise {
-            for tm in atom.iter_subterms(universe) {
-                has_occurred[tm] = true;
-            }
-        }
-
-        // Unify terms occuring in equalities in premise.
-        for atom in premise {
-            use AtomData::*;
-            match &atom.data {
-                Equal(lhs, rhs) => {
-                    has_occurred.union(*lhs, *rhs);
-                }
-                Defined(_, _) | Predicate(_, _) => (),
-            }
-        }
-
-        has_occurred.congruence_closure();
-
-        // Check that conclusion doesn't contain wildcards or variables that haven't occurred in
-        // premise.
-        for atom in conclusion {
-            for tm in atom.iter_subterms(universe) {
-                match universe.data(tm) {
-                    TermData::Variable(_) | TermData::Wildcard if has_occurred[tm] => (),
-                    TermData::Application { .. } => (),
-                    TermData::Variable(var) => {
-                        return Err(CompileError::VariableNotInPremise {
-                            var: var.clone(),
-                            location: Some(universe.loc(tm)),
-                        })
-                    }
-                    TermData::Wildcard => {
-                        return Err(CompileError::WildcardInConclusion {
-                            location: Some(universe.loc(tm)),
-                        })
-                    }
-                }
-            }
-        }
-
-        for atom in conclusion {
-            use AtomData::*;
-            match &atom.data {
-                Equal(lhs, rhs) => {
-                    let lhs = *lhs;
-                    let rhs = *rhs;
-                    if !has_occurred[lhs] && !has_occurred[rhs] {
-                        return Err(CompileError::ConclusionEqualityOfNewTerms {
-                            location: atom.location,
-                        });
-                    }
-
-                    if !has_occurred[lhs] || !has_occurred[rhs] {
-                        let new = if has_occurred[lhs] { rhs } else { lhs };
-                        use TermData::*;
-                        match universe.data(new) {
-                            Variable(_) | Wildcard => {
-                                // Variables or Wildcards should've been checked earlier.
-                                debug_assert!(has_occurred[new]);
-                            }
-                            Application { args, .. } => {
-                                if let Some(arg) = args.iter().find(|arg| !has_occurred[**arg]) {
-                                    return Err(CompileError::ConclusionEqualityArgNew {
-                                        location: Some(universe.loc(*arg)),
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    has_occurred.union(lhs, rhs);
-                    has_occurred.congruence_closure();
-                }
-                Defined(_, _) => (),
-                Predicate(_, args) => {
-                    if let Some(arg) = args.iter().copied().find(|arg| !has_occurred[*arg]) {
-                        return Err(CompileError::ConclusionPredicateArgNew {
-                            location: Some(universe.loc(arg)),
-                        });
-                    }
-                }
-            }
-            for tm in atom.iter_subterms(universe) {
-                has_occurred[tm] = true;
-            }
-        }
-
-        Ok(())
-    }
-
     // Check that all variables are snake_case.
     fn check_variable_case(universe: &TermContext) -> Result<(), CompileError> {
         for tm in universe.iter_terms() {
@@ -288,7 +177,6 @@ impl<'a> ModuleWrapper<'a> {
     fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
         let sorts = check_rule(&self.symbols, &rule)?.map(|typ| typ.to_string());
         let axiom = rule_to_axiom(rule);
-        Self::check_epimorphism(&axiom.sequent)?;
         Self::check_variable_case(&axiom.sequent.universe)?;
         Self::check_variable_occurence(&axiom.sequent.universe)?;
         self.axioms.push((axiom, sorts));

@@ -114,10 +114,48 @@ pub struct IfAtom {
     pub loc: Location,
 }
 
+impl IfAtom {
+    pub fn iter_subterms<'a>(
+        &'a self,
+        context: &'a TermContext,
+    ) -> impl 'a + Iterator<Item = Term> {
+        let top_tms = match &self.data {
+            IfAtomData::Equal(lhs, rhs) => vec![*lhs, *rhs],
+            IfAtomData::Pred { pred: _, args } => args.clone(),
+            IfAtomData::Var { term, typ: _ } => vec![*term],
+            IfAtomData::Defined(tm) => vec![*tm],
+        };
+
+        top_tms
+            .into_iter()
+            .flat_map(move |tm| context.iter_subterms(tm))
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ThenAtom {
     pub data: ThenAtomData,
     pub loc: Location,
+}
+
+impl ThenAtom {
+    pub fn iter_subterms<'a>(
+        &'a self,
+        context: &'a TermContext,
+    ) -> impl 'a + Iterator<Item = Term> {
+        let top_tms = match &self.data {
+            ThenAtomData::Equal(lhs, rhs) => vec![*lhs, *rhs],
+            ThenAtomData::Defined { var, term } => match var {
+                Some(var) => vec![*var, *term],
+                None => vec![*term],
+            },
+            ThenAtomData::Pred { pred: _, args } => args.clone(),
+        };
+
+        top_tms
+            .into_iter()
+            .flat_map(move |tm| context.iter_subterms(tm))
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
