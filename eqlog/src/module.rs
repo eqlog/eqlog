@@ -2,10 +2,8 @@ use crate::ast::*;
 use crate::ast_v1::*;
 use crate::error::*;
 use crate::semantics::*;
-use crate::source_display::Location;
 use crate::source_display::*;
 use crate::unification::*;
-use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 use std::iter::{once, repeat};
 
@@ -134,35 +132,9 @@ impl<'a> ModuleWrapper<'a> {
 }
 
 impl<'a> ModuleWrapper<'a> {
-    // Check that all variables are snake_case.
-    // Check that every variable occurs at least twice.
-    fn check_variable_occurence(universe: &TermContext) -> Result<(), CompileError> {
-        let mut occ_nums: BTreeMap<&str, (usize, Option<Location>)> = BTreeMap::new();
-        for tm in universe.iter_terms() {
-            if let TermData::Variable(v) = universe.data(tm) {
-                if let Some((n, _)) = occ_nums.get_mut(v.as_str()) {
-                    *n += 1;
-                } else {
-                    let loc = universe.loc(tm);
-                    occ_nums.insert(v, (1, Some(loc)));
-                }
-            }
-        }
-        for (name, (n, location)) in occ_nums.into_iter() {
-            if n == 1 {
-                return Err(CompileError::VariableOccursOnlyOnce {
-                    name: name.into(),
-                    location,
-                });
-            }
-        }
-        Ok(())
-    }
-
     fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
         let sorts = check_rule(&self.symbols, &rule)?.map(|typ| typ.to_string());
         let axiom = rule_to_axiom(rule);
-        Self::check_variable_occurence(&axiom.sequent.universe)?;
         self.axioms.push((axiom, sorts));
         Ok(())
     }

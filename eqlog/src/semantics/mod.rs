@@ -2,6 +2,8 @@ mod check_epic;
 mod symbol_table;
 mod type_inference;
 
+use std::collections::BTreeMap;
+
 use check_epic::*;
 use convert_case::Case;
 use convert_case::Casing;
@@ -10,6 +12,7 @@ use type_inference::*;
 
 use crate::ast::*;
 use crate::error::*;
+use crate::source_display::*;
 use crate::unification::*;
 
 /// Checks that the `var` term in all [ThenAtomData::Defined] that occur in a rule are actually
@@ -57,6 +60,27 @@ pub fn check_var_case(rule: &RuleDecl) -> Result<(), CompileError> {
     Ok(())
 }
 
+pub fn check_vars_occur_twice<'a>(rule: &'a RuleDecl) -> Result<(), CompileError> {
+    let context = &rule.term_context;
+    let mut occ_nums: BTreeMap<&str, (usize, Location)> = BTreeMap::new();
+    for tm in context.iter_terms() {
+        if let TermData::Variable(v) = context.data(tm) {
+            let loc = context.loc(tm);
+            let (count, _): &mut (usize, Location) = occ_nums.entry(v.as_str()).or_insert((0, loc));
+            *count += 1;
+        }
+    }
+    for (name, (n, loc)) in occ_nums.into_iter() {
+        if n == 1 {
+            return Err(CompileError::VariableOccursOnlyOnce {
+                name: name.into(),
+                location: Some(loc),
+            });
+        }
+    }
+    Ok(())
+}
+
 pub fn check_rule<'a>(
     symbols: &'a SymbolTable<'a>,
     rule: &'a RuleDecl,
@@ -65,5 +89,6 @@ pub fn check_rule<'a>(
     check_epic(rule)?;
     let types = infer_types(symbols, rule)?;
     check_var_case(rule)?;
+    check_vars_occur_twice(rule)?;
     Ok(types)
 }
