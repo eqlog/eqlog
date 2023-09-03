@@ -21,7 +21,6 @@ fn process_if_atom<'a>(atom: &IfAtom, context: &'a TermContext, occurred: &mut O
     match &atom.data {
         IfAtomData::Equal(lhs, rhs) => {
             occurred.union(*lhs, *rhs);
-            occurred.congruence_closure();
         }
         IfAtomData::Defined(_) => {}
         IfAtomData::Pred { .. } => {}
@@ -173,6 +172,7 @@ pub fn check_epic(rule: &RuleDecl) -> Result<(), CompileError> {
                 process_if_atom(atom, context, &mut occurred);
             }
             StmtData::Then(atom) => {
+                occurred.congruence_closure();
                 check_then_atom_epic(atom, context, &occurred)?;
                 check_then_atom_surjective(atom, context, &occurred)?;
                 process_then_atom(atom, context, &mut occurred);
