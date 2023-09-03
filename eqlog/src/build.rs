@@ -105,7 +105,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .map(|qa| qa.queries.iter().flatten())
         .flatten();
     let action_atoms = query_actions.iter().map(|qa| qa.action.iter()).flatten();
-    let index_selection = select_indices(&module_wrapper, query_atoms, action_atoms);
+    let index_selection = select_indices(&module_wrapper.symbols, query_atoms, action_atoms);
     let theory_name = in_file
         .file_stem()
         .unwrap()

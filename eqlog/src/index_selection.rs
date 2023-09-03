@@ -1,5 +1,5 @@
 use crate::llam::*;
-use crate::module::ModuleWrapper;
+use crate::semantics::SymbolTable;
 use maplit::hashset;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -108,7 +108,7 @@ impl IndexSpec {
 pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
 pub fn select_indices<'a, QA, AA>(
-    module: &ModuleWrapper,
+    symbols: &SymbolTable,
     query_atoms: QA,
     action_atoms: AA,
 ) -> IndexSelection
@@ -118,8 +118,7 @@ where
 {
     // Maps relations to a set of collected query specs. We always need a query for all (dirty)
     // tuples.
-    let mut query_specs: HashMap<String, HashSet<QuerySpec>> = module
-        .symbols
+    let mut query_specs: HashMap<String, HashSet<QuerySpec>> = symbols
         .iter_rels()
         .map(|(rel, _)| {
             (
@@ -177,7 +176,7 @@ where
                 .into_iter()
                 .flat_map(|queries| {
                     let index = IndexSpec::from_query_spec_chain(
-                        module.symbols.get_arity(&rel).unwrap().len(),
+                        symbols.get_arity(&rel).unwrap().len(),
                         &queries,
                     );
                     queries.into_iter().zip(repeat(index))
