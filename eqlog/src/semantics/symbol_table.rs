@@ -1,3 +1,6 @@
+use convert_case::Case;
+use convert_case::Casing;
+
 use crate::ast::*;
 use crate::error::*;
 use crate::source_display::Location;
@@ -96,7 +99,65 @@ impl<'a> SymbolTable<'a> {
                 });
             }
         }
-        Ok(SymbolTable(syms))
+        let table = SymbolTable(syms);
+        table.check_resolve()?;
+        table.check_casing()?;
+        Ok(table)
+    }
+
+    /// Checks that all used type names used in func and pred declarations have been declared.
+    /// This function does not check type names appearing in rules.
+    fn check_resolve(&self) -> Result<(), CompileError> {
+        for sym in self.0.values() {
+            match sym {
+                SymbolRef::Type(_) => {}
+                SymbolRef::Pred { pred, arity } => {
+                    // TODO: AST should have more precise location for typ.
+                    for typ in arity {
+                        self.get_type(typ, pred.loc)?;
+                    }
+                }
+                SymbolRef::Func { func, arity } => {
+                    // TODO: AST should have more precise location for typ.
+                    for typ in arity {
+                        self.get_type(typ, func.loc)?;
+                    }
+                }
+                SymbolRef::Rule(_) => todo!(),
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_casing(&self) -> Result<(), CompileError> {
+        for sym in self.0.values() {
+            let name = sym.name();
+            let loc = sym.loc();
+            let symbol_kind = sym.kind();
+            match symbol_kind {
+                SymbolKind::Type => {
+                    if name != name.to_case(Case::UpperCamel) {
+                        return Err(CompileError::SymbolNotCamelCase {
+                            name: name.to_string(),
+                            location: Some(loc),
+                            symbol_kind,
+                        });
+                    }
+                }
+                SymbolKind::Pred | SymbolKind::Func | SymbolKind::Rule => {
+                    if name != name.to_case(Case::Snake) {
+                        return Err(CompileError::SymbolNotSnakeCase {
+                            name: name.to_string(),
+                            location: Some(loc),
+                            symbol_kind,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn get_symbol(

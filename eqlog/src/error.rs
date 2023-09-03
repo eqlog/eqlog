@@ -40,16 +40,16 @@ pub enum CompileError {
     ExtraToken {
         location: Location,
     },
-    //SymbolNotCamelCase {
-    //    name: String,
-    //    location: Option<Location>,
-    //    symbol_kind: SymbolKind,
-    //},
-    //SymbolNotSnakeCase {
-    //    name: String,
-    //    location: Option<Location>,
-    //    symbol_kind: SymbolKind,
-    //},
+    SymbolNotCamelCase {
+        name: String,
+        location: Option<Location>,
+        symbol_kind: SymbolKind,
+    },
+    SymbolNotSnakeCase {
+        name: String,
+        location: Option<Location>,
+        symbol_kind: SymbolKind,
+    },
     VariableNotSnakeCase {
         name: String,
         location: Location,
@@ -191,22 +191,22 @@ impl Display for CompileErrorWithContext {
                 write!(f, "unexpected token\n")?;
                 write_loc(f, Some(*location))?;
             }
-            //SymbolNotCamelCase {
-            //    name,
-            //    location,
-            //    symbol_kind,
-            //} => {
-            //    write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
-            //    write_loc(f, *location)?;
-            //}
-            //SymbolNotSnakeCase {
-            //    name,
-            //    location,
-            //    symbol_kind,
-            //} => {
-            //    write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
-            //    write_loc(f, *location)?;
-            //}
+            SymbolNotCamelCase {
+                name,
+                location,
+                symbol_kind,
+            } => {
+                write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
+                write_loc(f, *location)?;
+            }
+            SymbolNotSnakeCase {
+                name,
+                location,
+                symbol_kind,
+            } => {
+                write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
+                write_loc(f, *location)?;
+            }
             VariableNotSnakeCase { name, location } => {
                 write!(f, "variable {name} is not lower_snake_case\n")?;
                 write_loc(f, Some(*location))?;

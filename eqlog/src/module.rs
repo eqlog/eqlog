@@ -99,33 +99,6 @@ impl<'a> ModuleWrapper<'a> {
     pub fn iter_axioms(&'a self) -> impl 'a + Iterator<Item = (&'a Axiom, &'a TermMap<String>)> {
         self.axioms.iter().map(|(axiom, types)| (axiom, types))
     }
-
-    //fn check_symbol_case(symbol: &Symbol) -> Result<(), CompileError> {
-    //    let name = symbol.name();
-    //    let kind = symbol.kind();
-    //    use SymbolKind::*;
-    //    match kind {
-    //        Sort | Predicate | Function => {
-    //            if name.to_case(Case::UpperCamel) != *name {
-    //                return Err(CompileError::SymbolNotCamelCase {
-    //                    name: name.to_string(),
-    //                    location: symbol.location(),
-    //                    symbol_kind: kind,
-    //                });
-    //            }
-    //        }
-    //        Query => {
-    //            if name.to_case(Case::Snake) != *name {
-    //                return Err(CompileError::SymbolNotSnakeCase {
-    //                    name: name.to_string(),
-    //                    location: symbol.location(),
-    //                    symbol_kind: kind,
-    //                });
-    //            }
-    //        }
-    //    }
-    //    Ok(())
-    //}
 }
 
 impl<'a> ModuleWrapper<'a> {
