@@ -81,14 +81,19 @@ pub fn check_vars_occur_twice<'a>(rule: &'a RuleDecl) -> Result<(), CompileError
     Ok(())
 }
 
+pub struct CheckedRule<'a> {
+    pub decl: &'a RuleDecl,
+    pub types: TermMap<&'a str>,
+}
+
 pub fn check_rule<'a>(
     symbols: &'a SymbolTable<'a>,
     rule: &'a RuleDecl,
-) -> Result<TermMap<&'a str>, CompileError> {
+) -> Result<CheckedRule<'a>, CompileError> {
     check_then_defined_var(rule)?;
     check_epic(rule)?;
     let types = infer_types(symbols, rule)?;
     check_var_case(rule)?;
     check_vars_occur_twice(rule)?;
-    Ok(types)
+    Ok(CheckedRule { types, decl: rule })
 }

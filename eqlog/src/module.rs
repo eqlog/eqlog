@@ -103,9 +103,11 @@ impl<'a> ModuleWrapper<'a> {
 
 impl<'a> ModuleWrapper<'a> {
     fn add_rule(&mut self, rule: RuleDecl) -> Result<(), CompileError> {
-        let sorts = check_rule(&self.symbols, &rule)?.map(|typ| typ.to_string());
+        let types = check_rule(&self.symbols, &rule)?
+            .types
+            .map(|typ| typ.to_string());
         let axiom = rule_to_axiom(rule);
-        self.axioms.push((axiom, sorts));
+        self.axioms.push((axiom, types.map(|typ| typ.to_string())));
         Ok(())
     }
 }
