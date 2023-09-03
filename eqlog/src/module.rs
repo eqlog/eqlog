@@ -2,10 +2,7 @@ use crate::ast::*;
 use crate::ast_v1::*;
 use crate::error::*;
 use crate::semantics::*;
-use crate::source_display::*;
 use crate::unification::*;
-use std::fmt::{self, Display};
-use std::iter::{once, repeat};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ModuleWrapper<'a> {
@@ -137,47 +134,5 @@ impl<'a> ModuleWrapper<'a> {
         let axiom = rule_to_axiom(rule);
         self.axioms.push((axiom, sorts));
         Ok(())
-    }
-}
-
-#[derive(Clone)]
-struct DumpAxiomsDisplay<'a> {
-    source: &'a str,
-    module: &'a ModuleWrapper<'a>,
-}
-
-impl<'a> Display for DumpAxiomsDisplay<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self { source, module } = self;
-        let separator: String = repeat('-').take(80).chain(once('\n')).collect();
-        write!(f, "{separator}")?;
-        for (axiom, sorts) in module.iter_axioms() {
-            if let Some(location) = axiom.location {
-                write!(f, "{}", SourceDisplay::new(source, location))?;
-            } else {
-                write!(f, "<unmapped axiom>\n")?;
-            }
-
-            write!(f, "\n")?;
-
-            write!(f, "Inferred sorts:\n")?;
-            for tm in axiom.sequent.universe.iter_terms() {
-                let sort = &sorts[tm];
-                let tm = tm.debug(&axiom.sequent.universe);
-                write!(f, "  {tm:?}: {sort}\n")?;
-            }
-            write!(f, "{separator}")?;
-        }
-        Ok(())
-    }
-}
-
-impl<'a> ModuleWrapper<'a> {
-    #[allow(dead_code)]
-    pub fn dump_axioms<'b>(&'b self, source: &'b str) -> impl 'b + Clone + Display {
-        DumpAxiomsDisplay {
-            module: self,
-            source,
-        }
     }
 }
