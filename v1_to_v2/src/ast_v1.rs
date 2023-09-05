@@ -226,16 +226,18 @@ pub struct Sequent {
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
 #[template(
-    source = r#"rule {
-{%- match self.sequent.data -%}
+    source = r#"{%- match self.sequent.data -%}
 {%- when SequentData::Implication with {premise, conclusion} -%}
+rule {
 {%- for atom in premise %}
     if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
 {%- endfor -%}
 {%- for atom in conclusion %}
     then {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
-{%- endfor -%}
+{%- endfor %}
+}
 {%- when SequentData::Reduction with {premise, from, to} -%}
+rule {
 {%- for atom in premise %}
     if {{ AtomWithUniverse::new(atom, self.sequent.universe) }};
 {%- endfor -%}
@@ -250,7 +252,7 @@ pub struct Sequent {
     if to = {{ TermWithUniverse::new(to, self.sequent.universe) }};
 {%- match self.sequent.universe.data_ref(from) -%}
 {%- when TermData::Application with (func, args) %}
-    then {{ func }}(
+    then {{ func.to_case(Snake) }}(
 {%- for arg in args -%}
 t_{{loop.index0}}
 {%- if !loop.last -%}, {% endif -%}
@@ -260,16 +262,58 @@ t_{{loop.index0}}
     then {{ name }} = to;
 {%- when TermData::Wildcard %}
     then _ = to;
-{%- endmatch -%}
-{%- when SequentData::Bireduction with {premise, lhs, rhs} -%}
-BIREDUCTIONS ARE NOT SUPPORTED
 {%- endmatch %}
-}"#,
+}
+{%- when SequentData::Bireduction with {premise, lhs, rhs} -%}
+{{ self.left_to_right_reduction() }}
+{{ self.right_to_left_reduction() }}
+{%- endmatch -%}"#,
     ext = "txt"
 )]
 pub struct Axiom {
     pub sequent: Sequent,
     pub location: Option<Location>,
+}
+
+impl Axiom {
+    fn left_to_right_reduction(&self) -> Axiom {
+        let reduction_data = match &self.sequent.data {
+            SequentData::Bireduction { premise, lhs, rhs } => SequentData::Reduction {
+                premise: premise.clone(),
+                from: *lhs,
+                to: *rhs,
+            },
+            _ => panic!("left_to_right_reduction can only be called on bireductions"),
+        };
+
+        let sequent = Sequent {
+            data: reduction_data,
+            universe: self.sequent.universe.clone(),
+        };
+        Axiom {
+            sequent,
+            location: self.location,
+        }
+    }
+    fn right_to_left_reduction(&self) -> Axiom {
+        let reduction_data = match &self.sequent.data {
+            SequentData::Bireduction { premise, lhs, rhs } => SequentData::Reduction {
+                premise: premise.clone(),
+                from: *rhs,
+                to: *lhs,
+            },
+            _ => panic!("right_to_left_reduction can only be called on bireductions"),
+        };
+
+        let sequent = Sequent {
+            data: reduction_data,
+            universe: self.sequent.universe.clone(),
+        };
+        Axiom {
+            sequent,
+            location: self.location,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

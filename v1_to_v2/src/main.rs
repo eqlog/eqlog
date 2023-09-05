@@ -113,21 +113,7 @@ fn main() -> ExitCode {
                 exit_code = ExitCode::FAILURE;
                 continue;
             }
-            Decl::Axiom(Axiom {
-                sequent: Sequent { data, .. },
-                ..
-            }) => match data {
-                SequentData::Implication { .. } => (),
-                SequentData::Reduction { .. } => (),
-                SequentData::Bireduction { .. } => {
-                    let err_msg = "WARNING: Unsupported <~> Axiom declaration";
-                    eprintln!("{err_msg}");
-                    writeln!(out_string, "// {err_msg}:").unwrap();
-                    write!(out_string, "{}", &v1_source[decl_begin..decl_end]).unwrap();
-                    exit_code = ExitCode::FAILURE;
-                    continue;
-                }
-            },
+            Decl::Axiom(_) => (),
             Decl::Sort(_) => (),
             Decl::Func(_) => (),
             Decl::Pred(_) => (),
