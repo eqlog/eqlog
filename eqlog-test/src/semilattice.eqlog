@@ -1,13 +1,37 @@
-Sort El;
-Pred Le: El * El;
-Func Meet: El * El -> El;
+type El;
+pred le(El, El);
+func meet(El, El) -> El;
 
 // Axioms of posets.
-Axiom x: El => Le(x, x);
-Axiom Le(x, y) & Le(y, z) => Le(x, z);
-Axiom Le(x, y) & Le(y, x) => x = y;
+rule {
+    if x: El;
+    then le(x, x);
+}
+rule {
+    if le(x, y);
+    if le(y, z);
+    then le(x, z);
+}
+rule {
+    if le(x, y);
+    if le(y, x);
+    then x = y;
+}
 
 // Axioms of meets.
-Axiom x: El & y: El => Meet(x, y)!;
-Axiom meet = Meet(x, y) => Le(meet, x) & Le(meet, y);
-Axiom Le(z, x) & Le(z, y) & meet = Meet(x, y) => Le(z, meet);
+rule {
+    if x: El;
+    if y: El;
+    then meet(x, y)!;
+}
+rule {
+    if meet = meet(x, y);
+    then le(meet, x);
+    then le(meet, y);
+}
+rule {
+    if le(z, x);
+    if le(z, y);
+    if meet = meet(x, y);
+    then le(z, meet);
+}

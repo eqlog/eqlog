@@ -1,2 +1,2 @@
-Sort El;
-Func Mul: El * El -> El;
+type El;
+func mul(El, El) -> El;

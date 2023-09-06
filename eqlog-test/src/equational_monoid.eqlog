@@ -1,7 +1,28 @@
-Sort M;
-Func E : M;
-Func Mul : M * M -> M;
+type M;
+func e() -> M;
+func mul(M, M) -> M;
 
-Axiom Mul(x, E()) ~> x;
-Axiom Mul(E(), x) ~> x;
-Axiom Mul(Mul(a, b), c) <~> Mul(a, Mul(b, c));
+rule {
+    if t_0 = x;
+    if t_1 = e();
+    if to = x;
+    then mul(t_0, t_1) = to;
+}
+rule {
+    if t_0 = e();
+    if t_1 = x;
+    if to = x;
+    then mul(t_0, t_1) = to;
+}
+rule {
+    if t_0 = mul(a, b);
+    if t_1 = c;
+    if to = mul(a, mul(b, c));
+    then mul(t_0, t_1) = to;
+}
+rule {
+    if t_0 = a;
+    if t_1 = mul(b, c);
+    if to = mul(mul(a, b), c);
+    then mul(t_0, t_1) = to;
+}

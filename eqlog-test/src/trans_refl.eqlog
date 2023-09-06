@@ -1,8 +1,12 @@
-Sort V;
-Pred Edge:
-  * V
-  * V
-  ;
+type V;
+pred edge(V, V);
 
-Axiom x: V => Edge(x, x);
-Axiom Edge(x, y) & Edge(y, z) => Edge(x, z);
+rule {
+    if x: V;
+    then edge(x, x);
+}
+rule {
+    if edge(x, y);
+    if edge(y, z);
+    then edge(x, z);
+}

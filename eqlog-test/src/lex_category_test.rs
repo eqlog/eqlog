@@ -1,5 +1,56 @@
 use crate::lex_category::*;
 
+fn iter_mor_with_signature<'a>(
+    dom: Obj,
+    cod: Obj,
+    cat: &'a LexCategory,
+) -> impl 'a + Iterator<Item = Mor> {
+    cat.iter_mor().filter_map(move |mor| {
+        let mor_dom = cat.dom(mor)?;
+        cat.are_equal_obj(dom, mor_dom).then_some(())?;
+        let mor_cod = cat.cod(mor)?;
+        cat.are_equal_obj(cod, mor_cod).then_some(())?;
+        Some(mor)
+    })
+}
+
+fn are_isomorphic(lhs: Obj, rhs: Obj, cat: &LexCategory) -> bool {
+    let lhs_id = match cat.id(lhs) {
+        Some(lhs_id) => lhs_id,
+        None => {
+            return false;
+        }
+    };
+    let rhs_id = match cat.id(rhs) {
+        Some(rhs_id) => rhs_id,
+        None => {
+            return false;
+        }
+    };
+
+    for lhs_rhs in iter_mor_with_signature(lhs, rhs, cat) {
+        for rhs_lhs in iter_mor_with_signature(rhs, lhs, cat) {
+            let lhs_comp = match cat.comp(rhs_lhs, lhs_rhs) {
+                Some(lhs_comp) => lhs_comp,
+                None => {
+                    continue;
+                }
+            };
+            let rhs_comp = match cat.comp(lhs_rhs, rhs_lhs) {
+                Some(rhs_comp) => rhs_comp,
+                None => {
+                    continue;
+                }
+            };
+            if cat.are_equal_mor(lhs_comp, lhs_id) && cat.are_equal_mor(rhs_comp, rhs_id) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 #[test]
 fn test_fibre_products_are_isomorphic() {
     let mut cat = LexCategory::new();
@@ -15,7 +66,7 @@ fn test_fibre_products_are_isomorphic() {
     let prod1_obj = cat.define_fibre_prod_obj(prod1);
 
     cat.close();
-    assert!(cat.is_iso(prod0_obj, prod1_obj));
+    assert!(are_isomorphic(prod0_obj, prod1_obj, &cat));
 }
 
 #[test]
@@ -45,5 +96,5 @@ fn test_fibre_products_are_associative() {
     let prod_f_g_obj = cat.define_fibre_prod_obj(prod_f_g);
 
     cat.close();
-    assert!(cat.is_iso(prod_f_g_obj, prod_f1_f0_g_obj));
+    assert!(are_isomorphic(prod_f_g_obj, prod_f1_f0_g_obj, &cat));
 }

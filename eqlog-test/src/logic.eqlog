@@ -1,6 +1,11 @@
-Pred Absurd : ();
-Pred Truth : ();
-Pred Undetermined : ();
+pred absurd();
+pred truth();
+pred undetermined();
 
-Axiom Truth();
-Axiom Absurd() => Undetermined();
+rule {
+    then truth();
+}
+rule {
+    if absurd();
+    then undetermined();
+}

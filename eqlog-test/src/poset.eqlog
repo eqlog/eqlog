@@ -1,6 +1,17 @@
-Sort P;
-Pred Le: P * P;
+type P;
+pred le(P, P);
 
-Axiom x : P => Le(x, x);
-Axiom Le(x, y) & Le(y, z) => Le(x, z);
-Axiom Le(x, y) & Le(y, x) => x = y;
+rule {
+    if x: P;
+    then le(x, x);
+}
+rule {
+    if le(x, y);
+    if le(y, z);
+    then le(x, z);
+}
+rule {
+    if le(x, y);
+    if le(y, x);
+    then x = y;
+}

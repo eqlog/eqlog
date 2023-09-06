@@ -1,11 +1,27 @@
-Sort M;
+type M;
 // The neutral element.
-Func E : M;
+func e() -> M;
 // The multiplication operation.
-Func Mul : M * M -> M;
+func mul(M, M) -> M;
 
-Axiom E()!;
-Axiom x: M & y: M => Mul(x, y)!;
-Axiom y = Mul(x, E()) => x = y;
-Axiom y = Mul(E(), x) => x = y;
-Axiom d = Mul(Mul(a, b), c) & e = Mul(a, Mul(b, c)) => d = e;
+rule {
+    then e()!;
+}
+rule {
+    if x: M;
+    if y: M;
+    then mul(x, y)!;
+}
+rule {
+    if y = mul(x, e());
+    then x = y;
+}
+rule {
+    if y = mul(e(), x);
+    then x = y;
+}
+rule {
+    if d = mul(mul(a, b), c);
+    if e = mul(a, mul(b, c));
+    then d = e;
+}

@@ -1,19 +1,53 @@
-Sort El;
+type El;
 
-Func Mul: El * El -> El;
-Func Id: El;
-Func Inv: El -> El;
+func mul(El, El) -> El;
+func id() -> El;
+func inv(El) -> El;
 
 // Totality.
-Axiom x: El & y: El => Mul(x, y)!;
-Axiom Id()!;
-Axiom x: El => Inv(x)!;
+rule {
+    if x: El;
+    if y: El;
+    then mul(x, y)!;
+}
+rule {
+    then id()!;
+}
+rule {
+    if x: El;
+    then inv(x)!;
+}
 
 // Associativity.
-Axiom Mul(Mul(x, y), z) <~> Mul(x, Mul(y, z));
+rule {
+    if t_0 = mul(x, y);
+    if t_1 = z;
+    if to = mul(x, mul(y, z));
+    then mul(t_0, t_1) = to;
+}
+rule {
+    if t_0 = x;
+    if t_1 = mul(y, z);
+    if to = mul(mul(x, y), z);
+    then mul(t_0, t_1) = to;
+}
 
 // Right identity.
-Axiom Mul(x, Id()) ~> x;
+rule {
+    if t_0 = x;
+    if t_1 = id();
+    if to = x;
+    then mul(t_0, t_1) = to;
+}
 
 // Right invertibility.
-Axiom Mul(x, Inv(x)) <~> Id();
+rule {
+    if t_0 = x;
+    if t_1 = inv(x);
+    if to = id();
+    then mul(t_0, t_1) = to;
+}
+rule {
+    if to = mul(x, inv(x));
+    then id() = to;
+}

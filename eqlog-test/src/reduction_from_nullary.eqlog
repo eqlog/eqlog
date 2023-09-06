@@ -1,5 +1,8 @@
-Sort S;
-Func Nullary: S;
-Func Binary: S * S -> S;
+type S;
+func nullary() -> S;
+func binary(S, S) -> S;
 
-Axiom Nullary() ~> Binary(_, Nullary());
+rule {
+    if to = binary(_, nullary());
+    then nullary() = to;
+}

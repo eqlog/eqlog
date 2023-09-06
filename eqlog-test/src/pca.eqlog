@@ -1,21 +1,53 @@
-Sort El;
-Func App: El * El -> El;
-Func K: El;
-Func S: El;
+type El;
+func app(El, El) -> El;
+func k() -> El;
+func s() -> El;
 
 // K and S exist.
-Axiom K()!;
-Axiom S()!;
+rule {
+    then k()!;
+}
+rule {
+    then s()!;
+}
 
 // K x y is defined and equal to x for all x and y.
-Axiom x: El & y: El => App(App(K(), x), y)!;
-Axiom App(App(K(), x), _) ~> x;
+rule {
+    if x: El;
+    if y: El;
+    then app(app(k(), x), y)!;
+}
+rule {
+    if t_0 = app(k(), x);
+    if t_1 = _;
+    if to = x;
+    then app(t_0, t_1) = to;
+}
 
 // S x y is defined for all x and y.
-Axiom x: El & y: El => App(App(S(), x), y)!;
+rule {
+    if x: El;
+    if y: El;
+    then app(app(s(), x), y)!;
+}
 
 // S x y z is defined and equal to (x z) (y z) if either side exists.
 // Note that the second axiom is necessary because the reduction in the
 // direction <~ kicks in only if App(x, z) and App(y, z) are defined.
-Axiom App(App(App(S(), x), y), z) <~> App(App(x, z), App(y, z));
-Axiom App(App(App(S(), x), y), z)! => App(x, z)! & App(y, z)!;
+rule {
+    if t_0 = app(app(s(), x), y);
+    if t_1 = z;
+    if to = app(app(x, z), app(y, z));
+    then app(t_0, t_1) = to;
+}
+rule {
+    if t_0 = app(x, z);
+    if t_1 = app(y, z);
+    if to = app(app(app(s(), x), y), z);
+    then app(t_0, t_1) = to;
+}
+rule {
+    if app(app(app(s(), x), y), z)!;
+    then app(x, z)!;
+    then app(y, z)!;
+}

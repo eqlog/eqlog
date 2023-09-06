@@ -1,22 +1,70 @@
-Sort El;
-Pred Le: El * El;
-Func Meet: El * El -> El;
-Func Join: El * El -> El;
+type El;
+pred le(El, El);
+func meet(El, El) -> El;
+func join(El, El) -> El;
 
 // Axioms of posets.
-Axiom x: El => Le(x, x);
-Axiom Le(x, y) & Le(y, z) => Le(x, z);
-Axiom Le(x, y) & Le(y, x) => x = y;
+rule {
+    if x: El;
+    then le(x, x);
+}
+rule {
+    if le(x, y);
+    if le(y, z);
+    then le(x, z);
+}
+rule {
+    if le(x, y);
+    if le(y, x);
+    then x = y;
+}
 
 // Axioms of meets.
-Axiom x: El & y: El => Meet(x, y)!;
-Axiom meet = Meet(x, y) => Le(meet, x) & Le(meet, y);
-Axiom Le(z, x) & Le(z, y) & meet = Meet(x, y) => Le(z, meet);
+rule {
+    if x: El;
+    if y: El;
+    then meet(x, y)!;
+}
+rule {
+    if meet = meet(x, y);
+    then le(meet, x);
+    then le(meet, y);
+}
+rule {
+    if le(z, x);
+    if le(z, y);
+    if meet = meet(x, y);
+    then le(z, meet);
+}
 
 // Axioms of join.
-Axiom x: El & y: El => Join(x, y)!;
-Axiom join = Join(x, y) => Le(x, join) & Le(y, join);
-Axiom Le(x, z) & Le(y, z) & join = Join(x, y) => Le(join, z);
+rule {
+    if x: El;
+    if y: El;
+    then join(x, y)!;
+}
+rule {
+    if join = join(x, y);
+    then le(x, join);
+    then le(y, join);
+}
+rule {
+    if le(x, z);
+    if le(y, z);
+    if join = join(x, y);
+    then le(join, z);
+}
 
 // Distributivity of joins over meets.
-Axiom Join(x, Meet(y, z)) <~> Meet(Join(x, y), Join(x, z));
+rule {
+    if t_0 = x;
+    if t_1 = meet(y, z);
+    if to = meet(join(x, y), join(x, z));
+    then join(t_0, t_1) = to;
+}
+rule {
+    if t_0 = join(x, y);
+    if t_1 = join(x, z);
+    if to = join(x, meet(y, z));
+    then meet(t_0, t_1) = to;
+}

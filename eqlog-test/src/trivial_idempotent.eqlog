@@ -1,11 +1,10 @@
-Sort M;
-Func E : M;
-Func Mul : M * M -> M;
+type M;
+func e() -> M;
+func mul(M, M) -> M;
 
 
-Axiom
-  & a = Mul(a, a)
-  & E()!
-  =>
-  & a = E()
-  ;
+rule {
+    if a = mul(a, a);
+    if e()!;
+    then a = e();
+}

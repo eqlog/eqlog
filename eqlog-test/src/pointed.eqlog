@@ -1,3 +1,5 @@
-Sort P;
-Func Pt : P;
-Axiom Pt()!;
+type P;
+func pt() -> P;
+rule {
+    then pt()!;
+}

@@ -1,112 +1,203 @@
-Sort Obj;
-Sort Mor;
+type Obj;
+type Mor;
 
-Func Dom: Mor -> Obj;
-Func Cod: Mor -> Obj;
-Func Id: Obj -> Mor;
-Func Comp: Mor * Mor -> Mor;
+func dom(Mor) -> Obj;
+func cod(Mor) -> Obj;
+func id(Obj) -> Mor;
+func comp(Mor, Mor) -> Mor;
 
 // Product objects.
-Sort Prod;
-Func Left: Prod -> Obj;
-Func Right: Prod -> Obj;
-Func ProdObj: Prod -> Obj;
-Func LeftProj: Prod -> Mor;
-Func RightProj: Prod -> Mor;
+type Prod;
+func left(Prod) -> Obj;
+func right(Prod) -> Obj;
+func prod_obj(Prod) -> Obj;
+func left_proj(Prod) -> Mor;
+func right_proj(Prod) -> Mor;
 
-Func Tuple: Prod * Mor * Mor -> Mor;
+func tuple(Prod, Mor, Mor) -> Mor;
 
 // Every morphism has a domain and a codomain.
-Axiom f: Mor => Dom(f)! & Cod(f)!;
+rule {
+    if f: Mor;
+    then dom(f)!;
+    then cod(f)!;
+}
 
 // Every object has an identity.
-Axiom x: Obj => Id(x)!;
+rule {
+    if x: Obj;
+    then id(x)!;
+}
 
 // Composition is defined if and only domain and codomain match.
-Axiom Cod(f) = Dom(g) => Comp(g, f)!;
-Axiom Comp(g, f)! => Cod(f) <~> Dom(g);
+rule {
+    if cod(f) = dom(g);
+    then comp(g, f)!;
+}
+rule {
+    if comp(g, f)!;
+    if t_0 = f;
+    if to = dom(g);
+    then cod(t_0) = to;
+}
+rule {
+    if comp(g, f)!;
+    if t_0 = g;
+    if to = cod(f);
+    then dom(t_0) = to;
+}
 
 // Domains and codomains of identities.
-Axiom Dom(Id(x)) ~> x;
-Axiom Cod(Id(x)) ~> x;
+rule {
+    if t_0 = id(x);
+    if to = x;
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = id(x);
+    if to = x;
+    then cod(t_0) = to;
+}
 
 // Domains and codomains of compositions.
-Axiom Dom(Comp(_, f)) ~> Dom(f);
-Axiom Cod(Comp(g, _)) ~> Cod(g);
+rule {
+    if t_0 = comp(_, f);
+    if to = dom(f);
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = comp(g, _);
+    if to = cod(g);
+    then cod(t_0) = to;
+}
 
 // Identity morphisms are left and right identities.
-Axiom Comp(Id(Cod(f)), f) ~> f;
-Axiom Comp(f, Id(Dom(f))) ~> f;
+rule {
+    if t_0 = id(cod(f));
+    if t_1 = f;
+    if to = f;
+    then comp(t_0, t_1) = to;
+}
+rule {
+    if t_0 = f;
+    if t_1 = id(dom(f));
+    if to = f;
+    then comp(t_0, t_1) = to;
+}
 
 // Composition is associative.
-Axiom Comp(h, Comp(g, f)) <~> Comp(Comp(h, g), f);
+rule {
+    if t_0 = h;
+    if t_1 = comp(g, f);
+    if to = comp(comp(h, g), f);
+    then comp(t_0, t_1) = to;
+}
+rule {
+    if t_0 = comp(h, g);
+    if t_1 = f;
+    if to = comp(h, comp(g, f));
+    then comp(t_0, t_1) = to;
+}
 
 // All data of a prod element exists.
-Axiom
-  & prod: Prod
-  =>
-  & Left(prod)!
-  & Right(prod)!
-  & ProdObj(prod)!
-  & LeftProj(prod)!
-  & RightProj(prod)!
-  ;
+rule {
+    if prod: Prod;
+    then left(prod)!;
+    then right(prod)!;
+    then prod_obj(prod)!;
+    then left_proj(prod)!;
+    then right_proj(prod)!;
+}
 
 // A prod element is determined by its data.
-Axiom
-  & Left(prod_0) = Left(prod_1)
-  & Right(prod_0) = Right(prod_1)
-  & ProdObj(prod_0) = ProdObj(prod_1)
-  & LeftProj(prod_0) = LeftProj(prod_1)
-  & RightProj(prod_0) = RightProj(prod_1)
-  =>
-  prod_0 = prod_1
-  ;
+rule {
+    if left(prod_0) = left(prod_1);
+    if right(prod_0) = right(prod_1);
+    if prod_obj(prod_0) = prod_obj(prod_1);
+    if left_proj(prod_0) = left_proj(prod_1);
+    if right_proj(prod_0) = right_proj(prod_1);
+    then prod_0 = prod_1;
+}
 
 // Domain and codomains of the projections.
-Axiom Dom(LeftProj(prod)) ~> ProdObj(prod);
-Axiom Dom(RightProj(prod)) ~> ProdObj(prod);
-Axiom Cod(LeftProj(prod)) ~> Left(prod);
-Axiom Cod(RightProj(prod)) ~> Right(prod);
+rule {
+    if t_0 = left_proj(prod);
+    if to = prod_obj(prod);
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = right_proj(prod);
+    if to = prod_obj(prod);
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = left_proj(prod);
+    if to = left(prod);
+    then cod(t_0) = to;
+}
+rule {
+    if t_0 = right_proj(prod);
+    if to = right(prod);
+    then cod(t_0) = to;
+}
 
 // Tuple(prod, _, _) is defined for pairs morphisms with appropriate signatures.
-Axiom
-  & Dom(l) = Dom(r)
-  & Cod(l) = Left(prod)
-  & Cod(r) = Right(prod)
-  =>
-  & Tuple(prod, l, r)!
-  ;
-Axiom
-  & Tuple(prod, l, r)!
-  & Dom(l)! & Dom(r)! & Cod(l)! & Left(prod)! & Right(prod)!
-  =>
-  & Dom(l) = Dom(r)
-  & Cod(l) = Left(prod)
-  & Cod(r) = Right(prod)
-  ;
+rule {
+    if dom(l) = dom(r);
+    if cod(l) = left(prod);
+    if cod(r) = right(prod);
+    then tuple(prod, l, r)!;
+}
+rule {
+    if tuple(prod, l, r)!;
+    if dom(l)!;
+    if dom(r)!;
+    if cod(l)!;
+    if left(prod)!;
+    if right(prod)!;
+    then dom(l) = dom(r);
+    then cod(l) = left(prod);
+    then cod(r) = right(prod);
+}
 
 // Domain and codomain of tuple morphisms.
-Axiom Dom(Tuple(_, l, _)) ~> Dom(l);
-Axiom Dom(Tuple(_, _, r)) ~> Dom(r);
-Axiom Cod(Tuple(prod, _, _)) ~> ProdObj(prod);
+rule {
+    if t_0 = tuple(_, l, _);
+    if to = dom(l);
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = tuple(_, _, r);
+    if to = dom(r);
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = tuple(prod, _, _);
+    if to = prod_obj(prod);
+    then cod(t_0) = to;
+}
 
 // Compatibility of the tuple morphism with the projections.
-Axiom Comp(LeftProj(prod), Tuple(prod, l, _)) ~> l;
-Axiom Comp(RightProj(prod), Tuple(prod, _, r)) ~> r;
+rule {
+    if t_0 = left_proj(prod);
+    if t_1 = tuple(prod, l, _);
+    if to = l;
+    then comp(t_0, t_1) = to;
+}
+rule {
+    if t_0 = right_proj(prod);
+    if t_1 = tuple(prod, _, r);
+    if to = r;
+    then comp(t_0, t_1) = to;
+}
 
 // Uniqueness of the tuple morphism.
-Axiom
-  & Comp(LeftProj(prod), u) = l
-  & Comp(RightProj(prod), u) = r
-  =>
-	Tuple(prod, l, r) ~> u
-  ;
-
-Query is_iso(x: Obj, y: Obj)
-  where
-	& Dom(f) = x
-  & Cod(f) = y
-  & Comp(g, f) = Id(x)
-  & Comp(f, g) = Id(y)
-  ;
+rule {
+    if comp(left_proj(prod), u) = l;
+    if comp(right_proj(prod), u) = r;
+    if t_0 = prod;
+    if t_1 = l;
+    if t_2 = r;
+    if to = u;
+    then tuple(t_0, t_1, t_2) = to;
+}
