@@ -12,12 +12,12 @@ repository = "https://github.com/eqlog/eqlog/"
 readme = "../README.md"
 
 [dependencies]
-lalrpop-util = { version = "0", features = [ "lexer" ] }
-regex = "1"
-maplit = "1"
-itertools = "0"
-convert_case = "0"
-indoc = "1"
+lalrpop-util = { version = "*", features = [ "lexer" ] }
+regex = "*"
+maplit = "*"
+itertools = "*"
+convert_case = "*"
+indoc = "*"
 
 [build-dependencies]
-lalrpop = { version = "0", features = [ "lexer" ] }
+lalrpop = { version = "*", features = [ "lexer" ] }

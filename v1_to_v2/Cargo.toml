@@ -6,12 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lalrpop-util = { version = "0", features = [ "lexer" ] }
-regex = "1"
-convert_case = "0"
-itertools = "0"
-clap = { version = "4", features = ["derive"] }
-askama = "0"
+lalrpop-util = { version = "*", features = [ "lexer" ] }
+regex = "*"
+convert_case = "*"
+itertools = "*"
+clap = { version = "*", features = ["derive"] }
+askama = "*"
 
 [build-dependencies]
-lalrpop = { version = "0", features = [ "lexer" ] }
+lalrpop = { version = "*", features = [ "lexer" ] }

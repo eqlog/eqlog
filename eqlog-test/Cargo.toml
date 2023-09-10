@@ -7,7 +7,7 @@ edition = "2021"
 path = "../eqlog-runtime"
 
 [dependencies]
-maplit = "1"
+maplit = "*"
 
 [build-dependencies.eqlog]
 path = "../eqlog"
