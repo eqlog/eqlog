@@ -33,7 +33,7 @@ fn then_atom_to_v1_atom(then_atom: ThenAtomData) -> AtomData {
     }
 }
 
-fn rule_to_axiom(rule: RuleDecl) -> Axiom {
+fn rule_to_axiom(rule: RuleDecl) -> Result<Axiom, CompileError> {
     let RuleDecl {
         term_context,
         body,
@@ -47,10 +47,9 @@ fn rule_to_axiom(rule: RuleDecl) -> Axiom {
     for stmt in body {
         match stmt.data {
             StmtData::If(IfAtom { loc, data }) => {
-                assert!(
-                    conclusion.is_empty(),
-                    "Mixing if and then statements not supported yet"
-                );
+                if !conclusion.is_empty() {
+                    return Err(CompileError::IfAfterThen { location: loc });
+                }
                 let v1_atom = Atom {
                     data: if_atom_to_v1_atom(data),
                     location: Some(loc),
@@ -75,10 +74,10 @@ fn rule_to_axiom(rule: RuleDecl) -> Axiom {
         universe: term_context,
     };
 
-    Axiom {
+    Ok(Axiom {
         sequent,
         location: Some(loc),
-    }
+    })
 }
 
 impl<'a> ModuleWrapper<'a> {
@@ -106,7 +105,7 @@ impl<'a> ModuleWrapper<'a> {
         let types = check_rule(&self.symbols, &rule)?
             .types
             .map(|typ| typ.to_string());
-        let axiom = rule_to_axiom(rule);
+        let axiom = rule_to_axiom(rule)?;
         self.axioms.push((axiom, types.map(|typ| typ.to_string())));
         Ok(())
     }

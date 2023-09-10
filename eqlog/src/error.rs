@@ -86,6 +86,9 @@ pub enum CompileError {
         first_declaration: Location,
         second_declaration: Location,
     },
+    IfAfterThen {
+        location: Location,
+    },
     NoSort {
         location: Option<Location>,
     },
@@ -264,6 +267,10 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, Some(*second_declaration))?;
                 write!(f, "Previously declared here:\n")?;
                 write_loc(f, Some(*first_declaration))?;
+            }
+            IfAfterThen { location } => {
+                write!(f, "if statement after then statement not supported yet\n")?;
+                write_loc(f, Some(*location))?;
             }
             NoSort { location } => {
                 write!(f, "sort of term undetermined\n")?;
