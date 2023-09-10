@@ -8,30 +8,54 @@ Compiles to specialized rust code that easily integrates into rust projects.
 
 Semilattices are partial orders (i.e. sets equipped with reflexive, transitive and antisymmetric relations) with binary meets.
 They can be formalized in the following eqlog theory:
-```rust
+```eqlog
 // semilattice.eqlog
 
 // The carrier set.
-Sort El;
+type El;
 // The less-equal relation.
-Pred Le: El * El;
+pred le: El * El;
 
-// Reflexivity.
-Axiom x: El => Le(x, x);
-// Transitivity.
-Axiom Le(x, y) & Le(y, z) => Le(x, z);
-// Antisymmetry.
-Axiom Le(x, y) & Le(y, x) => x = y;
+// The less-equal relation is reflexive.
+rule reflexivity {
+    if x: El; 
+    then le(x, x);
+}
+// The less-equal relation is transitive.
+rule transitivity {
+    if le(x, y);
+    if le(y, z);
+    then le(x, z);
+}
+// The less-equal relation is antisymmetric.
+rule antisymmetry {
+    if le(x, y);
+    if le(y, x);
+    then x = y;
+}
 
 // A function assigning binary meets, i.e. binary greatest lower bound.
-Func Meet: El * El -> El;
+func meet(El, El) -> El;
 
 // The meet function is total, i.e. defined for all elements x, y.
-Axiom x: El & y: El => Meet(x, y)!;
+rule totality {
+    if x: El;
+    if y: El;
+    then meet(x, y)!;
+}
 // The meet is a lower bound.
-Axiom m = Meet(x, y) => Le(m, x) & Le(m, y);
-// All lower bounds are smaller or equal to the meet.
-Axiom Le(z, x) & Le(z, y) & m = Meet(x, y) => Le(z, m);
+rule lower_bound {
+    if m = meet(x, y);
+    then le(m, x);
+    then le(m, y);
+}
+// The meet is the greatest lower bound.
+rule greatest_lower_bound {
+    if le(z, x);
+    if le(z, y);
+    if m = meet(x, y);
+    then le(z, m);
+}
 ```
 
 Eqlog translates this eqlog file to a rust module that allows computations on models of the semilattice theory, i.e. semilattices.
@@ -50,10 +74,10 @@ fn main() {
     let y = sl.new_el();
     let z = sl.new_el();
 
-    // Close the semilattice structure by matching premises of axioms and
-    // adding conclusions until we reach a fixed point.
+    // Close the semilattice structure by matching atoms in if statements of rules
+    // and adding then atoms until we reach a fixed point.
     sl.close();
-    // sl satisfies all semilattice axioms now.
+    // sl satisfies all semilattice rules now.
 
     // Evaluate the left-associated meet xy_z = (x /\ y) /\ z.
     let xy = sl.meet(x, y).unwrap();
@@ -107,54 +131,57 @@ Note that a special invocation that specifies the full path is needed for eqlog 
 
 ## Language
 
-Each eqlog file consists of a sequence of sort, predicate, function and axiom declarations.
+Each eqlog file consists of a sequence of type, predicate, function and rule declarations.
 Mathematically, eqlog is a way to specify [essentially algebraic theories](https://ncatlab.org/nlab/show/essentially+algebraic+theory#definition).
 
-### Sorts
-Sorts represent the different carrier sets of models of our theory.
+### Types
+Types represent the different carrier sets of models of our theory.
 They are declared as follows:
-```rust
-Sort <SortName>;
+```eqlog
+type <TypeName>;
 ```
-The name of a sort must be `UpperCamelCase`.
 
 ### Predicates
 Predicates are declared as follows:
-```rust
-Pred <PredName> : <Sort_1> * ... * <Sort_n>;
+```eqlog
+pred <PredName>(<Type_1>, ..., <Type_n>);
 ```
-Each predicate has an arity, which is the list of sorts separated by an asterisk appearing after the colon.
-All sorts appearing in the arity must be declared prior to the predicate.
-Predicate names must be `UpperCamelCase`.
+Each predicate has an arity, which is the list of types appearing in the parentheses.
 
 ### Functions
 Functions are declared as follows:
-```rust
-Func <FuncName> : <ArgSort_1> * ... * <ArgSort_n> -> <ResultSort>;
+```eqlog
+func <FuncName>(<ArgType_1>, ..., <ArgType_n>) -> <ResultType>;
 ```
-Each function has a domain, which is the list of sorts appearing before the arrow, and a codomain sort after the arrow.
-All sorts appearing in the domain and the codomain must be declared prior to the function.
-Function names must be `UpperCamelCase`.
+Each function has a domain, which is the list of types appearing before the arrow, and a codomain type after the arrow.
 
 A function with empty domain is a constant.
 Constants are declared as follows:
-```rust
-Func <ConstantName> : <Sort>;
+```eqlog
+func <ConstantName> : <Type>;
 ```
 
 To eqlog, functions are synonymous to *partial* functions; they need not be total.
 
-### Axioms
-The simplest but most general type of axiom is the *implication*.
-Implications are of the form
-```rust
-Axiom <Premise> => <Conclusion>;
+### Rules
+
+Rules are of the form
 ```
-where `<Premise>` and `<Conclusion>` are conjunctions of *atoms*.
+rule <name> {
+    if <Premise_1>;
+    if <Premise_2>;
+    ...
+    if <Premise_m>;
+    then <Conclusion_1>;
+    then <Conclusion_2>;
+    ...
+    then <Conclusion_n>;
+}
+```
+where the `<Premise_i>` and `<Conclusion_j>` are *atoms*.
 
 Most atoms contain *terms*.
 A term is either a variable or an application of a function symbol to terms.
-Variables names must be `lower_snake_case`.
 Variables that are used only once should be replaced with a wildcard `_`.
 
 Eqlog supports the following atoms:
@@ -163,82 +190,101 @@ Eqlog supports the following atoms:
 * Atoms of the form `<term>!`.
   Note the exclamation mark.
   Such atoms assert that `<term>` is defined, i.e. that the involved functions are defined on their arguments.
+  In a `then` clause, `<term>` can be given a name like so:
+  `<var_name> := <term>!`.
 * Atoms of the form `<tm_1> = <tm_2>`.
   Such atoms assert that the terms `<tm_1>` and `<tm_2>` are both defined and equal.
-* Atoms of the form `<var_name> : <SortName>`.
-  Such atoms assert that `<var_name>` is a variable of type `<SortName>`.
-  They can only appear in premises.
+* Atoms of the form `<var_name> : <TypeName>`.
+  Such atoms assert that `<var_name>` is a variable of type `<TypeName>`.
+  They can only appear in `if` clauses.
 
-Every variable occuring in an implication must be used at least once in the premise.
-Thus no additional variables may be introduced in the conclusion.
-Furthermore, unless the exclamation mark operator `!` is used, implications must be *surjective*:
-Every term appearing in the conclusion of an implication must be equal to a term appearing in the premise or earlier in the conclusion.
-The only way to circumvent this restriction is to add an atom of the form `<tm>!` in the conclusion.
-Later atoms can then freely use `<tm>`.
+Except for the `<var> := ...` form of the exclamation mark operator, no additional variables may be introduced in then statements.
+Every term appearing in a `then` statement of a rule must be equal to a term appearing in an earlier `if` statement.
+The only way to circumvent this restriction is to add a statement of the form `then <tm>!;`.
+Later `then` statements atoms can then freely use `<tm>`.
 
-For example, consider the following invalid and valid axioms for the semilattice theory above:
-```rust
-// Invalid: Cannot infer sort of x.
-Axiom x = x => x = x;
+For example, consider the following invalid and valid rules for the semilattice theory above:
+```
+// Invalid: Cannot infer type of x.
+rule {
+    if x = x;
+    then x = x;
+}
 // Valid (but nonsensical):
-Axiom x: El => x = x;
+rule {
+    if x: El;
+    then x = x;
+}
 
-// Invalid: x and y are not used in the (empty) premise.
-Axiom Meet(x, y)!;
+// Invalid: x and y are not introduced in an `if` statement.
+rule {
+    then meet(x, y)!;
+}
 // Valid:
-Axiom x: El & y: El => Meet(x, y)!;
+rule {
+    if x: El;
+    if y: El;
+    then meet(x, y)!;
+}
 
-// Invalid: Meet(x, y) is not equal to a term occuring earlier.
-Axiom Le(z, x) & Le(z, y) => Le(z, Meet(x, y));
-// Valid: Assert that Meet(x, y) exists as part of conclusion.
-Axiom Le(z, x) & Le(z, y) => Meet(x, y)! & Le(z, Meet(x, y));
-// Valid: Suppose that Meet(x, y) exists in premise.
-Axiom Le(z, x) & Le(z, y) & Meet(x, y)! => Le(z, Meet(x, y));
+// Invalid: meet(x, y) is not equal to a term occurring earlier.
+rule {
+    if le(z, x);
+    if le(z, y);
+    then le(z, meet(x, y));
+}
+// Valid: Assert that meet(x, y) exists in a then statement.
+rule {
+    if le(z, x);
+    if le(z, y);
+    then meet(x, y)!
+    then le(z, meet(x, y));
+}
+// Valid: Suppose that meet(x, y) exists in if statement.
+rule {
+    if le(z, x);
+    if le(z, y);
+    if meet(x, y)!;
+    then le(z, meet(x, y));
+}
 
 // Invalid: Both Meet(x, y) and Meet(y, x) do not occur earlier.
-Axiom x: El & y: El => Meet(x, y) = Meet(y, x);
+rule {
+    if x: El;
+    if y: El;
+    then meet(x, y);
+    then meet(y, x);
+}
+
 // Valid: the term on the left-hand side of the equation is introduced
-// in the premise.
-Axiom Meet(x, y)! => Meet(x, y) = Meet(y, x);
+// in an if statement.
+rule {
+    if meet(x, y)!;
+    then meet(x, y);
+    then meet(y, x);
+}
+
 // Valid: the term on the right-hand side of the equation is introduced
-// earlier in the conclusion.
-Axiom x: El & y : El => Meet(x, y)! & Meet(y, x) = Meet(x, y);
+// earlier in a then statement.
+rule {
+    if x: El;
+    if y: El;
+    then meet(x, y)!;
+    then meet(y, x) = meet(x, y);
+}
 
-// Invalid: Meet(x, y) is not equal to a term that occurs earlier.
-Axiom u = Meet(x, Meet(y, z))! => Meet(Meet(x, y), z) = u;
-// Valid: All of u, Meet(x, y) and z are introduced in the premise.
-Axiom u = Meet(x, Meet(y, z))! & Meet(x, y)! => u = Meet(Meet(x, y), z);
-```
+// Invalid: meet(x, y) is not equal to a term that occurs earlier.
+rule {
+    if u = meet(x, meet(y, z))!;
+    then meet(meet(x, y), z) = u;
+}
 
-#### Reductions
-Reductions are syntactic sugar for implication axioms.
-A reduction has the form
-```rust
-Axiom <from> ~> <to>;
-```
-where `<from>` and `<to>` are terms of the same sort and `<from>` must not be a variable.
-A reduction axiom has the following meaning:
-*If all subterms of `<from>` are defined and `<to>` is defined, then also `<from>` is defined and equals `<to>`.*
-Accordingly, if `<from> = <Func>(<arg_1>, ..., <arg_n>)`, then the reduction desugars to the implication
-```rust
-Axiom <arg_1>! & ... & <arg_n>! & <to>! => <from> = <to>;
-```
-The order of the `from` and `to` terms can be confusing at first, but consider that algorithms involving reduction usually work top-down, whereas eqlog evaluates bottom-up.
-
-Eqlog also supports the following symmetric form
-```rust
-Axiom <lhs> <~> <rhs>;
-```
-which desugars to the two reductions
-```rust
-Axiom <lhs> ~> <rhs>;
-Axiom <rhs> ~> <lhs>;
-```
-
-Both reductions and symmetric reductions can be made conditional on a premise:
-```rust
-Axiom <atom_1> & ... & <atom_n> => <lhs> ~> <rhs>;
-Axiom <atom_1> & ... & <atom_n> => <lhs> <~> <rhs>;
+// Valid: All of u, Meet(x, y) and z are introduced in an if statement.
+rule {
+    if u = meet(x, meet(y, z))!;
+    if meet(x, y)!;
+    then u = meet(meet(x, y), z);
+}
 ```
 
 ## Generated rust interfaces
@@ -252,7 +298,7 @@ cargo doc --document-private-items --open
 ```
 
 The public API of the generated rust module consists of the following symbols:
-* For each sort, a type `<SortName>` of element ids for this sort.
+* For each Eqlog type, a Rust type `<TypeName>` of element ids for this type.
 * The model structure.
   Its name is derived by converting the file name to upper camel case.
   For example, for `semi_group.eqlog`, this would be `SemiGroup`.
@@ -261,36 +307,36 @@ The model structure has the following member functions:
 * `fn new() -> Self`  
   Creates an empty model structure.
 * `fn close(&mut self)`  
-  Close the model under all axioms.
+  Close the model under all rules.
 * `pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool`  
-  Close the model under all axioms until a condition is satisfied.
-  Returns false if the model could be closed under all axioms but the condition still does not hold.
-* For each sort:
-  - `fn new_<sort_name>(&mut self) -> <SortName>`  
+  Close the model under all rules until a condition is satisfied.
+  Returns false if the model could be closed under all rules but the condition still does not hold.
+* For each type:
+  - `fn new_<sort_name>(&mut self) -> <TypeName>`  
     Adjoins a new element to the model structure.
-  - `fn equate_<sort_name>(&mut self, lhs: <SortName>, rhs: <SortName>)`  
+  - `fn equate_<sort_name>(&mut self, lhs: <TypeName>, rhs: <TypeName>)`  
     Enforces the equality `lhs = rhs` in the model structure.
-  - `fn are_equal_<sort_name>(&self, lhs: <SortName>, rhs: <SortName>) -> bool`  
+  - `fn are_equal_<sort_name>(&self, lhs: <TypeName>, rhs: <TypeName>) -> bool`  
     Returns true if `lhs` and `rhs` represent the same element.
-  - `fn root_<sort_name>(&self, el: <SortName>) -> <SortName>`    
+  - `fn root_<sort_name>(&self, el: <TypeName>) -> <TypeName>`    
     Returns the canonical/root element of the equivalence class of an element.
 * For each predicate:
-  - `fn <pred_name>(&self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>)`  
+  - `fn <pred_name>(&self, arg_1: <Type_1>, ..., arg_n: <Type_n>)`  
     Checks whether the predicate holds on the given arguments.
   - `fn iter_<pred_name>(&self) -> impl '_ + Iterator<Item = <arity>>`  
     Returns an iterator over tuples satisfying the predicate.
     The item type yielded by the iterator is a tuple type determined by the arity.
-  - `fn insert_<pred_name>(&mut self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>)`  
+  - `fn insert_<pred_name>(&mut self, arg_1: <Type_1>, ..., arg_n: <Type_n>)`  
     Enforces that the predicate holds for the given arguments.
 * For each function:
-  - `fn <func_name>(&self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>) -> Option<<ResultSort>>`  
+  - `fn <func_name>(&self, arg_1: <Type_1>, ..., arg_n: <Type_n>) -> Option<<ResultType>>`  
     Evaluates the function on the given arguments.
   - `fn iter_<func_name>(&self) -> impl '_ + Iterator<Item = <arity>>`  
     Returns an iterator over tuples in the graph of the function.
     The item type yielded by the iterator is a tuple type determined by the arity.
-  - `fn define_<func_name>(&mut self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>) -> <ResultSort>`  
+  - `fn define_<func_name>(&mut self, arg_1: <Type_1>, ..., arg_n: <Type_n>) -> <ResultType>`  
     Enforces that the function is defined on the given arguments, adjoining a new element if necessary.
-  - `fn insert_<func_name>(&mut self, arg_1: <Sort_1>, ..., arg_n: <Sort_n>, result: <ResultSort>)`  
+  - `fn insert_<func_name>(&mut self, arg_1: <Type_1>, ..., arg_n: <Type_n>, result: <ResultType>)`  
     Insert a tuple into the graph of the function.
 
 For example, these are the public declarations of the rust module generated from the semilattice theory:
@@ -321,82 +367,103 @@ impl Semilattice {
 ## Data model and algorithms
 
 ### Standard datalog features
-The theory model structures generated by eqlog can be thought of as in-memory SQL databases, with schema given by sort, predicate and function declarations.
-Elements of a given sort are simple integer ids, and the model structure maintains a list of valid ids for each sort.
-Every predicate `P` is represented as a table whose rows are the tuples of elements for which the predicate holds.
+The theory model structures generated by eqlog can be thought of as in-memory SQL databases, with schema given by type, predicate and function declarations.
+Elements of a given type are simple integer ids, and the model structure maintains a list of valid ids for each type.
+Every predicate `p` is represented as a table whose rows are the tuples of elements for which the predicate holds.
 Functions are represented as [graphs](https://en.wikipedia.org/wiki/Graph_of_a_function).
-For example, if F is a function in one argument, then the internal table for F will consist of rows of the form `(x, F(x))`.
+For example, if `f` is a function in one argument, then the internal table for `f` will consist of rows of the form `(x, f(x))`.
 
-The `close` function repeatedly enumerates all instances of premises of axioms and adjoins their conclusion to the model.
-Eventually, a [fixed point](https://en.wikipedia.org/wiki/Fixed_point_(mathematics)) is reached (unless the theory contains non-surjective axioms, see below) and the algorithm stops.
+The `close` function repeatedly enumerates all matches of if statements in rules and adjoins data corresponding to the then statements in the rule to the model.
+Eventually, a [fixed point](https://en.wikipedia.org/wiki/Fixed_point_(mathematics)) is reached (unless the theory contains non-surjective rules, see below) and the algorithm stops.
 For example, for the transitivity axiom
-```rust
-Axiom Le(x, y) & Le(y, z) => Le(x, z);
 ```
-the the close function enumerates all rows `(x, y_0)` and `(y_1, z)` in the `Le` table such that `y_0 = y_1`, and then adds the row `(x, z)` to `Le`.
+rule {
+    if le(x, y);
+    if le(y, z);
+    then le(x, z);
+}
+```
+the close function enumerates all rows `(x, y_0)` and `(y_1, z)` in the `Le` table such that `y_0 = y_1`, and then adds the row `(x, z)` to `Le`.
 Eventually, the `Le` table will already contain all the new rows `(x, z)` we find, which means that we have reached the fixed point and can stop:
-The `Le` predicate is transitive now.
+The `le` predicate is transitive now.
 
-The enumeration of instances of premises is known as [(inner) join](https://en.wikipedia.org/wiki/Join_(SQL)#Inner_join) in SQL terminology.
-SQL databases speed up inner joins using indices, and eqlog automatically selects and maintains indices to speed up the joins required to enumerate the axioms listed in the eqlog file.
-In each iteration, it is not necessary to enumerate premises that were already enumerated in the previous iteration.
+The enumeration of instances of if statements is known as [(inner) join](https://en.wikipedia.org/wiki/Join_(SQL)#Inner_join) in SQL terminology.
+SQL databases speed up inner joins using indices, and eqlog automatically selects and maintains indices to speed up the joins required to enumerate the rules listed in the eqlog file.
+In each iteration, it is not necessary to enumerate if statements that were already enumerated in the previous iteration.
 This optimization is known as *semi-naive evaluation*, and is again something that eqlog uses to speed up the `close` function.
 
 ### Equalities
-In addition to the standard datalog features discussed so far, eqlog supports equalities in conclusions.
+In addition to the standard datalog features discussed so far, eqlog supports equalities in `then` statements.
 One example is the antisymmetry axiom of partial orders:
-```rust
-Axiom Le(x, y) & Le(y, x) => x = y;
 ```
-Another source of equality in conclusions are the implicit functionality axioms for functions:
-For functions `F`, if we find both `(x_1, ..., x_n, y)` and `(x1, , ..., x_n, z)` in the graph of `F`, then we must derive `y = z`.
-If we denote the graph of `F` by `G_F`, then the implicit functionality axiom can be stated as follows:
-```rust
-Axiom G_F(x_1, ..., x_n, y) & G_F(x_1, ..., x_n, z) => y = z
+rule {
+    if le(x, y);
+    if le(y, x);
+    then x = y;
+}
+```
+Another source of equality in `then` statements are the implicit functionality axioms for functions:
+For functions `f`, if we find both `(x_1, ..., x_n, y)` and `(x1, , ..., x_n, z)` in the graph of `f`, then we must derive `y = z`.
+If we denote the graph of `f` by `g_f`, then the implicit functionality axiom can be stated as follows:
+```
+rule {
+    if g_f(x_1, ..., x_n, y);
+    if g_f(x_1, ..., x_n, z);
+    then y = z;
+}
 ```
 Note, however, that graphs of functions cannot be referred to directly in eqlog files.
 
-To account for derived equalities, eqlog model structures maintain [union-find data structures](https://en.wikipedia.org/wiki/Disjoint-set_data_structure) for each sort.
+To account for derived equalities, eqlog model structures maintain [union-find data structures](https://en.wikipedia.org/wiki/Disjoint-set_data_structure) for each type.
 When an equality `x = y` is derived during a call to `close`, eqlog merges the equivalence classes of `x` and `y`.
 
-To speed up computation of the joins required when matching axiom premises, eqlog maintains indices for each table.
+To speed up computation of the joins required when matching if statements, eqlog maintains indices for each table.
 However, these indices can only be used if element ids can be compared for equality directly instead of consulting a union find data structure.
-Eqlog thus maintains the invariant that all predicate and function graph tables contain canonical sort elements only, i.e. only elements whose ids are root nodes with respect to the corresponding union find data structure.
+Eqlog thus maintains the invariant that all predicate and function graph tables contain canonical type elements only, i.e. only elements whose ids are root nodes with respect to the corresponding union find data structure.
 
 This invariant is temporarily violated when eqlog merges the equivalence class of some element `x` into that of an element `y`.
 To restore the invariant, eqlog removes all rows from tables that contain `x`, replaces `x` by the new root id `y`, and inserts the rows again.
 To speed up this process, eqlog maintains a list for each root id that contains all rows in which the root id appears.
 
-### Non-surjective axioms and non-termination
-Recall that eqlog axioms need to be surjective unless the exclamation mark operator `!` is used:
-Every element in the conclusion must be equal to some element in the premise.
-Closing model structures under surjective axioms does not increase the number of elements in the model, which guarantees that the `close` function eventually terminates.
+### Non-surjective rules and non-termination
+Recall that eqlog rules need to be surjective unless the exclamation mark operator `!` is used:
+Every element in a then statement must be equal to some element in an if statement.
+Closing model structures under surjective rules does not increase the number of elements in the model, which guarantees that the `close` function eventually terminates.
 
-If there are non-surjective axioms, then this is not guaranteed.
+If there are non-surjective rules, then this is not guaranteed.
 Consider the following eqlog theory that formalizes natural numbers:
 ```
-Sort N;
-Zero: N;
-Succ: N -> N;
+type N;
+zero: N;
+succ: N -> N;
 
-Axiom Zero()!;
-Axiom n: N => Succ(n)!;
+rule {
+    then Zero()!;
+}
+rule {
+    if n: N;
+    then Succ(n)!;
+}
 ```
-Closing the empty model structure will first add an element `Zero` to the model, then the element `Succ(N)`, then `Succ(Succ(N))` and so forth.
-However, the presence of non-surjective axioms does not necessarily mean that the close function must run indefinitely.
-For example, the semilattice theory contains the non-surjective axiom
-```rust
-Axiom x: El & y : El => Meet(x, y)!;
+Closing the empty model structure will first add an element `zero` to the model, then the element `succ(zero)`, then `succ(succ(zero))` and so forth.
+However, the presence of non-surjective rules does not necessarily mean that the close function must run indefinitely.
+For example, the semilattice theory contains the non-surjective rule
+```
+rule {
+    if x: El;
+    if y : El;
+    then meet(x, y)!;
+}
 ```
 but `close` nevertheless terminates.
 
-If a theory contains non-surjective axioms, the generated `close` function will consist of nested close loops:
-The outer loop is responsible for non-surjective axioms, and the inner loop is responsible for surjective axioms.
+If a theory contains non-surjective rules, the generated `close` function will consist of nested close loops:
+The outer loop is responsible for non-surjective rules, and the inner loop is responsible for surjective rules.
 In pseudo-code, the `close` function looks a bit like this:
 ```rust
-// Match axiom premise and change the model such that the conclusion holds.
-// Returns true if the model was changed, i.e. if not all conclusions were
-// already true.
+// Match `if` statements in a rule and change the model such that the
+// corresponding `then` statements holds. Returns true if the model was
+// changed, i.e. if new facts were concluded.
 fn adjoin_conclusions(ax: Axiom) -> bool {
   ...
 }
@@ -404,13 +471,13 @@ fn adjoin_conclusions(ax: Axiom) -> bool {
 fn close() {
   loop {
     loop {
-      let model_changed = surjective_axioms.iter().any(adjoin_conclusion);
+      let model_changed = surjective_rules.iter().any(adjoin_conclusion);
       if !model_changed {
         break;
       }
     }
 
-    let model_changed = non_surjective_axioms.iter().any(adjoin_conclusion);
+    let model_changed = non_surjective_rules.iter().any(adjoin_conclusion);
     if !model_changed {
       break;
     }
