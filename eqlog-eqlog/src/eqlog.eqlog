@@ -1,0 +1,42 @@
+type Func;
+type Pred;
+type Type;
+
+type TypeList;
+func nil_type_list() -> TypeList;
+func cons_type_list(head: Type, tail: TypeList) -> TypeList;
+
+type TermNode;
+
+type TermListNode;
+pred nil_term_node_list(nil: TermListNode);
+pred cons_term_node_list(node: TermListNode, head: TermNode, tail: TermListNode);
+
+type OptTermNode;
+pred none_term_node(OptTermNode);
+pred some_term_node(OptTermNode, value: TermNode);
+
+type Var;
+
+pred var_term(TermNode, Var);
+pred wildcard_term(TermNode);
+pred app_term(Func, args: TermListNode);
+
+type IfStmtNode;
+pred equal_if_stmt_node(IfStmtNode, lhs: TermNode, rhs: TermNode);
+pred defined_if_stmt_node(IfStmtNode, term: TermNode);
+pred pred_if_stmt_node(IfStmtNode, Pred, args: TermListNode);
+pred var_if_stmt_node(IfStmtNode, var: TermNode, typ: Type);
+
+type ThenStmtNode;
+pred equal_then_stmt_node(ThenStmtNode, lhs: TermNode, rhs: TermNode);
+pred defined_then_stmt_node(ThenStmtNode, OptTermNode, TermNode);
+pred pred_then_stmt_node(ThenStmtNode, Pred, TermListNode);
+
+type StmtNode;
+pred if_stmt_node(StmtNode, IfStmtNode);
+pred then_stmt_node(StmtNode, ThenStmtNode);
+
+type StmtListNode;
+pred nil_stmt_list_node(nil: StmtListNode);
+pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);

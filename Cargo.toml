@@ -6,6 +6,7 @@ members = [
   "eqlog-test",
 	"v1_to_v2",
   "examples/inference",
+  "eqlog-eqlog",
 ]
 
 # Keep examples out of workspace. It should be possible to build them without a
