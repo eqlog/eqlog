@@ -123,7 +123,7 @@ impl<'a> SymbolTable<'a> {
                         self.get_type(typ, func.loc)?;
                     }
                 }
-                SymbolRef::Rule(_) => todo!(),
+                SymbolRef::Rule(_) => {}
             }
         }
 
