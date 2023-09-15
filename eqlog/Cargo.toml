@@ -1,6 +1,6 @@
 [package]
 name = "eqlog"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = [
   "Martin E. Bidlingmaier <martin.bidlingmaier@mbid.me>",
@@ -12,12 +12,12 @@ repository = "https://github.com/eqlog/eqlog/"
 readme = "../README.md"
 
 [dependencies]
-lalrpop-util = { version = "*", features = [ "lexer" ] }
-regex = "*"
-maplit = "*"
-itertools = "*"
-convert_case = "*"
-indoc = "*"
+lalrpop-util = { version = ">= 0", features = [ "lexer" ] }
+regex = ">= 0"
+maplit = ">= 0"
+itertools = ">= 0"
+convert_case = ">= 0"
+indoc = ">= 0"
 
 [build-dependencies]
-lalrpop = { version = "*", features = [ "lexer" ] }
+lalrpop = { version = ">= 0", features = [ "lexer" ] }
