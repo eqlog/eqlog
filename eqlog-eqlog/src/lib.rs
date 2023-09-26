@@ -1,4 +1,4 @@
-use eqlog_runtime_published::eqlog_mod;
+use eqlog_runtime::eqlog_mod;
 
 eqlog_mod!(eqlog);
 pub use eqlog::*;
