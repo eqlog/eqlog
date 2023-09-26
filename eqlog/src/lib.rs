@@ -22,4 +22,4 @@ mod llam;
 mod rust_gen;
 mod source_display;
 
-pub use crate::build::process_root;
+pub use crate::build::{process_root, process_root_with_config, Config};

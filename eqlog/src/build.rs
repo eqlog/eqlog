@@ -156,6 +156,25 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
 /// }
 /// ```
 pub fn process_root() {
+    process_root_with_config(&Config::default());
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct Config {
+    /// The name of the eqlog-runtime crate.
+    pub runtime_crate: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            runtime_crate: "eqlog-runtime".to_string(),
+        }
+    }
+}
+
+/// A version of [process_root] that allows configuratin some aspects of the compilation process.
+pub fn process_root_with_config(_config: &Config) {
     let in_dir: PathBuf = "src".into();
     let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
 
