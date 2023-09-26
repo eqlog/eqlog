@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::config::*;
 use crate::error::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
@@ -70,7 +71,11 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
+fn process_file<'a>(
+    in_file: &'a Path,
+    out_file: &'a Path,
+    config: &Config,
+) -> Result<(), Box<dyn Error>> {
     let source = fs::read_to_string(in_file)?;
     let source_without_comments = whipe_comments(&source);
     let module = parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
@@ -113,13 +118,13 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .unwrap()
         .to_case(Case::UpperCamel);
     let mut result: Vec<u8> = Vec::new();
-    // TODO: write_module needs query_actions.
     write_module(
         &mut result,
         &theory_name,
         &module_wrapper,
         &query_actions,
         &index_selection,
+        config,
     )?;
     fs::write(&out_file, &result)?;
     match Command::new("rustfmt").arg(&out_file).status() {
@@ -159,22 +164,8 @@ pub fn process_root() {
     process_root_with_config(&Config::default());
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct Config {
-    /// The name of the eqlog-runtime crate.
-    pub runtime_crate: String,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            runtime_crate: "eqlog-runtime".to_string(),
-        }
-    }
-}
-
 /// A version of [process_root] that allows configuratin some aspects of the compilation process.
-pub fn process_root_with_config(_config: &Config) {
+pub fn process_root_with_config(config: &Config) {
     let in_dir: PathBuf = "src".into();
     let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
 
@@ -190,7 +181,7 @@ pub fn process_root_with_config(_config: &Config) {
         let out_file = out_parent.join(name).with_extension("rs");
         println!("Compiling {in_file:?} into {out_file:?}");
 
-        if let Err(err) = process_file(&in_file, &out_file) {
+        if let Err(err) = process_file(&in_file, &out_file, config) {
             eprintln!("{err}");
             exit(1);
         }

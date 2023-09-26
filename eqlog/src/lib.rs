@@ -13,6 +13,7 @@ mod build;
 //    #[allow(unused)]
 //    grammar_v1
 //);
+mod config;
 mod error;
 mod flat_ast;
 mod flat_to_llam;
@@ -22,4 +23,5 @@ mod llam;
 mod rust_gen;
 mod source_display;
 
-pub use crate::build::{process_root, process_root_with_config, Config};
+pub use crate::build::{process_root, process_root_with_config};
+pub use crate::config::Config;

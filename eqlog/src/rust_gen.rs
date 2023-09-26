@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::config::*;
 use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
@@ -12,14 +13,15 @@ use std::io::{self, Write};
 
 use Case::{Snake, UpperCamel};
 
-fn write_imports(out: &mut impl Write) -> io::Result<()> {
+fn write_imports(out: &mut impl Write, config: &Config) -> io::Result<()> {
+    let runtime_crate = &config.runtime_crate;
     writedoc! { out, "
         #[allow(unused)]
         use std::collections::{{BTreeSet, BTreeMap}};
         use std::fmt;
         #[allow(unused)]
-        use eqlog_runtime::Unification;
-        use eqlog_runtime::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
+        use {runtime_crate}::Unification;
+        use {runtime_crate}::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
         use std::ops::Bound;
     "}
 }
@@ -1828,8 +1830,9 @@ pub fn write_module(
     module: &ModuleWrapper,
     query_actions: &[QueryAction],
     index_selection: &IndexSelection,
+    config: &Config,
 ) -> io::Result<()> {
-    write_imports(out)?;
+    write_imports(out, config)?;
     write!(out, "\n")?;
 
     for sort in module.symbols.iter_types() {
