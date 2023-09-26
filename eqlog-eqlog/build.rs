@@ -1,3 +1,3 @@
 fn main() {
-    eqlog::process_root();
+    eqlog_published::process_root();
 }
