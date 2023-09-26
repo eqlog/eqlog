@@ -1,3 +1,5 @@
+pred absurd();
+
 type Func;
 type Pred;
 type Type;
@@ -5,6 +7,8 @@ type Type;
 type TypeList;
 func nil_type_list() -> TypeList;
 func cons_type_list(head: Type, tail: TypeList) -> TypeList;
+
+// ## Syntax tree nodes
 
 type TermNode;
 
@@ -16,11 +20,11 @@ type OptTermNode;
 pred none_term_node(OptTermNode);
 pred some_term_node(OptTermNode, value: TermNode);
 
-type Var;
+type Ident;
 
-pred var_term(TermNode, Var);
-pred wildcard_term(TermNode);
-pred app_term(Func, args: TermListNode);
+pred var_term_node(TermNode, Ident);
+pred wildcard_term_node(TermNode);
+pred app_term_node(Func, args: TermListNode);
 
 type IfStmtNode;
 pred equal_if_stmt_node(IfStmtNode, lhs: TermNode, rhs: TermNode);
@@ -40,3 +44,248 @@ pred then_stmt_node(StmtNode, ThenStmtNode);
 type StmtListNode;
 pred nil_stmt_list_node(nil: StmtListNode);
 pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);
+
+type RuleNode;
+pred rule_node(node: RuleNode, stmts: StmtListNode);
+
+// ## Structures
+
+type Structure;
+
+type El;
+func el_type(El) -> Type;
+
+type ElList;
+func nil_el_list(Structure) -> ElList;
+func cons_el_list(head: El, tail: ElList) -> ElList;
+rule el_list_cons_injective {
+    if cons_el_list(head_0, tail_0) = cons_el_list(head_1, tail_1);
+    then head_0 = head_1;
+    then tail_0 = tail_1;
+}
+rule el_list_cons_nil {
+    if cons_el_list(_, _) = nil_el_list(_);
+    then absurd();
+}
+
+func el_types(ElList) -> TypeList;
+
+func el_structure(El) -> Structure;
+func els_structure(ElList) -> Structure;
+rule nil_els_structure {
+    if els = nil_el_list(structure);
+    then els_structure(els) = structure;
+}
+rule cons_els_structure {
+    if els = cons_el_list(head, tail);
+    if head_structure = el_structure(head);
+    then head_structure = els_structure(els);
+    then head_structure = els_structure(tail);
+}
+
+func func_app(Func, ElList) -> El;
+rule {
+    if result = func_app(_, args);
+    if structure = els_structure(args);
+    then structure = el_structure(result);
+}
+
+pred pred_holds(Pred, ElList);
+
+pred constrained_el(El);
+pred constrained_els(ElList);
+rule func_app_constrained {
+    if result = func_app(_, args);
+    then constrained_els(args);
+    then constrained_el(result);
+}
+rule pred_holds_constrained {
+    if pred_holds(_, args);
+    then constrained_els(args);
+}
+rule constrained_head_tail {
+    if constrained_els(cons_el_list(head, tail));
+    then constrained_el(head);
+    then constrained_els(tail);
+}
+
+// ## Morphisms
+
+type Morphism;
+func dom(Morphism) -> Structure;
+func cod(Morphism) -> Structure;
+func map_el(Morphism, El) -> El;
+func map_els(Morphism, ElList) -> ElList;
+
+// Mapped elements live in the codomain structure.
+rule map_el_structure {
+    if mapped = map_el(mor, _);
+    if cod = cod(mor);
+    then el_structure(mapped) = cod;
+}
+rule map_els_structure {
+    if mapped = map_els(mor, _);
+    if cod = cod(mor);
+    then els_structure(mapped) = cod;
+}
+
+// The operations map_el(mor, -) and map_els(mor, -) are total.
+rule map_el_defined {
+    if dom(mor) = struct;
+    if el_structure(el) = struct;
+    then map_el(mor, el)!;
+}
+rule map_els_defined {
+    if dom(mor) = struct;
+    if els_structure(els) = struct;
+    then map_els(mor, els)!;
+}
+
+// Morphisms commute with nil and cons.
+rule map_nil_els {
+    if mapped = map_els(mor, nil_el_list(_));
+    if cod = cod(mor);
+    then mapped = nil_el_list(cod);
+}
+rule map_cons_els {
+    if mapped = map_els(mor, cons_el_list(head, tail));
+    then map_el(mor, head)!;
+    then map_els(mor, tail)!;
+    then mapped = cons_el_list(map_el(mor, head), map_els(mor, tail));
+}
+
+// Morphisms commute with function application and are
+// comptabile with predicates.
+rule map_app_func {
+    if mapped_result = map_el(mor, func_app(function, args));
+    if mapped_args = map_els(mor, args);
+    then mapped_result = func_app(function, mapped_args);
+}
+rule map_pred_holds {
+    if pred_holds(predicate, args);
+    if mapped_args = map_els(_, args);
+    then pred_holds(predicate, mapped_args);
+}
+
+// ## Non-empty chains of structures.
+
+type Chain;
+func singleton_chain(head: Structure) -> Chain;
+func cons_chain(head: Structure, transition: Morphism, tail: Chain) -> Chain;
+
+func chain_head(Chain) -> Structure;
+rule chain_head_singleton {
+    if chain = singleton_chain(head);
+    then chain_head(chain) = head;
+}
+rule chain_head_cons {
+    if chain = cons_chain(head, _, _);
+    then chain_head(chain) = head;
+}
+
+rule chain_transition_signature {
+    if cons_chain(head, transition, tail)!;
+    if tail_head = chain_head(tail);
+    then dom(transition) = head;
+    then cod(transition) = tail_head;
+}
+
+// ## The Chain associated to a RuleNode
+//
+// The chain of a rule has one object for each *group* of statements, where
+// groups are given by consecutive statements of the same type (i.e. either
+// `if` or `then` statements).
+
+func rule_chain(RuleNode) -> Chain;
+rule rule_stmt_list_chain {
+    if rule_node(node, stmts);
+    if chain = stmt_list_chain(stmts);
+    then rule_chain(node) = chain;
+}
+
+func stmt_list_chain(StmtListNode) -> Chain;
+func stmt_structure(StmtNode) -> Structure;
+func stmt_transition(StmtNode) -> Morphism;
+
+rule stmt_structure_total {
+    if stmt: StmtNode;
+    then stmt_structure(stmt)!;
+}
+rule stmt_list_chain_total {
+    if stmts: StmtListNode;
+    then stmt_list_chain(stmts)!;
+}
+
+rule stmt_list_chain_head {
+    if cons_stmt_list_node(stmts, head, _);
+    if structure = stmt_structure(head);
+    if chain = stmt_list_chain(stmts);
+    then chain_head(chain) = structure;
+}
+
+rule stmt_list_chain_transition {
+    if cons_stmt_list_node(stmts, head, _);
+    if stmt_list_chain(stmts) = cons_chain(_, transition, _);
+    then stmt_transition(head) = transition;
+}
+
+// For either
+//
+// - two consecutive `if` statements, or
+// - two consecutive `then` statements
+//
+// the chains of the two statements agree.
+rule stmt_list_chain_if_if {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if if_stmt_node(first, _);
+    if if_stmt_node(second, _);
+    if chain = stmt_list_chain(stmts);
+    then stmt_list_chain(stmts_tail) = chain;
+}
+rule stmt_list_chain_then_then {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if then_stmt_node(first, _);
+    if then_stmt_node(second, _);
+    if chain = stmt_list_chain(stmts);
+    then stmt_list_chain(stmts_tail) = chain;
+}
+
+// For either
+//
+// - an `if` statement followed by a `then` statement, or
+// - a `then` statement followed by an `if` statement,
+//
+// there is a transition in the associated chains.
+rule stmt_list_chain_if_then {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if if_stmt_node(first, _);
+    if then_stmt_node(second, _);
+    if first_structure = stmt_structure(first);
+    if chain = stmt_list_chain(stmts);
+    if tail_chain = stmt_list_chain(stmts_tail);
+    then stmt_transition(first)!;
+    then chain = cons_chain(first_structure, stmt_transition(first), tail_chain);
+}
+rule stmt_list_chain_then_if {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if then_stmt_node(first, _);
+    if if_stmt_node(second, _);
+    if first_structure = stmt_structure(first);
+    if chain = stmt_list_chain(stmts);
+    if tail_chain = stmt_list_chain(stmts_tail);
+    then stmt_transition(first)!;
+    then chain = cons_chain(first_structure, stmt_transition(first), tail_chain);
+}
+
+// A singleton statement list corresponds to a singleton chain.
+rule stmt_list_chain_singleton {
+    if nil_stmt_list_node(tail);
+    if cons_stmt_list_node(stmts, head, tail);
+    if structure = stmt_structure(head);
+    if chain = stmt_list_chain(stmts);
+    then chain = singleton_chain(structure);
+}
