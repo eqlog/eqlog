@@ -14,10 +14,6 @@ lalrpop_mod!(
     grammar_new
 );
 mod build;
-//lalrpop_mod!(
-//    #[allow(unused)]
-//    grammar_v1
-//);
 mod error;
 mod flat_ast;
 mod flat_to_llam;
