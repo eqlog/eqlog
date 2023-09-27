@@ -4,7 +4,6 @@ use convert_case::Casing;
 use crate::ast::*;
 use crate::error::*;
 use crate::source_display::Location;
-use eqlog_eqlog::*;
 use std::collections::BTreeMap;
 use std::iter::once;
 
@@ -80,12 +79,6 @@ impl<'a> SymbolRef<'a> {
             Rule(_) => SymbolKind::Rule,
         }
     }
-}
-
-pub enum EqlogSymbol {
-    Func(Func),
-    Pred(Pred),
-    Type(Type),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -264,27 +257,5 @@ impl<'a> SymbolTable<'a> {
                 None
             }
         })
-    }
-
-    pub fn make_eqlog_model(&'a self) -> (Eqlog, BTreeMap<&'a str, EqlogSymbol>) {
-        let mut eqlog = Eqlog::new();
-        let mut names: BTreeMap<&'a str, EqlogSymbol> = BTreeMap::new();
-
-        for typ in self.iter_types() {
-            let eqlog_typ = eqlog.new_type();
-            names.insert(typ.name.as_str(), EqlogSymbol::Type(eqlog_typ));
-        }
-
-        for pred in self.iter_preds() {
-            let eqlog_pred = eqlog.new_pred();
-            names.insert(pred.name.as_str(), EqlogSymbol::Pred(eqlog_pred));
-        }
-
-        for func in self.iter_funcs() {
-            let eqlog_func = eqlog.new_func();
-            names.insert(func.name.as_str(), EqlogSymbol::Func(eqlog_func));
-        }
-
-        (eqlog, names)
     }
 }
