@@ -26,20 +26,20 @@ pred var_term_node(TermNode, Ident);
 pred wildcard_term_node(TermNode);
 pred app_term_node(Func, args: TermListNode);
 
-type IfStmtNode;
-pred equal_if_stmt_node(IfStmtNode, lhs: TermNode, rhs: TermNode);
-pred defined_if_stmt_node(IfStmtNode, term: TermNode);
-pred pred_if_stmt_node(IfStmtNode, Pred, args: TermListNode);
-pred var_if_stmt_node(IfStmtNode, var: TermNode, typ: Type);
+type IfAtomNode;
+pred equal_if_stmt_node(IfAtomNode, lhs: TermNode, rhs: TermNode);
+pred defined_if_stmt_node(IfAtomNode, term: TermNode);
+pred pred_if_stmt_node(IfAtomNode, Pred, args: TermListNode);
+pred var_if_stmt_node(IfAtomNode, var: TermNode, typ: Type);
 
-type ThenStmtNode;
-pred equal_then_stmt_node(ThenStmtNode, lhs: TermNode, rhs: TermNode);
-pred defined_then_stmt_node(ThenStmtNode, OptTermNode, TermNode);
-pred pred_then_stmt_node(ThenStmtNode, Pred, TermListNode);
+type ThenAtomNode;
+pred equal_then_stmt_node(ThenAtomNode, lhs: TermNode, rhs: TermNode);
+pred defined_then_stmt_node(ThenAtomNode, OptTermNode, TermNode);
+pred pred_then_stmt_node(ThenAtomNode, Pred, TermListNode);
 
 type StmtNode;
-pred stmt_node_if(StmtNode, IfStmtNode);
-pred stmt_node_then(StmtNode, ThenStmtNode);
+pred if_stmt_node(StmtNode, IfAtomNode);
+pred then_stmt_node(StmtNode, ThenAtomNode);
 
 type StmtListNode;
 pred nil_stmt_list_node(nil: StmtListNode);
@@ -238,16 +238,16 @@ rule stmt_list_chain_transition {
 rule stmt_list_chain_if_if {
     if cons_stmt_list_node(stmts, first, stmts_tail);
     if cons_stmt_list_node(stmts_tail, second, _);
-    if stmt_node_if(first, _);
-    if stmt_node_if(second, _);
+    if if_stmt_node(first, _);
+    if if_stmt_node(second, _);
     if chain = stmt_list_chain(stmts);
     then stmt_list_chain(stmts_tail) = chain;
 }
 rule stmt_list_chain_then_then {
     if cons_stmt_list_node(stmts, first, stmts_tail);
     if cons_stmt_list_node(stmts_tail, second, _);
-    if stmt_node_then(first, _);
-    if stmt_node_then(second, _);
+    if then_stmt_node(first, _);
+    if then_stmt_node(second, _);
     if chain = stmt_list_chain(stmts);
     then stmt_list_chain(stmts_tail) = chain;
 }
@@ -261,8 +261,8 @@ rule stmt_list_chain_then_then {
 rule stmt_list_chain_if_then {
     if cons_stmt_list_node(stmts, first, stmts_tail);
     if cons_stmt_list_node(stmts_tail, second, _);
-    if stmt_node_if(first, _);
-    if stmt_node_then(second, _);
+    if if_stmt_node(first, _);
+    if then_stmt_node(second, _);
     if first_structure = stmt_structure(first);
     if chain = stmt_list_chain(stmts);
     if tail_chain = stmt_list_chain(stmts_tail);
@@ -272,8 +272,8 @@ rule stmt_list_chain_if_then {
 rule stmt_list_chain_then_if {
     if cons_stmt_list_node(stmts, first, stmts_tail);
     if cons_stmt_list_node(stmts_tail, second, _);
-    if stmt_node_then(first, _);
-    if stmt_node_if(second, _);
+    if then_stmt_node(first, _);
+    if if_stmt_node(second, _);
     if first_structure = stmt_structure(first);
     if chain = stmt_list_chain(stmts);
     if tail_chain = stmt_list_chain(stmts_tail);
