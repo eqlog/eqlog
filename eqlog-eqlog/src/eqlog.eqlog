@@ -10,11 +10,16 @@ func cons_type_list(head: Type, tail: TypeList) -> TypeList;
 
 // ## Syntax tree nodes
 
+// TODO: These currently don't carry any data, but they should.
+type TypeDeclNode;
+type PredDeclNode;
+type FuncDeclNode;
+
 type TermNode;
 
 type TermListNode;
-pred nil_term_node_list(nil: TermListNode);
-pred cons_term_node_list(node: TermListNode, head: TermNode, tail: TermListNode);
+pred nil_term_list_node(nil: TermListNode);
+pred cons_term_list_node(node: TermListNode, head: TermNode, tail: TermListNode);
 
 type OptTermNode;
 pred none_term_node(OptTermNode);
@@ -24,18 +29,18 @@ type Ident;
 
 pred var_term_node(TermNode, Ident);
 pred wildcard_term_node(TermNode);
-pred app_term_node(Func, args: TermListNode);
+pred app_term_node(TermNode, function: Ident, args: TermListNode);
 
 type IfAtomNode;
-pred equal_if_stmt_node(IfAtomNode, lhs: TermNode, rhs: TermNode);
-pred defined_if_stmt_node(IfAtomNode, term: TermNode);
-pred pred_if_stmt_node(IfAtomNode, Pred, args: TermListNode);
-pred var_if_stmt_node(IfAtomNode, var: TermNode, typ: Type);
+pred equal_if_atom_node(IfAtomNode, lhs: TermNode, rhs: TermNode);
+pred defined_if_atom_node(IfAtomNode, term: TermNode);
+pred pred_if_atom_node(IfAtomNode, predicate: Ident, args: TermListNode);
+pred var_if_atom_node(IfAtomNode, var: TermNode, typ: Ident);
 
 type ThenAtomNode;
-pred equal_then_stmt_node(ThenAtomNode, lhs: TermNode, rhs: TermNode);
-pred defined_then_stmt_node(ThenAtomNode, OptTermNode, TermNode);
-pred pred_then_stmt_node(ThenAtomNode, Pred, TermListNode);
+pred equal_then_atom_node(ThenAtomNode, lhs: TermNode, rhs: TermNode);
+pred defined_then_atom_node(ThenAtomNode, var: OptTermNode, tm: TermNode);
+pred pred_then_atom_node(ThenAtomNode, predicate: Ident, args: TermListNode);
 
 type StmtNode;
 pred if_stmt_node(StmtNode, IfAtomNode);
@@ -45,8 +50,21 @@ type StmtListNode;
 pred nil_stmt_list_node(nil: StmtListNode);
 pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);
 
-type RuleNode;
-pred rule_node_stmts(node: RuleNode, stmts: StmtListNode);
+type RuleDeclNode;
+pred stmts_rule_decl_node(node: RuleDeclNode, stmts: StmtListNode);
+
+type DeclNode;
+pred type_decl(DeclNode, TypeDeclNode);
+pred pred_decl(DeclNode, PredDeclNode);
+pred func_decl(DeclNode, FuncDeclNode);
+pred rule_decl(DeclNode, RuleDeclNode);
+
+type DeclListNode;
+pred nil_decl_list_node(DeclListNode);
+pred cons_decl_list_node(DeclListNode, head: DeclNode, tail: DeclListNode);
+
+type ModuleNode;
+pred decls_module_node(ModuleNode, DeclListNode);
 
 // ## Structures
 
@@ -190,15 +208,15 @@ rule chain_transition_signature {
     then cod(transition) = tail_head;
 }
 
-// ## The Chain associated to a RuleNode
+// ## The Chain associated to a RuleDeclNode
 //
 // The chain of a rule has one object for each *group* of statements, where
 // groups are given by consecutive statements of the same type (i.e. either
 // `if` or `then` statements).
 
-func rule_chain(RuleNode) -> Chain;
+func rule_chain(RuleDeclNode) -> Chain;
 rule rule_stmt_list_chain {
-    if rule_node_stmts(node, stmts);
+    if stmts_rule_decl_node(node, stmts);
     if chain = stmt_list_chain(stmts);
     then rule_chain(node) = chain;
 }

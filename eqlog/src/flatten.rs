@@ -1,7 +1,6 @@
 use crate::ast_v1::*;
 use crate::flat_ast::*;
 use crate::unification::*;
-use eqlog_eqlog::Eqlog;
 use std::collections::BTreeMap;
 use std::iter::once;
 
