@@ -3,6 +3,7 @@ mod ast_v1;
 mod module;
 mod semantics;
 mod unification;
+mod flatten_v2;
 use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[allow(unused)]
