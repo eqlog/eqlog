@@ -42,7 +42,7 @@ fn parse(source: &str) -> Result<Module, CompileError> {
         .map_err(CompileError::from)
 }
 
-fn parse_v2(source: &str) -> Result<(Eqlog, BTreeMap<String, Ident>, ModuleNode), CompileError> {
+fn parse_new(source: &str) -> Result<(Eqlog, BTreeMap<String, Ident>, ModuleNode), CompileError> {
     let mut eqlog = Eqlog::new();
     let mut identifiers = BTreeMap::new();
     let module = grammar_new::ModuleParser::new()
@@ -90,7 +90,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source.clone(),
         source_path: in_file.into(),
     })?;
-    parse_v2(&source_without_comments).unwrap();
+    parse_new(&source_without_comments).unwrap();
 
     let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
         error,
