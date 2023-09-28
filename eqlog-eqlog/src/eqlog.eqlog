@@ -12,8 +12,23 @@ func cons_type_list(head: Type, tail: TypeList) -> TypeList;
 
 // TODO: These currently don't carry any data, but they should.
 type TypeDeclNode;
+pred type_decl(TypeDeclNode, name: Ident);
+
+type ArgDeclNode;
+// arg_decl_node_name is optional (but must be unique), arg_decl_node_type is
+// mandatory and must be unique.
+pred arg_decl_node_name(ArgDeclNode, name: Ident);
+pred arg_decl_node_type(ArgDeclNode, typ: Ident);
+
+type ArgDeclListNode;
+pred nil_arg_decl_list_node(ArgDeclListNode);
+pred cons_arg_decl_list_node(ArgDeclListNode, head: ArgDeclNode, tail: ArgDeclListNode);
+
 type PredDeclNode;
+pred pred_decl(PredDeclNode, name: Ident, args: ArgDeclListNode);
+
 type FuncDeclNode;
+pred func_decl(FuncDeclNode, name: Ident, args: ArgDeclListNode, result_type: Ident);
 
 type TermNode;
 
@@ -51,13 +66,13 @@ pred nil_stmt_list_node(nil: StmtListNode);
 pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);
 
 type RuleDeclNode;
-pred stmts_rule_decl_node(node: RuleDeclNode, stmts: StmtListNode);
+pred rule_decl(node: RuleDeclNode, stmts: StmtListNode);
 
 type DeclNode;
-pred type_decl(DeclNode, TypeDeclNode);
-pred pred_decl(DeclNode, PredDeclNode);
-pred func_decl(DeclNode, FuncDeclNode);
-pred rule_decl(DeclNode, RuleDeclNode);
+pred decl_node_type(DeclNode, TypeDeclNode);
+pred decl_node_pred(DeclNode, PredDeclNode);
+pred decl_node_func(DeclNode, FuncDeclNode);
+pred decl_node_rule(DeclNode, RuleDeclNode);
 
 type DeclListNode;
 pred nil_decl_list_node(DeclListNode);
@@ -216,7 +231,7 @@ rule chain_transition_signature {
 
 func rule_chain(RuleDeclNode) -> Chain;
 rule rule_stmt_list_chain {
-    if stmts_rule_decl_node(node, stmts);
+    if rule_decl(node, stmts);
     if chain = stmt_list_chain(stmts);
     then rule_chain(node) = chain;
 }

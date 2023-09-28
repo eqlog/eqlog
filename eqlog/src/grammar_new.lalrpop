@@ -127,7 +127,7 @@ RuleDecl: RuleDeclNode = {
     <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => {
         let rule = eqlog.new_rule_decl_node();
         let body = stmt_list_node(body.as_slice(), eqlog);
-        eqlog.insert_stmts_rule_decl_node(rule, body);
+        eqlog.insert_rule_decl(rule, body);
         rule
     },
 }
@@ -135,55 +135,64 @@ RuleDecl: RuleDeclNode = {
 TypeDecl: TypeDeclNode = {
     <l: @L>  "type" <name: Id> ";" <r: @R> => {
         // TODO: This node should be associated with data.
-        eqlog.new_type_decl_node()
+        let typ = eqlog.new_type_decl_node();
+        eqlog.insert_type_decl(typ, name);
+        typ
     },
 }
 
-ArgDecl: () = {
+ArgDecl: ArgDeclNode = {
     <l: @L> <name: PairFirst<Id, ":">?> <typ: Id> <r: @R> => {
-        ()
+        let arg_decl = eqlog.new_arg_decl_node();
+        if let Some(name) = name {
+            eqlog.insert_arg_decl_node_name(arg_decl, name);
+        }
+        eqlog.insert_arg_decl_node_type(arg_decl, typ);
+        arg_decl
     },
 }
 
-ArgDeclList: () = {
+ArgDeclList: ArgDeclListNode = {
     "(" <arg_decls: Intersperse<ArgDecl, ",">> ")" => {
-        ()
+        arg_decl_list_node(arg_decls.as_slice(), eqlog)
     },
 }
 
 PredDecl: PredDeclNode = {
     <l: @L> "pred" <name: Id> <arg_decls: ArgDeclList> ";" <r: @R> => {
-        // TODO: This node should be associated with data.
-        eqlog.new_pred_decl_node()
+        let pred = eqlog.new_pred_decl_node();
+        eqlog.insert_pred_decl(pred, name, arg_decls);
+        pred
     },
 }
 
 FuncDecl: FuncDeclNode = {
     <l: @L> "func" <name: Id> <arg_decls: ArgDeclList> "->" <result: Id> ";" <r: @R> => {
-        // TODO: This node should be associated with data.
-        eqlog.new_func_decl_node()
+        let func = eqlog.new_func_decl_node();
+        eqlog.insert_func_decl(func, name, arg_decls, result);
+        func
     },
 }
 
 Decl: DeclNode = {
     <typ: TypeDecl> => {
         let decl = eqlog.new_decl_node();
-        eqlog.insert_type_decl(decl, typ);
+        eqlog.insert_decl_node_type(decl, typ);
         decl
     },
     <pred: PredDecl> => {
         let decl = eqlog.new_decl_node();
-        eqlog.insert_pred_decl(decl, pred);
+        eqlog.insert_decl_node_pred(decl, pred);
         decl
     },
     <func: FuncDecl> => {
         let decl = eqlog.new_decl_node();
-        eqlog.insert_func_decl(decl, func);
+        eqlog.insert_decl_node_func(decl, func);
         decl
     },
     <rule: RuleDecl> => {
         let decl = eqlog.new_decl_node();
-        eqlog.insert_rule_decl(decl, rule);
+        eqlog.insert_decl_node_rule(decl, rule);
         decl
     },
 }
