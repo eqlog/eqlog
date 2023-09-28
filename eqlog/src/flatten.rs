@@ -214,7 +214,6 @@ impl<'a> Emitter<'a> {
 
 #[derive(Clone, Debug)]
 pub struct SequentFlattening {
-    pub term_map: BTreeMap<Term, FlatTerm>,
     pub sequent: FlatSequent,
     pub sorts: BTreeMap<FlatTerm, String>,
 }
@@ -263,7 +262,6 @@ fn flatten_implication<'a, 'b>(
         .collect();
 
     SequentFlattening {
-        term_map,
         sequent: flat_sequent,
         sorts: flat_sorts,
     }
