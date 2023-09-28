@@ -1,13 +1,5 @@
 pred absurd();
 
-type Func;
-type Pred;
-type Type;
-
-type TypeList;
-func nil_type_list() -> TypeList;
-func cons_type_list(head: Type, tail: TypeList) -> TypeList;
-
 // ## Syntax tree nodes
 
 // TODO: These currently don't carry any data, but they should.
@@ -80,6 +72,77 @@ pred cons_decl_list_node(DeclListNode, head: DeclNode, tail: DeclListNode);
 
 type ModuleNode;
 pred decls_module_node(ModuleNode, DeclListNode);
+
+// ## Semantic types, predicates and functions
+
+type Type;
+type TypeList;
+func nil_type_list() -> TypeList;
+func cons_type_list(head: Type, tail: TypeList) -> TypeList;
+rule type_list_nil_not_cons {
+    if nil_type_list() = cons_type_list(_, _);
+    then absurd();
+}
+rule type_list_cons_injective {
+    if cons_type_list(head_0, tail_0) = cons_type_list(head_1, tail_1);
+    then head_0 = head_1;
+    then tail_0 = tail_1;
+}
+
+func semantic_type(Ident) -> Type;
+rule semantic_decl_type {
+    if type_decl(_, ident);
+    then semantic_type(ident)!;
+}
+
+func semantic_arg_types(ArgDeclListNode) -> TypeList;
+rule semantic_arg_types_nil {
+    if nil_arg_decl_list_node(n);
+    then nil_type_list()!;
+    then semantic_arg_types(n) = nil_type_list();
+}
+rule semantic_arg_types_cons {
+    if cons_arg_decl_list_node(arg_decls, head, tail);
+    if arg_decl_node_type(head, head_type_name);
+    if head_type = semantic_type(head_type_name);
+    if tail_types = semantic_arg_types(tail);
+    then cons_type_list(head_type, tail_types)!;
+    then semantic_arg_types(arg_decls) = cons_type_list(head_type, tail_types);
+}
+
+type Pred;
+func semantic_pred(Ident) -> Pred;
+rule semantic_decl_pred {
+    if pred_decl(_, name, _);
+    then semantic_pred(name)!;
+}
+
+
+func pred_arity(Pred) -> TypeList;
+rule pred_arity_decl {
+    if pred_decl(_, pred_name, arg_decls);
+    if predicate = semantic_pred(pred_name);
+    if arg_types = semantic_arg_types(arg_decls);
+    then pred_arity(predicate) = arg_types;
+}
+
+type Func;
+func semantic_func(Ident) -> Func;
+rule semantic_decl_func {
+    if func_decl(_, name, _, _);
+    then semantic_func(name)!;
+}
+
+func func_domain(Func) -> TypeList;
+func func_codomain(Func) -> Type;
+rule func_domain_decl {
+    if func_decl(_, func_name, arg_decls, result_type_name);
+    if function = semantic_func(func_name);
+    if domain_types = semantic_arg_types(arg_decls);
+    if result_type = semantic_type(result_type_name);
+    then func_domain(function) = domain_types;
+    then func_codomain(function) = result_type;
+}
 
 // ## Structures
 
