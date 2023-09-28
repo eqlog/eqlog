@@ -118,12 +118,12 @@ rule semantic_decl_pred {
 }
 
 
-func pred_arity(Pred) -> TypeList;
-rule pred_arity_decl {
+func arity(Pred) -> TypeList;
+rule arity_decl {
     if pred_decl(_, pred_name, arg_decls);
     if predicate = semantic_pred(pred_name);
     if arg_types = semantic_arg_types(arg_decls);
-    then pred_arity(predicate) = arg_types;
+    then arity(predicate) = arg_types;
 }
 
 type Func;
@@ -133,15 +133,15 @@ rule semantic_decl_func {
     then semantic_func(name)!;
 }
 
-func func_domain(Func) -> TypeList;
-func func_codomain(Func) -> Type;
-rule func_domain_decl {
+func domain(Func) -> TypeList;
+func codomain(Func) -> Type;
+rule domain_decl {
     if func_decl(_, func_name, arg_decls, result_type_name);
     if function = semantic_func(func_name);
     if domain_types = semantic_arg_types(arg_decls);
     if result_type = semantic_type(result_type_name);
-    then func_domain(function) = domain_types;
-    then func_codomain(function) = result_type;
+    then domain(function) = domain_types;
+    then codomain(function) = result_type;
 }
 
 // ## Structures
@@ -149,11 +149,11 @@ rule func_domain_decl {
 type Structure;
 
 type El;
-func el_type(El) -> Type;
 
 type ElList;
 func nil_el_list(Structure) -> ElList;
 func cons_el_list(head: El, tail: ElList) -> ElList;
+
 rule el_list_cons_injective {
     if cons_el_list(head_0, tail_0) = cons_el_list(head_1, tail_1);
     then head_0 = head_1;
@@ -164,8 +164,13 @@ rule el_list_cons_nil {
     then absurd();
 }
 
-func el_types(ElList) -> TypeList;
+func func_app(Func, ElList) -> El;
 
+pred pred_app(Pred, ElList);
+
+func var(Structure, Ident) -> El;
+
+// ### The structure that elements belong to
 func el_structure(El) -> Structure;
 func els_structure(ElList) -> Structure;
 rule nil_els_structure {
@@ -179,15 +184,52 @@ rule cons_els_structure {
     then head_structure = els_structure(tail);
 }
 
-func func_app(Func, ElList) -> El;
-rule {
+rule func_app_structure {
     if result = func_app(_, args);
     if structure = els_structure(args);
     then structure = el_structure(result);
 }
 
-pred pred_holds(Pred, ElList);
+rule var_structure {
+    if el = var(structure, _);
+    then el_structure(el) = structure;
+}
 
+// ### The types of elements
+func el_type(El) -> Type;
+func el_types(ElList) -> TypeList;
+rule nil_el_types {
+    if els = nil_el_list(_);
+    then nil_type_list()!;
+    then el_types(els) = nil_type_list();
+}
+rule cons_el_types {
+    if els = cons_el_list(head, tail);
+    if head_type = el_type(head);
+    if tail_types = el_types(tail);
+    then cons_type_list(head_type, tail_types)!;
+    then el_types(els) = cons_type_list(head_type, tail_types);
+}
+
+rule func_app_types {
+    if result = func_app(function, args);
+    if domain(function) = dom;
+    if codomain(function) = cod;
+    then el_types(args) = dom;
+    then el_type(result) = cod;
+}
+
+rule pred_app_types {
+    if pred_app(predicate, args);
+    if arity(predicate) = ar;
+    then el_types(args) = ar;
+}
+
+// ### Constrained elements
+//
+// An element is constrained if it appears in a function
+// application (including the result) or in the
+// application of a predicate.
 pred constrained_el(El);
 pred constrained_els(ElList);
 rule func_app_constrained {
@@ -195,8 +237,8 @@ rule func_app_constrained {
     then constrained_els(args);
     then constrained_el(result);
 }
-rule pred_holds_constrained {
-    if pred_holds(_, args);
+rule pred_app_constrained {
+    if pred_app(_, args);
     then constrained_els(args);
 }
 rule constrained_head_tail {
@@ -250,17 +292,23 @@ rule map_cons_els {
     then mapped = cons_el_list(map_el(mor, head), map_els(mor, tail));
 }
 
-// Morphisms commute with function application and are
-// comptabile with predicates.
+// Morphisms commute with function application, preserve
+// variables and are compatible with predicates.
 rule map_app_func {
     if mapped_result = map_el(mor, func_app(function, args));
     if mapped_args = map_els(mor, args);
     then mapped_result = func_app(function, mapped_args);
 }
-rule map_pred_holds {
-    if pred_holds(predicate, args);
+rule map_var {
+    if el = var(_, name);
+    if mapped_el = map_el(morph, el);
+    if cod(morph) = cod_structure;
+    then mapped_el = var(cod_structure, name);
+}
+rule map_pred_app {
+    if pred_app(predicate, args);
     if mapped_args = map_els(_, args);
-    then pred_holds(predicate, mapped_args);
+    then pred_app(predicate, mapped_args);
 }
 
 // ## Non-empty chains of structures.
@@ -299,6 +347,9 @@ rule rule_stmt_list_chain {
     then rule_chain(node) = chain;
 }
 
+// ### The structure of the chain
+//
+// That is, the length of the chain, and which structure in the chain a given statement is associated with.
 func stmt_list_chain(StmtListNode) -> Chain;
 func stmt_structure(StmtNode) -> Structure;
 func stmt_transition(StmtNode) -> Morphism;
@@ -384,4 +435,186 @@ rule stmt_list_chain_singleton {
     if structure = stmt_structure(head);
     if chain = stmt_list_chain(stmts);
     then chain = singleton_chain(structure);
+}
+
+// ### Propagation of associated structures through the AST
+
+// #### Propagate stmt structure through if and then stmts.
+func if_atom_structure(IfAtomNode) -> Structure;
+func then_atom_structure(ThenAtomNode) -> Structure;
+
+rule if_stmt_structure {
+    if if_stmt_node(stmt, atom);
+    if structure = stmt_structure(stmt);
+    then if_atom_structure(atom) = structure;
+}
+rule then_stmt_structure {
+    if then_stmt_node(stmt, atom);
+    if structure = stmt_structure(stmt);
+    then then_atom_structure(atom) = structure;
+}
+
+func term_structure(TermNode) -> Structure;
+func terms_structure(TermListNode) -> Structure;
+func opt_term_structure(OptTermNode) -> Structure;
+
+// #### Propagate associated structures through if atoms.
+rule equal_if_atom_structure {
+    if equal_if_atom_node(atom, lhs, rhs);
+    if structure = if_atom_structure(atom);
+    then term_structure(lhs) = structure;
+    then term_structure(rhs) = structure;
+}
+rule defined_if_atom_structure {
+    if defined_if_atom_node(atom, term);
+    if structure = if_atom_structure(atom);
+    then term_structure(term) = structure;
+}
+rule pred_if_atom_structure {
+    if pred_if_atom_node(atom, _, arg_terms);
+    if structure = if_atom_structure(atom);
+    then terms_structure(arg_terms) = structure;
+}
+rule var_if_atom_structure {
+    if var_if_atom_node(atom, var_term, _);
+    if structure = if_atom_structure(atom);
+    then term_structure(var_term) = structure;
+}
+
+// #### Propagate associated structures through then atoms.
+rule equal_then_atom_structure {
+    if equal_then_atom_node(atom, lhs, rhs);
+    if structure = then_atom_structure(atom);
+    then term_structure(lhs) = structure;
+    then term_structure(rhs) = structure;
+}
+rule defined_then_atom_structure {
+    if defined_then_atom_node(atom, var_term, term);
+    if structure = then_atom_structure(atom);
+    then opt_term_structure(var_term) = structure;
+    then term_structure(term) = structure;
+}
+rule pred_then_atom_structure {
+    if pred_then_atom_node(atom, _, arg_terms);
+    if structure = then_atom_structure(atom);
+    then terms_structure(arg_terms) = structure;
+}
+
+// #### Propagate associated structures through terms.
+rule cons_term_list_structure {
+    if cons_term_list_node(terms, head, tail);
+    if structure = terms_structure(terms);
+    then term_structure(head) = structure;
+    then terms_structure(tail) = structure;
+}
+
+rule some_opt_term_structure {
+    if some_term_node(opt_term, term);
+    if structure = opt_term_structure(opt_term);
+    then term_structure(term) = structure;
+}
+
+rule app_term_structure {
+    if app_term_node(term, _, args);
+    if structure = term_structure(term);
+    then terms_structure(args) = structure;
+}
+
+// ### Populate associated structures
+
+func semantic_el(TermNode) -> El;
+rule semantic_el_total {
+    if el: TermNode;
+    then semantic_el(el)!;
+}
+
+func semantic_els(TermListNode) -> ElList;
+rule semantic_els_total {
+    if els: TermListNode;
+    then semantic_els(els)!;
+}
+
+rule semantic_els_nil {
+    if nil_term_list_node(terms);
+    if structure = terms_structure(terms);
+    if sem_els = semantic_els(terms);
+    then sem_els = nil_el_list(structure);
+}
+rule semantic_els_cons {
+    if cons_term_list_node(terms, head, tail);
+    if sem_els = semantic_els(terms);
+    if head_sem_el = semantic_el(head);
+    if tail_sem_els = semantic_els(tail);
+    then sem_els = cons_el_list(head_sem_el, tail_sem_els);
+}
+
+// #### The structures of semantic elements
+
+rule semantic_el_struct {
+    if el = semantic_el(tm);
+    if structure = term_structure(tm);
+    then el_structure(el) = structure;
+}
+rule semantic_els_struct {
+    if els = semantic_els(tms);
+    if structure = terms_structure(tms);
+    then els_structure(els) = structure;
+}
+
+// #### Semantics of terms
+rule app_term_semantics {
+    if app_term_node(result_term, func_name, arg_terms);
+    if result_el = semantic_el(result_term);
+    if arg_els = semantic_els(arg_terms);
+    if function = semantic_func(func_name);
+    then result_el = func_app(function, arg_els);
+}
+
+rule var_term_semantics {
+    if var_term_node(term, name);
+    if el = semantic_el(term);
+    if structure = term_structure(term);
+    then el = var(structure, name);
+}
+
+// #### Semantics of if atoms
+rule equal_if_atom_semantics {
+    if equal_if_atom_node(_, lhs_term, rhs_term);
+    if lhs_el = semantic_el(lhs_term);
+    if rhs_el = semantic_el(rhs_term);
+    then lhs_el = rhs_el;
+}
+// No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
+rule pred_if_atom_semantics {
+    if pred_if_atom_node(_, predicate_name, arg_terms);
+    if predicate = semantic_pred(predicate_name);
+    if arg_els = semantic_els(arg_terms);
+    then pred_app(predicate, arg_els);
+}
+rule var_if_atom_semantics {
+    if var_if_atom_node(_, var_term, type_name);
+    if typ = semantic_type(type_name);
+    if var_el = semantic_el(var_term);
+    then el_type(var_el) = typ;
+}
+
+// #### Semantics of then atoms
+rule equal_then_atom_semantics {
+    if equal_then_atom_node(_, lhs_term, rhs_term);
+    if lhs_el = semantic_el(lhs_term);
+    if rhs_el = semantic_el(rhs_term);
+    then lhs_el = rhs_el;
+}
+rule defined_then_atom_semantics {
+    if defined_then_atom_node(_, opt_var_term, term);
+    if some_term_node(opt_var_term, var_term);
+    if var_el = semantic_el(var_term);
+    if el = semantic_el(term);
+    then var_el = el;
+}
+rule pred_then_atom_semantics {
+    if pred_then_atom_node(_, predicate_name, arg_terms);
+    if predicate = semantic_pred(predicate_name);
+    if arg_els = semantic_els(arg_terms);
+    then pred_app(predicate, arg_els);
 }
