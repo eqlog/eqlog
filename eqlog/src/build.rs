@@ -90,7 +90,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source.clone(),
         source_path: in_file.into(),
     })?;
-    parse_new(&source_without_comments).unwrap();
+    let (mut eqlog, _identifiers, _module) = parse_new(&source_without_comments).unwrap();
+    eqlog.close();
 
     let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
         error,
