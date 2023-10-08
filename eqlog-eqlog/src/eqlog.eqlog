@@ -314,24 +314,26 @@ rule map_pred_app {
 // ## Non-empty chains of structures.
 
 type Chain;
-func singleton_chain(head: Structure) -> Chain;
-func cons_chain(head: Structure, transition: Morphism, tail: Chain) -> Chain;
+func nil_chain() -> Chain;
+func chain_tail(Chain) -> Chain;
+func chain_head_structure(Chain) -> Structure;
+func chain_head_transition(Chain) -> Morphism;
 
-func chain_head(Chain) -> Structure;
-rule chain_head_singleton {
-    if chain = singleton_chain(head);
-    then chain_head(chain) = head;
+rule chain_head_structure_defined {
+    if chain_tail(chain)!;
+    then chain_head_structure(chain)!;
 }
-rule chain_head_cons {
-    if chain = cons_chain(head, _, _);
-    then chain_head(chain) = head;
+rule chain_head_transition_defined {
+    if chain_tail(chain_tail(chain))!;
+    then chain_head_transition(chain)!;
 }
-
 rule chain_transition_signature {
-    if cons_chain(head, transition, tail)!;
-    if tail_head = chain_head(tail);
-    then dom(transition) = head;
-    then cod(transition) = tail_head;
+    if tail = chain_tail(chain);
+    if head_0 = chain_head_structure(chain);
+    if trans = chain_head_transition(chain);
+    if head_1 = chain_head_structure(tail);
+    then dom(trans) = head_0;
+    then cod(trans) = head_1;
 }
 
 // ## The Chain associated to a RuleDeclNode
@@ -349,31 +351,28 @@ rule rule_stmt_list_chain {
 
 // ### The structure of the chain
 //
-// That is, the length of the chain, and which structure in the chain a given statement is associated with.
+// That is, the length of the chain, and which structure in the chain a given
+// statement is associated with.
 func stmt_list_chain(StmtListNode) -> Chain;
-func stmt_structure(StmtNode) -> Structure;
-func stmt_transition(StmtNode) -> Morphism;
 
-rule stmt_structure_total {
-    if stmt: StmtNode;
-    then stmt_structure(stmt)!;
-}
 rule stmt_list_chain_total {
     if stmts: StmtListNode;
     then stmt_list_chain(stmts)!;
 }
 
-rule stmt_list_chain_head {
-    if cons_stmt_list_node(stmts, head, _);
-    if structure = stmt_structure(head);
+// An nil statement list corresponds to a nil chain, and a singleton statement
+// list corresponds to a singleton chain.
+rule stmt_list_chain_nil {
+    if nil_stmt_list_node(stmts);
     if chain = stmt_list_chain(stmts);
-    then chain_head(chain) = structure;
+    then chain = nil_chain();
 }
-
-rule stmt_list_chain_transition {
-    if cons_stmt_list_node(stmts, head, _);
-    if stmt_list_chain(stmts) = cons_chain(_, transition, _);
-    then stmt_transition(head) = transition;
+rule stmt_list_chain_singleton {
+    if cons_stmt_list_node(stmts, _, tail);
+    if nil_stmt_list_node(tail);
+    if chain = stmt_list_chain(stmts);
+    if tail_chain = stmt_list_chain(tail);
+    then chain_tail(chain) = tail_chain;
 }
 
 // For either
@@ -387,16 +386,16 @@ rule stmt_list_chain_if_if {
     if cons_stmt_list_node(stmts_tail, second, _);
     if if_stmt_node(first, _);
     if if_stmt_node(second, _);
-    if chain = stmt_list_chain(stmts);
-    then stmt_list_chain(stmts_tail) = chain;
+    if stmts_chain = stmt_list_chain(stmts);
+    then stmt_list_chain(stmts_tail) = stmts_chain;
 }
 rule stmt_list_chain_then_then {
     if cons_stmt_list_node(stmts, first, stmts_tail);
     if cons_stmt_list_node(stmts_tail, second, _);
     if then_stmt_node(first, _);
     if then_stmt_node(second, _);
-    if chain = stmt_list_chain(stmts);
-    then stmt_list_chain(stmts_tail) = chain;
+    if stmts_chain = stmt_list_chain(stmts);
+    then stmt_list_chain(stmts_tail) = stmts_chain;
 }
 
 // For either
@@ -410,36 +409,31 @@ rule stmt_list_chain_if_then {
     if cons_stmt_list_node(stmts_tail, second, _);
     if if_stmt_node(first, _);
     if then_stmt_node(second, _);
-    if first_structure = stmt_structure(first);
     if chain = stmt_list_chain(stmts);
     if tail_chain = stmt_list_chain(stmts_tail);
-    then stmt_transition(first)!;
-    then chain = cons_chain(first_structure, stmt_transition(first), tail_chain);
+    then chain_tail(chain) = tail_chain;
 }
 rule stmt_list_chain_then_if {
     if cons_stmt_list_node(stmts, first, stmts_tail);
     if cons_stmt_list_node(stmts_tail, second, _);
     if then_stmt_node(first, _);
     if if_stmt_node(second, _);
-    if first_structure = stmt_structure(first);
     if chain = stmt_list_chain(stmts);
     if tail_chain = stmt_list_chain(stmts_tail);
-    then stmt_transition(first)!;
-    then chain = cons_chain(first_structure, stmt_transition(first), tail_chain);
-}
-
-// A singleton statement list corresponds to a singleton chain.
-rule stmt_list_chain_singleton {
-    if nil_stmt_list_node(tail);
-    if cons_stmt_list_node(stmts, head, tail);
-    if structure = stmt_structure(head);
-    if chain = stmt_list_chain(stmts);
-    then chain = singleton_chain(structure);
+    then chain_tail(chain) = tail_chain;
 }
 
 // ### Propagation of associated structures through the AST
 
 // #### Propagate stmt structure through if and then stmts.
+func stmt_structure(StmtNode) -> Structure;
+
+rule stmt_structure_chain {
+    if cons_stmt_list_node(stmts, stmt, _);
+    if structure = chain_head_structure(stmt_list_chain(stmts));
+    then stmt_structure(stmt) = structure;
+}
+
 func if_atom_structure(IfAtomNode) -> Structure;
 func then_atom_structure(ThenAtomNode) -> Structure;
 
@@ -617,4 +611,22 @@ rule pred_then_atom_semantics {
     if predicate = semantic_pred(predicate_name);
     if arg_els = semantic_els(arg_terms);
     then pred_app(predicate, arg_els);
+}
+
+/// ### The names associated to elements in chains
+//
+// Flat names are created outside of this Eqlog module, during flattening.
+// We can't do it here because flattening involves some choice (e.g. "pick any
+// name for this element") and negative reasoning (e.g. "if no name exists for
+// this element, introduce a new name").
+//
+// Nevertheless, flat names satisfy some algebraic properties, which can be
+// encoded here in Eqlog.
+type FlatName;
+pred flat_el_name(El, FlatName);
+
+rule flat_name_map {
+    if mapped_el = map_el(_, el);
+    if flat_el_name(el, name);
+    then flat_el_name(mapped_el, name);
 }
