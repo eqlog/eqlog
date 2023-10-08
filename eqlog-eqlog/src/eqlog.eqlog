@@ -198,6 +198,7 @@ rule var_structure {
 // ### The types of elements
 func el_type(El) -> Type;
 func el_types(ElList) -> TypeList;
+
 rule nil_el_types {
     if els = nil_el_list(_);
     then nil_type_list()!;
@@ -209,6 +210,12 @@ rule cons_el_types {
     if tail_types = el_types(tail);
     then cons_type_list(head_type, tail_types)!;
     then el_types(els) = cons_type_list(head_type, tail_types);
+}
+rule cons_el_types_reverse {
+    if els = cons_el_list(head, tail);
+    if el_types(els) = cons_type_list(head_type, tail_types);
+    then el_type(head) = head_type;
+    then el_types(tail) = tail_types;
 }
 
 rule func_app_types {
@@ -309,6 +316,74 @@ rule map_pred_app {
     if pred_app(predicate, args);
     if mapped_args = map_els(_, args);
     then pred_app(predicate, mapped_args);
+}
+
+// Morphisms preserve and reflect types.
+rule map_preserves_el_type {
+    if el_type(el) = typ;
+    if mapped_el = map_el(_, el);
+    then el_type(mapped_el) = typ;
+}
+rule map_reflects_el_type {
+    if el_type(map_el(_, el)) = typ;
+    then el_type(el) = typ;
+}
+
+// ### Kernel pairs of morphisms.
+
+pred in_ker(Morphism, El, El);
+rule in_ker_rule {
+    if map_el(morph, el_0) = map_el(morph, el_1);
+    then in_ker(morph, el_0, el_1);
+}
+
+// ### Images of morphisms.
+
+pred el_in_img(Morphism, El);
+rule el_in_img_rule {
+    if map_el(morph, _) = el;
+    then el_in_img(morph, el);
+}
+
+pred pred_tuple_in_img(Morphism, Pred, ElList);
+rule pred_tuple_in_img_rule {
+    if map_els(morphism, dom_els) = cod_els;
+    if pred_app(predicate, dom_els);
+    then pred_tuple_in_img(morphism, predicate, cod_els);
+}
+
+pred func_app_in_img(Morphism, Func, args: ElList);
+rule func_app_in_img_rule {
+    if map_els(morphism, dom_els) = cod_els;
+    if func_app(function, dom_els)!;
+    then func_app_in_img(morphism, function, cod_els);
+}
+
+// ## The initial structure
+
+func initial_structure() -> Structure;
+func initiality_morphism(Structure) -> Morphism;
+
+rule initial_structure_total {
+    then initial_structure()!;
+}
+
+rule initiality_morphism_total {
+    if structure: Structure;
+    then initiality_morphism(structure)!;
+}
+
+rule dom_cod_initiality_morphism {
+    if initial_struct = initial_structure();
+    if initiality_morph = initiality_morphism(structure);
+    then dom(initiality_morph) = initial_struct;
+    then cod(initiality_morph) = structure;
+}
+
+rule initiality_uniqueness {
+    if dom(morph) = initial_structure();
+    if cod(morph) = structure;
+    then morph = initiality_morphism(structure);
 }
 
 // ## Non-empty chains of structures.

@@ -90,7 +90,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source.clone(),
         source_path: in_file.into(),
     })?;
-    let (mut eqlog, _identifiers, _module) = parse_new(&source_without_comments).unwrap();
+    let (mut eqlog, identifiers, _module) = parse_new(&source_without_comments).unwrap();
     eqlog.close();
     assert!(!eqlog.absurd());
 
@@ -111,6 +111,10 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .iter_axioms()
         .map(|(axiom, term_sorts)| flatten_sequent(&axiom.sequent, term_sorts).into_iter())
         .flatten();
+    let rules: Vec<_> = eqlog.iter_rule_decl_node().collect();
+    for rule in rules {
+        crate::flatten_v2::flatten(rule, &mut eqlog, &identifiers);
+    }
     query_actions.extend(
         axiom_flattenings
             .map(|flattening| lower_sequent_seminaive(&flattening.sequent, &flattening.sorts)),
