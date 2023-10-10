@@ -81,6 +81,24 @@ pub fn check_vars_occur_twice<'a>(rule: &'a RuleDecl) -> Result<(), CompileError
     Ok(())
 }
 
+pub fn check_if_after_then<'a>(rule: &'a RuleDecl) -> Result<(), CompileError> {
+    let mut then_atom_occurred = false;
+    for stmt in rule.body.iter() {
+        match &stmt.data {
+            StmtData::If(_) => {
+                if then_atom_occurred {
+                    return Err(CompileError::IfAfterThen { location: stmt.loc });
+                }
+            }
+            StmtData::Then(_) => {
+                then_atom_occurred = true;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub struct CheckedRule<'a> {
     pub decl: &'a RuleDecl,
     pub types: TermMap<&'a str>,
@@ -95,5 +113,6 @@ pub fn check_rule<'a>(
     let types = infer_types(symbols, rule)?;
     check_var_case(rule)?;
     check_vars_occur_twice(rule)?;
+    check_if_after_then(rule)?;
     Ok(CheckedRule { types, decl: rule })
 }

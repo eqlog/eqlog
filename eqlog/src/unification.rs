@@ -1,4 +1,4 @@
-use crate::ast_v1::*;
+use crate::ast::*;
 use std::collections::HashMap;
 use std::mem::swap;
 use std::ops::{Index, IndexMut};
@@ -50,18 +50,18 @@ pub struct TermUnification<'a, Payload, Merge>
 where
     Merge: MergeFn<Payload>,
 {
-    universe: &'a TermUniverse,
+    context: &'a TermContext,
     parents: Vec<usize>,
     payloads: Vec<Option<Payload>>,
     merge: Merge,
 }
 
 impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
-    pub fn new(universe: &'a TermUniverse, payloads: Vec<Payload>, merge: Merge) -> Self {
-        assert_eq!(universe.len(), payloads.len());
+    pub fn new(context: &'a TermContext, payloads: Vec<Payload>, merge: Merge) -> Self {
+        assert_eq!(context.len(), payloads.len());
         TermUnification {
-            universe: universe,
-            parents: (0..universe.len()).collect(),
+            context: context,
+            parents: (0..context.len()).collect(),
             payloads: payloads.into_iter().map(Some).collect(),
             merge,
         }
@@ -116,8 +116,8 @@ impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
 
     pub fn congruence_closure(&mut self) {
         let mut vars: HashMap<&str, Term> = HashMap::new();
-        for tm in self.universe.iter_terms() {
-            if let TermData::Variable(s) = self.universe.data(tm) {
+        for tm in self.context.iter_terms() {
+            if let TermData::Variable(s) = self.context.data(tm) {
                 let prev_tm = vars.insert(s, tm);
                 if let Some(prev_tm) = prev_tm {
                     self.union(prev_tm, tm);
@@ -129,8 +129,8 @@ impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
         while dirty {
             dirty = false;
             let mut apps: HashMap<(&str, Vec<Term>), Term> = HashMap::new();
-            for tm in self.universe.iter_terms() {
-                if let TermData::Application { func, args } = self.universe.data(tm) {
+            for tm in self.context.iter_terms() {
+                if let TermData::Application { func, args } = self.context.data(tm) {
                     let arg_roots = args.iter().map(|arg| self.root(*arg)).collect();
                     let prev_tm = apps.insert((func, arg_roots), tm);
                     if let Some(prev_tm) = prev_tm {
@@ -147,11 +147,11 @@ impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
     }
 
     pub fn freeze(mut self) -> TermMap<Payload> {
-        let mut ids = vec![usize::MAX; self.universe.len()];
+        let mut ids = vec![usize::MAX; self.context.len()];
         let mut values = Vec::new();
         let mut next_id = 0;
 
-        for tm in 0..self.universe.len() {
+        for tm in 0..self.context.len() {
             if self.parents[tm] == tm {
                 let mut val = None;
                 swap(&mut val, &mut self.payloads[tm]);
@@ -163,7 +163,7 @@ impl<'a, Payload, Merge: MergeFn<Payload>> TermUnification<'a, Payload, Merge> {
             }
         }
 
-        for tm in 0..self.universe.len() {
+        for tm in 0..self.context.len() {
             ids[tm] = ids[self.root(Term(tm)).0];
         }
 

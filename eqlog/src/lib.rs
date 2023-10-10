@@ -1,5 +1,4 @@
 mod ast;
-mod ast_v1;
 mod grammar_util;
 mod module;
 mod semantics;
