@@ -3,11 +3,14 @@ use crate::error::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
 use crate::grammar::*;
+use crate::grammar_new;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
 use crate::rust_gen::*;
 use convert_case::{Case, Casing};
+use eqlog_eqlog::*;
+use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -37,6 +40,15 @@ fn parse(source: &str) -> Result<Module, CompileError> {
     ModuleParser::new()
         .parse(&mut TermContext::new(), source)
         .map_err(CompileError::from)
+}
+
+fn parse_new(source: &str) -> Result<(Eqlog, BTreeMap<String, Ident>, ModuleNode), CompileError> {
+    let mut eqlog = Eqlog::new();
+    let mut identifiers = BTreeMap::new();
+    let module = grammar_new::ModuleParser::new()
+        .parse(&mut eqlog, &mut identifiers, source)
+        .map_err(CompileError::from)?;
+    Ok((eqlog, identifiers, module))
 }
 
 fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
@@ -78,6 +90,9 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source.clone(),
         source_path: in_file.into(),
     })?;
+    let (mut eqlog, identifiers, _module) = parse_new(&source_without_comments).unwrap();
+    eqlog.close();
+    assert!(!eqlog.absurd());
 
     let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
         error,
@@ -92,12 +107,14 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
             module_wrapper.symbols.get_arity(&func.name).unwrap(),
         )
     }));
-    let axiom_flattenings = module_wrapper
-        .iter_axioms()
-        .map(|(axiom, term_sorts)| flatten_sequent(&axiom.sequent, term_sorts).into_iter())
-        .flatten();
+    let rules: Vec<RuleDeclNode> = eqlog.iter_rule_decl_node().collect();
+    let rule_flattenings: Vec<SequentFlattening> = rules
+        .into_iter()
+        .map(move |rule| flatten(rule, &mut eqlog, &identifiers))
+        .collect();
     query_actions.extend(
-        axiom_flattenings
+        rule_flattenings
+            .into_iter()
             .map(|flattening| lower_sequent_seminaive(&flattening.sequent, &flattening.sorts)),
     );
     let query_atoms = query_actions

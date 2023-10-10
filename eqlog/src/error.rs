@@ -1,3 +1,4 @@
+use crate::grammar_util::*;
 use crate::source_display::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::error::Error;
@@ -138,6 +139,28 @@ impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
                 location: Location(token.0, token.2),
             },
             ParseError::User { error } => error,
+        }
+    }
+}
+
+impl<'a> From<ParseError<usize, Token<'a>, NeverType>> for CompileError {
+    fn from(parse_error: ParseError<usize, Token<'_>, NeverType>) -> CompileError {
+        match parse_error {
+            ParseError::InvalidToken { location } => CompileError::InvalidToken {
+                location: Location(location, location + 1),
+            },
+            ParseError::UnrecognizedEof { location, expected } => CompileError::UnrecognizedEOF {
+                location: Location(location, location + 1),
+                expected,
+            },
+            ParseError::UnrecognizedToken { token, expected } => CompileError::UnrecognizedToken {
+                location: Location(token.0, token.2),
+                expected,
+            },
+            ParseError::ExtraToken { token } => CompileError::ExtraToken {
+                location: Location(token.0, token.2),
+            },
+            ParseError::User { error } => match error {},
         }
     }
 }

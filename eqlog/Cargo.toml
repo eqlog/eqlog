@@ -18,6 +18,7 @@ maplit = ">= 0"
 itertools = ">= 0"
 convert_case = ">= 0"
 indoc = ">= 0"
+eqlog-eqlog = { path = "../eqlog-eqlog", version = ">= 0" }
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
