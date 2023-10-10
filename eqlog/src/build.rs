@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::error::*;
 use crate::flat_to_llam::*;
-use crate::flatten::*;
+use crate::flatten_v2::*;
 use crate::grammar::*;
 use crate::grammar_new;
 use crate::index_selection::*;
@@ -107,16 +107,14 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
             module_wrapper.symbols.get_arity(&func.name).unwrap(),
         )
     }));
-    let axiom_flattenings = module_wrapper
-        .iter_axioms()
-        .map(|(axiom, term_sorts)| flatten_sequent(&axiom.sequent, term_sorts).into_iter())
-        .flatten();
-    let rules: Vec<_> = eqlog.iter_rule_decl_node().collect();
-    for rule in rules {
-        crate::flatten_v2::flatten(rule, &mut eqlog, &identifiers);
-    }
+    let rules: Vec<RuleDeclNode> = eqlog.iter_rule_decl_node().collect();
+    let rule_flattenings: Vec<SequentFlattening> = rules
+        .into_iter()
+        .map(move |rule| flatten(rule, &mut eqlog, &identifiers))
+        .collect();
     query_actions.extend(
-        axiom_flattenings
+        rule_flattenings
+            .into_iter()
             .map(|flattening| lower_sequent_seminaive(&flattening.sequent, &flattening.sorts)),
     );
     let query_atoms = query_actions

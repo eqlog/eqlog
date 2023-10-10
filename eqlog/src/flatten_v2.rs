@@ -1,8 +1,13 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::flat_ast::*;
-use crate::flatten::SequentFlattening;
 use eqlog_eqlog::*;
+use maplit::btreeset;
+
+pub struct SequentFlattening {
+    pub sequent: FlatSequent,
+    pub sorts: BTreeMap<FlatTerm, String>,
+}
 
 /// A chain with at most one morphism (i.e. two objects).
 ///
@@ -132,40 +137,51 @@ pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
         break;
     }
 
-    result.reverse();
     result
 }
 
-pub fn get_flat_term_or_create(el: El, flat_names: &mut BTreeMap<El, FlatTerm>) -> FlatTerm {
-    let len = flat_names.len();
-    *flat_names.entry(el).or_insert(FlatTerm(len))
+pub fn get_flat_term_or_create(
+    el: El,
+    flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>,
+) -> FlatTerm {
+    let len = flat_names
+        .iter()
+        .map(|(_, flat_terms)| flat_terms.len())
+        .sum();
+    let names = flat_names.entry(el).or_insert(btreeset! {FlatTerm(len)});
+    *names.iter().next().unwrap()
 }
 
 pub fn flatten_delta(
     morphism: Morphism,
-    flat_names: BTreeMap<El, FlatTerm>,
+    mut flat_names: BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<String, Ident>,
-) -> (BTreeMap<El, FlatTerm>, Vec<FlatAtom>) {
+) -> (BTreeMap<El, BTreeSet<FlatTerm>>, Vec<FlatAtom>) {
     let codomain = eqlog.cod(morphism).unwrap();
     let mut atoms: Vec<FlatAtom> = Vec::new();
 
     for (el0, el1) in iter_in_ker(morphism, eqlog) {
         if !eqlog.are_equal_el(el0, el1) {
-            let tm0 = *flat_names
-                .get(&el0)
-                .expect("domain els must already have names");
-            let tm1 = *flat_names
-                .get(&el1)
-                .expect("domain els must already have names");
+            let tm0 = get_flat_term_or_create(el0, &mut flat_names);
+            let tm1 = get_flat_term_or_create(el1, &mut flat_names);
             atoms.push(FlatAtom::Equal(tm0, tm1));
         }
     }
 
-    let mut flat_names: BTreeMap<_, _> = flat_names
-        .into_iter()
-        .map(|(el, flat_term)| (eqlog.map_el(morphism, el).unwrap(), flat_term))
-        .collect();
+    flat_names = {
+        let mut new_flat_names = BTreeMap::new();
+        for (el, tms) in flat_names.into_iter() {
+            let img_el = eqlog.map_el(morphism, el).unwrap();
+            for tm in tms {
+                new_flat_names
+                    .entry(img_el)
+                    .or_insert(BTreeSet::new())
+                    .insert(tm);
+            }
+        }
+        new_flat_names
+    };
 
     for (pred, els) in iter_pred_app(codomain, eqlog) {
         if !eqlog.pred_tuple_in_img(morphism, pred, els) {
@@ -241,13 +257,13 @@ pub fn flatten_delta(
 }
 
 pub fn sort_map(
-    flat_names: &BTreeMap<El, FlatTerm>,
+    flat_names: &BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<String, Ident>,
 ) -> BTreeMap<FlatTerm, String> {
     flat_names
         .iter()
-        .map(|(el, tm)| {
+        .map(|(el, tms)| {
             let typ = eqlog.el_type(*el).unwrap();
             let type_ident = eqlog
                 .iter_semantic_type()
@@ -262,9 +278,99 @@ pub fn sort_map(
                 })
                 .unwrap();
 
-            (*tm, type_name.to_string())
+            tms.iter().copied().map(|tm| (tm, type_name.to_string()))
         })
+        .flatten()
         .collect()
+}
+
+/// Sort atoms so that each atom corresponds to an epimorphic delta.
+///
+/// This is necessary so that we add subterms before terms.
+/// Consider this eqlog/PHL then atom:
+/// ```eqlog
+/// then foo(bar())!;
+/// ```
+///
+/// This might correspond to the following flat/RHL atoms:
+/// ```eqlog
+/// then bar(tm0);
+/// then foo(tm0, tm1);
+/// ```
+/// but it might also correspond to
+/// ```eqlog
+/// then foo(tm0, tm1);
+/// then bar(tm0);
+/// ```
+///
+/// The second version is bad, since here we're introducing the new flat term `tm0` not as last
+/// argument, so we want the first one.
+///
+/// This function reorders the provided atoms so that we always introduce new flat terms only as
+/// last arguments. This must be possible; otherwise the function panics.
+pub fn sort_then_atoms(
+    mut atoms: Vec<FlatAtom>,
+    premise_flat_terms: BTreeSet<FlatTerm>,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<String, Ident>,
+) -> Vec<FlatAtom> {
+    let mut result = Vec::new();
+    let mut added_flat_terms = premise_flat_terms;
+    while !atoms.is_empty() {
+        let before_len = atoms.len();
+        atoms = atoms
+            .into_iter()
+            .filter_map(|atom| {
+                let should_add = match &atom {
+                    FlatAtom::Equal(lhs, rhs) => {
+                        added_flat_terms.contains(lhs) && added_flat_terms.contains(rhs)
+                    }
+                    FlatAtom::Relation(rel, args) => {
+                        let rel_ident = identifiers.get(rel).unwrap();
+                        let is_func = eqlog.semantic_func(*rel_ident).is_some();
+                        let is_pred = eqlog.semantic_pred(*rel_ident).is_some();
+                        assert!(
+                            is_func ^ is_pred,
+                            "rel should be either function or relation"
+                        );
+                        let last_arg_is_ok = is_func
+                            || match args.last() {
+                                Some(last_arg) => added_flat_terms.contains(last_arg),
+                                None => true,
+                            };
+
+                        last_arg_is_ok
+                            && args[0..args.len().saturating_sub(1)]
+                                .iter()
+                                .all(|arg| added_flat_terms.contains(arg))
+                    }
+                    FlatAtom::Unconstrained(_, _) => true,
+                };
+
+                if should_add {
+                    match &atom {
+                        FlatAtom::Equal(lhs, rhs) => {
+                            added_flat_terms.insert(*lhs);
+                            added_flat_terms.insert(*rhs);
+                        }
+                        FlatAtom::Relation(_, args) => {
+                            added_flat_terms.extend(args);
+                        }
+                        FlatAtom::Unconstrained(tm, _) => {
+                            added_flat_terms.insert(*tm);
+                        }
+                    }
+                    result.push(atom);
+                    None
+                } else {
+                    Some(atom)
+                }
+            })
+            .collect();
+        assert!(atoms.len() < before_len);
+    }
+
+    result
 }
 
 pub fn flatten(
@@ -275,7 +381,7 @@ pub fn flatten(
     let chain = eqlog.rule_chain(rule).unwrap();
     let restricted_chain = RestrictedChain::from_chain(chain, eqlog);
 
-    match restricted_chain {
+    let flattening = match restricted_chain {
         RestrictedChain::Empty { chain: _ } => {
             let sequent = FlatSequent {
                 premise: Vec::new(),
@@ -290,8 +396,10 @@ pub fn flatten(
         } => {
             let premise: Vec<FlatAtom> = Vec::new();
             let initiality_morphism = eqlog.initiality_morphism(structure).unwrap();
-            let (flat_names, conclusion) =
+            let (flat_names, mut conclusion) =
                 flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
+            let premise_terms = BTreeSet::new();
+            conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
             let sequent = FlatSequent {
                 premise,
                 conclusion,
@@ -308,7 +416,11 @@ pub fn flatten(
             let initiality_morphism = eqlog.initiality_morphism(domain).unwrap();
             let (flat_names, premise) =
                 flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
-            let (flat_names, conclusion) = flatten_delta(morphism, flat_names, eqlog, identifiers);
+            let premise_terms: BTreeSet<FlatTerm> =
+                flat_names.values().flatten().copied().collect();
+            let (flat_names, mut conclusion) =
+                flatten_delta(morphism, flat_names, eqlog, identifiers);
+            conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
             let sequent = FlatSequent {
                 premise,
                 conclusion,
@@ -316,5 +428,9 @@ pub fn flatten(
             let sorts = sort_map(&flat_names, eqlog, identifiers);
             SequentFlattening { sequent, sorts }
         }
-    }
+    };
+
+    #[cfg(debug_assertions)]
+    flattening.sequent.check();
+    flattening
 }

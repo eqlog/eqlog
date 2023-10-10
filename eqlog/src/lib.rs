@@ -17,7 +17,6 @@ mod build;
 mod error;
 mod flat_ast;
 mod flat_to_llam;
-mod flatten;
 mod flatten_v2;
 mod index_selection;
 mod llam;
