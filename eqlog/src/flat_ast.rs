@@ -35,7 +35,7 @@ impl Display for FlatAtom {
             }
             FlatAtom::Relation(rel, args) => {
                 let args = args.iter().format(", ");
-                write!(f, "{rel}({args})");
+                write!(f, "{rel}({args})")?;
             }
             FlatAtom::Unconstrained(tm, typ) => {
                 write!(f, "{tm}: {typ}")?;
