@@ -17,7 +17,7 @@ mod build;
 mod error;
 mod flat_ast;
 mod flat_to_llam;
-mod flatten_v2;
+mod flatten;
 mod index_selection;
 mod llam;
 mod rust_gen;
