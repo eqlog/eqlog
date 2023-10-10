@@ -4,7 +4,7 @@ use crate::error::*;
 use crate::semantics::*;
 use crate::unification::*;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ModuleWrapper<'a> {
     pub symbols: SymbolTable<'a>,
     axioms: Vec<(Axiom, TermMap<String>)>,
