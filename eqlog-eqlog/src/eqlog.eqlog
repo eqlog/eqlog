@@ -18,7 +18,6 @@ rule real_virt_ident_total {
 
 // ## Syntax tree nodes
 
-// TODO: These currently don't carry any data, but they should.
 type TypeDeclNode;
 pred type_decl(TypeDeclNode, name: Ident);
 
