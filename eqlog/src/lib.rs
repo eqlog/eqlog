@@ -1,4 +1,5 @@
 mod ast;
+mod eqlog_util;
 mod grammar_util;
 mod module;
 mod semantics;

@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
-
+use crate::eqlog_util::*;
 use crate::flat_ast::*;
 use eqlog_eqlog::*;
 use maplit::btreeset;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct SequentFlattening {
     pub sequent: FlatSequent,
@@ -66,84 +66,7 @@ impl RestrictedChain {
     }
 }
 
-pub fn iter_els<'a>(structure: Structure, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = El> {
-    eqlog.iter_el_structure().filter_map(move |(el, strct)| {
-        if eqlog.are_equal_structure(strct, structure) {
-            Some(el)
-        } else {
-            None
-        }
-    })
-}
-
-pub fn iter_pred_app<'a>(
-    structure: Structure,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (Pred, ElList)> {
-    eqlog.iter_pred_app().filter_map(move |(pred, args)| {
-        if !eqlog.are_equal_structure(eqlog.els_structure(args).unwrap(), structure) {
-            return None;
-        }
-
-        Some((pred, args))
-    })
-}
-
-pub fn iter_func_app<'a>(
-    structure: Structure,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (Func, ElList, El)> {
-    eqlog
-        .iter_func_app()
-        .filter_map(move |(func, args, result)| {
-            if !eqlog.are_equal_structure(eqlog.els_structure(args).unwrap(), structure) {
-                return None;
-            }
-            assert!(eqlog.are_equal_structure(eqlog.el_structure(result).unwrap(), structure));
-
-            Some((func, args, result))
-        })
-}
-
-pub fn iter_in_ker<'a>(
-    morphism: Morphism,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (El, El)> {
-    eqlog.iter_in_ker().filter_map(move |(morph, el0, el1)| {
-        if !eqlog.are_equal_morphism(morphism, morph) {
-            return None;
-        }
-
-        Some((el0, el1))
-    })
-}
-
-pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
-    let mut result = Vec::new();
-    loop {
-        let cons_entry = eqlog
-            .iter_cons_el_list()
-            .find(|(_, _, cons_els)| eqlog.are_equal_el_list(*cons_els, els));
-        if let Some((head_el, tail_els, _)) = cons_entry {
-            result.push(head_el);
-            els = tail_els;
-            continue;
-        }
-
-        assert!(eqlog
-            .iter_nil_el_list()
-            .find(|(_, nil)| eqlog.are_equal_el_list(els, *nil))
-            .is_some());
-        break;
-    }
-
-    result
-}
-
-pub fn get_flat_term_or_create(
-    el: El,
-    flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>,
-) -> FlatTerm {
+fn get_flat_term_or_create(el: El, flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>) -> FlatTerm {
     let len = flat_names
         .iter()
         .map(|(_, flat_terms)| flat_terms.len())
@@ -152,7 +75,7 @@ pub fn get_flat_term_or_create(
     *names.iter().next().unwrap()
 }
 
-pub fn flatten_delta(
+fn flatten_delta(
     morphism: Morphism,
     mut flat_names: BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
@@ -256,7 +179,7 @@ pub fn flatten_delta(
     (flat_names, atoms)
 }
 
-pub fn sort_map(
+fn sort_map(
     flat_names: &BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<String, Ident>,
@@ -308,7 +231,7 @@ pub fn sort_map(
 ///
 /// This function reorders the provided atoms so that we always introduce new flat terms only as
 /// last arguments. This must be possible; otherwise the function panics.
-pub fn sort_then_atoms(
+fn sort_then_atoms(
     mut atoms: Vec<FlatAtom>,
     premise_flat_terms: BTreeSet<FlatTerm>,
     eqlog: &Eqlog,
