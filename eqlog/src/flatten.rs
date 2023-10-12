@@ -378,7 +378,7 @@ pub fn flatten(
     eqlog: &mut Eqlog,
     identifiers: &BTreeMap<String, Ident>,
 ) -> SequentFlattening {
-    let chain = eqlog.rule_chain(rule).unwrap();
+    let chain = eqlog.grouped_rule_chain(rule).unwrap();
     let restricted_chain = RestrictedChain::from_chain(chain, eqlog);
 
     let flattening = match restricted_chain {

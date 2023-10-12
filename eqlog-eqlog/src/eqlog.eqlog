@@ -1,5 +1,21 @@
 pred absurd();
 
+// ## Identifiers
+//
+// The `Ident` type corresponds to actual strings that occur in the source
+// file. The `VirtIdent` type represent ids that do not occur verbatim in
+// source code, but semantically correspond to identifiers. For example, each
+// occurence of a wildcard token _ corresponds to a separate `VirtIdent` which
+// does not arise from an `Ident`.
+type Ident;
+type VirtIdent;
+func real_virt_ident(Ident) -> VirtIdent;
+
+rule real_virt_ident_total {
+    if ident: Ident;
+    then real_virt_ident(ident)!;
+}
+
 // ## Syntax tree nodes
 
 // TODO: These currently don't carry any data, but they should.
@@ -31,8 +47,6 @@ pred cons_term_list_node(node: TermListNode, head: TermNode, tail: TermListNode)
 type OptTermNode;
 pred none_term_node(OptTermNode);
 pred some_term_node(OptTermNode, value: TermNode);
-
-type Ident;
 
 pred var_term_node(TermNode, Ident);
 pred wildcard_term_node(TermNode);
@@ -168,7 +182,7 @@ func func_app(Func, ElList) -> El;
 
 pred pred_app(Pred, ElList);
 
-func var(Structure, Ident) -> El;
+func var(Structure, VirtIdent) -> El;
 
 // ### The structure that elements belong to
 func el_structure(El) -> Structure;
@@ -413,9 +427,9 @@ rule chain_transition_signature {
 
 // ## The Chain associated to a RuleDeclNode
 //
-// The chain of a rule has one object for each *group* of statements, where
-// groups are given by consecutive statements of the same type (i.e. either
-// `if` or `then` statements).
+// The chain of a rule has one structure for each statement in the rule. The
+// structure associated to statement corresponds to all the data that has been
+// hypothesized or concluded in this and prior statements.
 
 func rule_chain(RuleDeclNode) -> Chain;
 rule rule_stmt_list_chain {
@@ -425,92 +439,39 @@ rule rule_stmt_list_chain {
 }
 
 // ### The structure of the chain
-//
-// That is, the length of the chain, and which structure in the chain a given
-// statement is associated with.
 func stmt_list_chain(StmtListNode) -> Chain;
-
 rule stmt_list_chain_total {
     if stmts: StmtListNode;
     then stmt_list_chain(stmts)!;
 }
 
-// An nil statement list corresponds to a nil chain, and a singleton statement
-// list corresponds to a singleton chain.
 rule stmt_list_chain_nil {
     if nil_stmt_list_node(stmts);
     if chain = stmt_list_chain(stmts);
     then chain = nil_chain();
 }
-rule stmt_list_chain_singleton {
-    if cons_stmt_list_node(stmts, _, tail);
-    if nil_stmt_list_node(tail);
-    if chain = stmt_list_chain(stmts);
-    if tail_chain = stmt_list_chain(tail);
-    then chain_tail(chain) = tail_chain;
-}
-
-// For either
-//
-// - two consecutive `if` statements, or
-// - two consecutive `then` statements
-//
-// the chains of the two statements agree.
-rule stmt_list_chain_if_if {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if if_stmt_node(first, _);
-    if if_stmt_node(second, _);
+rule stmt_list_chain_cons {
+    if cons_stmt_list_node(stmts, _, tail_stmts);
     if stmts_chain = stmt_list_chain(stmts);
-    then stmt_list_chain(stmts_tail) = stmts_chain;
-}
-rule stmt_list_chain_then_then {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if then_stmt_node(first, _);
-    if then_stmt_node(second, _);
-    if stmts_chain = stmt_list_chain(stmts);
-    then stmt_list_chain(stmts_tail) = stmts_chain;
-}
-
-// For either
-//
-// - an `if` statement followed by a `then` statement, or
-// - a `then` statement followed by an `if` statement,
-//
-// there is a transition in the associated chains.
-rule stmt_list_chain_if_then {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if if_stmt_node(first, _);
-    if then_stmt_node(second, _);
-    if chain = stmt_list_chain(stmts);
-    if tail_chain = stmt_list_chain(stmts_tail);
-    then chain_tail(chain) = tail_chain;
-}
-rule stmt_list_chain_then_if {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if then_stmt_node(first, _);
-    if if_stmt_node(second, _);
-    if chain = stmt_list_chain(stmts);
-    if tail_chain = stmt_list_chain(stmts_tail);
-    then chain_tail(chain) = tail_chain;
+    if tail_chain = stmt_list_chain(tail_stmts);
+    then chain_tail(stmts_chain) = tail_chain;
 }
 
 // ### Propagation of associated structures through the AST
 
 // #### Propagate stmt structure through if and then stmts.
 func stmt_structure(StmtNode) -> Structure;
+func if_atom_structure(IfAtomNode) -> Structure;
+func then_atom_structure(ThenAtomNode) -> Structure;
+func term_structure(TermNode) -> Structure;
+func terms_structure(TermListNode) -> Structure;
+func opt_term_structure(OptTermNode) -> Structure;
 
 rule stmt_structure_chain {
     if cons_stmt_list_node(stmts, stmt, _);
     if structure = chain_head_structure(stmt_list_chain(stmts));
     then stmt_structure(stmt) = structure;
 }
-
-func if_atom_structure(IfAtomNode) -> Structure;
-func then_atom_structure(ThenAtomNode) -> Structure;
 
 rule if_stmt_structure {
     if if_stmt_node(stmt, atom);
@@ -522,10 +483,6 @@ rule then_stmt_structure {
     if structure = stmt_structure(stmt);
     then then_atom_structure(atom) = structure;
 }
-
-func term_structure(TermNode) -> Structure;
-func terms_structure(TermListNode) -> Structure;
-func opt_term_structure(OptTermNode) -> Structure;
 
 // #### Propagate associated structures through if atoms.
 rule equal_if_atom_structure {
@@ -618,7 +575,6 @@ rule semantic_els_cons {
 }
 
 // #### The structures of semantic elements
-
 rule semantic_el_struct {
     if el = semantic_el(tm);
     if structure = term_structure(tm);
@@ -641,6 +597,20 @@ rule app_term_semantics {
 
 rule var_term_semantics {
     if var_term_node(term, name);
+    if virt_name = real_virt_ident(name);
+    if el = semantic_el(term);
+    if structure = term_structure(term);
+    then el = var(structure, virt_name);
+}
+
+func wildcard_virt_ident(TermNode) -> VirtIdent;
+rule wildcard_virt_ident_defined {
+    if wildcard_term_node(term);
+    then wildcard_virt_ident(term)!;
+}
+rule wildcard_term_semantics {
+    if wildcard_term_node(term);
+    if name = wildcard_virt_ident(term);
     if el = semantic_el(term);
     if structure = term_structure(term);
     then el = var(structure, name);
@@ -686,6 +656,93 @@ rule pred_then_atom_semantics {
     if predicate = semantic_pred(predicate_name);
     if arg_els = semantic_els(arg_terms);
     then pred_app(predicate, arg_els);
+}
+
+
+// ### The *grouped* Chain associated to a RuleDeclNode
+//
+// The chain of a rule has one object for each *group* of statements, where
+// groups are given by consecutive statements of the same type (i.e. either
+// `if` or `then` statements). The structure associated to a statement group 
+// is the structure in the (ungrouped) chain of the last statement in that
+// group.
+func grouped_rule_chain(RuleDeclNode) -> Chain;
+rule grouped_rule_stmt_list_chain {
+    if rule_decl(node, stmts);
+    if grouped_chain = grouped_stmt_list_chain(stmts);
+    then grouped_rule_chain(node) = grouped_chain;
+}
+
+func grouped_stmt_list_chain(StmtListNode) -> Chain;
+rule grouped_stmt_list_chain_total {
+    if stmts: StmtListNode;
+    then grouped_stmt_list_chain(stmts)!;
+}
+
+// The grouped chain of the empty statement list is the empty chain.
+rule grouped_stmt_list_chain_nil {
+    if nil_stmt_list_node(stmts);
+    if grouped_chain = grouped_stmt_list_chain(stmts);
+    then grouped_chain = nil_chain();
+}
+
+// For either
+//
+// - two consecutive `if` statements, or
+// - two consecutive `then` statements
+//
+// the chains of the two statements agree.
+rule grouped_chain_if_if {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if if_stmt_node(first, _);
+    if if_stmt_node(second, _);
+    if stmts_chain = grouped_stmt_list_chain(stmts);
+    then grouped_stmt_list_chain(stmts_tail) = stmts_chain;
+}
+rule stmt_list_chain_then_then {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if then_stmt_node(first, _);
+    if then_stmt_node(second, _);
+    if stmts_chain = grouped_stmt_list_chain(stmts);
+    then grouped_stmt_list_chain(stmts_tail) = stmts_chain;
+}
+
+// For a statement followed by a statement of different type (e.g. `if`
+// statement followed by a `then` statement or no statement at all), there is a
+// transition in the grouped chain. The head of the chain agrees with the head
+// of the ungrouped chain.
+rule stmt_list_chain_singleton {
+    if cons_stmt_list_node(stmts, _, stmts_tail);
+    if nil_stmt_list_node(stmts_tail);
+    if grouped_chain = grouped_stmt_list_chain(stmts);
+    if grouped_tail_chain = grouped_stmt_list_chain(stmts_tail);
+    if ungrouped_chain_head = chain_head_structure(stmt_list_chain(stmts));
+    then chain_tail(grouped_chain) = grouped_tail_chain;
+    then chain_head_structure(grouped_chain) = ungrouped_chain_head;
+}
+rule grouped_chain_if_then {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if if_stmt_node(first, _);
+    if then_stmt_node(second, _);
+    if grouped_chain = grouped_stmt_list_chain(stmts);
+    if grouped_tail_chain = grouped_stmt_list_chain(stmts_tail);
+    if ungrouped_chain_head = chain_head_structure(stmt_list_chain(stmts));
+    then chain_tail(grouped_chain) = grouped_tail_chain;
+    then chain_head_structure(grouped_chain) = ungrouped_chain_head;
+}
+rule grouped_chain_then_if {
+    if cons_stmt_list_node(stmts, first, stmts_tail);
+    if cons_stmt_list_node(stmts_tail, second, _);
+    if then_stmt_node(first, _);
+    if if_stmt_node(second, _);
+    if grouped_chain = grouped_stmt_list_chain(stmts);
+    if grouped_tail_chain = grouped_stmt_list_chain(stmts_tail);
+    if ungrouped_chain_head = chain_head_structure(stmt_list_chain(stmts));
+    then chain_tail(grouped_chain) = grouped_tail_chain;
+    then chain_head_structure(grouped_chain) = ungrouped_chain_head;
 }
 
 /// ### The names associated to elements in chains
