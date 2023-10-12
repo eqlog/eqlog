@@ -770,7 +770,7 @@ rule subterms_surjective_exempted {
 }
 
 rule defined_if_atom_surjective_exempted {
-    if defined_if_atom_node(tm, _);
+    if defined_if_atom_node(_, tm);
     then term_surjective_exempted(tm);
 }
 
