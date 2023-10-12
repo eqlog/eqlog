@@ -72,10 +72,20 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
             }
         };
 
-        if (file_type.is_file() || is_symlink_file()?)
-            && path.extension().is_some()
-            && path.extension().unwrap() == "eqlog"
-        {
+        if !(file_type.is_file() || is_symlink_file()?) {
+            continue;
+        }
+
+        let extension = match path.extension() {
+            Some(extension) => extension,
+            None => {
+                continue;
+            }
+        };
+
+        // TODO: We should emit an error if both a .eql and an .eqlog file exist, since both files
+        // will correspond to the same rust file and module.
+        if extension == "eql" || extension == "eqlog" {
             result.push(path);
         }
     }
