@@ -744,3 +744,40 @@ rule grouped_chain_then_if {
     then chain_tail(grouped_chain) = grouped_tail_chain;
     then chain_head_structure(grouped_chain) = ungrouped_chain_head;
 }
+
+// ## Surjectivity check
+pred term_surjective_exempted(TermNode);
+pred terms_surjective_exempted(TermListNode);
+
+rule cons_head_tail_terms_surjective_exempted {
+    if cons_term_list_node(tms, head, tail);
+    if terms_surjective_exempted(tms);
+    then term_surjective_exempted(head);
+    then terms_surjective_exempted(tail);
+}
+
+rule head_tail_cons_terms_surjective_exempted {
+    if cons_term_list_node(tms, head, tail);
+    if term_surjective_exempted(head);
+    if terms_surjective_exempted(tail);
+    then terms_surjective_exempted(tms);
+}
+
+rule subterms_surjective_exempted {
+    if app_term_node(tm, _, args);
+    if term_surjective_exempted(tm);
+    then terms_surjective_exempted(args);
+}
+
+rule defined_if_atom_surjective_exempted {
+    if defined_if_atom_node(tm, _);
+    then term_surjective_exempted(tm);
+}
+
+pred el_surjective_exempted(El);
+
+rule semantic_el_exempted {
+    if term_surjective_exempted(tm);
+    if el = semantic_el(tm);
+    then el_surjective_exempted(el);
+}
