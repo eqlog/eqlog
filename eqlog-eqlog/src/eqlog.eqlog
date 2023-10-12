@@ -86,6 +86,26 @@ pred cons_decl_list_node(DeclListNode, head: DeclNode, tail: DeclListNode);
 type ModuleNode;
 pred decls_module_node(ModuleNode, DeclListNode);
 
+// ### Locations
+type Loc;
+
+func type_decl_node_loc(TypeDeclNode) -> Loc;
+func arg_decl_node_loc(ArgDeclNode) -> Loc;
+func arg_decl_list_node_loc(ArgDeclListNode) -> Loc;
+func pred_decl_node_loc(PredDeclNode) -> Loc;
+func func_decl_node_loc(FuncDeclNode) -> Loc;
+func term_node_loc(TermNode) -> Loc;
+func term_list_node_loc(TermListNode) -> Loc;
+func opt_term_node_loc(OptTermNode) -> Loc;
+func if_atom_node_loc(IfAtomNode) -> Loc;
+func then_atom_node_loc(ThenAtomNode) -> Loc;
+func stmt_node_loc(StmtNode) -> Loc;
+func stmt_list_node_loc(StmtListNode) -> Loc;
+func rule_decl_node_loc(RuleDeclNode) -> Loc;
+func decl_node_loc(DeclNode) -> Loc;
+func decl_list_node_loc(DeclListNode) -> Loc;
+func module_node_loc(ModuleNode) -> Loc;
+
 // ## Semantic types, predicates and functions
 
 type Type;

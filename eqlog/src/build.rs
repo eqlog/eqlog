@@ -4,6 +4,7 @@ use crate::flat_to_llam::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::grammar_new;
+use crate::grammar_util::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
@@ -42,13 +43,24 @@ fn parse(source: &str) -> Result<Module, CompileError> {
         .map_err(CompileError::from)
 }
 
-fn parse_new(source: &str) -> Result<(Eqlog, BTreeMap<String, Ident>, ModuleNode), CompileError> {
+fn parse_new(
+    source: &str,
+) -> Result<
+    (
+        Eqlog,
+        BTreeMap<String, Ident>,
+        BTreeMap<Loc, Location>,
+        ModuleNode,
+    ),
+    CompileError,
+> {
     let mut eqlog = Eqlog::new();
     let mut identifiers = BTreeMap::new();
+    let mut locations = BTreeMap::new();
     let module = grammar_new::ModuleParser::new()
-        .parse(&mut eqlog, &mut identifiers, source)
+        .parse(&mut eqlog, &mut identifiers, &mut locations, source)
         .map_err(CompileError::from)?;
-    Ok((eqlog, identifiers, module))
+    Ok((eqlog, identifiers, locations, module))
 }
 
 fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
@@ -100,7 +112,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source.clone(),
         source_path: in_file.into(),
     })?;
-    let (mut eqlog, identifiers, _module) = parse_new(&source_without_comments).unwrap();
+    let (mut eqlog, identifiers, _locations, _module) =
+        parse_new(&source_without_comments).unwrap();
     eqlog.close();
     assert!(!eqlog.absurd());
 

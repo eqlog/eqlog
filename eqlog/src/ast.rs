@@ -1,4 +1,4 @@
-use crate::source_display::Location;
+use crate::grammar_util::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Term(pub usize);

@@ -12,7 +12,7 @@ use type_inference::*;
 
 use crate::ast::*;
 use crate::error::*;
-use crate::source_display::*;
+use crate::grammar_util::*;
 use crate::unification::*;
 
 /// Checks that the `var` term in all [ThenAtomData::Defined] that occur in a rule are actually

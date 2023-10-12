@@ -3,7 +3,7 @@ use convert_case::Casing;
 
 use crate::ast::*;
 use crate::error::*;
-use crate::source_display::Location;
+use crate::grammar_util::*;
 use std::collections::BTreeMap;
 use std::iter::once;
 
