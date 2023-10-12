@@ -744,21 +744,3 @@ rule grouped_chain_then_if {
     then chain_tail(grouped_chain) = grouped_tail_chain;
     then chain_head_structure(grouped_chain) = ungrouped_chain_head;
 }
-
-/// ### The names associated to elements in chains
-//
-// Flat names are created outside of this Eqlog module, during flattening.
-// We can't do it here because flattening involves some choice (e.g. "pick any
-// name for this element") and negative reasoning (e.g. "if no name exists for
-// this element, introduce a new name").
-//
-// Nevertheless, flat names satisfy some algebraic properties, which can be
-// encoded here in Eqlog.
-type FlatName;
-pred flat_el_name(El, FlatName);
-
-rule flat_name_map {
-    if mapped_el = map_el(_, el);
-    if flat_el_name(el, name);
-    then flat_el_name(mapped_el, name);
-}
