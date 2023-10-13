@@ -451,10 +451,19 @@ rule chain_transition_signature {
 // hypothesized or concluded in this and prior statements.
 
 func rule_chain(RuleDeclNode) -> Chain;
+rule rule_chain_total {
+    if rul: RuleDeclNode;
+    then rule_chain(rul)!;
+}
+// The chain of rule always starts with the initial structure, with tail of the
+// being given by the statements in the rule.
 rule rule_stmt_list_chain {
-    if rule_decl(node, stmts);
-    if chain = stmt_list_chain(stmts);
-    then rule_chain(node) = chain;
+    if rule_decl(rul, stmts);
+    if rule_chain = rule_chain(rul);
+    if stmts_chain = stmt_list_chain(stmts);
+    then chain_tail(rule_chain) = stmts_chain;
+    then initial_structure()!;
+    then chain_head_structure(rule_chain) = initial_structure();
 }
 
 // ### The structure of the chain
