@@ -43,11 +43,10 @@ fn check_then_atom_epic(
 ) -> Result<(), CompileError> {
     let check_occurred = |term: Term| -> Result<(), CompileError> {
         match context.data(term) {
-            TermData::Variable(name) => {
+            TermData::Variable(_) => {
                 if !occurred[term] {
                     return Err(CompileError::VariableIntroducedInThenStmt {
-                        var: name.clone(),
-                        location: Some(context.loc(term)),
+                        location: context.loc(term),
                     });
                 }
             }
@@ -197,6 +196,37 @@ fn process_then_atom<'a>(
             }
         }
         ThenAtomData::Pred { .. } => {}
+    }
+}
+
+pub fn check_epic_new(
+    eqlog: &Eqlog,
+    locations: &BTreeMap<Loc, Location>,
+) -> Result<(), CompileError> {
+    let bad_location: Option<Location> = eqlog
+        .iter_term_should_be_epic_ok()
+        .filter_map(|tm| {
+            let name = eqlog.iter_var_term_node().find_map(|(var_tm, ident)| {
+                if eqlog.are_equal_term_node(tm, var_tm) {
+                    Some(ident)
+                } else {
+                    None
+                }
+            })?;
+            let virt_name = eqlog.real_virt_ident(name).unwrap();
+            if !eqlog.var_before_term(tm, virt_name) {
+                let loc = eqlog.term_node_loc(tm).unwrap();
+                let location = *locations.get(&loc).unwrap();
+                Some(location)
+            } else {
+                None
+            }
+        })
+        .min_by_key(|location| location.1);
+
+    match bad_location {
+        Some(location) => Err(CompileError::VariableIntroducedInThenStmt { location }),
+        None => Ok(()),
     }
 }
 

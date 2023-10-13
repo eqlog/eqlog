@@ -773,6 +773,245 @@ rule grouped_chain_then_if {
     then chain_head_structure(grouped_chain) = ungrouped_chain_head;
 }
 
+// ## Epic check
+
+// ### Bound variables
+//
+// These predicates track which variables have been
+// introduced in *statements* prior to the one in which
+// the AST node appears.
+pred var_before_term(TermNode, VirtIdent);
+pred var_before_terms(TermListNode, VirtIdent);
+pred var_before_opt_term(OptTermNode, VirtIdent);
+pred var_before_if_atom(IfAtomNode, VirtIdent);
+pred var_before_then_atom(ThenAtomNode, VirtIdent);
+pred var_before_stmt(StmtNode, VirtIdent);
+pred var_before_stmts(StmtListNode, VirtIdent);
+
+// These predicates track which variables appear in the
+// respective AST node.
+pred var_in_term(TermNode, VirtIdent);
+pred var_in_terms(TermListNode, VirtIdent);
+pred var_in_opt_term(OptTermNode, VirtIdent);
+pred var_in_if_atom(IfAtomNode, VirtIdent);
+pred var_in_then_atom(ThenAtomNode, VirtIdent);
+pred var_in_stmt(StmtNode, VirtIdent);
+
+// #### Propagate var_before_X downwards
+rule var_before_stmts_cons {
+    if var_before_stmts(stmts, name);
+    if cons_stmt_list_node(stmts, stmt, stmts_tail);
+    then var_before_stmt(stmt, name);
+    then var_before_stmts(stmts_tail, name);
+}
+rule var_before_stmt_if {
+    if var_before_stmt(stmt, name);
+    if if_stmt_node(stmt, atom);
+    then var_before_if_atom(atom, name);
+}
+rule var_before_stmt_then {
+    if var_before_stmt(stmt, name);
+    if then_stmt_node(stmt, atom);
+    then var_before_then_atom(atom, name);
+}
+
+rule var_before_if_atom_equal {
+    if var_before_if_atom(atom, name);
+    if equal_if_atom_node(atom, lhs, rhs);
+    then var_before_term(lhs, name);
+    then var_before_term(rhs, name);
+}
+rule var_before_if_atom_defined {
+    if var_before_if_atom(atom, name);
+    if defined_if_atom_node(atom, tm);
+    then var_before_term(tm, name);
+}
+rule var_before_if_atom_pred {
+    if var_before_if_atom(atom, name);
+    if pred_if_atom_node(atom, _, args);
+    then var_before_terms(args, name);
+}
+rule var_before_if_atom_var {
+    if var_before_if_atom(atom, name);
+    if var_if_atom_node(atom, var_term, _);
+    then var_before_term(var_term, name);
+}
+
+rule var_before_then_atom_equal {
+    if var_before_then_atom(atom, name);
+    if equal_then_atom_node(atom, lhs, rhs);
+    then var_before_term(lhs, name);
+    then var_before_term(rhs, name);
+}
+rule var_before_then_atom_defined {
+    if var_before_then_atom(atom, name);
+    if defined_then_atom_node(atom, var_term, tm);
+    then var_before_opt_term(var_term, name);
+    then var_before_term(tm, name);
+}
+rule var_before_then_atom_pred {
+    if var_before_then_atom(atom, name);
+    if pred_then_atom_node(atom, _, args);
+    then var_before_terms(args, name);
+}
+
+rule var_before_terms_cons {
+    if var_before_terms(tms, name);
+    if cons_term_list_node(tms, head, tail);
+    then var_before_term(head, name);
+    then var_before_terms(tail, name);
+}
+
+rule var_before_opt_term_some {
+    if var_before_opt_term(opt_term, name);
+    if some_term_node(opt_term, term);
+    then var_before_term(term, name);
+}
+
+rule var_before_term_app {
+    if var_before_term(tm, name);
+    if app_term_node(tm, _, args);
+    then var_before_terms(args, name);
+}
+
+// #### Propagate var_in_X upwards
+rule var_in_term_var {
+    if var_term_node(tm, ident);
+    if name = real_virt_ident(ident);
+    then var_in_term(tm, name);
+}
+rule var_in_term_wildcard {
+    if wildcard_term_node(tm);
+    if name = wildcard_virt_ident(tm);
+    then var_in_term(tm, name);
+}
+rule var_in_term_app {
+    if app_term_node(tm, _, args);
+    if var_in_terms(args, name);
+    then var_in_term(tm, name);
+}
+
+rule var_in_terms_cons_head {
+    if cons_term_list_node(tms, head, _);
+    if var_in_term(head, name);
+    then var_in_terms(tms, name);
+}
+rule var_in_terms_cons_tail {
+    if cons_term_list_node(tms, _, tail);
+    if var_in_terms(tail, name);
+    then var_in_terms(tms, name);
+}
+
+rule var_in_opt_terms {
+    if some_term_node(opt_term, term);
+    if var_in_term(term, name);
+    then var_in_opt_term(opt_term, name);
+}
+
+rule var_in_if_atom_equal_lhs {
+    if equal_if_atom_node(atom, lhs, _);
+    if var_in_term(lhs, name);
+    then var_in_if_atom(atom, name);
+}
+rule var_in_if_atom_equal_rhs {
+    if equal_if_atom_node(atom, _, rhs);
+    if var_in_term(rhs, name);
+    then var_in_if_atom(atom, name);
+}
+rule var_in_if_atom_defined {
+    if defined_if_atom_node(atom, tm);
+    if var_in_term(tm, name);
+    then var_in_if_atom(atom, name);
+}
+rule var_in_if_atom_pred {
+    if pred_if_atom_node(atom, _, args);
+    if var_in_terms(args, name);
+    then var_in_if_atom(atom, name);
+}
+rule var_in_if_atom_var {
+    if var_if_atom_node(atom, var_term, _);
+    if var_in_term(var_term, name);
+    then var_in_if_atom(atom, name);
+}
+
+rule var_in_then_atom_equal_lhs {
+    if equal_then_atom_node(atom, lhs, _);
+    if var_in_term(lhs, name);
+    then var_in_then_atom(atom, name);
+}
+rule var_in_then_atom_equal_rhs {
+    if equal_then_atom_node(atom, _, rhs);
+    if var_in_term(rhs, name);
+    then var_in_then_atom(atom, name);
+}
+rule var_in_then_atom_defined_var_term {
+    if defined_then_atom_node(atom, var_term, _);
+    if var_in_opt_term(var_term, name);
+    then var_in_then_atom(atom, name);
+}
+rule var_in_then_atom_defined_term {
+    if defined_then_atom_node(atom, _, tm);
+    if var_in_term(tm, name);
+    then var_in_then_atom(atom, name);
+}
+rule var_in_then_atom_pred {
+    if pred_then_atom_node(atom, _, args);
+    if var_in_terms(args, name);
+    then var_in_then_atom(atom, name);
+}
+
+rule var_in_stmt_if {
+    if if_stmt_node(stmt, atom);
+    if var_in_if_atom(atom, name);
+    then var_in_stmt(stmt, name);
+}
+
+rule var_in_stmt_then {
+    if then_stmt_node(stmt, atom);
+    if var_in_then_atom(atom, name);
+    then var_in_stmt(stmt, name);
+}
+
+// #### Connect var_before_X and var_in_X
+
+rule var_in_var_before {
+    if cons_stmt_list_node(_, stmt, tail);
+    if var_in_stmt(stmt, name);
+    then var_before_stmts(tail, name);
+}
+
+// ### Terms that should need epic checking
+//
+// These are terms that appear in then statements.
+
+pred term_should_be_epic_ok(TermNode);
+pred terms_should_be_epic_ok(TermListNode);
+
+rule terms_should_be_epic_ok_head {
+    if terms_should_be_epic_ok(terms);
+    if cons_term_list_node(terms, head, _);
+    then term_should_be_epic_ok(head);
+}
+rule terms_should_be_epic_ok_tail {
+    if terms_should_be_epic_ok(terms);
+    if cons_term_list_node(terms, _, tail);
+    then terms_should_be_epic_ok(tail);
+}
+
+rule then_atom_epic_ok_equal {
+    if equal_then_atom_node(_, lhs, rhs);
+    then term_should_be_epic_ok(lhs);
+    then term_should_be_epic_ok(rhs);
+}
+rule then_atom_epic_ok_defined {
+    if defined_then_atom_node(_, _, tm);
+    then term_should_be_epic_ok(tm);
+}
+rule then_atom_epic_ok_pred {
+    if pred_then_atom_node(_, _, args);
+    then terms_should_be_epic_ok(args);
+}
+
 // ## Surjectivity check
 
 pred should_be_surjective(Morphism);

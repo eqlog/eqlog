@@ -98,8 +98,7 @@ pub enum CompileError {
         location: Option<Location>,
     },
     VariableIntroducedInThenStmt {
-        var: String,
-        location: Option<Location>,
+        location: Location,
     },
     WildcardInThenStmt {
         location: Option<Location>,
@@ -306,9 +305,9 @@ impl Display for CompileErrorWithContext {
                 write!(f, "term has conflicting types\n")?;
                 write_loc(f, *location)?;
             }
-            VariableIntroducedInThenStmt { var: _, location } => {
+            VariableIntroducedInThenStmt { location } => {
                 write!(f, "variable introduced in then statement\n")?;
-                write_loc(f, *location)?;
+                write_loc(f, Some(*location))?;
             }
             WildcardInThenStmt { location } => {
                 write!(f, "wildcards must not appear in then statements\n")?;
