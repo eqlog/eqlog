@@ -9,6 +9,7 @@ use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
 use crate::rust_gen::*;
+use crate::semantics::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use std::collections::BTreeMap;
@@ -112,14 +113,19 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source.clone(),
         source_path: in_file.into(),
     })?;
-    let (mut eqlog, identifiers, _locations, _module) =
-        parse_new(&source_without_comments).unwrap();
+    let (mut eqlog, identifiers, locations, _module) = parse_new(&source_without_comments).unwrap();
     eqlog.close();
     assert!(!eqlog.absurd());
 
     let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
         error,
-        source,
+        source: source.clone(),
+        source_path: in_file.into(),
+    })?;
+
+    check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
+        error,
+        source: source,
         source_path: in_file.into(),
     })?;
 

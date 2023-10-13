@@ -104,6 +104,9 @@ pub enum CompileError {
     WildcardInThenStmt {
         location: Option<Location>,
     },
+    SurjectivityViolation {
+        location: Location,
+    },
     ConclusionEqualityOfNewTerms {
         location: Option<Location>,
     },
@@ -310,6 +313,10 @@ impl Display for CompileErrorWithContext {
             WildcardInThenStmt { location } => {
                 write!(f, "wildcards must not appear in then statements\n")?;
                 write_loc(f, *location)?;
+            }
+            SurjectivityViolation { location } => {
+                write!(f, "Term has not appeared earlier\n")?;
+                write_loc(f, Some(*location))?;
             }
             ConclusionEqualityOfNewTerms { location } => {
                 write!(

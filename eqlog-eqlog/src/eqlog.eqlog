@@ -765,6 +765,20 @@ rule grouped_chain_then_if {
 }
 
 // ## Surjectivity check
+
+pred should_be_surjective(Morphism);
+rule then_stmt_surjective {
+    if cons_stmt_list_node(stmts, _, tail_stmts);
+    if cons_stmt_list_node(tail_stmts, second_stmt, _);
+    if then_stmt_node(second_stmt, _);
+    if chain = stmt_list_chain(stmts);
+    // TODO: This doesn't work if the first statement in a rule is a then
+    // statement, since then there's no chain_head_transition. This should be
+    // fixed by making every chain start with the initial structure.
+    if morph = chain_head_transition(chain);
+    then should_be_surjective(morph);
+}
+
 pred term_surjective_exempted(TermNode);
 pred terms_surjective_exempted(TermListNode);
 
@@ -788,8 +802,8 @@ rule subterms_surjective_exempted {
     then terms_surjective_exempted(args);
 }
 
-rule defined_if_atom_surjective_exempted {
-    if defined_if_atom_node(_, tm);
+rule defined_atom_surjective_exempted {
+    if defined_then_atom_node(_, _, tm);
     then term_surjective_exempted(tm);
 }
 
@@ -799,4 +813,24 @@ rule semantic_el_exempted {
     if term_surjective_exempted(tm);
     if el = semantic_el(tm);
     then el_surjective_exempted(el);
+}
+
+pred el_should_be_surjective_ok(El);
+pred el_is_surjective_ok(El);
+
+rule surjective_codomain_should_be_ok {
+    if should_be_surjective(morph);
+    if el_structure(el) = cod(morph);
+    then el_should_be_surjective_ok(el);
+}
+
+rule surjective_exempted_el_is_ok {
+    if el_surjective_exempted(el);
+    then el_is_surjective_ok(el);
+}
+
+rule surjective_img_el_is_ok {
+    if should_be_surjective(morph);
+    if el_in_img(morph, el);
+    then el_is_surjective_ok(el);
 }

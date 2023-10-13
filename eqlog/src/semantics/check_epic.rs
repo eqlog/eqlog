@@ -1,6 +1,11 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
 use crate::ast::*;
 use crate::error::*;
+use crate::grammar_util::*;
 use crate::unification::*;
+use eqlog_eqlog::*;
 
 // A term unification data structure to keep track of whether a term is equal to a term that has
 // already occurred in the rule.
@@ -87,6 +92,38 @@ fn check_then_atom_epic(
     }
 
     Ok(())
+}
+
+pub fn check_surjective<'a>(
+    eqlog: &Eqlog,
+    locations: &BTreeMap<Loc, Location>,
+) -> Result<(), CompileError> {
+    let should_be_ok: BTreeSet<El> = eqlog.iter_el_should_be_surjective_ok().collect();
+    let is_ok: BTreeSet<El> = eqlog.iter_el_is_surjective_ok().collect();
+    let not_ok: Option<(TermNode, Location)> = should_be_ok
+        .difference(&is_ok)
+        .copied()
+        .flat_map(|el| {
+            eqlog.iter_semantic_el().filter_map(move |(tm, tm_el)| {
+                if eqlog.are_equal_el(tm_el, el) {
+                    let loc = eqlog.term_node_loc(tm).unwrap();
+                    let location = *locations.get(&loc).unwrap();
+                    Some((tm, location))
+                } else {
+                    None
+                }
+            })
+        })
+        .min_by_key(|(_, location)| location.1);
+
+    let (_, location): (TermNode, Location) = match not_ok {
+        Some(not_ok) => not_ok,
+        None => {
+            return Ok(());
+        }
+    };
+
+    Err(CompileError::SurjectivityViolation { location })
 }
 
 /// Checks that an epic [ThenAtom] is surjective.

@@ -14,6 +14,7 @@ use crate::ast::*;
 use crate::error::*;
 use crate::grammar_util::*;
 use crate::unification::*;
+use eqlog_eqlog::*;
 
 /// Checks that the `var` term in all [ThenAtomData::Defined] that occur in a rule are actually
 /// variables.
@@ -115,4 +116,13 @@ pub fn check_rule<'a>(
     check_vars_occur_twice(rule)?;
     check_if_after_then(rule)?;
     Ok(CheckedRule { types, decl: rule })
+}
+
+pub fn check_eqlog(
+    eqlog: &Eqlog,
+    _identifiers: &BTreeMap<String, Ident>,
+    locations: &BTreeMap<Loc, Location>,
+) -> Result<(), CompileError> {
+    check_surjective(eqlog, locations)?;
+    Ok(())
 }
