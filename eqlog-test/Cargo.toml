@@ -1,0 +1,13 @@
+[package]
+name = "eqlog-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.eqlog-runtime]
+path = "../eqlog-runtime"
+
+[dependencies]
+maplit = "*"
+
+[build-dependencies.eqlog]
+path = "../eqlog"

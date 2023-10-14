@@ -1,0 +1,121 @@
+type Ty;
+type Tm;
+
+// A function assigning to each term its type.
+func tm_ty(Tm) -> Ty;
+
+// Every term has a type.
+rule {
+    if s: Tm;
+    then tm_ty(s)!;
+}
+
+// Populated iff a term has contradictory types.
+pred absurd();
+
+
+// The type of booleans.
+func bool() -> Ty;
+
+// The `true` and `false` constants of type `Bool`.
+func true_tm() -> Tm;
+func false_tm() -> Tm;
+
+// Types of boolean constants.
+rule {
+    if to = tm_ty(true_tm());
+    then bool() = to;
+}
+rule {
+    if to = tm_ty(false_tm());
+    then bool() = to;
+}
+
+// The recursion principle for `Bool`:
+// `IfTm(a, b, c)` corresponds to `if a then b else c`.
+func if_tm(Tm, Tm, Tm) -> Tm;
+
+// Typing rules for `IfTm`.
+rule {
+    if if_tm(cond, _, _)!;
+    if to = tm_ty(cond);
+    then bool() = to;
+}
+rule {
+    if t_0 = if_tm(_, true_case, _);
+    if to = tm_ty(true_case);
+    then tm_ty(t_0) = to;
+}
+rule {
+    if t_0 = if_tm(_, _, false_case);
+    if to = tm_ty(false_case);
+    then tm_ty(t_0) = to;
+}
+
+
+// `Fun(a, b)` is the type of functions a -> b.
+func fun(Ty, Ty) -> Ty;
+
+// Domain and codomain of function types.
+func dom(Ty) -> Ty;
+func cod(Ty) -> Ty;
+
+// Fun and (Dom, Cod) form a bijection Ty * Ty <--> Ty. In particular, Fun(-, -) is injective.
+rule {
+    if t_0 = fun(sigma, _);
+    if to = sigma;
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = fun(_, tau);
+    if to = tau;
+    then cod(t_0) = to;
+}
+rule {
+    if t_0 = dom(kappa);
+    if t_1 = cod(kappa);
+    if to = kappa;
+    then fun(t_0, t_1) = to;
+}
+
+// Dom and Cod are define on the same set of types.
+rule {
+    if dom(kappa)!;
+    then cod(kappa)!;
+}
+rule {
+    if cod(kappa)!;
+    then dom(kappa)!;
+}
+
+// App(f, t) is the function application f(t).
+func app(Tm, Tm) -> Tm;
+// Lambda(v, t) is the lambda expression \v -> t.
+func lambda(Tm, Tm) -> Tm;
+
+// Typing rules for function application.
+rule {
+    if app(s, t)!;
+    if t_0 = tm_ty(s);
+    if to = tm_ty(t);
+    then dom(t_0) = to;
+}
+rule {
+    if t_0 = tm_ty(s);
+    if to = tm_ty(app(s, _));
+    then cod(t_0) = to;
+}
+
+// The type of a lambda abstraction.
+rule {
+    if t_0 = tm_ty(v);
+    if t_1 = tm_ty(t);
+    if to = tm_ty(lambda(v, t));
+    then fun(t_0, t_1) = to;
+}
+
+// The type of booleans is not a function type.
+rule {
+    if fun(_, _) = bool();
+    then absurd();
+}
