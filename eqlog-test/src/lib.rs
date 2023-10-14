@@ -16,7 +16,6 @@ eqlog_mod!(pca);
 eqlog_mod!(inference);
 eqlog_mod!(reduction_from_nullary);
 
-mod category_mod;
 #[cfg(test)]
 mod distr_lattice_test;
 #[cfg(test)]
