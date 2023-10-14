@@ -1,5 +1,4 @@
 use eqlog_runtime::eqlog_mod;
-eqlog_mod!(equational_monoid);
 eqlog_mod!(monoid);
 eqlog_mod!(pointed);
 eqlog_mod!(trivial_idempotent);
