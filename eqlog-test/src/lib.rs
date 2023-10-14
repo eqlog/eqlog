@@ -5,12 +5,8 @@ eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
 eqlog_mod!(semilattice);
 eqlog_mod!(product_category);
-eqlog_mod!(pca);
 eqlog_mod!(reduction_from_nullary);
 
-// Disabled by default because it takes a while to run in debug mode.
-//#[cfg(test)]
-//mod pca_test;
 mod pointed_test;
 #[cfg(test)]
 mod poset_test;
