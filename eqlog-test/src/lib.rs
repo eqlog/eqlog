@@ -1,5 +1,4 @@
 use eqlog_runtime::eqlog_mod;
-eqlog_mod!(monoid);
 eqlog_mod!(pointed);
 eqlog_mod!(trivial_idempotent);
 eqlog_mod!(trans_refl);
@@ -12,7 +11,6 @@ eqlog_mod!(reduction_from_nullary);
 
 #[cfg(test)]
 mod eval_func;
-mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]
 //mod pca_test;
