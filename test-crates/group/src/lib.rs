@@ -1,14 +1,43 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+use eqlog_runtime::eqlog_mod;
+eqlog_mod!(group);
+pub use crate::group::*;
+
+#[test]
+fn left_identity_test() {
+    let mut grp = Group::new();
+
+    let x = grp.new_el();
+    let id = grp.define_id();
+    let id_x = grp.define_mul(id, x);
+
+    assert!(grp.close_until(|grp| grp.are_equal_el(x, id_x)));
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[test]
+fn left_inverse_test() {
+    let mut grp = Group::new();
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+    let x = grp.new_el();
+    let xinv = grp.define_inv(x);
+    let x_xinv = grp.define_mul(x, xinv);
+    let id = grp.define_id();
+
+    assert!(grp.close_until(|grp| grp.are_equal_el(x_xinv, id)));
+}
+
+#[test]
+fn hemd_und_jacke_test() {
+    let mut grp = Group::new();
+
+    let x = grp.new_el();
+    let y = grp.new_el();
+
+    let xy = grp.define_mul(x, y);
+    let xyinv = grp.define_inv(xy);
+
+    let xinv = grp.define_inv(x);
+    let yinv = grp.define_inv(y);
+    let yinv_xinv = grp.define_mul(yinv, xinv);
+
+    assert!(grp.close_until(|grp| grp.are_equal_el(xyinv, yinv_xinv)));
 }

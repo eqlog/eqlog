@@ -6,7 +6,6 @@ eqlog_mod!(trivial_idempotent);
 eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
 eqlog_mod!(semilattice);
-eqlog_mod!(group);
 eqlog_mod!(product_category);
 eqlog_mod!(lex_category);
 eqlog_mod!(partial_magma);
@@ -16,8 +15,6 @@ eqlog_mod!(reduction_from_nullary);
 
 #[cfg(test)]
 mod eval_func;
-#[cfg(test)]
-mod group_test;
 #[cfg(test)]
 mod lex_category_test;
 mod monoid_test;
