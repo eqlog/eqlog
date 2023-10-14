@@ -6,15 +6,12 @@ eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
 eqlog_mod!(semilattice);
 eqlog_mod!(product_category);
-eqlog_mod!(lex_category);
 eqlog_mod!(partial_magma);
 eqlog_mod!(pca);
 eqlog_mod!(reduction_from_nullary);
 
 #[cfg(test)]
 mod eval_func;
-#[cfg(test)]
-mod lex_category_test;
 mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]
