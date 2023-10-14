@@ -1,5 +1,21 @@
 [workspace]
 
 members = [
+  "category",
+  "distr-lattice",
+	"equational-monoid",
+	"group",
+	"inference",
+	"lex-category",
   "logic",
+	"monoid",
+	"partial-magma",
+	"pca",
+	"pointed",
+	"poset",
+	"product-category",
+	"reduction-from-nullary",
+	"semilattice",
+	"trans-refl",
+	"trivial-idempotent",
 ]
