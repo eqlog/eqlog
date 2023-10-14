@@ -3,7 +3,6 @@ eqlog_mod!(equational_monoid);
 eqlog_mod!(monoid);
 eqlog_mod!(pointed);
 eqlog_mod!(trivial_idempotent);
-eqlog_mod!(logic);
 eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
 eqlog_mod!(semilattice);
@@ -24,8 +23,6 @@ mod eval_func;
 mod group_test;
 #[cfg(test)]
 mod lex_category_test;
-#[cfg(test)]
-mod logic_test;
 mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]
