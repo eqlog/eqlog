@@ -3,7 +3,6 @@
 members = [
   "eqlog",
   "eqlog-runtime",
-  "eqlog-test",
 	"v1_to_v2",
   "examples/inference",
   "eqlog-eqlog",
