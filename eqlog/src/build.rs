@@ -12,6 +12,7 @@ use crate::rust_gen::*;
 use crate::semantics::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
+use indoc::eprintdoc;
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
@@ -189,6 +190,44 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     Ok(())
 }
 
+/// [Config] and [process] are public for testing only, they shouldn't be used by third parties.
+#[doc(hidden)]
+pub struct Config {
+    pub in_dir: PathBuf,
+    pub out_dir: PathBuf,
+}
+
+#[doc(hidden)]
+pub fn process(config: Config) -> Result<(), Box<dyn Error>> {
+    let Config { in_dir, out_dir } = config;
+    for in_file in eqlog_files(&in_dir)? {
+        let src_rel = in_file
+            .strip_prefix(&in_dir)
+            .expect("File yielded by eqlog_files(dir) should be in in_dir");
+        let out_parent = match src_rel.parent() {
+            Some(parent) => out_dir.clone().join(parent),
+            None => out_dir.clone(),
+        };
+        std::fs::create_dir_all(&out_parent)?;
+
+        let name = in_file
+            .file_stem()
+            .expect("in_file should not be empty")
+            .to_str()
+            .unwrap_or_else(|| {
+                eprintdoc! {"
+                Input file name is not valid utf8
+            "};
+                exit(1)
+            });
+        let out_file = out_parent.join(name).with_extension("rs");
+
+        process_file(&in_file, &out_file)?;
+    }
+
+    Ok(())
+}
+
 /// Compile all eqlog files in the `src` directory into rust modules.
 ///
 /// Must be called from a `build.rs` script via cargo.
@@ -203,23 +242,28 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
 /// ```
 pub fn process_root() {
     let in_dir: PathBuf = "src".into();
-    let out_dir: PathBuf = env::var("OUT_DIR").unwrap().into();
+    let out_dir: PathBuf = env::var("OUT_DIR")
+        .unwrap_or_else(|err| {
+            match err {
+                env::VarError::NotPresent => {
+                    eprintdoc! {"
+                        Error: OUT_DIR environment variable not set
+                        
+                        process_root should only be called from build.rs via cargo.
+                "};
+                }
+                env::VarError::NotUnicode(_) => {
+                    eprintdoc! {"
+                        Error: OUT_DIR environment variable is not valid utf8
+                    "};
+                }
+            }
+            exit(1)
+        })
+        .into();
 
-    for in_file in eqlog_files(&in_dir).unwrap() {
-        let src_rel = in_file.strip_prefix(&in_dir).unwrap();
-        let out_parent = match src_rel.parent() {
-            Some(parent) => out_dir.clone().join(parent),
-            None => out_dir.clone(),
-        };
-        std::fs::create_dir_all(&out_parent).unwrap();
-
-        let name = in_file.file_stem().unwrap().to_str().unwrap();
-        let out_file = out_parent.join(name).with_extension("rs");
-        println!("Compiling {in_file:?} into {out_file:?}");
-
-        if let Err(err) = process_file(&in_file, &out_file) {
-            eprintln!("{err}");
-            exit(1);
-        }
+    if let Err(err) = process(Config { in_dir, out_dir }) {
+        eprintln!("{err}");
+        exit(1);
     }
 }
