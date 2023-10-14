@@ -6,7 +6,6 @@ eqlog_mod!(trivial_idempotent);
 eqlog_mod!(trans_refl);
 eqlog_mod!(poset);
 eqlog_mod!(semilattice);
-eqlog_mod!(distr_lattice);
 eqlog_mod!(group);
 eqlog_mod!(product_category);
 eqlog_mod!(lex_category);
@@ -15,8 +14,6 @@ eqlog_mod!(pca);
 eqlog_mod!(inference);
 eqlog_mod!(reduction_from_nullary);
 
-#[cfg(test)]
-mod distr_lattice_test;
 #[cfg(test)]
 mod eval_func;
 #[cfg(test)]
