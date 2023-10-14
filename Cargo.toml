@@ -3,15 +3,31 @@
 members = [
   "eqlog",
   "eqlog-runtime",
-	"v1_to_v2",
-  "examples/inference",
+  "v1_to_v2",
   "eqlog-eqlog",
+
+  "test-crates/category",
+  "test-crates/distr-lattice",
+  "test-crates/equational-monoid",
+  "test-crates/group",
+  "test-crates/lex-category",
+  "test-crates/logic",
+  "test-crates/monoid",
+  "test-crates/partial-magma",
+  "test-crates/pca",
+  "test-crates/pointed",
+  "test-crates/poset",
+  "test-crates/product-category",
+  "test-crates/reduction-from-nullary",
+  "test-crates/semilattice",
+  "test-crates/trans-refl",
+  "test-crates/trivial-idempotent",
 ]
 
 # Keep examples out of workspace. It should be possible to build them without a
 # local eqlog checkout.
 exclude = [
   "examples/semilattice",
-	"cwf-theory",
-	"exp-epa",
+  "cwf-theory",
+  "exp-epa",
 ]
