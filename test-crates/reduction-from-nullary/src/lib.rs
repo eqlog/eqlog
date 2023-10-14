@@ -1,14 +1,3 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+use eqlog_runtime::eqlog_mod;
+eqlog_mod!(reduction_from_nullary);
+pub use crate::reduction_from_nullary::*;
