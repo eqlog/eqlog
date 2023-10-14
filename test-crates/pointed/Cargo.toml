@@ -8,4 +8,4 @@ eqlog = { path = "../../eqlog" }
 
 [dependencies]
 eqlog-runtime = { path = "../../eqlog-runtime" }
-
+maplit = "*"
