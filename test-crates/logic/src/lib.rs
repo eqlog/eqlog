@@ -1,4 +1,7 @@
-use crate::logic::*;
+use eqlog_runtime::eqlog_mod;
+eqlog_mod!(logic);
+
+pub use crate::logic::*;
 
 #[test]
 fn test_close_empty() {

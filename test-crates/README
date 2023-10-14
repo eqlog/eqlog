@@ -1,0 +1,2 @@
+This directory contains integration test cases.
+Each test case is an individual Rust crate.
