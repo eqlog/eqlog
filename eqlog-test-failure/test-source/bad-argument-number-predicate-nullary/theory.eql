@@ -1,0 +1,7 @@
+type Foo;
+pred bar();
+
+rule {
+    if x: Foo;
+    then bar(x);
+}

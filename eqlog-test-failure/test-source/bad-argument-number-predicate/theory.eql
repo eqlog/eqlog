@@ -1,0 +1,7 @@
+type Foo;
+pred bar(Foo, Foo, Foo);
+
+rule {
+    if bar(x, y);
+    then x = y;
+}

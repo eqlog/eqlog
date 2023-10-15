@@ -113,3 +113,11 @@ fn bad_argument_number_function_nullary() {
 fn bad_argument_number_function() {
     test_case(Path::new("bad-argument-number-function"));
 }
+#[test]
+fn bad_argument_number_predicate_nullary() {
+    test_case(Path::new("bad-argument-number-predicate-nullary"));
+}
+#[test]
+fn bad_argument_number_predicate() {
+    test_case(Path::new("bad-argument-number-predicate"));
+}
