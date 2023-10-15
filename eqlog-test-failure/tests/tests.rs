@@ -95,3 +95,12 @@ fn bad_case_rule() {
 fn bad_case_variable() {
     test_case(Path::new("bad-case-variable"));
 }
+
+#[test]
+fn variable_only_once_if() {
+    test_case(Path::new("variable-only-once-if"));
+}
+#[test]
+fn variable_only_once_then() {
+    test_case(Path::new("variable-only-once-then"));
+}
