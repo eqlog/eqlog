@@ -1,0 +1,7 @@
+type Foo;
+func bar() -> Foo;
+
+rule {
+    if bar(x) = y;
+    then bar(y) = x;
+}

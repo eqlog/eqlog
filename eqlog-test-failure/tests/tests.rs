@@ -104,3 +104,12 @@ fn variable_only_once_if() {
 fn variable_only_once_then() {
     test_case(Path::new("variable-only-once-then"));
 }
+
+#[test]
+fn bad_argument_number_function_nullary() {
+    test_case(Path::new("bad-argument-number-function-nullary"));
+}
+#[test]
+fn bad_argument_number_function() {
+    test_case(Path::new("bad-argument-number-function"));
+}

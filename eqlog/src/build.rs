@@ -116,7 +116,6 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     })?;
     let (mut eqlog, identifiers, locations, _module) = parse_new(&source_without_comments).unwrap();
     eqlog.close();
-    assert!(!eqlog.absurd());
 
     let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
         error,
@@ -129,6 +128,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source: source,
         source_path: in_file.into(),
     })?;
+    assert!(!eqlog.absurd());
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
     query_actions.extend(module_wrapper.symbols.iter_funcs().map(|func| {
