@@ -1,0 +1,2 @@
+type Bar;
+func Foo() -> Bar;

@@ -1,0 +1,6 @@
+Error: pred Foo is not lower_snake_case
+ --> test-source/bad-case-predicate/theory.eql:1
+  | 
+1 | pred Foo();
+  | ^^^^^^^^^^^
+  | 

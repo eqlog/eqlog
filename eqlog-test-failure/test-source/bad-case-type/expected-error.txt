@@ -1,0 +1,6 @@
+Error: type foo is not UpperCamelCase
+ --> test-source/bad-case-type/theory.eql:1
+  | 
+1 | type foo;
+  | ^^^^^^^^^
+  | 

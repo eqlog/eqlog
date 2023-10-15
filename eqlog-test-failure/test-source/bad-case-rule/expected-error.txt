@@ -1,0 +1,6 @@
+Error: rule Foo is not lower_snake_case
+ --> test-source/bad-case-rule/theory.eql:1
+  | 
+1 | rule Foo {}
+  | ^^^^^^^^^^^
+  | 
