@@ -1,0 +1,3 @@
+rule {
+    if foo(x, y, z);
+}
