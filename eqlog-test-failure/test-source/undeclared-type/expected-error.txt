@@ -1,0 +1,6 @@
+Error: undeclared symbol "Foo"
+ --> test-source/undeclared-type/theory.eql:2
+  | 
+2 |     if x: Foo; 
+  |        ^       
+  | 
