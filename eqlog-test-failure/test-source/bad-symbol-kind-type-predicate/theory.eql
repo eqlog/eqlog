@@ -1,0 +1,6 @@
+type Foo;
+
+rule {
+    if Foo(x, y);
+    then Foo(y, x);
+}

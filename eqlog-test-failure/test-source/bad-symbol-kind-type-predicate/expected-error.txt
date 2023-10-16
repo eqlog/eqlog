@@ -1,0 +1,12 @@
+Error: expected pred, found type Foo
+ --> test-source/bad-symbol-kind-type-predicate/theory.eql:4
+  | 
+4 |     if Foo(x, y);
+  |        ^^^^^^^^^ 
+  | 
+Foo declared as type here:
+ --> test-source/bad-symbol-kind-type-predicate/theory.eql:1
+  | 
+1 | type Foo;
+  | ^^^^^^^^^
+  | 

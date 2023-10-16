@@ -1,0 +1,8 @@
+type Foo;
+pred bar(Foo);
+
+rule {
+    if x = bar(a);
+    if y = bar(b);
+    then x = y;
+}

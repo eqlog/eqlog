@@ -121,3 +121,16 @@ fn bad_argument_number_predicate_nullary() {
 fn bad_argument_number_predicate() {
     test_case(Path::new("bad-argument-number-predicate"));
 }
+
+#[test]
+fn bad_symbol_kind_type_predicate() {
+    test_case(Path::new("bad-symbol-kind-type-predicate"));
+}
+#[test]
+fn bad_symbol_kind_predicate_function() {
+    test_case(Path::new("bad-symbol-kind-predicate-function"));
+}
+#[test]
+fn bad_symbol_kind_function_rule() {
+    test_case(Path::new("bad-symbol-kind-function-rule"));
+}
