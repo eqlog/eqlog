@@ -90,7 +90,7 @@ pub enum CompileError {
     IfAfterThen {
         location: Location,
     },
-    NoSort {
+    UndeterminedTermType {
         location: Option<Location>,
     },
     ConflictingTypes {
@@ -297,7 +297,7 @@ impl Display for CompileErrorWithContext {
                 write!(f, "if statement after then statement not supported yet\n")?;
                 write_loc(f, Some(*location))?;
             }
-            NoSort { location } => {
+            UndeterminedTermType { location } => {
                 write!(f, "sort of term undetermined\n")?;
                 write_loc(f, *location)?;
             }

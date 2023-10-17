@@ -124,7 +124,7 @@ fn into_unique_types<'a>(
     for tm in context.iter_terms() {
         match types[tm].len() {
             0 => {
-                return Err(CompileError::NoSort {
+                return Err(CompileError::UndeterminedTermType {
                     location: Some(context.loc(tm)),
                 })
             }
