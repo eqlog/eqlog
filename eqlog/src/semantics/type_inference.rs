@@ -65,7 +65,7 @@ fn collect_if_atom_type_constraints<'a, 'b>(
                     predicate: pred.clone(),
                     expected: arg_decls.len(),
                     got: args.len(),
-                    location: Some(atom.loc),
+                    location: atom.loc,
                 });
             }
             for (arg, arg_decl) in args.iter().copied().zip(arg_decls) {
@@ -96,7 +96,7 @@ fn collect_then_atom_type_constraints<'a, 'b>(
                     predicate: pred.clone(),
                     expected: arg_decls.len(),
                     got: args.len(),
-                    location: Some(atom.loc),
+                    location: atom.loc,
                 });
             }
             for (arg, arg_decl) in args.iter().copied().zip(arg_decls) {
@@ -125,13 +125,13 @@ fn into_unique_types<'a>(
         match types[tm].len() {
             0 => {
                 return Err(CompileError::UndeterminedTermType {
-                    location: Some(context.loc(tm)),
+                    location: context.loc(tm),
                 })
             }
             1 => (),
             _ => {
                 return Err(CompileError::ConflictingTermType {
-                    location: Some(context.loc(tm)),
+                    location: context.loc(tm),
                     types: types[tm].iter().map(|typ| typ.to_string()).collect(),
                 })
             }

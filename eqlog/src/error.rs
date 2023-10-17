@@ -43,12 +43,12 @@ pub enum CompileError {
     },
     SymbolNotCamelCase {
         name: String,
-        location: Option<Location>,
+        location: Location,
         symbol_kind: SymbolKind,
     },
     SymbolNotSnakeCase {
         name: String,
-        location: Option<Location>,
+        location: Location,
         symbol_kind: SymbolKind,
     },
     VariableNotSnakeCase {
@@ -57,7 +57,7 @@ pub enum CompileError {
     },
     VariableOccursOnlyOnce {
         name: String,
-        location: Option<Location>,
+        location: Location,
     },
     FunctionArgumentNumber {
         function: String,
@@ -69,7 +69,7 @@ pub enum CompileError {
         predicate: String,
         expected: usize,
         got: usize,
-        location: Option<Location>,
+        location: Location,
     },
     UndeclaredSymbol {
         name: String,
@@ -91,11 +91,11 @@ pub enum CompileError {
         location: Location,
     },
     UndeterminedTermType {
-        location: Option<Location>,
+        location: Location,
     },
     ConflictingTermType {
         types: Vec<String>,
-        location: Option<Location>,
+        location: Location,
     },
     VariableIntroducedInThenStmt {
         location: Location,
@@ -173,42 +173,38 @@ impl Display for CompileErrorWithContext {
             source_path,
             source,
         } = self;
-        let write_loc = |f: &mut fmt::Formatter, loc: Option<Location>| -> fmt::Result {
-            if let Some(loc) = loc {
-                let src_displ = SourceDisplay {
-                    source_path: Some(source_path),
-                    underlined: true,
-                    ..SourceDisplay::new(source, loc)
-                };
-                write!(f, "{}", src_displ)?;
-            } else {
-                write!(f, "{}", source_path_pointer(source_path))?;
-            }
+        let write_loc = |f: &mut fmt::Formatter, loc: Location| -> fmt::Result {
+            let src_displ = SourceDisplay {
+                source_path: Some(source_path),
+                underlined: true,
+                ..SourceDisplay::new(source, loc)
+            };
+            write!(f, "{}", src_displ)?;
             Ok(())
         };
         write!(f, "Error: ")?;
         match error {
             InvalidToken { location } => {
                 write!(f, "invalid token\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             UnrecognizedEOF {
                 location,
                 expected: _,
             } => {
                 write!(f, "unexpected end of file\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             UnrecognizedToken {
                 location,
                 expected: _,
             } => {
                 write!(f, "unrecognized token\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             ExtraToken { location } => {
                 write!(f, "unexpected token\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             SymbolNotCamelCase {
                 name,
@@ -228,7 +224,7 @@ impl Display for CompileErrorWithContext {
             }
             VariableNotSnakeCase { name, location } => {
                 write!(f, "variable \"{name}\" is not lower_snake_case\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             VariableOccursOnlyOnce { name, location } => {
                 write!(f, "variable \"{name}\" occurs only once\n")?;
@@ -244,7 +240,7 @@ impl Display for CompileErrorWithContext {
                     f,
                     "function takes {expected} arguments but {got} were supplied\n"
                 )?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             PredicateArgumentNumber {
                 predicate: _,
@@ -260,7 +256,7 @@ impl Display for CompileErrorWithContext {
             }
             UndeclaredSymbol { name, used_at } => {
                 write!(f, "undeclared symbol \"{name}\"\n")?;
-                write_loc(f, Some(*used_at))?;
+                write_loc(f, *used_at)?;
             }
             BadSymbolKind {
                 name,
@@ -270,9 +266,9 @@ impl Display for CompileErrorWithContext {
                 declared_at,
             } => {
                 write!(f, "expected {expected}, found {found} \"{name}\"\n")?;
-                write_loc(f, Some(*used_at))?;
+                write_loc(f, *used_at)?;
                 write!(f, "\"{name}\" declared as {found} here:\n")?;
-                write_loc(f, Some(*declared_at))?;
+                write_loc(f, *declared_at)?;
             }
             SymbolDeclaredTwice {
                 name: _,
@@ -280,13 +276,13 @@ impl Display for CompileErrorWithContext {
                 second_declaration,
             } => {
                 write!(f, "symbol declared multiple times\n")?;
-                write_loc(f, Some(*second_declaration))?;
+                write_loc(f, *second_declaration)?;
                 write!(f, "Previously declared here:\n")?;
-                write_loc(f, Some(*first_declaration))?;
+                write_loc(f, *first_declaration)?;
             }
             IfAfterThen { location } => {
                 write!(f, "if statement after then statement not supported yet\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             UndeterminedTermType { location } => {
                 write!(f, "sort of term undetermined\n")?;
@@ -298,23 +294,23 @@ impl Display for CompileErrorWithContext {
             }
             VariableIntroducedInThenStmt { location } => {
                 write!(f, "variable introduced in then statement\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             WildcardInThenStmt { location } => {
                 write!(f, "wildcards must not appear in then statements\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             SurjectivityViolation { location } => {
                 write!(f, "term does not appear earlier in this rule\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             ThenDefinedNotVar { location } => {
                 write!(f, "expected a variable\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
             ThenDefinedVarNotNew { location } => {
                 write!(f, "variable has already been introduced earlier\n")?;
-                write_loc(f, Some(*location))?;
+                write_loc(f, *location)?;
             }
         }
         Ok(())

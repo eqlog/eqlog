@@ -75,7 +75,7 @@ pub fn check_vars_occur_twice<'a>(rule: &'a RuleDecl) -> Result<(), CompileError
         if n == 1 {
             return Err(CompileError::VariableOccursOnlyOnce {
                 name: name.into(),
-                location: Some(loc),
+                location: loc,
             });
         }
     }

@@ -140,7 +140,7 @@ impl<'a> SymbolTable<'a> {
                     if name != name.to_case(Case::UpperCamel) {
                         return Err(CompileError::SymbolNotCamelCase {
                             name: name.to_string(),
-                            location: Some(loc),
+                            location: loc,
                             symbol_kind,
                         });
                     }
@@ -149,7 +149,7 @@ impl<'a> SymbolTable<'a> {
                     if name != name.to_case(Case::Snake) {
                         return Err(CompileError::SymbolNotSnakeCase {
                             name: name.to_string(),
-                            location: Some(loc),
+                            location: loc,
                             symbol_kind,
                         });
                     }
