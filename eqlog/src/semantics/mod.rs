@@ -124,6 +124,13 @@ pub fn check_eqlog(
 ) -> Result<(), CompileError> {
     check_epic(eqlog, locations)?;
     check_then_defined_variable(eqlog, locations)?;
-    check_surjective(eqlog, locations)?;
-    Ok(())
+
+    let first_error: Option<CompileError> =
+        iter_surjectivity_errors(eqlog, locations).min_by_key(|err| err.primary_location().1);
+
+    if let Some(err) = first_error {
+        Err(err)
+    } else {
+        Ok(())
+    }
 }

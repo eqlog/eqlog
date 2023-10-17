@@ -1,40 +1,44 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::iter::once;
 
 use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
 
-pub fn check_surjective<'a>(
-    eqlog: &Eqlog,
-    locations: &BTreeMap<Loc, Location>,
-) -> Result<(), CompileError> {
+pub fn iter_surjectivity_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
     let should_be_ok: BTreeSet<El> = eqlog.iter_el_should_be_surjective_ok().collect();
     let is_ok: BTreeSet<El> = eqlog.iter_el_is_surjective_ok().collect();
-    let not_ok: Option<(TermNode, Location)> = should_be_ok
-        .difference(&is_ok)
-        .copied()
-        .flat_map(|el| {
-            eqlog.iter_semantic_el().filter_map(move |(tm, tm_el)| {
+    should_be_ok
+        .into_iter()
+        .filter(move |el| !is_ok.contains(el))
+        .flat_map(move |el| {
+            let mut tms = eqlog.iter_semantic_el().filter_map(move |(tm, tm_el)| {
                 if eqlog.are_equal_el(tm_el, el) {
-                    let loc = eqlog.term_node_loc(tm).unwrap();
-                    let location = *locations.get(&loc).unwrap();
-                    Some((tm, location))
+                    Some(tm)
                 } else {
                     None
                 }
+            });
+
+            // The semantics are set up such that every new element (and only those need to be
+            // surjective-ok) must be the semantics of at least one term. To make sure that we
+            // don't accidentally suppress an error here, we take on term from the iterator (making
+            // sure that there is one!) and put it back afterwards.
+            let first_tm = tms
+                .next()
+                .expect("every new element should correspond to a term");
+            let tms = once(first_tm).chain(tms);
+
+            tms.map(|tm| {
+                let loc = eqlog.term_node_loc(tm).unwrap();
+                let location = *locations.get(&loc).unwrap();
+                CompileError::SurjectivityViolation { location }
             })
         })
-        .min_by_key(|(_, location)| location.1);
-
-    let (_, location): (TermNode, Location) = match not_ok {
-        Some(not_ok) => not_ok,
-        None => {
-            return Ok(());
-        }
-    };
-
-    Err(CompileError::SurjectivityViolation { location })
 }
 
 pub fn check_epic(eqlog: &Eqlog, locations: &BTreeMap<Loc, Location>) -> Result<(), CompileError> {

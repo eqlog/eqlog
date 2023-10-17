@@ -114,6 +114,36 @@ pub enum CompileError {
     },
 }
 
+impl CompileError {
+    pub fn primary_location(&self) -> Location {
+        match self {
+            CompileError::InvalidToken { location } => *location,
+            CompileError::UnrecognizedEOF { location, .. } => *location,
+            CompileError::UnrecognizedToken { location, .. } => *location,
+            CompileError::ExtraToken { location } => *location,
+            CompileError::SymbolNotCamelCase { location, .. } => *location,
+            CompileError::SymbolNotSnakeCase { location, .. } => *location,
+            CompileError::VariableNotSnakeCase { location, .. } => *location,
+            CompileError::VariableOccursOnlyOnce { location, .. } => *location,
+            CompileError::FunctionArgumentNumber { location, .. } => *location,
+            CompileError::PredicateArgumentNumber { location, .. } => *location,
+            CompileError::UndeclaredSymbol { used_at, .. } => *used_at,
+            CompileError::BadSymbolKind { used_at, .. } => *used_at,
+            CompileError::SymbolDeclaredTwice {
+                second_declaration, ..
+            } => *second_declaration,
+            CompileError::IfAfterThen { location } => *location,
+            CompileError::UndeterminedTermType { location } => *location,
+            CompileError::ConflictingTermType { location, .. } => *location,
+            CompileError::VariableIntroducedInThenStmt { location } => *location,
+            CompileError::WildcardInThenStmt { location } => *location,
+            CompileError::SurjectivityViolation { location } => *location,
+            CompileError::ThenDefinedNotVar { location } => *location,
+            CompileError::ThenDefinedVarNotNew { location } => *location,
+        }
+    }
+}
+
 impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
     fn from(parse_error: ParseError<usize, Token<'_>, CompileError>) -> CompileError {
         match parse_error {
