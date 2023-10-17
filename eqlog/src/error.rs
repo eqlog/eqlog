@@ -314,7 +314,7 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *location)?;
             }
             SurjectivityViolation { location } => {
-                write!(f, "Term does not appear earlier in this rule\n")?;
+                write!(f, "term does not appear earlier in this rule\n")?;
                 write_loc(f, Some(*location))?;
             }
             ConclusionEqualityOfNewTerms { location } => {
