@@ -122,11 +122,11 @@ pub fn check_eqlog(
     _identifiers: &BTreeMap<String, Ident>,
     locations: &BTreeMap<Loc, Location>,
 ) -> Result<(), CompileError> {
-    check_epic(eqlog, locations)?;
-    check_then_defined_variable(eqlog, locations)?;
-
-    let first_error: Option<CompileError> =
-        iter_surjectivity_errors(eqlog, locations).min_by_key(|err| err.primary_location().1);
+    let first_error: Option<CompileError> = iter_then_defined_variable_errors(eqlog, locations)
+        .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
+        .chain(iter_wildcard_in_then_errors(eqlog, locations))
+        .chain(iter_surjectivity_errors(eqlog, locations))
+        .min_by_key(|err| err.primary_location().1);
 
     if let Some(err) = first_error {
         Err(err)
