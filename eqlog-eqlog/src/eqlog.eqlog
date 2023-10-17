@@ -1239,3 +1239,14 @@ rule var_term_in_rule_child {
     if rule_child(rule_child_term(tm), rul);
     then var_term_in_rule(tm, ident, rul);
 }
+
+// ## If-after-then check
+pred if_after_then(if_stmt: StmtNode);
+
+rule after_then_should_be_if {
+    if cons_stmt_list_node(_, first, tail);
+    if then_stmt_node(first, _);
+    if cons_stmt_list_node(tail, second, _);
+    if if_stmt_node(second, _);
+    then if_after_then(second);
+}

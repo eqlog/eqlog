@@ -91,22 +91,15 @@ pub fn iter_variable_occurs_twice<'a>(
     })
 }
 
-pub fn check_if_after_then<'a>(rule: &'a RuleDecl) -> Result<(), CompileError> {
-    let mut then_atom_occurred = false;
-    for stmt in rule.body.iter() {
-        match &stmt.data {
-            StmtData::If(_) => {
-                if then_atom_occurred {
-                    return Err(CompileError::IfAfterThen { location: stmt.loc });
-                }
-            }
-            StmtData::Then(_) => {
-                then_atom_occurred = true;
-            }
-        }
-    }
-
-    Ok(())
+pub fn iter_if_after_then_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog.iter_if_after_then().map(|if_stmt| {
+        let loc = eqlog.stmt_node_loc(if_stmt).unwrap();
+        let location = *locations.get(&loc).unwrap();
+        CompileError::IfAfterThen { location }
+    })
 }
 
 pub struct CheckedRule<'a> {
@@ -119,7 +112,6 @@ pub fn check_rule<'a>(
     rule: &'a RuleDecl,
 ) -> Result<CheckedRule<'a>, CompileError> {
     let types = infer_types(symbols, rule)?;
-    check_if_after_then(rule)?;
     Ok(CheckedRule { types, decl: rule })
 }
 
@@ -132,6 +124,7 @@ pub fn check_eqlog(
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
+        .chain(iter_if_after_then_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
         .chain(iter_variable_not_snake_case_errors(
             eqlog,
