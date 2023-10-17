@@ -143,3 +143,8 @@ fn symbol_declared_twice_type_pred() {
 fn symbol_declared_twice_func_rule() {
     test_case(Path::new("symbol-declared-twice-func-rule"));
 }
+
+#[test]
+fn if_after_then() {
+    test_case(Path::new("if-after-then"));
+}

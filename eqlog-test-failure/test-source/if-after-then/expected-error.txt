@@ -1,0 +1,6 @@
+Error: if statement after then statement not supported yet
+ --> test-source/if-after-then/theory.eql:7
+  | 
+7 |     if z: Foo;
+  |     ^^^^^^^^^^
+  | 
