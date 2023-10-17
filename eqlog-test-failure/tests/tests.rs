@@ -134,3 +134,12 @@ fn bad_symbol_kind_predicate_function() {
 fn bad_symbol_kind_function_rule() {
     test_case(Path::new("bad-symbol-kind-function-rule"));
 }
+
+#[test]
+fn symbol_declared_twice_type_pred() {
+    test_case(Path::new("symbol-declared-twice-type-pred"));
+}
+#[test]
+fn symbol_declared_twice_func_rule() {
+    test_case(Path::new("symbol-declared-twice-func-rule"));
+}

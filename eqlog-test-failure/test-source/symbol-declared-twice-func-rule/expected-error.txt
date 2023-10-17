@@ -1,0 +1,14 @@
+Error: symbol declared multiple times
+ --> test-source/symbol-declared-twice-func-rule/theory.eql:3
+  | 
+3 | rule bar {
+  | ^^^^^^^^^^
+4 | }
+  | ^
+  | 
+Previously declared here:
+ --> test-source/symbol-declared-twice-func-rule/theory.eql:2
+  | 
+2 | func bar() -> Foo;
+  | ^^^^^^^^^^^^^^^^^^
+  | 
