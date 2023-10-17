@@ -101,19 +101,10 @@ pub enum CompileError {
         location: Location,
     },
     WildcardInThenStmt {
-        location: Option<Location>,
+        location: Location,
     },
     SurjectivityViolation {
         location: Location,
-    },
-    ConclusionEqualityOfNewTerms {
-        location: Option<Location>,
-    },
-    ConclusionEqualityArgNew {
-        location: Option<Location>,
-    },
-    ConclusionPredicateArgNew {
-        location: Option<Location>,
     },
     ThenDefinedNotVar {
         location: Location,
@@ -311,29 +302,11 @@ impl Display for CompileErrorWithContext {
             }
             WildcardInThenStmt { location } => {
                 write!(f, "wildcards must not appear in then statements\n")?;
-                write_loc(f, *location)?;
+                write_loc(f, Some(*location))?;
             }
             SurjectivityViolation { location } => {
                 write!(f, "term does not appear earlier in this rule\n")?;
                 write_loc(f, Some(*location))?;
-            }
-            ConclusionEqualityOfNewTerms { location } => {
-                write!(
-                    f,
-                    "both sides of equality in conclusion are not used earlier\n"
-                )?;
-                write_loc(f, *location)?;
-            }
-            ConclusionEqualityArgNew { location } => {
-                write!(
-                    f,
-                    "argument of undefined term in equality in conclusion is not used earlier\n"
-                )?;
-                write_loc(f, *location)?;
-            }
-            ConclusionPredicateArgNew { location } => {
-                write!(f, "argument of predicate in conclusion is not used earlier")?;
-                write_loc(f, *location)?;
             }
             ThenDefinedNotVar { location } => {
                 write!(f, "expected a variable\n")?;

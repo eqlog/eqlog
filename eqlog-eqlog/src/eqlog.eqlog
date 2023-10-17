@@ -987,15 +987,18 @@ rule var_in_var_before {
 pred term_should_be_epic_ok(TermNode);
 pred terms_should_be_epic_ok(TermListNode);
 
-rule terms_should_be_epic_ok_head {
+// #### Propagate should_be_epic_ok downwards.
+rule terms_should_be_epic_ok_cons {
     if terms_should_be_epic_ok(terms);
-    if cons_term_list_node(terms, head, _);
+    if cons_term_list_node(terms, head, tail);
     then term_should_be_epic_ok(head);
-}
-rule terms_should_be_epic_ok_tail {
-    if terms_should_be_epic_ok(terms);
-    if cons_term_list_node(terms, _, tail);
     then terms_should_be_epic_ok(tail);
+}
+
+rule terms_should_be_epic_ok_app {
+    if term_should_be_epic_ok(tm);
+    if app_term_node(tm, _, args);
+    then terms_should_be_epic_ok(args);
 }
 
 rule then_atom_epic_ok_equal {

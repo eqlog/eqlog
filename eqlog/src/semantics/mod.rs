@@ -110,7 +110,6 @@ pub fn check_rule<'a>(
     rule: &'a RuleDecl,
 ) -> Result<CheckedRule<'a>, CompileError> {
     check_then_defined_var(rule)?;
-    check_epic(rule)?;
     let types = infer_types(symbols, rule)?;
     check_var_case(rule)?;
     check_vars_occur_twice(rule)?;
@@ -123,7 +122,8 @@ pub fn check_eqlog(
     _identifiers: &BTreeMap<String, Ident>,
     locations: &BTreeMap<Loc, Location>,
 ) -> Result<(), CompileError> {
-    check_epic_new(eqlog, locations)?;
+    check_epic(eqlog, locations)?;
+    check_then_defined_variable(eqlog, locations)?;
     check_surjective(eqlog, locations)?;
     Ok(())
 }

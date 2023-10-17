@@ -1,8 +1,0 @@
-type Foo;
-pred bar(Foo);
-pred baz(Foo, Foo);
-
-rule {
-    if bar(x);
-    then baz(x, y);
-}

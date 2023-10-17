@@ -1,6 +1,6 @@
 Error: variable introduced in then statement
- --> test-source/variable-introduced-in-then-statement/theory.eql:7
+ --> test-source/variable-introduced-in-then-statement/theory.eql:8
   | 
-7 |     then foo(y) = x;
+8 |     then foo(z) = x;
   |              ^      
   | 

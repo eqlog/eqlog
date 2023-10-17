@@ -1,4 +1,5 @@
-Error: argument of predicate in conclusion is not used earlier --> test-source/surjectivity-violation-predicate-argument/theory.eql:8
+Error: term does not appear earlier in this rule
+ --> test-source/surjectivity-violation-predicate-argument/theory.eql:8
   | 
 8 |     then bar(foo(x));
   |              ^^^^^^  

@@ -1,6 +1,0 @@
-Error: variable introduced in then statement
- --> test-source/variable-only-once-then/theory.eql:7
-  | 
-7 |     then baz(x, y);
-  |                 ^  
-  | 

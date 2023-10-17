@@ -1,97 +1,9 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use crate::ast::*;
 use crate::error::*;
 use crate::grammar_util::*;
-use crate::unification::*;
 use eqlog_eqlog::*;
-
-// A term unification data structure to keep track of whether a term is equal to a term that has
-// already occurred in the rule.
-struct OccurredMerge {}
-impl MergeFn<bool> for OccurredMerge {
-    fn merge(&mut self, lhs_occurred: bool, rhs_occurred: bool) -> bool {
-        lhs_occurred || rhs_occurred
-    }
-}
-type OccurredMap<'a> = TermUnification<'a, bool, OccurredMerge>;
-
-/// Adds terms and equalities of an [IfAtom] to an [OccurredMap].
-fn process_if_atom<'a>(atom: &IfAtom, context: &'a TermContext, occurred: &mut OccurredMap<'a>) {
-    for tm in atom.iter_subterms(context) {
-        occurred[tm] = true;
-    }
-
-    match &atom.data {
-        IfAtomData::Equal(lhs, rhs) => {
-            occurred.union(*lhs, *rhs);
-        }
-        IfAtomData::Defined(_) => {}
-        IfAtomData::Pred { .. } => {}
-        IfAtomData::Var { .. } => {}
-    }
-}
-
-/// Checks that no new variables occur in a [ThenAtom].
-///
-/// The only exception is a variable `v` in an atom `v := t!`, which must *not* have occurred.
-fn check_then_atom_epic(
-    atom: &ThenAtom,
-    context: &TermContext,
-    occurred: &OccurredMap,
-) -> Result<(), CompileError> {
-    let check_occurred = |term: Term| -> Result<(), CompileError> {
-        match context.data(term) {
-            TermData::Variable(_) => {
-                if !occurred[term] {
-                    return Err(CompileError::VariableIntroducedInThenStmt {
-                        location: context.loc(term),
-                    });
-                }
-            }
-            TermData::Wildcard => {
-                return Err(CompileError::WildcardInThenStmt {
-                    location: Some(context.loc(term)),
-                })
-            }
-            TermData::Application { .. } => {}
-        };
-
-        Ok(())
-    };
-
-    match &atom.data {
-        ThenAtomData::Equal(_, _) => {
-            for tm in atom.iter_subterms(context) {
-                check_occurred(tm)?;
-            }
-        }
-        ThenAtomData::Defined { var, term } => {
-            for tm in context.iter_subterms(*term) {
-                check_occurred(tm)?;
-            }
-            if let Some(var) = var {
-                if occurred[*var] {
-                    return Err(CompileError::ThenDefinedVarNotNew {
-                        location: context.loc(*var),
-                    });
-                }
-            }
-        }
-        ThenAtomData::Pred { pred: _, args } => {
-            for tm in args
-                .iter()
-                .copied()
-                .flat_map(|arg| context.iter_subterms(arg))
-            {
-                check_occurred(tm)?;
-            }
-        }
-    }
-
-    Ok(())
-}
 
 pub fn check_surjective<'a>(
     eqlog: &Eqlog,
@@ -125,85 +37,8 @@ pub fn check_surjective<'a>(
     Err(CompileError::SurjectivityViolation { location })
 }
 
-/// Checks that an epic [ThenAtom] is surjective.
-///
-/// Non-surjectivity is only allowed in [ThenAtomData::Defined].
-fn check_then_atom_surjective<'a>(
-    atom: &ThenAtom,
-    context: &'a TermContext,
-    occurred: &OccurredMap<'a>,
-) -> Result<(), CompileError> {
-    // Check that non-surjectivity can only occur using ThenAtomData::Defined.
-    match &atom.data {
-        ThenAtomData::Equal(lhs, rhs) => {
-            let lhs = *lhs;
-            let rhs = *rhs;
-            if !occurred[lhs] && !occurred[rhs] {
-                return Err(CompileError::ConclusionEqualityOfNewTerms {
-                    location: Some(atom.loc),
-                });
-            }
-
-            if !occurred[lhs] || !occurred[rhs] {
-                let new = if occurred[lhs] { rhs } else { lhs };
-                use TermData::*;
-                match context.data(new) {
-                    TermData::Variable(_) | TermData::Wildcard => {
-                        assert!(
-                            occurred[new],
-                            "new variables or wildcards cannot appear in an epic then atom"
-                        );
-                    }
-                    Application { args, .. } => {
-                        if let Some(arg) = args.iter().find(|arg| !occurred[**arg]) {
-                            return Err(CompileError::ConclusionEqualityArgNew {
-                                location: Some(context.loc(*arg)),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        ThenAtomData::Pred { pred: _, args } => {
-            if let Some(arg) = args.iter().copied().find(|arg| !occurred[*arg]) {
-                return Err(CompileError::ConclusionPredicateArgNew {
-                    location: Some(context.loc(arg)),
-                });
-            }
-        }
-        ThenAtomData::Defined { var: _, term: _ } => {}
-    }
-    Ok(())
-}
-
-/// Adds terms and equalities of a [ThenAtom] to an [OccurredMap].
-fn process_then_atom<'a>(
-    atom: &ThenAtom,
-    context: &'a TermContext,
-    occurred: &mut OccurredMap<'a>,
-) {
-    for tm in atom.iter_subterms(context) {
-        occurred[tm] = true;
-    }
-
-    match &atom.data {
-        ThenAtomData::Equal(lhs, rhs) => {
-            occurred.union(*lhs, *rhs);
-        }
-        ThenAtomData::Defined { var, term } => {
-            if let Some(var) = var {
-                occurred.union(*var, *term);
-            }
-        }
-        ThenAtomData::Pred { .. } => {}
-    }
-}
-
-pub fn check_epic_new(
-    eqlog: &Eqlog,
-    locations: &BTreeMap<Loc, Location>,
-) -> Result<(), CompileError> {
-    let bad_location: Option<Location> = eqlog
+pub fn check_epic(eqlog: &Eqlog, locations: &BTreeMap<Loc, Location>) -> Result<(), CompileError> {
+    let bad_variable_location: Option<Location> = eqlog
         .iter_term_should_be_epic_ok()
         .filter_map(|tm| {
             let name = eqlog.iter_var_term_node().find_map(|(var_tm, ident)| {
@@ -224,28 +59,87 @@ pub fn check_epic_new(
         })
         .min_by_key(|location| location.1);
 
-    match bad_location {
-        Some(location) => Err(CompileError::VariableIntroducedInThenStmt { location }),
-        None => Ok(()),
-    }
-}
-
-pub fn check_epic(rule: &RuleDecl) -> Result<(), CompileError> {
-    let context = &rule.term_context;
-    let mut occurred = OccurredMap::new(context, vec![false; context.len()], OccurredMerge {});
-    for stmt in rule.body.iter() {
-        match &stmt.data {
-            StmtData::If(atom) => {
-                process_if_atom(atom, context, &mut occurred);
+    let bad_wildcard_location: Option<Location> = eqlog
+        .iter_term_should_be_epic_ok()
+        .filter_map(|tm| {
+            if !eqlog.wildcard_term_node(tm) {
+                return None;
             }
-            StmtData::Then(atom) => {
-                occurred.congruence_closure();
-                check_then_atom_epic(atom, context, &occurred)?;
-                check_then_atom_surjective(atom, context, &occurred)?;
-                process_then_atom(atom, context, &mut occurred);
+
+            let loc = eqlog.term_node_loc(tm).unwrap();
+            let location = *locations.get(&loc).unwrap();
+            Some(location)
+        })
+        .min_by_key(|location| location.1);
+
+    match (bad_variable_location, bad_wildcard_location) {
+        (None, None) => Ok(()),
+        (Some(location), None) => Err(CompileError::VariableIntroducedInThenStmt { location }),
+        (None, Some(location)) => Err(CompileError::WildcardInThenStmt { location: location }),
+        (Some(bad_variable_location), Some(bad_wildcard_location)) => {
+            if bad_variable_location.1 < bad_wildcard_location.1 {
+                Err(CompileError::VariableIntroducedInThenStmt {
+                    location: bad_variable_location,
+                })
+            } else {
+                assert!(bad_variable_location.1 >= bad_wildcard_location.1);
+                Err(CompileError::WildcardInThenStmt {
+                    location: bad_wildcard_location,
+                })
             }
         }
     }
+}
 
-    Ok(())
+pub fn check_then_defined_variable(
+    eqlog: &Eqlog,
+    locations: &BTreeMap<Loc, Location>,
+) -> Result<(), CompileError> {
+    // TODO: We should emit the error with the earliest source location. Currently it's some
+    // arbitrary error.
+    let error: Option<CompileError> =
+        eqlog
+            .iter_defined_then_atom_node()
+            .find_map(|(_, opt_var, _)| {
+                let var_term = eqlog.iter_some_term_node().find_map(|(some_tm, tm)| {
+                    if eqlog.are_equal_opt_term_node(some_tm, opt_var) {
+                        Some(tm)
+                    } else {
+                        None
+                    }
+                })?;
+
+                if eqlog.wildcard_term_node(var_term) {
+                    return None;
+                }
+
+                let loc = eqlog.term_node_loc(var_term).unwrap();
+                let location = *locations.get(&loc).unwrap();
+
+                let var_name: Option<Ident> = eqlog.iter_var_term_node().find_map(|(vt, name)| {
+                    if eqlog.are_equal_term_node(vt, var_term) {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                });
+
+                let var_name: Ident = match var_name {
+                    None => {
+                        return Some(CompileError::ThenDefinedNotVar { location });
+                    }
+                    Some(name) => name,
+                };
+
+                if eqlog.var_before_term(var_term, eqlog.real_virt_ident(var_name).unwrap()) {
+                    return Some(CompileError::ThenDefinedVarNotNew { location });
+                }
+
+                None
+            });
+
+    match error {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }

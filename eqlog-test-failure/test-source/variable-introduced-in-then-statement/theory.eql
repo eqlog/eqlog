@@ -4,5 +4,7 @@ func foo(A) -> B;
 
 rule {
     if x: B;
-    then foo(y) = x;
+    if y: B;
+    then foo(z) = x;
+    then foo(z) = y;
 }
