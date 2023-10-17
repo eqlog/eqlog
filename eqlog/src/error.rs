@@ -18,8 +18,8 @@ impl Display for SymbolKind {
         use SymbolKind::*;
         f.write_str(match self {
             Type => "type",
-            Pred => "pred",
-            Func => "func",
+            Pred => "predicate",
+            Func => "function",
             Rule => "rule",
         })
     }

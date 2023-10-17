@@ -1,4 +1,4 @@
-Error: expected pred, found type Foo
+Error: expected predicate, found type Foo
  --> test-source/bad-symbol-kind-type-predicate/theory.eql:4
   | 
 4 |     if Foo(x, y);

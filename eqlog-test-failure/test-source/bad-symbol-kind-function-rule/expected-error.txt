@@ -1,4 +1,4 @@
-Error: expected func, found rule bar
+Error: expected function, found rule bar
   --> test-source/bad-symbol-kind-function-rule/theory.eql:10
    | 
 10 |     if x = bar(y);
