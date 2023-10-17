@@ -1,0 +1,8 @@
+type A;
+func foo(A) -> A;
+
+rule {
+    if x: A;
+    if y: A;
+    then y := foo(x)!;
+}
