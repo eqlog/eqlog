@@ -1,0 +1,9 @@
+type A;
+type B;
+func foo(A) -> B;
+pred bar(B);
+
+rule {
+    if x: A;
+    then bar(foo(x));
+}

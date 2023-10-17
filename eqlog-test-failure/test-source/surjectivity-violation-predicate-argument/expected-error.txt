@@ -1,0 +1,5 @@
+Error: argument of predicate in conclusion is not used earlier --> test-source/surjectivity-violation-predicate-argument/theory.eql:8
+  | 
+8 |     then bar(foo(x));
+  |              ^^^^^^  
+  | 

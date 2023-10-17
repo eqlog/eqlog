@@ -176,3 +176,16 @@ fn variable_introduced_in_then_statement() {
 fn wildcard_in_then_statement() {
     test_case(Path::new("wildcard-in-then-statement"));
 }
+
+#[test]
+fn surjectivity_violation_predicate_argument() {
+    test_case(Path::new("surjectivity-violation-predicate-argument"));
+}
+#[test]
+fn surjectivity_violation_equality() {
+    test_case(Path::new("surjectivity-violation-equality"));
+}
+#[test]
+fn surjectivity_violation_nested_application() {
+    test_case(Path::new("surjectivity-violation-nested-application"));
+}

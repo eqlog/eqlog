@@ -1,0 +1,5 @@
+Error: argument of predicate in conclusion is not used earlier --> test-source/surjectivity-violation-nested-application/theory.eql:8
+  | 
+8 |     then baz(foo(bar(x)));
+  |              ^^^^^^^^^^^  
+  | 
