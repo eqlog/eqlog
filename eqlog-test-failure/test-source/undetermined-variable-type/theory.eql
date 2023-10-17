@@ -1,0 +1,4 @@
+rule {
+    if x = y;
+    then y = x;
+}

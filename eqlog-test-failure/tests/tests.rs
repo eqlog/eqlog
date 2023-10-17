@@ -148,3 +148,8 @@ fn symbol_declared_twice_func_rule() {
 fn if_after_then() {
     test_case(Path::new("if-after-then"));
 }
+
+#[test]
+fn undetermined_variable_type() {
+    test_case(Path::new("undetermined-variable-type"));
+}
