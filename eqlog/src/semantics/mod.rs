@@ -16,23 +16,35 @@ use crate::grammar_util::*;
 use crate::unification::*;
 use eqlog_eqlog::*;
 
-pub fn check_var_case(rule: &RuleDecl) -> Result<(), CompileError> {
-    let context = &rule.term_context;
-    for tm in context.iter_terms() {
-        match context.data(tm) {
-            TermData::Variable(name) => {
-                if name != &name.to_case(Case::Snake) {
-                    return Err(CompileError::VariableNotSnakeCase {
-                        name: name.into(),
-                        location: context.loc(tm),
-                    });
+pub fn iter_variable_not_snake_case_errors<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<String, Ident>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog.iter_var_term_node().filter_map(|(tm, ident)| {
+        let name: &str = identifiers
+            .iter()
+            .find_map(|(s, i)| {
+                if eqlog.are_equal_ident(*i, ident) {
+                    Some(s.as_str())
+                } else {
+                    None
                 }
-            }
-            TermData::Wildcard | TermData::Application { .. } => {}
-        }
-    }
+            })
+            .unwrap();
 
-    Ok(())
+        if name == &name.to_case(Case::Snake) {
+            return None;
+        }
+
+        let loc = eqlog.term_node_loc(tm).unwrap();
+        let location = *locations.get(&loc).unwrap();
+
+        Some(CompileError::VariableNotSnakeCase {
+            name: name.to_string(),
+            location,
+        })
+    })
 }
 
 pub fn check_vars_occur_twice<'a>(rule: &'a RuleDecl) -> Result<(), CompileError> {
@@ -84,7 +96,6 @@ pub fn check_rule<'a>(
     rule: &'a RuleDecl,
 ) -> Result<CheckedRule<'a>, CompileError> {
     let types = infer_types(symbols, rule)?;
-    check_var_case(rule)?;
     check_vars_occur_twice(rule)?;
     check_if_after_then(rule)?;
     Ok(CheckedRule { types, decl: rule })
@@ -92,13 +103,18 @@ pub fn check_rule<'a>(
 
 pub fn check_eqlog(
     eqlog: &Eqlog,
-    _identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<String, Ident>,
     locations: &BTreeMap<Loc, Location>,
 ) -> Result<(), CompileError> {
     let first_error: Option<CompileError> = iter_then_defined_variable_errors(eqlog, locations)
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
+        .chain(iter_variable_not_snake_case_errors(
+            eqlog,
+            identifiers,
+            locations,
+        ))
         .min_by_key(|err| err.primary_location().1);
 
     if let Some(err) = first_error {
