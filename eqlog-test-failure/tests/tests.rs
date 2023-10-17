@@ -153,3 +153,16 @@ fn if_after_then() {
 fn undetermined_variable_type() {
     test_case(Path::new("undetermined-variable-type"));
 }
+
+#[test]
+fn conflicting_term_type_equality() {
+    test_case(Path::new("conflicting-term-type-equality"));
+}
+#[test]
+fn conflicting_term_type_app_result() {
+    test_case(Path::new("conflicting-term-type-app-result"));
+}
+#[test]
+fn conflicting_term_type_app_arg() {
+    test_case(Path::new("conflicting-term-type-app-arg"));
+}

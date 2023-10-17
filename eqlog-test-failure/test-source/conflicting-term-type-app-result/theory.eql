@@ -1,0 +1,9 @@
+type A;
+type B;
+func foo() -> A;
+func bar() -> B;
+
+rule {
+    if foo() = bar();
+    then bar() = foo();
+}

@@ -1,0 +1,9 @@
+type Foo;
+type Bar;
+
+rule {
+    if x: Foo;
+    if y: Bar;
+    if x = y;
+    then y = x;
+}
