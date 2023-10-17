@@ -189,3 +189,8 @@ fn surjectivity_violation_equality() {
 fn surjectivity_violation_nested_application() {
     test_case(Path::new("surjectivity-violation-nested-application"));
 }
+
+#[test]
+fn then_defined_not_variable() {
+    test_case(Path::new("then-defined-not-variable"));
+}

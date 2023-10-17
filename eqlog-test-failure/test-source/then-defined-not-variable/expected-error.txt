@@ -1,0 +1,6 @@
+Error: expected a variable
+ --> test-source/then-defined-not-variable/theory.eql:7
+  | 
+7 |     then bar() := foo()!;
+  |          ^^^^^           
+  | 

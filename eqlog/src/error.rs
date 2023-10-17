@@ -336,11 +336,11 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *location)?;
             }
             ThenDefinedNotVar { location } => {
-                write!(f, "expected a variable")?;
+                write!(f, "expected a variable\n")?;
                 write_loc(f, Some(*location))?;
             }
             ThenDefinedVarNotNew { location } => {
-                write!(f, "variable has already been introduced earlier")?;
+                write!(f, "variable has already been introduced earlier\n")?;
                 write_loc(f, Some(*location))?;
             }
         }
