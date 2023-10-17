@@ -130,7 +130,7 @@ fn into_unique_types<'a>(
             }
             1 => (),
             _ => {
-                return Err(CompileError::ConflictingTypes {
+                return Err(CompileError::ConflictingTermType {
                     location: Some(context.loc(tm)),
                     types: types[tm].iter().map(|typ| typ.to_string()).collect(),
                 })

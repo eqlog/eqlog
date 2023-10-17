@@ -93,7 +93,7 @@ pub enum CompileError {
     UndeterminedTermType {
         location: Option<Location>,
     },
-    ConflictingTypes {
+    ConflictingTermType {
         types: Vec<String>,
         location: Option<Location>,
     },
@@ -301,7 +301,7 @@ impl Display for CompileErrorWithContext {
                 write!(f, "sort of term undetermined\n")?;
                 write_loc(f, *location)?;
             }
-            ConflictingTypes { types: _, location } => {
+            ConflictingTermType { types: _, location } => {
                 write!(f, "term has conflicting types\n")?;
                 write_loc(f, *location)?;
             }
