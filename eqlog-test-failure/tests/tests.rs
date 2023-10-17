@@ -166,3 +166,8 @@ fn conflicting_term_type_app_result() {
 fn conflicting_term_type_app_arg() {
     test_case(Path::new("conflicting-term-type-app-arg"));
 }
+
+#[test]
+fn variable_introduced_in_then_statement() {
+    test_case(Path::new("variable-introduced-in-then-statement"));
+}
