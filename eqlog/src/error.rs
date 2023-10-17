@@ -224,7 +224,7 @@ impl Display for CompileErrorWithContext {
                 location,
                 symbol_kind,
             } => {
-                write!(f, "{symbol_kind} {name} is not UpperCamelCase\n")?;
+                write!(f, "{symbol_kind} \"{name}\" is not UpperCamelCase\n")?;
                 write_loc(f, *location)?;
             }
             SymbolNotSnakeCase {
@@ -232,15 +232,15 @@ impl Display for CompileErrorWithContext {
                 location,
                 symbol_kind,
             } => {
-                write!(f, "{symbol_kind} {name} is not lower_snake_case\n")?;
+                write!(f, "{symbol_kind} \"{name}\" is not lower_snake_case\n")?;
                 write_loc(f, *location)?;
             }
             VariableNotSnakeCase { name, location } => {
-                write!(f, "variable {name} is not lower_snake_case\n")?;
+                write!(f, "variable \"{name}\" is not lower_snake_case\n")?;
                 write_loc(f, Some(*location))?;
             }
             VariableOccursOnlyOnce { name, location } => {
-                write!(f, "variable {name} occurs only once\n")?;
+                write!(f, "variable \"{name}\" occurs only once\n")?;
                 write_loc(f, *location)?;
             }
             FunctionArgumentNumber {
@@ -278,9 +278,9 @@ impl Display for CompileErrorWithContext {
                 used_at,
                 declared_at,
             } => {
-                write!(f, "expected {expected}, found {found} {name}\n")?;
+                write!(f, "expected {expected}, found {found} \"{name}\"\n")?;
                 write_loc(f, Some(*used_at))?;
-                write!(f, "{name} declared as {found} here:\n")?;
+                write!(f, "\"{name}\" declared as {found} here:\n")?;
                 write_loc(f, Some(*declared_at))?;
             }
             SymbolDeclaredTwice {

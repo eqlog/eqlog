@@ -1,4 +1,4 @@
-Error: variable X is not lower_snake_case
+Error: variable "X" is not lower_snake_case
  --> test-source/bad-case-variable/theory.eql:6
   | 
 6 |     if bar(X);

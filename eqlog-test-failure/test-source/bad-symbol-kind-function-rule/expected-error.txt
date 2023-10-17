@@ -1,10 +1,10 @@
-Error: expected function, found rule bar
+Error: expected function, found rule "bar"
   --> test-source/bad-symbol-kind-function-rule/theory.eql:10
    | 
 10 |     if x = bar(y);
    |            ^^^^^^ 
    | 
-bar declared as rule here:
+"bar" declared as rule here:
  --> test-source/bad-symbol-kind-function-rule/theory.eql:3
   | 
 3 | rule bar {

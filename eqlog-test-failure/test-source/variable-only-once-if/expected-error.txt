@@ -1,4 +1,4 @@
-Error: variable y occurs only once
+Error: variable "y" occurs only once
  --> test-source/variable-only-once-if/theory.eql:6
   | 
 6 |     if bar(x, y);

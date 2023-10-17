@@ -1,4 +1,4 @@
-Error: predicate Foo is not lower_snake_case
+Error: predicate "Foo" is not lower_snake_case
  --> test-source/bad-case-predicate/theory.eql:1
   | 
 1 | pred Foo();
