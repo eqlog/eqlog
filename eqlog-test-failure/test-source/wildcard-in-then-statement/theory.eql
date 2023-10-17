@@ -1,0 +1,8 @@
+type A;
+type B;
+func foo(A) -> B;
+
+rule {
+    if x: B;
+    then foo(_) = x;
+}

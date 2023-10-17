@@ -171,3 +171,8 @@ fn conflicting_term_type_app_arg() {
 fn variable_introduced_in_then_statement() {
     test_case(Path::new("variable-introduced-in-then-statement"));
 }
+
+#[test]
+fn wildcard_in_then_statement() {
+    test_case(Path::new("wildcard-in-then-statement"));
+}

@@ -1,0 +1,6 @@
+Error: wildcards must not appear in then statements
+ --> test-source/wildcard-in-then-statement/theory.eql:7
+  | 
+7 |     then foo(_) = x;
+  |              ^      
+  | 
