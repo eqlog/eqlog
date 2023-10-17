@@ -16,7 +16,7 @@ rule real_virt_ident_total {
     then real_virt_ident(ident)!;
 }
 
-// ## Syntax tree nodes
+// ## Abstract syntax tree (AST) nodes
 
 type TypeDeclNode;
 pred type_decl(TypeDeclNode, name: Ident);
@@ -105,6 +105,151 @@ func rule_decl_node_loc(RuleDeclNode) -> Loc;
 func decl_node_loc(DeclNode) -> Loc;
 func decl_list_node_loc(DeclListNode) -> Loc;
 func module_node_loc(ModuleNode) -> Loc;
+
+// ### Child nodes of rules
+//
+// Every node that can appear as a descendant of a `RuleDeclNode` can be
+// coerced into a `RuleChildNode`. This can then be used to query the rule that
+// a given node belongs to.
+type RuleChildNode;
+
+func rule_child_term(TermNode) -> RuleChildNode;
+func rule_child_term_list(TermListNode) -> RuleChildNode;
+func rule_child_opt_term(OptTermNode) -> RuleChildNode;
+func rule_child_if_atom(IfAtomNode) -> RuleChildNode;
+func rule_child_then_atom(ThenAtomNode) -> RuleChildNode;
+func rule_child_stmt(StmtNode) -> RuleChildNode;
+func rule_child_stmt_list(StmtListNode) -> RuleChildNode;
+
+rule rule_child_term_total {
+    if tm: TermNode;
+    then rule_child_term(tm)!;
+}
+rule rule_child_term_list_total {
+    if tms: TermListNode;
+    then rule_child_term_list(tms)!;
+}
+rule rule_child_opt_term_total {
+    if opt_tm: OptTermNode;
+    then rule_child_opt_term(opt_tm)!;
+}
+rule rule_child_if_atom_total {
+    if atom: IfAtomNode;
+    then rule_child_if_atom(atom)!;
+}
+rule rule_child_then_atom_total {
+    if atom: ThenAtomNode;
+    then rule_child_then_atom(atom)!;
+}
+rule rule_child_stmt_total {
+    if stmt: StmtNode;
+    then rule_child_stmt(stmt)!;
+}
+rule rule_child_stmt_list_total {
+    if stmts: StmtListNode;
+    then rule_child_stmt_list(stmts)!;
+}
+
+pred rule_child(RuleChildNode, RuleDeclNode);
+
+rule rule_child_rule_decl {
+    if rule_decl(rul, stmts);
+    if child = rule_child_stmt_list(stmts);
+    then rule_child(child, rul);
+}
+
+rule rule_child_stmts_cons {
+    if cons_stmt_list_node(stmts, head, tail);
+    if rule_child(rule_child_stmt_list(stmts), rul);
+    if child_head = rule_child_stmt(head);
+    if child_tail = rule_child_stmt_list(tail);
+    then rule_child(child_head, rul);
+    then rule_child(child_tail, rul);
+}
+
+rule rule_child_stmt_if {
+    if if_stmt_node(stmt, atom);
+    if rule_child(rule_child_stmt(stmt), rul);
+    if child_atom = rule_child_if_atom(atom);
+    then rule_child(child_atom, rul);
+}
+rule rule_child_stmt_then {
+    if then_stmt_node(stmt, atom);
+    if rule_child(rule_child_stmt(stmt), rul);
+    if child_atom = rule_child_then_atom(atom);
+    then rule_child(child_atom, rul);
+}
+
+rule rule_child_if_atom_equal {
+    if equal_if_atom_node(atom, lhs, rhs);
+    if rule_child(rule_child_if_atom(atom), rul);
+    if child_lhs = rule_child_term(lhs);
+    if child_rhs = rule_child_term(rhs);
+    then rule_child(child_lhs, rul);
+    then rule_child(child_rhs, rul);
+}
+rule rule_child_if_atom_defined {
+    if defined_if_atom_node(atom, tm);
+    if rule_child(rule_child_if_atom(atom), rul);
+    if child_tm = rule_child_term(tm);
+    then rule_child(child_tm, rul);
+}
+rule rule_child_if_atom_pred {
+    if pred_if_atom_node(atom, _, tms);
+    if rule_child(rule_child_if_atom(atom), rul);
+    if child_tms = rule_child_term_list(tms);
+    then rule_child(child_tms, rul);
+}
+rule rule_child_if_atom_var {
+    if var_if_atom_node(atom, tm, _);
+    if rule_child(rule_child_if_atom(atom), rul);
+    if child_tm = rule_child_term(tm);
+    then rule_child(child_tm, rul);
+}
+
+rule rule_child_then_atom_equal {
+    if equal_then_atom_node(atom, lhs, rhs);
+    if rule_child(rule_child_then_atom(atom), rul);
+    if child_lhs = rule_child_term(lhs);
+    if child_rhs = rule_child_term(rhs);
+    then rule_child(child_lhs, rul);
+    then rule_child(child_rhs, rul);
+}
+rule rule_child_then_atom_defined {
+    if defined_then_atom_node(atom, var_tm, tm);
+    if rule_child(rule_child_then_atom(atom), rul);
+    if child_var_tm = rule_child_opt_term(var_tm);
+    if child_tm = rule_child_term(tm);
+    then rule_child(child_var_tm, rul);
+    then rule_child(child_tm, rul);
+}
+rule rule_child_then_atom_pred {
+    if pred_then_atom_node(atom, _, tms);
+    if rule_child(rule_child_then_atom(atom), rul);
+    if child_tms = rule_child_term_list(tms);
+    then rule_child(child_tms, rul);
+}
+
+rule rule_child_terms_cons {
+    if cons_term_list_node(tms, head, tail);
+    if rule_child(rule_child_term_list(tms), rul);
+    if child_head = rule_child_term(head);
+    if child_tail = rule_child_term_list(tail);
+    then rule_child(child_head, rul);
+    then rule_child(child_tail, rul);
+}
+rule rule_child_opt_term_some {
+    if some_term_node(opt_tm, tm);
+    if rule_child(rule_child_opt_term(opt_tm), rul);
+    if child_tm = rule_child_term(tm);
+    then rule_child(child_tm, rul);
+}
+rule rule_child_term_app {
+    if app_term_node(tm, _, args);
+    if rule_child(rule_child_term(tm), rul);
+    if child_args = rule_child_term_list(args);
+    then rule_child(child_args, rul);
+}
 
 // ## Semantic types, predicates and functions
 
@@ -1084,4 +1229,13 @@ rule surjective_img_el_is_ok {
     if should_be_surjective(morph);
     if el_in_img(morph, el);
     then el_is_surjective_ok(el);
+}
+
+// ## Variable occurs twice check
+
+pred var_term_in_rule(TermNode, Ident, RuleDeclNode);
+rule var_term_in_rule_child {
+    if var_term_node(tm, ident);
+    if rule_child(rule_child_term(tm), rul);
+    then var_term_in_rule(tm, ident, rul);
 }

@@ -3,6 +3,7 @@ mod symbol_table;
 mod type_inference;
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use check_epic::*;
 use convert_case::Case;
@@ -47,25 +48,47 @@ pub fn iter_variable_not_snake_case_errors<'a>(
     })
 }
 
-pub fn check_vars_occur_twice<'a>(rule: &'a RuleDecl) -> Result<(), CompileError> {
-    let context = &rule.term_context;
-    let mut occ_nums: BTreeMap<&str, (usize, Location)> = BTreeMap::new();
-    for tm in context.iter_terms() {
-        if let TermData::Variable(v) = context.data(tm) {
-            let loc = context.loc(tm);
-            let (count, _): &mut (usize, Location) = occ_nums.entry(v.as_str()).or_insert((0, loc));
-            *count += 1;
-        }
+pub fn iter_variable_occurs_twice<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<String, Ident>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    let mut var_tms: BTreeMap<(RuleDeclNode, Ident), BTreeSet<TermNode>> = BTreeMap::new();
+
+    for (tm, ident, rule) in eqlog.iter_var_term_in_rule() {
+        var_tms
+            .entry((rule, ident))
+            .or_insert(BTreeSet::new())
+            .insert(tm);
     }
-    for (name, (n, loc)) in occ_nums.into_iter() {
-        if n == 1 {
-            return Err(CompileError::VariableOccursOnlyOnce {
-                name: name.into(),
-                location: loc,
-            });
+
+    var_tms.into_iter().filter_map(|((_, ident), var_tms)| {
+        if var_tms.len() >= 2 {
+            return None;
         }
-    }
-    Ok(())
+
+        assert!(var_tms.len() == 1);
+        let var_tm = var_tms.into_iter().next().unwrap();
+
+        let name: &str = identifiers
+            .iter()
+            .find_map(|(s, i)| {
+                if eqlog.are_equal_ident(*i, ident) {
+                    Some(s.as_str())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
+        let loc = eqlog.term_node_loc(var_tm).unwrap();
+        let location = *locations.get(&loc).unwrap();
+
+        Some(CompileError::VariableOccursOnlyOnce {
+            name: name.to_string(),
+            location,
+        })
+    })
 }
 
 pub fn check_if_after_then<'a>(rule: &'a RuleDecl) -> Result<(), CompileError> {
@@ -96,7 +119,6 @@ pub fn check_rule<'a>(
     rule: &'a RuleDecl,
 ) -> Result<CheckedRule<'a>, CompileError> {
     let types = infer_types(symbols, rule)?;
-    check_vars_occur_twice(rule)?;
     check_if_after_then(rule)?;
     Ok(CheckedRule { types, decl: rule })
 }
@@ -110,6 +132,7 @@ pub fn check_eqlog(
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
+        .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
         .chain(iter_variable_not_snake_case_errors(
             eqlog,
             identifiers,
