@@ -38,9 +38,6 @@ impl TermContext {
     pub fn loc(&self, tm: Term) -> Location {
         self.0[tm.0].1
     }
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
     pub fn iter_terms(&self) -> impl Iterator<Item = Term> {
         (0..self.0.len()).map(Term)
     }

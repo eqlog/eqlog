@@ -3,7 +3,6 @@ mod eqlog_util;
 mod grammar_util;
 mod module;
 mod semantics;
-mod unification;
 use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(
     #[allow(unused)]

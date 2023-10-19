@@ -159,7 +159,7 @@ fn flatten_delta(
         if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
             let tm = get_flat_term_or_create(el, &mut flat_names);
 
-            let typ = eqlog.el_type(el).unwrap();
+            let typ = el_type(el, eqlog).unwrap();
             let type_ident = eqlog
                 .iter_semantic_type()
                 .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))
@@ -187,7 +187,7 @@ fn sort_map(
     flat_names
         .iter()
         .map(|(el, tms)| {
-            let typ = eqlog.el_type(*el).unwrap();
+            let typ = el_type(*el, eqlog).unwrap();
             let type_ident = eqlog
                 .iter_semantic_type()
                 .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))

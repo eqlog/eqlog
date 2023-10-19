@@ -374,40 +374,40 @@ rule var_structure {
 }
 
 // ### The types of elements
-func el_type(El) -> Type;
-func el_types(ElList) -> TypeList;
+pred el_type(El, Type);
+pred el_types(ElList, TypeList);
 
 rule nil_el_types {
     if els = nil_el_list(_);
     then nil_type_list()!;
-    then el_types(els) = nil_type_list();
+    then el_types(els, nil_type_list());
 }
 rule cons_el_types {
     if els = cons_el_list(head, tail);
-    if head_type = el_type(head);
-    if tail_types = el_types(tail);
+    if el_type(head, head_type);
+    if el_types(tail, tail_types);
     then cons_type_list(head_type, tail_types)!;
-    then el_types(els) = cons_type_list(head_type, tail_types);
+    then el_types(els, cons_type_list(head_type, tail_types));
 }
 rule cons_el_types_reverse {
     if els = cons_el_list(head, tail);
-    if el_types(els) = cons_type_list(head_type, tail_types);
-    then el_type(head) = head_type;
-    then el_types(tail) = tail_types;
+    if el_types(els, cons_type_list(head_type, tail_types));
+    then el_type(head, head_type);
+    then el_types(tail, tail_types);
 }
 
 rule func_app_types {
     if result = func_app(function, args);
     if domain(function) = dom;
     if codomain(function) = cod;
-    then el_types(args) = dom;
-    then el_type(result) = cod;
+    then el_types(args, dom);
+    then el_type(result, cod);
 }
 
 rule pred_app_types {
     if pred_app(predicate, args);
     if arity(predicate) = ar;
-    then el_types(args) = ar;
+    then el_types(args, ar);
 }
 
 // ### Constrained elements
@@ -498,13 +498,13 @@ rule map_pred_app {
 
 // Morphisms preserve and reflect types.
 rule map_preserves_el_type {
-    if el_type(el) = typ;
+    if el_type(el, typ);
     if mapped_el = map_el(_, el);
-    then el_type(mapped_el) = typ;
+    then el_type(mapped_el, typ);
 }
 rule map_reflects_el_type {
-    if el_type(map_el(_, el)) = typ;
-    then el_type(el) = typ;
+    if el_type(map_el(_, el), typ);
+    then el_type(el, typ);
 }
 
 // ### Kernel pairs of morphisms.
@@ -807,7 +807,7 @@ rule var_if_atom_semantics {
     if var_if_atom_node(_, var_term, type_name);
     if typ = semantic_type(type_name);
     if var_el = semantic_el(var_term);
-    then el_type(var_el) = typ;
+    then el_type(var_el, typ);
 }
 
 // #### Semantics of then atoms

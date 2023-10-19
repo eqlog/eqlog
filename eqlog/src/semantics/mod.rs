@@ -2,6 +2,7 @@ mod check_epic;
 mod symbol_table;
 mod type_inference;
 
+use std::collections::btree_map;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -14,7 +15,6 @@ use type_inference::*;
 use crate::ast::*;
 use crate::error::*;
 use crate::grammar_util::*;
-use crate::unification::*;
 use eqlog_eqlog::*;
 
 pub fn iter_variable_not_snake_case_errors<'a>(
@@ -91,6 +91,66 @@ pub fn iter_variable_occurs_twice<'a>(
     })
 }
 
+pub fn iter_conflicting_type_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    let mut el_type: BTreeMap<El, Type> = BTreeMap::new();
+    eqlog
+        .iter_el_type()
+        .filter_map(move |(el, ty)| match el_type.entry(el) {
+            btree_map::Entry::Vacant(vacant) => {
+                vacant.insert(ty);
+                None
+            }
+            btree_map::Entry::Occupied(occupied) => {
+                if eqlog.are_equal_type(*occupied.get(), ty) {
+                    None
+                } else {
+                    Some(el)
+                }
+            }
+        })
+        .flat_map(move |el| {
+            eqlog.iter_semantic_el().filter_map(move |(tm, e)| {
+                if !eqlog.are_equal_el(e, el) {
+                    return None;
+                }
+
+                let loc = eqlog.term_node_loc(tm).unwrap();
+                let location = *locations.get(&loc).unwrap();
+
+                Some(CompileError::ConflictingTermType {
+                    types: Vec::new(),
+                    location,
+                })
+            })
+        })
+}
+
+pub fn iter_undetermined_type_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    let all_els: BTreeSet<El> = eqlog.iter_el().collect();
+    let els_with_type: BTreeSet<El> = eqlog.iter_el_type().map(|(el, _)| el).collect();
+
+    all_els
+        .into_iter()
+        .filter(move |el| !els_with_type.contains(el))
+        .flat_map(move |el| {
+            eqlog.iter_semantic_el().filter_map(move |(tm, e)| {
+                if !eqlog.are_equal_el(e, el) {
+                    return None;
+                }
+
+                let loc = eqlog.term_node_loc(tm).unwrap();
+                let location = *locations.get(&loc).unwrap();
+                return Some(CompileError::UndeterminedTermType { location });
+            })
+        })
+}
+
 pub fn iter_if_after_then_errors<'a>(
     eqlog: &'a Eqlog,
     locations: &'a BTreeMap<Loc, Location>,
@@ -104,15 +164,14 @@ pub fn iter_if_after_then_errors<'a>(
 
 pub struct CheckedRule<'a> {
     pub decl: &'a RuleDecl,
-    pub types: TermMap<&'a str>,
 }
 
 pub fn check_rule<'a>(
     symbols: &'a SymbolTable<'a>,
     rule: &'a RuleDecl,
 ) -> Result<CheckedRule<'a>, CompileError> {
-    let types = infer_types(symbols, rule)?;
-    Ok(CheckedRule { types, decl: rule })
+    infer_types(symbols, rule)?;
+    Ok(CheckedRule { decl: rule })
 }
 
 pub fn check_eqlog(
@@ -123,6 +182,8 @@ pub fn check_eqlog(
     let first_error: Option<CompileError> = iter_then_defined_variable_errors(eqlog, locations)
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
+        .chain(iter_conflicting_type_errors(eqlog, locations))
+        .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
         .chain(iter_if_after_then_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
