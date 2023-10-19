@@ -1,6 +1,3 @@
-use convert_case::Case;
-use convert_case::Casing;
-
 use crate::ast::*;
 use crate::error::*;
 use crate::grammar_util::*;
@@ -70,13 +67,13 @@ impl<'a> SymbolRef<'a> {
         }
     }
 
-    fn kind(&self) -> SymbolKind {
+    fn kind(&self) -> SymbolKindEnum {
         use SymbolRef::*;
         match self {
-            Type(_) => SymbolKind::Type,
-            Pred { .. } => SymbolKind::Pred,
-            Func { .. } => SymbolKind::Func,
-            Rule(_) => SymbolKind::Rule,
+            Type(_) => SymbolKindEnum::Type,
+            Pred { .. } => SymbolKindEnum::Pred,
+            Func { .. } => SymbolKindEnum::Func,
+            Rule(_) => SymbolKindEnum::Rule,
         }
     }
 }
@@ -89,19 +86,10 @@ impl<'a> SymbolTable<'a> {
         let mut syms: BTreeMap<&'a str, SymbolRef<'a>> = BTreeMap::new();
         for sym in module.0.iter().filter_map(SymbolRef::try_from_decl) {
             let name = sym.name();
-            let sym_loc = sym.loc();
-            let prev_sym = syms.insert(name, sym);
-            if let Some(prev_sym) = prev_sym {
-                return Err(CompileError::SymbolDeclaredTwice {
-                    name: name.into(),
-                    first_declaration: prev_sym.loc(),
-                    second_declaration: sym_loc,
-                });
-            }
+            syms.insert(name, sym);
         }
         let table = SymbolTable(syms);
         table.check_resolve()?;
-        table.check_casing()?;
         Ok(table)
     }
 
@@ -130,36 +118,6 @@ impl<'a> SymbolTable<'a> {
         Ok(())
     }
 
-    fn check_casing(&self) -> Result<(), CompileError> {
-        for sym in self.0.values() {
-            let name = sym.name();
-            let loc = sym.loc();
-            let symbol_kind = sym.kind();
-            match symbol_kind {
-                SymbolKind::Type => {
-                    if name != name.to_case(Case::UpperCamel) {
-                        return Err(CompileError::SymbolNotCamelCase {
-                            name: name.to_string(),
-                            location: loc,
-                            symbol_kind,
-                        });
-                    }
-                }
-                SymbolKind::Pred | SymbolKind::Func | SymbolKind::Rule => {
-                    if name != name.to_case(Case::Snake) {
-                        return Err(CompileError::SymbolNotSnakeCase {
-                            name: name.to_string(),
-                            location: loc,
-                            symbol_kind,
-                        });
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn get_symbol(
         &'a self,
         name: &str,
@@ -180,7 +138,7 @@ impl<'a> SymbolTable<'a> {
         } else {
             Err(CompileError::BadSymbolKind {
                 name: name.into(),
-                expected: SymbolKind::Type,
+                expected: SymbolKindEnum::Type,
                 found: sym.kind(),
                 used_at,
                 declared_at: sym.loc(),
@@ -195,7 +153,7 @@ impl<'a> SymbolTable<'a> {
         } else {
             Err(CompileError::BadSymbolKind {
                 name: name.into(),
-                expected: SymbolKind::Pred,
+                expected: SymbolKindEnum::Pred,
                 found: sym.kind(),
                 used_at,
                 declared_at: sym.loc(),
@@ -210,7 +168,7 @@ impl<'a> SymbolTable<'a> {
         } else {
             Err(CompileError::BadSymbolKind {
                 name: name.into(),
-                expected: SymbolKind::Func,
+                expected: SymbolKindEnum::Func,
                 found: sym.kind(),
                 used_at,
                 declared_at: sym.loc(),

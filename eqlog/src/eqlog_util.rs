@@ -1,3 +1,4 @@
+use crate::error::SymbolKindEnum;
 use eqlog_eqlog::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
@@ -105,6 +106,23 @@ pub fn el_type(el: El, eqlog: &Eqlog) -> Option<Type> {
             None
         }
     })
+}
+
+pub fn symbol_kind(kind: SymbolKind, eqlog: &Eqlog) -> SymbolKindEnum {
+    if eqlog.are_equal_symbol_kind(kind, eqlog.type_symbol().unwrap()) {
+        return SymbolKindEnum::Type;
+    }
+    if eqlog.are_equal_symbol_kind(kind, eqlog.pred_symbol().unwrap()) {
+        return SymbolKindEnum::Pred;
+    }
+    if eqlog.are_equal_symbol_kind(kind, eqlog.func_symbol().unwrap()) {
+        return SymbolKindEnum::Func;
+    }
+    if eqlog.are_equal_symbol_kind(kind, eqlog.rule_symbol().unwrap()) {
+        return SymbolKindEnum::Rule;
+    }
+
+    panic!("Invalid symbol kind")
 }
 
 struct StructureDisplay<'a> {

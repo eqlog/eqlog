@@ -5,6 +5,7 @@ mod type_inference;
 use std::collections::btree_map;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::iter;
 
 use check_epic::*;
 use convert_case::Case;
@@ -13,6 +14,7 @@ pub use symbol_table::*;
 use type_inference::*;
 
 use crate::ast::*;
+use crate::eqlog_util::*;
 use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
@@ -162,6 +164,95 @@ pub fn iter_if_after_then_errors<'a>(
     })
 }
 
+pub fn iter_symbol_declared_twice_errors<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<String, Ident>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    let mut symbols: BTreeMap<Ident, Vec<Loc>> = BTreeMap::new();
+    for (name, _, loc) in eqlog.iter_defined_symbol() {
+        symbols.entry(name).or_insert(Vec::new()).push(loc);
+    }
+
+    symbols.into_iter().filter_map(|(ident, locs)| {
+        if locs.len() <= 1 {
+            return None;
+        }
+
+        let mut locations: Vec<Location> = locs
+            .into_iter()
+            .map(|loc| *locations.get(&loc).unwrap())
+            .collect();
+        locations.sort_by_key(|location| location.1);
+        assert!(locations.len() > 1);
+        let first_declaration = locations[0];
+        let second_declaration = locations[1];
+
+        let name: String = identifiers
+            .iter()
+            .find_map(|(s, i)| {
+                if eqlog.are_equal_ident(*i, ident) {
+                    Some(s.to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        Some(CompileError::SymbolDeclaredTwice {
+            name,
+            first_declaration,
+            second_declaration,
+        })
+    })
+}
+
+pub fn iter_symbol_casing_errors<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<String, Ident>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_defined_symbol()
+        .filter_map(|(ident, kind, loc)| {
+            let name: &str = identifiers
+                .iter()
+                .find_map(|(s, i)| {
+                    if eqlog.are_equal_ident(*i, ident) {
+                        Some(s.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+
+            let location = *locations.get(&loc).unwrap();
+
+            let symbol_kind = symbol_kind(kind, eqlog);
+            match symbol_kind {
+                SymbolKindEnum::Type => {
+                    if name != name.to_case(Case::UpperCamel) {
+                        return Some(CompileError::SymbolNotCamelCase {
+                            name: name.to_string(),
+                            location,
+                            symbol_kind,
+                        });
+                    }
+                }
+                SymbolKindEnum::Pred | SymbolKindEnum::Func | SymbolKindEnum::Rule => {
+                    if name != name.to_case(Case::Snake) {
+                        return Some(CompileError::SymbolNotSnakeCase {
+                            name: name.to_string(),
+                            location,
+                            symbol_kind,
+                        });
+                    }
+                }
+            };
+
+            None
+        })
+}
+
 pub struct CheckedRule<'a> {
     pub decl: &'a RuleDecl,
 }
@@ -179,7 +270,14 @@ pub fn check_eqlog(
     identifiers: &BTreeMap<String, Ident>,
     locations: &BTreeMap<Loc, Location>,
 ) -> Result<(), CompileError> {
-    let first_error: Option<CompileError> = iter_then_defined_variable_errors(eqlog, locations)
+    let first_error: Option<CompileError> = iter::empty()
+        .chain(iter_symbol_declared_twice_errors(
+            eqlog,
+            identifiers,
+            locations,
+        ))
+        .chain(iter_symbol_casing_errors(eqlog, identifiers, locations))
+        .chain(iter_then_defined_variable_errors(eqlog, locations))
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
         .chain(iter_conflicting_type_errors(eqlog, locations))

@@ -185,6 +185,10 @@ RuleDecl: RuleDeclNode = {
         let body = stmt_list_node(body.as_slice(), eqlog);
         eqlog.insert_rule_decl(rule, body);
 
+        if let Some(name) = name {
+            eqlog.insert_rule_name(rule, name);
+        }
+
         let loc = make_loc(Location(l, r), eqlog, locations);
         eqlog.insert_rule_decl_node_loc(rule, loc);
 

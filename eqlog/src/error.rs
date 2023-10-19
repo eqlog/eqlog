@@ -6,16 +6,16 @@ use std::fmt::{self, Display};
 use std::path::PathBuf;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum SymbolKind {
+pub enum SymbolKindEnum {
     Type,
     Pred,
     Func,
     Rule,
 }
 
-impl Display for SymbolKind {
+impl Display for SymbolKindEnum {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use SymbolKind::*;
+        use SymbolKindEnum::*;
         f.write_str(match self {
             Type => "type",
             Pred => "predicate",
@@ -44,12 +44,12 @@ pub enum CompileError {
     SymbolNotCamelCase {
         name: String,
         location: Location,
-        symbol_kind: SymbolKind,
+        symbol_kind: SymbolKindEnum,
     },
     SymbolNotSnakeCase {
         name: String,
         location: Location,
-        symbol_kind: SymbolKind,
+        symbol_kind: SymbolKindEnum,
     },
     VariableNotSnakeCase {
         name: String,
@@ -77,8 +77,8 @@ pub enum CompileError {
     },
     BadSymbolKind {
         name: String,
-        expected: SymbolKind,
-        found: SymbolKind,
+        expected: SymbolKindEnum,
+        found: SymbolKindEnum,
         used_at: Location,
         declared_at: Location,
     },

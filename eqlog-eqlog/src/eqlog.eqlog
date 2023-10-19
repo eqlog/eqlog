@@ -72,6 +72,8 @@ pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode)
 
 type RuleDeclNode;
 pred rule_decl(node: RuleDeclNode, stmts: StmtListNode);
+// This is defined for non-anonymous RuleDeclNode elements only.
+func rule_name(RuleDeclNode) -> Ident;
 
 type DeclNode;
 pred decl_node_type(DeclNode, TypeDeclNode);
@@ -587,6 +589,51 @@ rule chain_transition_signature {
     if head_1 = chain_head_structure(tail);
     then dom(trans) = head_0;
     then cod(trans) = head_1;
+}
+
+// ## Symbol checks
+//
+// This is for facilitating checks for duplicated symbols, wrong symbol types,
+// and wrong argument numbers.
+
+type SymbolKind;
+func type_symbol() -> SymbolKind;
+func pred_symbol() -> SymbolKind;
+func func_symbol() -> SymbolKind;
+func rule_symbol() -> SymbolKind;
+rule {
+    then type_symbol()!;
+    then pred_symbol()!;
+    then func_symbol()!;
+    then rule_symbol()!;
+}
+
+pred defined_symbol(Ident, SymbolKind, Loc);
+
+rule type_decl_defines_symbol {
+    if type_decl(decl, name);
+    if kind = type_symbol();
+    if loc = type_decl_node_loc(decl);
+    then defined_symbol(name, kind, loc);
+}
+rule pred_decl_defines_symbol {
+    if pred_decl(decl, name, _);
+    if kind = pred_symbol();
+    if loc = pred_decl_node_loc(decl);
+    then defined_symbol(name, kind, loc);
+}
+rule func_decl_defines_symbol {
+    if func_decl(decl, name, _, _);
+    if kind = func_symbol();
+    if loc = func_decl_node_loc(decl);
+    then defined_symbol(name, kind, loc);
+}
+rule rule_decl_defines_symbol {
+    if rule_decl(decl, _);
+    if name = rule_name(decl);
+    if kind = rule_symbol();
+    if loc = rule_decl_node_loc(decl);
+    then defined_symbol(name, kind, loc);
 }
 
 // ## The Chain associated to a RuleDeclNode
