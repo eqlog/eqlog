@@ -1698,16 +1698,22 @@ fn write_define_fn(out: &mut impl Write, function: &FuncDecl) -> io::Result<()> 
     "}
 }
 
-fn write_theory_struct(out: &mut impl Write, name: &str, module: &ModuleWrapper) -> io::Result<()> {
+fn write_theory_struct(
+    out: &mut impl Write,
+    name: &str,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
     write!(out, "/// A model of the `{name}` theory.\n")?;
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
-    for sort in module.symbols.iter_types() {
-        write_sort_fields(out, &sort.name)?;
+    for (_, type_ident) in eqlog.iter_type_decl() {
+        let type_name = identifiers.get(&type_ident).unwrap().as_str();
+        write_sort_fields(out, type_name)?;
         write!(out, "\n")?;
     }
 
-    for (relation, _) in module.symbols.iter_rels() {
+    for (relation, _) in iter_relation_arities(eqlog, identifiers) {
         let relation_snake = relation.to_case(Snake);
         let relation_camel = relation.to_case(UpperCamel);
         write!(out, "  {relation_snake}: {relation_camel}Table,")?;
@@ -1853,7 +1859,7 @@ pub fn write_module(
     write!(out, "\n")?;
 
     write_model_delta_struct(out, eqlog, identifiers)?;
-    write_theory_struct(out, name, module)?;
+    write_theory_struct(out, name, eqlog, identifiers)?;
 
     write_model_delta_impl(out, module)?;
     write!(out, "\n")?;
