@@ -1765,13 +1765,12 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
 
-    for pred in module.symbols.iter_preds() {
-        let arity = module.symbols.get_arity(&pred.name).unwrap();
-        write_pub_predicate_holds_fn(out, &pred.name, &arity)?;
+    for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
+        write_pub_predicate_holds_fn(out, pred, &arity)?;
         if arity.len() > 0 {
-            write_pub_iter_fn(out, &pred.name, &arity, false)?;
+            write_pub_iter_fn(out, pred, &arity, false)?;
         }
-        write_pub_insert_relation(out, &pred.name, &arity, false)?;
+        write_pub_insert_relation(out, &pred, &arity, false)?;
         write!(out, "\n")?;
     }
 
