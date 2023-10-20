@@ -189,6 +189,15 @@ pub fn iter_relation_arities<'a>(
         )
 }
 
+pub fn iter_types<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Iterator<Item = &'a str> {
+    eqlog
+        .iter_type_decl()
+        .map(|(_, type_ident)| identifiers.get(&type_ident).unwrap().as_str())
+}
+
 /// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element
 /// representing the natural number in the provided eqlog model.
 fn nats<'a>(eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Nat> {

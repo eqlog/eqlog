@@ -995,12 +995,17 @@ fn write_model_delta_struct(
     "}
 }
 
-fn write_model_delta_impl(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
+fn write_model_delta_impl(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+    module: &ModuleWrapper,
+) -> io::Result<()> {
     writedoc! {out, "
         impl ModelDelta {{
     "}?;
 
-    write_model_delta_new_fn(out, module)?;
+    write_model_delta_new_fn(out, eqlog, identifiers)?;
 
     write_model_delta_apply_fn(out)?;
     write_model_delta_apply_new_elements_fn(out, module)?;
@@ -1017,23 +1022,23 @@ fn write_model_delta_impl(out: &mut impl Write, module: &ModuleWrapper) -> io::R
     Ok(())
 }
 
-fn write_model_delta_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
-    let new_tuples = module
-        .symbols
-        .iter_rels()
-        .format_with("\n", |(relation, _), f| {
+fn write_model_delta_new_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let new_tuples =
+        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!("    new_{relation_snake}: Vec::new(),"))
         });
-    let new_equalities = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort = &sort.name;
+    let new_equalities = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
         f(&format_args!(
             "    new_{sort_snake}_equalities: Vec::new(),"
         ))
     });
-    let new_element_number = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort = &sort.name;
+    let new_element_number = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
         f(&format_args!("    new_{sort_snake}_number: 0,"))
     });
@@ -1861,7 +1866,7 @@ pub fn write_module(
     write_model_delta_struct(out, eqlog, identifiers)?;
     write_theory_struct(out, name, eqlog, identifiers)?;
 
-    write_model_delta_impl(out, module)?;
+    write_model_delta_impl(out, eqlog, identifiers, module)?;
     write!(out, "\n")?;
 
     write_theory_impl(out, name, module, query_actions)?;
