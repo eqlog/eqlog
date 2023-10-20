@@ -35,9 +35,11 @@ impl TermContext {
     pub fn data(&self, tm: Term) -> &TermData {
         &self.0[tm.0].0
     }
+    #[allow(unused)]
     pub fn loc(&self, tm: Term) -> Location {
         self.0[tm.0].1
     }
+    #[allow(unused)]
     pub fn iter_terms(&self) -> impl Iterator<Item = Term> {
         (0..self.0.len()).map(Term)
     }

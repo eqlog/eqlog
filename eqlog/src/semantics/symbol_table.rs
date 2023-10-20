@@ -57,6 +57,7 @@ impl<'a> SymbolRef<'a> {
         }
     }
 
+    #[allow(unused)]
     fn loc(&self) -> Location {
         use SymbolRef::*;
         match self {
@@ -67,6 +68,7 @@ impl<'a> SymbolRef<'a> {
         }
     }
 
+    #[allow(unused)]
     fn kind(&self) -> SymbolKindEnum {
         use SymbolRef::*;
         match self {
@@ -82,59 +84,42 @@ impl<'a> SymbolRef<'a> {
 pub struct SymbolTable<'a>(BTreeMap<&'a str, SymbolRef<'a>>);
 
 impl<'a> SymbolTable<'a> {
-    pub fn from_module(module: &'a Module) -> Result<Self, CompileError> {
+    pub fn from_module(module: &'a Module) -> Self {
         let mut syms: BTreeMap<&'a str, SymbolRef<'a>> = BTreeMap::new();
         for sym in module.0.iter().filter_map(SymbolRef::try_from_decl) {
             let name = sym.name();
             syms.insert(name, sym);
         }
         let table = SymbolTable(syms);
-        Ok(table)
+        table
     }
 
-    pub fn get_symbol(
-        &'a self,
-        name: &str,
-        used_at: Location,
-    ) -> Result<&'a SymbolRef<'a>, CompileError> {
-        self.0
-            .get(name)
-            .ok_or_else(|| CompileError::UndeclaredSymbol {
-                name: name.into(),
-                used_at,
-            })
+    #[allow(unused)]
+    pub fn get_symbol(&'a self, name: &str) -> &'a SymbolRef<'a> {
+        self.0.get(name).unwrap()
     }
 
-    pub fn get_pred(&'a self, name: &str, used_at: Location) -> Result<&'a PredDecl, CompileError> {
-        let sym = self.get_symbol(name, used_at)?;
+    #[allow(unused)]
+    pub fn get_pred(&'a self, name: &str) -> &'a PredDecl {
+        let sym = self.get_symbol(name);
         if let SymbolRef::Pred { pred, .. } = sym {
-            Ok(pred)
+            pred
         } else {
-            Err(CompileError::BadSymbolKind {
-                name: name.into(),
-                expected: SymbolKindEnum::Pred,
-                found: sym.kind(),
-                used_at,
-                declared_at: sym.loc(),
-            })
+            panic!("bad symbol kind")
         }
     }
 
-    pub fn get_func(&'a self, name: &str, used_at: Location) -> Result<&'a FuncDecl, CompileError> {
-        let sym = self.get_symbol(name, used_at)?;
+    #[allow(unused)]
+    pub fn get_func(&'a self, name: &str) -> &'a FuncDecl {
+        let sym = self.get_symbol(name);
         if let SymbolRef::Func { func, .. } = sym {
-            Ok(func)
+            func
         } else {
-            Err(CompileError::BadSymbolKind {
-                name: name.into(),
-                expected: SymbolKindEnum::Func,
-                found: sym.kind(),
-                used_at,
-                declared_at: sym.loc(),
-            })
+            panic!("bad symbol kind")
         }
     }
 
+    #[allow(unused)]
     pub fn iter_types<'b>(&'b self) -> impl 'b + Iterator<Item = &'a TypeDecl> {
         self.0.values().filter_map(|sym| match sym {
             SymbolRef::Type(typ) => Some(*typ),
@@ -157,7 +142,7 @@ impl<'a> SymbolTable<'a> {
     }
 
     pub fn get_arity(&'a self, relation: &str) -> Option<&'a [&'a str]> {
-        match self.0.get(relation)? {
+        match self.0.get(relation).unwrap() {
             SymbolRef::Type(_) => None,
             SymbolRef::Pred { arity, .. } => Some(arity),
             SymbolRef::Func { arity, .. } => Some(arity),

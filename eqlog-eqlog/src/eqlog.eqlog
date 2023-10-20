@@ -670,6 +670,80 @@ rule app_atom_should_be_func {
     then should_be_symbol(name, kind, loc);
 }
 
+// ### Natural numbers and argument numbers
+
+type Nat;
+func zero() -> Nat;
+func succ(Nat) -> Nat;
+
+func type_list_len(TypeList) -> Nat;
+rule type_list_len_total {
+    if tys: TypeList;
+    then type_list_len(tys)!;
+}
+rule type_list_len_nil {
+    if tys = nil_type_list();
+    if len = type_list_len(tys);
+    then len = zero();
+}
+rule type_list_len_cons {
+    if tys = cons_type_list(_, tail);
+    if len = type_list_len(tys);
+    if tail_len = type_list_len(tail);
+    then len = succ(tail_len);
+}
+
+func term_list_len(TermListNode) -> Nat;
+rule term_list_len_total {
+    if terms: TermListNode;
+    then term_list_len(terms)!;
+}
+rule term_list_len_nil {
+    if nil_term_list_node(terms);
+    if len = term_list_len(terms);
+    then len = zero();
+}
+rule term_list_len_cons {
+    if cons_term_list_node(terms, _, tail);
+    if len = term_list_len(terms);
+    if tail_len = term_list_len(tail);
+    then len = succ(tail_len);
+}
+
+pred pred_arg_num_should_match(
+    got: Nat,
+    expected: Nat,
+    usage: Loc
+);
+pred func_arg_num_should_match(
+    got: Nat,
+    expected: Nat,
+    usage: Loc
+);
+
+rule pred_if_atom_arg_num_should_match {
+    if pred_if_atom_node(atom, name, args);
+    if got_len = term_list_len(args);
+    if expected_len = type_list_len(arity(semantic_pred(name)));
+    if loc = if_atom_node_loc(atom);
+    then pred_arg_num_should_match(got_len, expected_len, loc);
+}
+rule pred_then_atom_arg_num_should_match {
+    if pred_then_atom_node(atom, name, args);
+    if got_len = term_list_len(args);
+    if expected_len = type_list_len(arity(semantic_pred(name)));
+    if loc = then_atom_node_loc(atom);
+    then pred_arg_num_should_match(got_len, expected_len, loc);
+}
+
+rule app_term_arg_num_should_match {
+    if app_term_node(tm, name, args);
+    if got_len = term_list_len(args);
+    if expected_len = type_list_len(domain(semantic_func(name)));
+    if loc = term_node_loc(tm);
+    then func_arg_num_should_match(got_len, expected_len, loc);
+}
+
 // ## The Chain associated to a RuleDeclNode
 //
 // The chain of a rule has one structure for each statement in the rule. The

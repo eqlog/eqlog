@@ -1,6 +1,5 @@
 mod check_epic;
 mod symbol_table;
-mod type_inference;
 
 use std::collections::btree_map;
 use std::collections::BTreeMap;
@@ -11,9 +10,7 @@ use check_epic::*;
 use convert_case::Case;
 use convert_case::Casing;
 pub use symbol_table::*;
-use type_inference::*;
 
-use crate::ast::*;
 use crate::eqlog_util::*;
 use crate::error::*;
 use crate::grammar_util::*;
@@ -271,6 +268,51 @@ pub fn iter_symbol_lookup_errors<'a>(
             }
         })
 }
+
+pub fn iter_pred_arg_number_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_pred_arg_num_should_match()
+        .filter_map(|(got, expected, loc)| {
+            if eqlog.are_equal_nat(got, expected) {
+                return None;
+            }
+
+            let got = nat(got, eqlog);
+            let expected = nat(expected, eqlog);
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::PredicateArgumentNumber {
+                expected,
+                got,
+                location,
+            })
+        })
+}
+
+pub fn iter_func_arg_number_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_func_arg_num_should_match()
+        .filter_map(|(got, expected, loc)| {
+            if eqlog.are_equal_nat(got, expected) {
+                return None;
+            }
+
+            let got = nat(got, eqlog);
+            let expected = nat(expected, eqlog);
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::FunctionArgumentNumber {
+                expected,
+                got,
+                location,
+            })
+        })
+}
+
 pub fn iter_symbol_casing_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<String, Ident>,
@@ -318,18 +360,6 @@ pub fn iter_symbol_casing_errors<'a>(
         })
 }
 
-pub struct CheckedRule<'a> {
-    pub decl: &'a RuleDecl,
-}
-
-pub fn check_rule<'a>(
-    symbols: &'a SymbolTable<'a>,
-    rule: &'a RuleDecl,
-) -> Result<CheckedRule<'a>, CompileError> {
-    infer_types(symbols, rule)?;
-    Ok(CheckedRule { decl: rule })
-}
-
 pub fn check_eqlog(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<String, Ident>,
@@ -342,6 +372,8 @@ pub fn check_eqlog(
             locations,
         ))
         .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
+        .chain(iter_pred_arg_number_errors(eqlog, locations))
+        .chain(iter_func_arg_number_errors(eqlog, locations))
         .chain(iter_symbol_casing_errors(eqlog, identifiers, locations))
         .chain(iter_then_defined_variable_errors(eqlog, locations))
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
@@ -356,7 +388,7 @@ pub fn check_eqlog(
             identifiers,
             locations,
         ))
-        .min_by_key(|err| err.primary_location().1);
+        .min();
 
     if let Some(err) = first_error {
         Err(err)

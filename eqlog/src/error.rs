@@ -1,6 +1,7 @@
 use crate::grammar_util::*;
 use crate::source_display::*;
 use lalrpop_util::{lexer::Token, ParseError};
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
@@ -60,13 +61,11 @@ pub enum CompileError {
         location: Location,
     },
     FunctionArgumentNumber {
-        function: String,
         expected: usize,
         got: usize,
         location: Location,
     },
     PredicateArgumentNumber {
-        predicate: String,
         expected: usize,
         got: usize,
         location: Location,
@@ -141,6 +140,44 @@ impl CompileError {
             CompileError::ThenDefinedNotVar { location } => *location,
             CompileError::ThenDefinedVarNotNew { location } => *location,
         }
+    }
+}
+
+/// [CompileError] is sorted according to *reverse* priority with respect to reporting:
+/// A smaller [CompileError] should be reported preferably over a larger one.
+///
+/// TODO: This is confusing, should revert the order. It is currently this way to be compatible
+/// with location ordering, where lower locations take precedence over greater ones.
+impl Ord for CompileError {
+    fn cmp(&self, other: &Self) -> Ordering {
+        use CompileError::*;
+        if self == other {
+            return Ordering::Equal;
+        }
+
+        // An earlier (lower) location has higher priority.
+        let loc_cmp = self.primary_location().1.cmp(&other.primary_location().1);
+
+        // TODO: Far from complete. We probably want to group errors into e.g. parse errors, symbol
+        // lookup errors, inference errors etc and define orders separately and then implement the
+        // ordering hierarchically: First within a group, then among groups.
+        match (self, other) {
+            (UndeclaredSymbol { .. }, UndeclaredSymbol { .. }) => loc_cmp,
+            (UndeclaredSymbol { .. }, _) => Ordering::Less,
+            (SymbolDeclaredTwice { .. }, SymbolDeclaredTwice { .. }) => loc_cmp,
+            (SymbolDeclaredTwice { .. }, _) => Ordering::Less,
+            (BadSymbolKind { .. }, BadSymbolKind { .. }) => loc_cmp,
+            (BadSymbolKind { .. }, _) => Ordering::Less,
+            (UndeterminedTermType { .. }, UndeterminedTermType { .. }) => loc_cmp,
+            (UndeterminedTermType { .. }, _) => Ordering::Greater,
+            (_, _) => loc_cmp,
+        }
+    }
+}
+
+impl PartialOrd for CompileError {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -261,7 +298,6 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *location)?;
             }
             FunctionArgumentNumber {
-                function: _,
                 expected,
                 got,
                 location,
@@ -273,7 +309,6 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *location)?;
             }
             PredicateArgumentNumber {
-                predicate: _,
                 expected,
                 got,
                 location,

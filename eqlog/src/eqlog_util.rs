@@ -3,6 +3,7 @@ use eqlog_eqlog::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
+use std::iter::successors;
 
 pub fn iter_els<'a>(structure: Structure, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = El> {
     eqlog.iter_el_structure().filter_map(move |(el, strct)| {
@@ -123,6 +124,19 @@ pub fn symbol_kind(kind: SymbolKind, eqlog: &Eqlog) -> SymbolKindEnum {
     }
 
     panic!("Invalid symbol kind")
+}
+
+/// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element
+/// representing the natural number in the provided eqlog model.
+fn nats<'a>(eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Nat> {
+    successors(eqlog.zero(), move |n| eqlog.succ(*n))
+}
+
+pub fn nat(n: Nat, eqlog: &Eqlog) -> usize {
+    nats(eqlog)
+        .enumerate()
+        .find_map(move |(k, n0)| eqlog.are_equal_nat(n0, n).then_some(k))
+        .unwrap()
 }
 
 struct StructureDisplay<'a> {
