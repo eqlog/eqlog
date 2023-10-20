@@ -1,13 +1,11 @@
-use crate::ast::*;
+use crate::eqlog_util::*;
 use crate::error::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
 use crate::grammar::*;
-use crate::grammar_new;
 use crate::grammar_util::*;
 use crate::index_selection::*;
 use crate::llam::*;
-use crate::module::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
 use convert_case::{Case, Casing};
@@ -39,13 +37,7 @@ fn whipe_comments(source: &str) -> String {
     lines.join("\n")
 }
 
-fn parse(source: &str) -> Result<Module, CompileError> {
-    ModuleParser::new()
-        .parse(&mut TermContext::new(), source)
-        .map_err(CompileError::from)
-}
-
-fn parse_new(
+fn parse(
     source: &str,
 ) -> Result<
     (
@@ -61,7 +53,7 @@ fn parse_new(
     let mut identifiers: BTreeMap<String, Ident> = BTreeMap::new();
     let mut locations: BTreeMap<Location, Loc> = BTreeMap::new();
 
-    let module = grammar_new::ModuleParser::new()
+    let module = ModuleParser::new()
         .parse(&mut eqlog, &mut identifiers, &mut locations, source)
         .map_err(CompileError::from)?;
 
@@ -118,19 +110,15 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
 fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
     let source = fs::read_to_string(in_file)?;
     let source_without_comments = whipe_comments(&source);
-    let module = parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
-        error,
-        source: source.clone(),
-        source_path: in_file.into(),
-    })?;
-    let (mut eqlog, identifiers, locations, _module) = parse_new(&source_without_comments).unwrap();
+    let (mut eqlog, identifiers, locations, _module) =
+        parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
+            error,
+            // TODO: Get rid of this copy; necessary because of the usage to create a
+            // CompileErrorWithContext below.
+            source: source.clone(),
+            source_path: in_file.into(),
+        })?;
     eqlog.close();
-
-    let module_wrapper = ModuleWrapper::new(&module).map_err(|error| CompileErrorWithContext {
-        error,
-        source: source.clone(),
-        source_path: in_file.into(),
-    })?;
 
     check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
         error,
@@ -140,12 +128,10 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     assert!(!eqlog.absurd());
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
-    query_actions.extend(module_wrapper.symbols.iter_funcs().map(|func| {
-        functionality(
-            &func.name,
-            module_wrapper.symbols.get_arity(&func.name).unwrap(),
-        )
-    }));
+    query_actions.extend(
+        iter_func_arities(&eqlog, &identifiers)
+            .map(|(func, arity)| functionality(func, arity.as_slice())),
+    );
     let rules: Vec<RuleDeclNode> = eqlog.iter_rule_decl_node().collect();
     let rule_flattenings: Vec<SequentFlattening> = rules
         .into_iter()
@@ -161,7 +147,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .map(|qa| qa.queries.iter().flatten())
         .flatten();
     let action_atoms = query_actions.iter().map(|qa| qa.action.iter()).flatten();
-    let index_selection = select_indices(&module_wrapper.symbols, query_atoms, action_atoms);
+    let index_selection = select_indices(query_atoms, action_atoms, &eqlog, &identifiers);
     let theory_name = in_file
         .file_stem()
         .unwrap()

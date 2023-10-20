@@ -1,17 +1,8 @@
-mod ast;
 mod eqlog_util;
 mod grammar_util;
-mod module;
 mod semantics;
 use lalrpop_util::lalrpop_mod;
-lalrpop_mod!(
-    #[allow(unused)]
-    grammar
-);
-lalrpop_mod!(
-    #[allow(unused)]
-    grammar_new
-);
+lalrpop_mod!(grammar);
 mod build;
 mod error;
 mod flat_ast;

@@ -1,7 +1,6 @@
 use eqlog_eqlog::*;
 use std::collections::BTreeMap;
 use crate::grammar_util::*;
-use crate::source_display::*;
 
 grammar(
     eqlog: &mut Eqlog,
@@ -13,7 +12,7 @@ extern {
     type Error = NeverType;
 }
 
-pub Id: Ident  = {
+Id: Ident  = {
     <s : r"[A-Za-z][A-Za-z0-9'_]*"> => {
         *identifiers.entry(s.to_string()).or_insert_with(|| {
             eqlog.new_ident()

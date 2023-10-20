@@ -1,8 +1,9 @@
+use crate::eqlog_util::*;
 use crate::llam::*;
-use crate::semantics::SymbolTable;
+use eqlog_eqlog::*;
 use maplit::hashset;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::iter::{once, repeat};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
@@ -108,9 +109,10 @@ impl IndexSpec {
 pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
 
 pub fn select_indices<'a, QA, AA>(
-    symbols: &SymbolTable,
     query_atoms: QA,
     action_atoms: AA,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> IndexSelection
 where
     QA: IntoIterator<Item = &'a QueryAtom>,
@@ -118,15 +120,15 @@ where
 {
     // Maps relations to a set of collected query specs. We always need a query for all (dirty)
     // tuples.
-    let mut query_specs: HashMap<String, HashSet<QuerySpec>> = symbols
-        .iter_rels()
-        .map(|(rel, _)| {
-            (
-                rel.to_string(),
-                hashset! {QuerySpec::all(), QuerySpec::all_dirty()},
-            )
-        })
-        .collect();
+    let mut query_specs: HashMap<String, HashSet<QuerySpec>> =
+        iter_relation_arities(eqlog, identifiers)
+            .map(|(rel, _)| {
+                (
+                    rel.to_string(),
+                    hashset! {QuerySpec::all(), QuerySpec::all_dirty()},
+                )
+            })
+            .collect();
 
     // Add indices for queries.
     for query_atom in query_atoms.into_iter() {
@@ -176,7 +178,7 @@ where
                 .into_iter()
                 .flat_map(|queries| {
                     let index = IndexSpec::from_query_spec_chain(
-                        symbols.get_arity(&rel).unwrap().len(),
+                        get_arity(&rel, eqlog, identifiers).unwrap().len(),
                         &queries,
                     );
                     queries.into_iter().zip(repeat(index))

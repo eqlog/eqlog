@@ -1,5 +1,4 @@
 mod check_epic;
-mod symbol_table;
 
 use std::collections::btree_map;
 use std::collections::BTreeMap;
@@ -9,7 +8,6 @@ use std::iter;
 use check_epic::*;
 use convert_case::Case;
 use convert_case::Casing;
-pub use symbol_table::*;
 
 use crate::eqlog_util::*;
 use crate::error::*;
