@@ -142,7 +142,7 @@ pub fn nat(n: Nat, eqlog: &Eqlog) -> usize {
 struct StructureDisplay<'a> {
     structure: Structure,
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
 }
 
 /// Changes the provided `name` so that it corresponds to the lexicographically next name.
@@ -173,15 +173,12 @@ fn advance_name(name: &mut Vec<char>, blocked_names: &BTreeSet<Vec<char>>) {
 fn assign_el_names(
     structure: Structure,
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> BTreeMap<El, String> {
     let mut names: BTreeMap<El, String> = iter_vars(structure, eqlog)
         .map(|(ident, el)| {
-            let name = identifiers
-                .iter()
-                .find_map(|(name, id)| eqlog.are_equal_ident(*id, ident).then_some(name.as_str()))
-                .unwrap();
-            (el, name.to_string())
+            let name: String = identifiers.get(&ident).unwrap().to_string();
+            (el, name)
         })
         .collect();
 
@@ -222,14 +219,7 @@ impl<'a> Display for StructureDisplay<'a> {
                 .iter_semantic_pred()
                 .find_map(|(ident, prd)| eqlog.are_equal_pred(prd, pred).then_some(ident))
                 .unwrap();
-            let pred_name = identifiers
-                .iter()
-                .find_map(|(name, ident)| {
-                    eqlog
-                        .are_equal_ident(*ident, pred_ident)
-                        .then_some(name.as_str())
-                })
-                .unwrap();
+            let pred_name: &str = identifiers.get(&pred_ident).unwrap().as_str();
             writeln!(f, "- {pred_name}({args})")?;
         }
 
@@ -245,14 +235,7 @@ impl<'a> Display for StructureDisplay<'a> {
                 .iter_semantic_func()
                 .find_map(|(ident, fnc)| eqlog.are_equal_func(fnc, func).then_some(ident))
                 .unwrap();
-            let func_name = identifiers
-                .iter()
-                .find_map(|(name, ident)| {
-                    eqlog
-                        .are_equal_ident(*ident, func_ident)
-                        .then_some(name.as_str())
-                })
-                .unwrap();
+            let func_name: &str = identifiers.get(&func_ident).unwrap().as_str();
             writeln!(f, "- {func_name}({args}) = {result}")?;
         }
         Ok(())
@@ -263,7 +246,7 @@ impl<'a> Display for StructureDisplay<'a> {
 pub fn display_structure<'a>(
     structure: Structure,
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     StructureDisplay {
         structure,

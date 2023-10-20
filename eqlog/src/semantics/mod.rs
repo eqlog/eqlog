@@ -18,20 +18,11 @@ use eqlog_eqlog::*;
 
 pub fn iter_variable_not_snake_case_errors<'a>(
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     eqlog.iter_var_term_node().filter_map(|(tm, ident)| {
-        let name: &str = identifiers
-            .iter()
-            .find_map(|(s, i)| {
-                if eqlog.are_equal_ident(*i, ident) {
-                    Some(s.as_str())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        let name: &str = identifiers.get(&ident).unwrap().as_str();
 
         if name == &name.to_case(Case::Snake) {
             return None;
@@ -49,7 +40,7 @@ pub fn iter_variable_not_snake_case_errors<'a>(
 
 pub fn iter_variable_occurs_twice<'a>(
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     let mut var_tms: BTreeMap<(RuleDeclNode, Ident), BTreeSet<TermNode>> = BTreeMap::new();
@@ -69,16 +60,7 @@ pub fn iter_variable_occurs_twice<'a>(
         assert!(var_tms.len() == 1);
         let var_tm = var_tms.into_iter().next().unwrap();
 
-        let name: &str = identifiers
-            .iter()
-            .find_map(|(s, i)| {
-                if eqlog.are_equal_ident(*i, ident) {
-                    Some(s.as_str())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        let name: &str = identifiers.get(&ident).unwrap().as_str();
 
         let loc = eqlog.term_node_loc(var_tm).unwrap();
         let location = *locations.get(&loc).unwrap();
@@ -163,7 +145,7 @@ pub fn iter_if_after_then_errors<'a>(
 
 pub fn iter_symbol_declared_twice_errors<'a>(
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     let mut symbols: BTreeMap<Ident, Vec<Loc>> = BTreeMap::new();
@@ -185,16 +167,7 @@ pub fn iter_symbol_declared_twice_errors<'a>(
         let first_declaration = locations[0];
         let second_declaration = locations[1];
 
-        let name: String = identifiers
-            .iter()
-            .find_map(|(s, i)| {
-                if eqlog.are_equal_ident(*i, ident) {
-                    Some(s.to_string())
-                } else {
-                    None
-                }
-            })
-            .unwrap();
+        let name: String = identifiers.get(&ident).unwrap().to_string();
         Some(CompileError::SymbolDeclaredTwice {
             name,
             first_declaration,
@@ -205,7 +178,7 @@ pub fn iter_symbol_declared_twice_errors<'a>(
 
 pub fn iter_symbol_lookup_errors<'a>(
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     // In case of multiple declared of a symbol, symbol lookup should go through if at least on
@@ -227,16 +200,7 @@ pub fn iter_symbol_lookup_errors<'a>(
         .iter_should_be_symbol()
         .filter_map(move |(ident, kind, loc)| {
             let kind = symbol_kind(kind, eqlog);
-            let name: &str = identifiers
-                .iter()
-                .find_map(|(s, i)| {
-                    if eqlog.are_equal_ident(*i, ident) {
-                        Some(s.as_str())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap();
+            let name: &str = identifiers.get(&ident).unwrap().as_str();
             let location = *locations.get(&loc).unwrap();
 
             let decls: &[(SymbolKindEnum, Location)] = match declared_symbols.get(&ident) {
@@ -315,22 +279,13 @@ pub fn iter_func_arg_number_errors<'a>(
 
 pub fn iter_symbol_casing_errors<'a>(
     eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<String, Ident>,
+    identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     eqlog
         .iter_defined_symbol()
         .filter_map(|(ident, kind, loc)| {
-            let name: &str = identifiers
-                .iter()
-                .find_map(|(s, i)| {
-                    if eqlog.are_equal_ident(*i, ident) {
-                        Some(s.as_str())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap();
+            let name: &str = identifiers.get(&ident).unwrap().as_str();
 
             let location = *locations.get(&loc).unwrap();
 
@@ -362,7 +317,7 @@ pub fn iter_symbol_casing_errors<'a>(
 
 pub fn check_eqlog(
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<Ident, String>,
     locations: &BTreeMap<Loc, Location>,
 ) -> Result<(), CompileError> {
     let first_error: Option<CompileError> = iter::empty()

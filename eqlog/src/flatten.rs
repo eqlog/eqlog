@@ -79,7 +79,7 @@ fn flatten_delta(
     morphism: Morphism,
     mut flat_names: BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> (BTreeMap<El, BTreeSet<FlatTerm>>, Vec<FlatAtom>) {
     let codomain = eqlog.cod(morphism).unwrap();
     let mut atoms: Vec<FlatAtom> = Vec::new();
@@ -116,15 +116,8 @@ fn flatten_delta(
                 .iter_semantic_pred()
                 .find_map(|(ident, prd)| eqlog.are_equal_pred(prd, pred).then_some(ident))
                 .unwrap();
-            let pred_name = identifiers
-                .iter()
-                .find_map(|(name, ident)| {
-                    eqlog
-                        .are_equal_ident(*ident, pred_ident)
-                        .then_some(name.as_str())
-                })
-                .unwrap();
-            atoms.push(FlatAtom::Relation(pred_name.to_string(), el_terms));
+            let pred_name: String = identifiers.get(&pred_ident).unwrap().to_string();
+            atoms.push(FlatAtom::Relation(pred_name, el_terms));
         }
     }
 
@@ -143,15 +136,8 @@ fn flatten_delta(
                 .iter_semantic_func()
                 .find_map(|(ident, fnc)| eqlog.are_equal_func(fnc, func).then_some(ident))
                 .unwrap();
-            let func_name = identifiers
-                .iter()
-                .find_map(|(name, ident)| {
-                    eqlog
-                        .are_equal_ident(*ident, func_ident)
-                        .then_some(name.as_str())
-                })
-                .unwrap();
-            atoms.push(FlatAtom::Relation(func_name.to_string(), tuple));
+            let func_name: String = identifiers.get(&func_ident).unwrap().to_string();
+            atoms.push(FlatAtom::Relation(func_name, tuple));
         }
     }
 
@@ -164,15 +150,8 @@ fn flatten_delta(
                 .iter_semantic_type()
                 .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))
                 .unwrap();
-            let type_name = identifiers
-                .iter()
-                .find_map(|(name, ident)| {
-                    eqlog
-                        .are_equal_ident(*ident, type_ident)
-                        .then_some(name.as_str())
-                })
-                .unwrap();
-            atoms.push(FlatAtom::Unconstrained(tm, type_name.to_string()));
+            let type_name: String = identifiers.get(&type_ident).unwrap().to_string();
+            atoms.push(FlatAtom::Unconstrained(tm, type_name));
         }
     }
 
@@ -182,7 +161,7 @@ fn flatten_delta(
 fn sort_map(
     flat_names: &BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> BTreeMap<FlatTerm, String> {
     flat_names
         .iter()
@@ -192,14 +171,7 @@ fn sort_map(
                 .iter_semantic_type()
                 .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))
                 .unwrap();
-            let type_name = identifiers
-                .iter()
-                .find_map(|(name, ident)| {
-                    eqlog
-                        .are_equal_ident(*ident, type_ident)
-                        .then_some(name.as_str())
-                })
-                .unwrap();
+            let type_name: &str = identifiers.get(&type_ident).unwrap().as_str();
 
             tms.iter().copied().map(|tm| (tm, type_name.to_string()))
         })
@@ -235,7 +207,7 @@ fn sort_then_atoms(
     mut atoms: Vec<FlatAtom>,
     premise_flat_terms: BTreeSet<FlatTerm>,
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> Vec<FlatAtom> {
     let mut result = Vec::new();
     let mut added_flat_terms = premise_flat_terms;
@@ -249,9 +221,12 @@ fn sort_then_atoms(
                         added_flat_terms.contains(lhs) && added_flat_terms.contains(rhs)
                     }
                     FlatAtom::Relation(rel, args) => {
-                        let rel_ident = identifiers.get(rel).unwrap();
-                        let is_func = eqlog.semantic_func(*rel_ident).is_some();
-                        let is_pred = eqlog.semantic_pred(*rel_ident).is_some();
+                        let rel_ident = *identifiers
+                            .iter()
+                            .find_map(|(i, s)| (s == rel).then_some(i))
+                            .unwrap();
+                        let is_func = eqlog.semantic_func(rel_ident).is_some();
+                        let is_pred = eqlog.semantic_pred(rel_ident).is_some();
                         assert!(
                             is_func ^ is_pred,
                             "rel should be either function or relation"
@@ -299,7 +274,7 @@ fn sort_then_atoms(
 pub fn flatten(
     rule: RuleDeclNode,
     eqlog: &mut Eqlog,
-    identifiers: &BTreeMap<String, Ident>,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> SequentFlattening {
     let chain = eqlog.grouped_rule_chain(rule).unwrap();
     let restricted_chain = RestrictedChain::from_chain(chain, eqlog);

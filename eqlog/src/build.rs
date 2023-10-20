@@ -50,18 +50,19 @@ fn parse_new(
 ) -> Result<
     (
         Eqlog,
-        BTreeMap<String, Ident>,
+        BTreeMap<Ident, String>,
         BTreeMap<Loc, Location>,
         ModuleNode,
     ),
     CompileError,
 > {
     let mut eqlog = Eqlog::new();
-    let mut identifiers = BTreeMap::new();
+    let mut identifiers: BTreeMap<String, Ident> = BTreeMap::new();
     let mut locations = BTreeMap::new();
     let module = grammar_new::ModuleParser::new()
         .parse(&mut eqlog, &mut identifiers, &mut locations, source)
         .map_err(CompileError::from)?;
+    let identifiers = identifiers.into_iter().map(|(s, i)| (i, s)).collect();
     Ok((eqlog, identifiers, locations, module))
 }
 
