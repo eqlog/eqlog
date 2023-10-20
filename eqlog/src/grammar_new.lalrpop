@@ -6,7 +6,7 @@ use crate::source_display::*;
 grammar(
     eqlog: &mut Eqlog,
     identifiers: &mut BTreeMap<String, Ident>,
-    locations: &mut BTreeMap<Loc, Location>
+    locations: &mut BTreeMap<Location, Loc>
 );
 
 extern {

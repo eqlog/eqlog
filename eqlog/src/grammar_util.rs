@@ -6,7 +6,7 @@ use eqlog_eqlog::*;
 // TODO: Use rust's built-in never type ! once it is stabilized.
 pub enum NeverType {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Location(pub usize, pub usize);
 
 impl Location {
@@ -39,11 +39,9 @@ impl Location {
 pub fn make_loc(
     location: Location,
     eqlog: &mut Eqlog,
-    locations: &mut BTreeMap<Loc, Location>,
+    locations: &mut BTreeMap<Location, Loc>,
 ) -> Loc {
-    let loc = eqlog.new_loc();
-    locations.insert(loc, location);
-    loc
+    *locations.entry(location).or_insert_with(|| eqlog.new_loc())
 }
 
 pub fn term_list_node(nodes: &[TermNode], eqlog: &mut Eqlog) -> TermListNode {
