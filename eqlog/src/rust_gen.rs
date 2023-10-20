@@ -1,4 +1,3 @@
-use crate::ast::*;
 use crate::eqlog_util::*;
 use crate::flat_ast::*;
 use crate::index_selection::*;
@@ -1651,39 +1650,40 @@ fn write_new_fn(
     Ok(())
 }
 
-fn write_define_fn(out: &mut impl Write, function: &FuncDecl) -> io::Result<()> {
-    let FuncDecl {
-        name,
-        arg_decls,
-        result,
-        ..
-    } = function;
+fn write_define_fn(out: &mut impl Write, name: &str, arity: &[&str]) -> io::Result<()> {
+    assert!(
+        arity.len() >= 1,
+        "Arity of function should have at least return type"
+    );
+    let arg_types = &arity[0..arity.len() - 1];
+    let result_type = arity.last().unwrap();
+
     let function_snake = name.to_case(Snake);
-    let fn_args = arg_decls
+
+    let fn_args = arg_types
         .iter()
-        .map(|arg_decl| &arg_decl.typ)
         .enumerate()
         .format_with(", ", |(i, typ), f| f(&format_args!("mut arg{i}: {typ}")));
 
     let query = QuerySpec {
-        projections: (0..arg_decls.len()).collect(),
+        projections: (0..arg_types.len()).collect(),
         diagonals: BTreeSet::new(),
         only_dirty: false,
     };
     let iter = IterName(&name, &query);
-    let iter_args = (0..arg_decls.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+    let iter_args = (0..arg_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
 
-    let cod_index = arg_decls.len();
+    let cod_index = arg_types.len();
 
-    let cod_snake = result.to_case(Snake);
+    let cod_snake = result_type.to_case(Snake);
 
-    let insert_dom_args = (0..arg_decls.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
+    let insert_dom_args = (0..arg_types.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
 
-    let canonicalize = arg_decls
+    let canonicalize = arg_types
         .iter()
         .enumerate()
-        .format_with("\n", |(i, arg_decl), f| {
-            let sort_snake = arg_decl.typ.to_case(Snake);
+        .format_with("\n", |(i, arg_type), f| {
+            let sort_snake = arg_type.to_case(Snake);
             f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
         });
 
@@ -1691,7 +1691,7 @@ fn write_define_fn(out: &mut impl Write, function: &FuncDecl) -> io::Result<()> 
     writedoc! {out, "
         /// Enforces that `{name}({args})` is defined, adjoining a new element if necessary.
         #[allow(dead_code)]
-        pub fn define_{function_snake}(&mut self, {fn_args}) -> {result} {{
+        pub fn define_{function_snake}(&mut self, {fn_args}) -> {result_type} {{
             {canonicalize}
             if let Some(t) = self.{iter}({iter_args}).next() {{
                 return t.{cod_index};
@@ -1757,12 +1757,11 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
 
-    for func in module.symbols.iter_funcs() {
-        let arity = module.symbols.get_arity(&func.name).unwrap();
-        write_pub_function_eval_fn(out, &func.name, &arity)?;
-        write_define_fn(out, func)?;
-        write_pub_iter_fn(out, &func.name, &arity, true)?;
-        write_pub_insert_relation(out, &func.name, &arity, true)?;
+    for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
+        write_pub_function_eval_fn(out, func_name, &arity)?;
+        write_define_fn(out, func_name, &arity)?;
+        write_pub_iter_fn(out, func_name, &arity, true)?;
+        write_pub_insert_relation(out, func_name, &arity, true)?;
         write!(out, "\n")?;
     }
 

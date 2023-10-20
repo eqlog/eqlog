@@ -164,29 +164,36 @@ pub fn arg_decl_types<'a>(
     result
 }
 
-pub fn iter_relation_arities<'a>(
+pub fn iter_pred_arities<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
+    eqlog.iter_pred_decl().map(|(_, ident, arg_decls)| {
+        let name = identifiers.get(&ident).unwrap().as_str();
+        let arity = arg_decl_types(arg_decls, eqlog, identifiers);
+        (name, arity)
+    })
+}
+
+pub fn iter_func_arities<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
     eqlog
-        // Predicates:
-        .iter_pred_decl()
-        .map(|(_, ident, arg_decls)| {
+        .iter_func_decl()
+        .map(|(_, ident, arg_decls, result_ident)| {
             let name = identifiers.get(&ident).unwrap().as_str();
-            let arity = arg_decl_types(arg_decls, eqlog, identifiers);
+            let mut arity = arg_decl_types(arg_decls, eqlog, identifiers);
+            arity.push(identifiers.get(&result_ident).unwrap().as_str());
             (name, arity)
         })
-        // Functions:
-        .chain(
-            eqlog
-                .iter_func_decl()
-                .map(|(_, ident, arg_decls, result_ident)| {
-                    let name = identifiers.get(&ident).unwrap().as_str();
-                    let mut arity = arg_decl_types(arg_decls, eqlog, identifiers);
-                    arity.push(identifiers.get(&result_ident).unwrap().as_str());
-                    (name, arity)
-                }),
-        )
+}
+
+pub fn iter_relation_arities<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
+    iter_pred_arities(eqlog, identifiers).chain(iter_func_arities(eqlog, identifiers))
 }
 
 pub fn iter_types<'a>(
