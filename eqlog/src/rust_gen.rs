@@ -999,7 +999,6 @@ fn write_model_delta_impl(
     out: &mut impl Write,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-    module: &ModuleWrapper,
 ) -> io::Result<()> {
     writedoc! {out, "
         impl ModelDelta {{
@@ -1008,12 +1007,12 @@ fn write_model_delta_impl(
     write_model_delta_new_fn(out, eqlog, identifiers)?;
 
     write_model_delta_apply_fn(out)?;
-    write_model_delta_apply_new_elements_fn(out, module)?;
-    write_model_delta_apply_equalities_fn(out, module)?;
-    write_model_delta_apply_tuples_fn(out, module)?;
+    write_model_delta_apply_new_elements_fn(out, eqlog, identifiers)?;
+    write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
+    write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
 
-    for sort in module.symbols.iter_types() {
-        write_model_delta_new_element_fn(out, &sort.name)?;
+    for type_name in iter_types(eqlog, identifiers) {
+        write_model_delta_new_element_fn(out, type_name)?;
     }
 
     writedoc! {out, "
@@ -1066,10 +1065,10 @@ fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
 
 fn write_model_delta_apply_new_elements_fn(
     out: &mut impl Write,
-    module: &ModuleWrapper,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort = &sort.name;
+    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
         f(&formatdoc! {"
             let old_{sort_snake}_number = model.{sort_snake}_equalities.len();
@@ -1096,17 +1095,15 @@ fn write_model_delta_apply_new_elements_fn(
 
 fn write_model_delta_apply_equalities_fn(
     out: &mut impl Write,
-    module: &ModuleWrapper,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort = &sort.name;
+    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
 
         let arity_contains_sort =
             |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
-        let clean_rels = module
-            .symbols
-            .iter_rels()
+        let clean_rels = iter_relation_arities(eqlog, identifiers)
             .filter(|(_, arity)| arity_contains_sort(arity))
             .format_with("\n", |(relation, arity), f| {
                 let relation_snake = relation.to_case(Snake);
@@ -1171,12 +1168,11 @@ fn write_model_delta_apply_equalities_fn(
 
 fn write_model_delta_apply_tuples_fn(
     out: &mut impl Write,
-    module: &ModuleWrapper,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let relations = module
-        .symbols
-        .iter_rels()
-        .format_with("\n", |(relation, arity), f| {
+    let relations =
+        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
             let relation_camel = relation.to_case(UpperCamel);
             let canonicalize = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
@@ -1866,7 +1862,7 @@ pub fn write_module(
     write_model_delta_struct(out, eqlog, identifiers)?;
     write_theory_struct(out, name, eqlog, identifiers)?;
 
-    write_model_delta_impl(out, eqlog, identifiers, module)?;
+    write_model_delta_impl(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
     write_theory_impl(out, name, module, query_actions)?;
