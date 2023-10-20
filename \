@@ -1621,24 +1621,20 @@ fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
     "}
 }
 
-fn write_new_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+fn write_new_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
     write!(out, "/// Creates an empty model.\n")?;
     write!(out, "#[allow(dead_code)]\n")?;
     write!(out, "pub fn new() -> Self {{\n")?;
     write!(out, "Self {{\n")?;
-    for sort in iter_types(eqlog, identifiers) {
-        let sort_snake = sort.to_case(Snake);
+    for sort in module.symbols.iter_types() {
+        let sort_snake = sort.name.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
         write!(out, "{sort_snake}_dirty_prev: Vec::new(),\n")?;
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
-    for (relation, _) in iter_relation_arities(eqlog, identifiers) {
+    for (relation, _) in module.symbols.iter_rels() {
         let relation_snake = relation.to_case(Snake);
         let relation_camel = relation.to_case(UpperCamel);
         write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
@@ -1736,24 +1732,22 @@ fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
     module: &ModuleWrapper,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
     query_actions: &[QueryAction],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
 
-    write_new_fn(out, eqlog, identifiers)?;
+    write_new_fn(out, module)?;
     write!(out, "\n")?;
 
     write_close_fn(out)?;
     write_close_until_fn(out, query_actions)?;
 
-    for type_name in iter_types(eqlog, identifiers) {
-        write_new_element(out, type_name)?;
-        write_equate_elements(out, type_name)?;
-        write_iter_sort_fn(out, type_name)?;
-        write_root_fn(out, type_name)?;
-        write_are_equal_fn(out, type_name)?;
+    for sort in module.symbols.iter_types() {
+        write_new_element(out, &sort.name)?;
+        write_equate_elements(out, &sort.name)?;
+        write_iter_sort_fn(out, &sort.name)?;
+        write_root_fn(out, &sort.name)?;
+        write_are_equal_fn(out, &sort.name)?;
         write!(out, "\n")?;
     }
 
