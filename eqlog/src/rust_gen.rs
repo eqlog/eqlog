@@ -1220,8 +1220,9 @@ fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Res
 
 fn write_query_loop_headers<'a>(
     out: &mut impl Write,
-    module: &ModuleWrapper,
     query: impl IntoIterator<Item = &'a QueryAtom>,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
     for atom in query.into_iter() {
         use QueryAtom::*;
@@ -1242,9 +1243,7 @@ fn write_query_loop_headers<'a>(
                     Quantifier::All,
                     "Only Quantifier::All is implemented"
                 );
-                let arity_len = module
-                    .symbols
-                    .iter_rels()
+                let arity_len = iter_relation_arities(eqlog, identifiers)
                     .find(|(rel, _)| rel == relation)
                     .unwrap()
                     .1
@@ -1309,9 +1308,10 @@ fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Resul
 
 fn write_query_and_record_fn(
     out: &mut impl Write,
-    module: &ModuleWrapper,
     query_action: &QueryAction,
     axiom_index: usize,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
     writedoc! {out, "
         fn query_and_record_{axiom_index}(&self, delta: &mut ModelDelta) {{
@@ -1327,7 +1327,7 @@ fn write_query_and_record_fn(
             continue;
         }
 
-        write_query_loop_headers(out, module, query)?;
+        write_query_loop_headers(out, query, eqlog, identifiers)?;
         let action_args = query_action
             .action_inputs
             .iter()
@@ -1349,8 +1349,9 @@ fn write_query_and_record_fn(
 
 fn write_action_atom(
     out: &mut impl Write,
-    module: &ModuleWrapper,
     atom: &ActionAtom,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
     use ActionAtom::*;
     match atom {
@@ -1361,7 +1362,7 @@ fn write_action_atom(
         } => {
             let relation_snake = relation.to_case(Snake);
             let relation_camel = relation.to_case(UpperCamel);
-            let arity = module.symbols.get_arity(relation).unwrap();
+            let arity = get_arity(relation, eqlog, identifiers).unwrap();
 
             let query_spec = QuerySpec {
                 projections: in_projections.keys().copied().collect(),
@@ -1429,11 +1430,12 @@ fn write_action_atom(
 
 fn write_record_action_fn(
     out: &mut impl Write,
-    module: &ModuleWrapper,
     sorts: &BTreeMap<FlatTerm, String>,
     action_inputs: &BTreeSet<FlatTerm>,
     action: &[ActionAtom],
     axiom_index: usize,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
     let args = action_inputs.iter().format_with("", |tm, f| {
         let sort = sorts.get(tm).unwrap();
@@ -1445,23 +1447,25 @@ fn write_record_action_fn(
         fn record_action_{axiom_index}(&self, delta: &mut ModelDelta, {args}) {{
     "}?;
     for atom in action.iter() {
-        write_action_atom(out, module, atom)?;
+        write_action_atom(out, atom, eqlog, identifiers)?;
     }
     writedoc! {out, "
         }}
     "}
 }
 
-fn write_drop_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
-    let relations = module
-        .symbols
-        .iter_rels()
-        .format_with("\n", |(relation, _), f| {
+fn write_drop_dirt_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let relations =
+        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!("self.{relation_snake}.drop_dirt();"))
         });
-    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort_snake = sort.name.to_case(Snake);
+    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
         f(&format_args!("self.{sort_snake}_dirty.clear();"))
     });
 
@@ -1476,16 +1480,18 @@ fn write_drop_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Resul
     "}
 }
 
-fn write_retire_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
-    let relations = module
-        .symbols
-        .iter_rels()
-        .format_with("\n", |(relation, _), f| {
+fn write_retire_dirt_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let relations =
+        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!("self.{relation_snake}.retire_dirt();"))
         });
-    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort_snake = sort.name.to_case(Snake);
+    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
         f(&formatdoc! {"
             let mut {sort_snake}_dirty_tmp = BTreeSet::new();
             std::mem::swap(&mut {sort_snake}_dirty_tmp, &mut self.{sort_snake}_dirty);
@@ -1503,11 +1509,13 @@ fn write_retire_dirt_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Res
     "}
 }
 
-fn write_recall_previous_dirt(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
-    let relations = module
-        .symbols
-        .iter_rels()
-        .format_with("\n", |(relation, arity), f| {
+fn write_recall_previous_dirt(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let relations =
+        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, arity), f| {
             let relation_snake = relation.to_case(Snake);
             let sorts: BTreeSet<&str> = arity.iter().copied().collect();
             let args = sorts.into_iter().format_with(", ", |sort, f| {
@@ -1519,8 +1527,8 @@ fn write_recall_previous_dirt(out: &mut impl Write, module: &ModuleWrapper) -> i
             ))
         });
 
-    let sorts = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort_snake = sort.name.to_case(Snake);
+    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
         f(&formatdoc! {"
                 let mut {sort_snake}_dirty_prev_tmp = Vec::new();
                 std::mem::swap(&mut {sort_snake}_dirty_prev_tmp, &mut self.{sort_snake}_dirty_prev);
@@ -1737,10 +1745,9 @@ fn write_theory_struct(
 fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
-    module: &ModuleWrapper,
+    query_actions: &[QueryAction],
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-    query_actions: &[QueryAction],
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
 
@@ -1782,18 +1789,19 @@ fn write_theory_impl(
     for (i, query_action) in query_actions.iter().enumerate() {
         write_record_action_fn(
             out,
-            module,
             &query_action.sorts,
             &query_action.action_inputs,
             &query_action.action,
             i,
+            eqlog,
+            identifiers,
         )?;
-        write_query_and_record_fn(out, module, query_action, i)?;
+        write_query_and_record_fn(out, query_action, i, eqlog, identifiers)?;
     }
 
-    write_drop_dirt_fn(out, module)?;
-    write_retire_dirt_fn(out, module)?;
-    write_recall_previous_dirt(out, module)?;
+    write_drop_dirt_fn(out, eqlog, identifiers)?;
+    write_retire_dirt_fn(out, eqlog, identifiers)?;
+    write_recall_previous_dirt(out, eqlog, identifiers)?;
 
     write!(out, "}}\n")?;
     Ok(())
@@ -1871,7 +1879,7 @@ pub fn write_module(
     write_model_delta_impl(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
-    write_theory_impl(out, name, module, eqlog, identifiers, query_actions)?;
+    write_theory_impl(out, name, query_actions, eqlog, identifiers)?;
     write_theory_display_impl(out, name, module)?;
 
     Ok(())

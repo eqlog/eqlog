@@ -196,6 +196,14 @@ pub fn iter_relation_arities<'a>(
     iter_pred_arities(eqlog, identifiers).chain(iter_func_arities(eqlog, identifiers))
 }
 
+pub fn get_arity<'a>(
+    rel: &'a str,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> Option<Vec<&'a str>> {
+    iter_relation_arities(eqlog, identifiers).find_map(|(r, arity)| (r == rel).then_some(arity))
+}
+
 pub fn iter_types<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
