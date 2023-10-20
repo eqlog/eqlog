@@ -2,7 +2,6 @@ use crate::eqlog_util::*;
 use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
-use crate::module::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
@@ -1810,11 +1809,12 @@ fn write_theory_impl(
 fn write_theory_display_impl(
     out: &mut impl Write,
     name: &str,
-    module: &ModuleWrapper,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let els = module.symbols.iter_types().format_with("", |sort, f| {
-        let sort_camel = &sort.name;
-        let sort_snake = sort.name.to_case(Snake);
+    let els = iter_types(eqlog, identifiers).format_with("", |sort, f| {
+        let sort_camel = &sort;
+        let sort_snake = sort.to_case(Snake);
         let modify_table = formatdoc! {"
             with(Header(\"{sort_camel}\"))
             .with(Modify::new(Segment::all())
@@ -1829,7 +1829,7 @@ fn write_theory_display_impl(
             "self.{sort_snake}_equalities.class_table().{modify_table}.fmt(f)?;"
         ))
     });
-    let rels = module.symbols.iter_rels().format_with("", |(rel, _), f| {
+    let rels = iter_relation_arities(eqlog, identifiers).format_with("", |(rel, _), f| {
         let rel_snake = rel.to_case(Snake);
         f(&format_args!("self.{rel_snake}.fmt(f)?;"))
     });
@@ -1848,7 +1848,6 @@ fn write_theory_display_impl(
 pub fn write_module(
     out: &mut impl Write,
     name: &str,
-    module: &ModuleWrapper,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
     query_actions: &[QueryAction],
@@ -1880,7 +1879,7 @@ pub fn write_module(
     write!(out, "\n")?;
 
     write_theory_impl(out, name, query_actions, eqlog, identifiers)?;
-    write_theory_display_impl(out, name, module)?;
+    write_theory_display_impl(out, name, eqlog, identifiers)?;
 
     Ok(())
 }

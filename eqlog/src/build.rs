@@ -173,7 +173,6 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     write_module(
         &mut result,
         &theory_name,
-        &module_wrapper,
         &eqlog,
         &identifiers,
         &query_actions,
