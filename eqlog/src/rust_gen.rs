@@ -961,28 +961,28 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_model_delta_struct(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
-    let new_tuples = module
-        .symbols
-        .iter_rels()
-        .format_with("\n", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            let relation_camel = relation.to_case(UpperCamel);
-            f(&format_args!(
-                "    new_{relation_snake}: Vec<{relation_camel}>,"
-            ))
-        });
-    let new_equalities = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort = &sort.name;
-        let sort_snake = sort.to_case(Snake);
+fn write_model_delta_struct(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let new_tuples = iter_relation_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
+        let name_snake = name.to_case(Snake);
+        let name_camel = name.to_case(UpperCamel);
+        f(&format_args!("    new_{name_snake}: Vec<{name_camel}>,"))
+    });
+
+    let new_equalities = eqlog.iter_type_decl().format_with("\n", |(_, ident), f| {
+        let name = identifiers.get(&ident).unwrap().as_str();
+        let name_snake = name.to_case(Snake);
         f(&format_args!(
-            "    new_{sort_snake}_equalities: Vec<({sort}, {sort})>,"
+            "    new_{name_snake}_equalities: Vec<({name}, {name})>,"
         ))
     });
-    let new_element_number = module.symbols.iter_types().format_with("\n", |sort, f| {
-        let sort = &sort.name;
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!("    new_{sort_snake}_number: usize,"))
+    let new_element_number = eqlog.iter_type_decl().format_with("\n", |(_, ident), f| {
+        let name = identifiers.get(&ident).unwrap().as_str();
+        let name_snake = name.to_case(Snake);
+        f(&format_args!("    new_{name_snake}_number: usize,"))
     });
 
     writedoc! {out, "
@@ -1852,7 +1852,7 @@ pub fn write_module(
     }
     write!(out, "\n")?;
 
-    write_model_delta_struct(out, module)?;
+    write_model_delta_struct(out, eqlog, identifiers)?;
     write_theory_struct(out, name, module)?;
 
     write_model_delta_impl(out, module)?;
