@@ -657,17 +657,19 @@ fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<
     "}
 }
 
-fn write_is_dirty_fn(out: &mut impl Write, module: &ModuleWrapper) -> io::Result<()> {
-    let rels_dirty = module
-        .symbols
-        .iter_rels()
-        .format_with("", |(relation, _), f| {
+fn write_is_dirty_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let rels_dirty =
+        iter_relation_arities(eqlog, identifiers).format_with("", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
             f(&format_args!(" || self.{relation_snake}.is_dirty()"))
         });
 
-    let sorts_dirty = module.symbols.iter_types().format_with("", |sort, f| {
-        let sort_snake = sort.name.to_case(Snake);
+    let sorts_dirty = iter_types(eqlog, identifiers).format_with("", |sort, f| {
+        let sort_snake = sort.to_case(Snake);
         f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
     });
 
@@ -1774,7 +1776,7 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
 
-    write_is_dirty_fn(out, module)?;
+    write_is_dirty_fn(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
     for (i, query_action) in query_actions.iter().enumerate() {
