@@ -1,9 +1,11 @@
 use crate::ast::*;
+use crate::eqlog_util::*;
 use crate::flat_ast::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::module::*;
 use convert_case::{Case, Casing};
+use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1826,19 +1828,22 @@ pub fn write_module(
     out: &mut impl Write,
     name: &str,
     module: &ModuleWrapper,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
     query_actions: &[QueryAction],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for sort in module.symbols.iter_types() {
-        write_sort_struct(out, &sort.name)?;
-        write_sort_impl(out, &sort.name)?;
+    for (_, ident) in eqlog.iter_type_decl() {
+        let name = identifiers.get(&ident).unwrap().as_str();
+        write_sort_struct(out, name)?;
+        write_sort_impl(out, name)?;
     }
     write!(out, "\n")?;
 
-    for (rel, arity) in module.symbols.iter_rels() {
+    for (rel, arity) in iter_relation_arities(eqlog, identifiers) {
         write_relation_struct(out, rel, &arity)?;
         let index = index_selection.get(rel).unwrap();
         write_table_struct(out, rel, &arity, index)?;

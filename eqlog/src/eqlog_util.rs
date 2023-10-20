@@ -126,6 +126,69 @@ pub fn symbol_kind(kind: SymbolKind, eqlog: &Eqlog) -> SymbolKindEnum {
     panic!("Invalid symbol kind")
 }
 
+pub fn arg_decl_types<'a>(
+    mut arg_decls: ArgDeclListNode,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> Vec<&'a str> {
+    let mut result = Vec::new();
+    loop {
+        if eqlog.nil_arg_decl_list_node(arg_decls) {
+            break;
+        }
+
+        let (head_arg_decl, tail_arg_decls) = eqlog
+            .iter_cons_arg_decl_list_node()
+            .find_map(|(args0, head, tail)| {
+                eqlog
+                    .are_equal_arg_decl_list_node(args0, arg_decls)
+                    .then_some((head, tail))
+            })
+            .expect("ArgDeclListNode should be either nil or cons");
+
+        let head_ident = eqlog
+            .iter_arg_decl_node_type()
+            .find_map(|(arg_decl, ident)| {
+                eqlog
+                    .are_equal_arg_decl_node(arg_decl, head_arg_decl)
+                    .then_some(ident)
+            })
+            .expect("ArgDeclNode should have a type");
+
+        let head_name = identifiers.get(&head_ident).unwrap().as_str();
+
+        result.push(head_name);
+        arg_decls = tail_arg_decls;
+    }
+
+    result
+}
+
+pub fn iter_relation_arities<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
+    eqlog
+        // Predicates:
+        .iter_pred_decl()
+        .map(|(_, ident, arg_decls)| {
+            let name = identifiers.get(&ident).unwrap().as_str();
+            let arity = arg_decl_types(arg_decls, eqlog, identifiers);
+            (name, arity)
+        })
+        // Functions:
+        .chain(
+            eqlog
+                .iter_func_decl()
+                .map(|(_, ident, arg_decls, result_ident)| {
+                    let name = identifiers.get(&ident).unwrap().as_str();
+                    let mut arity = arg_decl_types(arg_decls, eqlog, identifiers);
+                    arity.push(identifiers.get(&result_ident).unwrap().as_str());
+                    (name, arity)
+                }),
+        )
+}
+
 /// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element
 /// representing the natural number in the provided eqlog model.
 fn nats<'a>(eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Nat> {

@@ -149,7 +149,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     let rules: Vec<RuleDeclNode> = eqlog.iter_rule_decl_node().collect();
     let rule_flattenings: Vec<SequentFlattening> = rules
         .into_iter()
-        .map(move |rule| flatten(rule, &mut eqlog, &identifiers))
+        .map(|rule| flatten(rule, &eqlog, &identifiers))
         .collect();
     query_actions.extend(
         rule_flattenings
@@ -174,6 +174,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         &mut result,
         &theory_name,
         &module_wrapper,
+        &eqlog,
+        &identifiers,
         &query_actions,
         &index_selection,
     )?;

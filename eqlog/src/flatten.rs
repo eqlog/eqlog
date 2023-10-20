@@ -273,7 +273,7 @@ fn sort_then_atoms(
 
 pub fn flatten(
     rule: RuleDeclNode,
-    eqlog: &mut Eqlog,
+    eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> SequentFlattening {
     let chain = eqlog.grouped_rule_chain(rule).unwrap();
