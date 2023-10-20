@@ -636,6 +636,40 @@ rule rule_decl_defines_symbol {
     then defined_symbol(name, kind, loc);
 }
 
+// ### Symbol lookup checks
+pred should_be_symbol(name: Ident, kind: SymbolKind, loc: Loc);
+
+rule arg_decl_should_be_type {
+    if arg_decl_node_type(arg_decl, name);
+    if kind = type_symbol();
+    if loc = arg_decl_node_loc(arg_decl);
+    then should_be_symbol(name, kind, loc);
+}
+rule var_atom_should_be_type {
+    if var_if_atom_node(atom, _, name);
+    if kind = type_symbol();
+    if loc = if_atom_node_loc(atom);
+    then should_be_symbol(name, kind, loc);
+}
+rule pred_if_atom_should_be_pred {
+    if pred_if_atom_node(atom, pred_name, _);
+    if kind = pred_symbol();
+    if loc = if_atom_node_loc(atom);
+    then should_be_symbol(pred_name, kind, loc);
+}
+rule pred_then_atom_should_be_pred {
+    if pred_then_atom_node(atom, pred_name, _);
+    if kind = pred_symbol();
+    if loc = then_atom_node_loc(atom);
+    then should_be_symbol(pred_name, kind, loc);
+}
+rule app_atom_should_be_func {
+    if app_term_node(term, name, _);
+    if kind = func_symbol();
+    if loc = term_node_loc(term);
+    then should_be_symbol(name, kind, loc);
+}
+
 // ## The Chain associated to a RuleDeclNode
 //
 // The chain of a rule has one structure for each statement in the rule. The

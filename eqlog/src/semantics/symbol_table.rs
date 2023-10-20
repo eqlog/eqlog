@@ -89,33 +89,7 @@ impl<'a> SymbolTable<'a> {
             syms.insert(name, sym);
         }
         let table = SymbolTable(syms);
-        table.check_resolve()?;
         Ok(table)
-    }
-
-    /// Checks that all used type names used in func and pred declarations have been declared.
-    /// This function does not check type names appearing in rules.
-    fn check_resolve(&self) -> Result<(), CompileError> {
-        for sym in self.0.values() {
-            match sym {
-                SymbolRef::Type(_) => {}
-                SymbolRef::Pred { pred, arity } => {
-                    // TODO: AST should have more precise location for typ.
-                    for typ in arity {
-                        self.get_type(typ, pred.loc)?;
-                    }
-                }
-                SymbolRef::Func { func, arity } => {
-                    // TODO: AST should have more precise location for typ.
-                    for typ in arity {
-                        self.get_type(typ, func.loc)?;
-                    }
-                }
-                SymbolRef::Rule(_) => {}
-            }
-        }
-
-        Ok(())
     }
 
     pub fn get_symbol(
@@ -129,21 +103,6 @@ impl<'a> SymbolTable<'a> {
                 name: name.into(),
                 used_at,
             })
-    }
-
-    pub fn get_type(&'a self, name: &str, used_at: Location) -> Result<&'a TypeDecl, CompileError> {
-        let sym = self.get_symbol(name, used_at)?;
-        if let SymbolRef::Type(typ) = sym {
-            Ok(typ)
-        } else {
-            Err(CompileError::BadSymbolKind {
-                name: name.into(),
-                expected: SymbolKindEnum::Type,
-                found: sym.kind(),
-                used_at,
-                declared_at: sym.loc(),
-            })
-        }
     }
 
     pub fn get_pred(&'a self, name: &str, used_at: Location) -> Result<&'a PredDecl, CompileError> {

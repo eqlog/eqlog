@@ -206,6 +206,71 @@ pub fn iter_symbol_declared_twice_errors<'a>(
     })
 }
 
+pub fn iter_symbol_lookup_errors<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<String, Ident>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    // In case of multiple declared of a symbol, symbol lookup should go through if at least on
+    // declaration is of the right kind. Since the SymbolDeclaredTwice error is probably the root
+    // cause, it should be reported with higher preference.
+    let mut declared_symbols: BTreeMap<Ident, Vec<(SymbolKindEnum, Location)>> = BTreeMap::new();
+    for (name, kind, loc) in eqlog.iter_defined_symbol() {
+        let location = *locations.get(&loc).unwrap();
+        declared_symbols
+            .entry(name)
+            .or_insert(Vec::new())
+            .push((symbol_kind(kind, eqlog), location));
+    }
+    for decls in declared_symbols.values_mut() {
+        decls.sort_by_key(|(_, location)| location.1);
+    }
+
+    eqlog
+        .iter_should_be_symbol()
+        .filter_map(move |(ident, kind, loc)| {
+            let kind = symbol_kind(kind, eqlog);
+            let name: &str = identifiers
+                .iter()
+                .find_map(|(s, i)| {
+                    if eqlog.are_equal_ident(*i, ident) {
+                        Some(s.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+            let location = *locations.get(&loc).unwrap();
+
+            let decls: &[(SymbolKindEnum, Location)] = match declared_symbols.get(&ident) {
+                None => {
+                    return Some(CompileError::UndeclaredSymbol {
+                        name: name.to_string(),
+                        used_at: location,
+                    });
+                }
+                Some(decls) => decls.as_slice(),
+            };
+
+            match decls
+                .iter()
+                .copied()
+                .find(|(decl_kind, _)| *decl_kind == kind)
+            {
+                Some(_) => None,
+                None => {
+                    let (decl_kind, decl_location) = decls[0];
+                    Some(CompileError::BadSymbolKind {
+                        name: name.to_string(),
+                        expected: kind,
+                        found: decl_kind,
+                        used_at: location,
+                        declared_at: decl_location,
+                    })
+                }
+            }
+        })
+}
 pub fn iter_symbol_casing_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<String, Ident>,
@@ -276,6 +341,7 @@ pub fn check_eqlog(
             identifiers,
             locations,
         ))
+        .chain(iter_symbol_lookup_errors(eqlog, identifiers, locations))
         .chain(iter_symbol_casing_errors(eqlog, identifiers, locations))
         .chain(iter_then_defined_variable_errors(eqlog, locations))
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))

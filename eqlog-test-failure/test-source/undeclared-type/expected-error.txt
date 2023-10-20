@@ -1,6 +1,6 @@
-Error: undeclared symbol "Foo"
- --> test-source/undeclared-type/theory.eql:2
+Error: undeclared symbol "A"
+ --> test-source/undeclared-type/theory.eql:1
   | 
-2 |     if x: Foo; 
-  |        ^       
+1 | pred foo(A);
+  |          ^  
   | 

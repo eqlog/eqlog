@@ -28,7 +28,6 @@ fn collect_term_type_constraints<'a, 'b>(
 
 fn collect_if_atom_type_constraints<'a, 'b>(
     symbols: &'a SymbolTable,
-    context: &'a TermContext,
     atom: &'a IfAtom,
 ) -> Result<(), CompileError> {
     match &atom.data {
@@ -45,9 +44,7 @@ fn collect_if_atom_type_constraints<'a, 'b>(
                 });
             }
         }
-        IfAtomData::Var { term, typ } => {
-            symbols.get_type(typ, context.loc(*term))?;
-        }
+        IfAtomData::Var { .. } => {}
     }
     Ok(())
 }
@@ -86,7 +83,7 @@ pub fn infer_types<'a>(
     for stmt in rule.body.iter() {
         match &stmt.data {
             StmtData::If(atom) => {
-                collect_if_atom_type_constraints(symbols, context, &atom)?;
+                collect_if_atom_type_constraints(symbols, &atom)?;
             }
             StmtData::Then(atom) => {
                 collect_then_atom_type_constraints(symbols, &atom)?;
