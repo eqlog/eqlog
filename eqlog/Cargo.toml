@@ -1,6 +1,6 @@
 [package]
 name = "eqlog"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 authors = [
   "Martin E. Bidlingmaier <martin.bidlingmaier@mbid.me>",
@@ -18,7 +18,7 @@ maplit = ">= 0"
 itertools = ">= 0"
 convert_case = ">= 0"
 indoc = ">= 0"
-eqlog-eqlog = { path = "../eqlog-eqlog", version = ">= 0" }
+eqlog-eqlog = { path = "../eqlog-eqlog", version = "0.3.0" }
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
