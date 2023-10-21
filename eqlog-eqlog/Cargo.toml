@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eqlog-runtime = { version = "*" }
+eqlog-runtime = { version = "0.2.3" }
 
 [build-dependencies]
-eqlog = { version = "*" }
+eqlog = { version = "0.2.3" }
