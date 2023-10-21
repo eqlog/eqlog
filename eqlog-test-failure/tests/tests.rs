@@ -31,7 +31,7 @@ fn test_case(case_src: &Path) {
         out_dir: PathBuf::from(out_dir.path()),
     };
 
-    let actual_error = match process(config) {
+    let actual_error = match process(&config) {
         Ok(()) => {
             panic!(
                 "{}",

@@ -41,6 +41,6 @@ macro_rules! eqlog_mod {
     };
 
     ($(#[$attr:meta])* $vis:vis $modname:ident, $source:expr) => {
-        $(#[$attr])* $vis mod $modname { include!(concat!(env!("OUT_DIR"), $source)); }
+        $(#[$attr])* $vis mod $modname { include!(concat!(env!("EQLOG_OUT_DIR"), $source)); }
     };
 }

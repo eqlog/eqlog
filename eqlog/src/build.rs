@@ -194,7 +194,12 @@ pub struct Config {
 }
 
 #[doc(hidden)]
-pub fn process(config: Config) -> Result<(), Box<dyn Error>> {
+pub fn print_cargo_set_eqlog_out_dir(out_dir: &Path) {
+    println!("cargo:rustc-env=EQLOG_OUT_DIR={}", out_dir.display());
+}
+
+#[doc(hidden)]
+pub fn process(config: &Config) -> Result<(), Box<dyn Error>> {
     let Config { in_dir, out_dir } = config;
     for in_file in eqlog_files(&in_dir)? {
         let src_rel = in_file
@@ -258,8 +263,12 @@ pub fn process_root() {
         })
         .into();
 
-    if let Err(err) = process(Config { in_dir, out_dir }) {
+    let config = Config { in_dir, out_dir };
+
+    if let Err(err) = process(&config) {
         eprintln!("{err}");
         exit(1);
     }
+
+    print_cargo_set_eqlog_out_dir(config.out_dir.as_path());
 }
