@@ -18,7 +18,15 @@ maplit = ">= 0"
 itertools = ">= 0"
 convert_case = ">= 0"
 indoc = ">= 0"
-eqlog-eqlog = { path = "../eqlog-eqlog", version = "0.3.0" }
+eqlog-eqlog-crates-prebuilt = { version = "0.3.0", package = "eqlog-eqlog", optional = true }
+eqlog-eqlog-tree-prebuilt = { path = "../eqlog-eqlog", package = "eqlog-eqlog", optional = true }
+eqlog-eqlog-tree-rebuild = { path = "../eqlog-eqlog", package = "eqlog-eqlog", features = ["rebuild"], optional = true }
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
+
+[features]
+default = ["crates-prebuilt"]
+crates-prebuilt = ["dep:eqlog-eqlog-crates-prebuilt"]
+tree-prebuilt = ["dep:eqlog-eqlog-tree-prebuilt"]
+tree-rebuild = ["dep:eqlog-eqlog-tree-rebuild"]

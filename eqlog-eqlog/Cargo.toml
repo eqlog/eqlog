@@ -13,7 +13,11 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eqlog-runtime = { version = "0.2.3" }
+eqlog-runtime = { version = "0.3.0" }
 
 [build-dependencies]
-eqlog = { version = "0.2.3" }
+eqlog = { version = "0.3.0", optional = true }
+
+[features]
+default = []
+rebuild = ["dep:eqlog"]
