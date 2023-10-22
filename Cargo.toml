@@ -21,7 +21,7 @@ exclude = [
 
 [workspace.package]
 edition = "2021"
-version = "0.3.0"
+version = "0.3.1"
 authors = [
   "Martin E. Bidlingmaier <martin.bidlingmaier@mbid.me>",
   "Jakob Botsch Nielsen <jakob.botsch.nielsen@gmail.com>",
