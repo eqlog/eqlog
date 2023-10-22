@@ -14,21 +14,32 @@ mod rust_gen;
 mod source_display;
 
 #[cfg(all(feature = "tree-rebuild", feature = "tree-prebuilt"))]
-std::compile_error!("Features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" are mutually exclusive");
+std::compile_error!(
+    "Features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" are mutually exclusive"
+);
 #[cfg(all(feature = "tree-rebuild", feature = "crates-prebuilt"))]
-std::compile_error!("Features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" are mutually exclusive");
+std::compile_error!(
+    "Features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" are mutually exclusive"
+);
 #[cfg(all(feature = "tree-prebuilt", feature = "crates-prebuilt"))]
-std::compile_error!("Features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" are mutually exclusive");
+std::compile_error!(
+    "Features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" are mutually exclusive"
+);
 
-#[cfg(not(any(feature = "tree-rebuild", feature = "tree-prebuilt", feature = "crates-prebuilt")))]
-std::compile_error!("One of features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" must be enabled");
+#[cfg(not(any(
+    feature = "tree-rebuild",
+    feature = "tree-prebuilt",
+    feature = "crates-prebuilt"
+)))]
+std::compile_error!(
+    "One of features \"tree-rebuild\", \"tree-prebuilt\" and \"crates-prebuilt\" must be enabled"
+);
 
-
-#[cfg(feature = "tree-rebuild")]
-extern crate eqlog_eqlog_tree_rebuild as eqlog_eqlog;
-#[cfg(feature = "tree-prebuilt")]
-extern crate eqlog_eqlog_tree_prebuilt as eqlog_eqlog;
 #[cfg(feature = "crates-prebuilt")]
 extern crate eqlog_eqlog_crates_prebuilt as eqlog_eqlog;
+#[cfg(feature = "tree-prebuilt")]
+extern crate eqlog_eqlog_tree_prebuilt as eqlog_eqlog;
+#[cfg(feature = "tree-rebuild")]
+extern crate eqlog_eqlog_tree_rebuild as eqlog_eqlog;
 
 pub use crate::build::{process, process_root, Config};

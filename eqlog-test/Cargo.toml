@@ -3,11 +3,9 @@ name = "eqlog-test"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies.eqlog-runtime]
-path = "../eqlog-runtime"
-
 [dependencies]
+eqlog-runtime = { path = "../eqlog-runtime" }
 maplit = "*"
 
-[build-dependencies.eqlog]
-path = "../eqlog"
+[build-dependencies]
+eqlog = { path = "../eqlog-tree", package = "eqlog-tree" }

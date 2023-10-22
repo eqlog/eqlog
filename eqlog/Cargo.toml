@@ -26,7 +26,7 @@ eqlog-eqlog-tree-rebuild = { path = "../eqlog-eqlog", package = "eqlog-eqlog", f
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
 
 [features]
-default = ["crates-prebuilt"]
+# default = ["crates-prebuilt"]
 crates-prebuilt = ["dep:eqlog-eqlog-crates-prebuilt"]
 tree-prebuilt = ["dep:eqlog-eqlog-tree-prebuilt"]
 tree-rebuild = ["dep:eqlog-eqlog-tree-rebuild"]

@@ -11,13 +11,12 @@ fn main() -> std::process::ExitCode {
 
     if let Err(err) = eqlog::process(&config) {
         eprintln!("{err}");
-        return ExitCode::FAILURE
+        return ExitCode::FAILURE;
     }
 
     println!("cargo:rustc-env=EQLOG_OUT_DIR={}", config.out_dir.display());
     ExitCode::SUCCESS
 }
-
 
 #[cfg(not(feature = "rebuild"))]
 fn main() {
