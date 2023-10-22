@@ -19,6 +19,17 @@ exclude = [
 	"exp-epa",
 ]
 
+[workspace.package]
+edition = "2021"
+version = "0.3.0"
+authors = [
+  "Martin E. Bidlingmaier <martin.bidlingmaier@mbid.me>",
+  "Jakob Botsch Nielsen <jakob.botsch.nielsen@gmail.com>",
+]
+license = "MIT"
+description = "Datalog with equality"
+repository = "https://github.com/eqlog/eqlog/"
+readme = "README.md"
 
 # Make sure to build eqlog-eqlog always with optimizations.
 [profile.dev.package.eqlog-eqlog]

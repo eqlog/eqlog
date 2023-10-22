@@ -1,14 +1,12 @@
 [package]
 name = "eqlog-eqlog"
-version = "0.3.0"
-edition = "2021"
-authors = [
-  "Martin E. Bidlingmaier <martin.bidlingmaier@mbid.me>",
-]
-license = "MIT"
-description = "Datalog with equality"
-repository = "https://github.com/eqlog/eqlog/"
-readme = "../README.md"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
