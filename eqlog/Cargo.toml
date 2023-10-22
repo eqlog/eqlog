@@ -16,8 +16,8 @@ itertools = ">= 0"
 convert_case = ">= 0"
 indoc = ">= 0"
 eqlog-eqlog-crates-prebuilt = { version = "0.3.0", package = "eqlog-eqlog", optional = true }
-eqlog-eqlog-tree-prebuilt = { path = "../eqlog-eqlog", package = "eqlog-eqlog", optional = true }
-eqlog-eqlog-tree-rebuild = { path = "../eqlog-eqlog", package = "eqlog-eqlog", features = ["rebuild"], optional = true }
+eqlog-eqlog-tree-prebuilt = { version = ">= 0", path = "../eqlog-eqlog", package = "eqlog-eqlog", optional = true }
+eqlog-eqlog-tree-rebuild = { version = ">= 0", path = "../eqlog-eqlog", package = "eqlog-eqlog", features = ["rebuild"], optional = true }
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
