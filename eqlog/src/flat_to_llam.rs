@@ -2,7 +2,7 @@ use crate::flat_ast::*;
 use crate::llam::*;
 use itertools::Itertools;
 use maplit::{btreemap, btreeset};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter::once;
 
 fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
@@ -18,7 +18,10 @@ fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
         .collect()
 }
 
-fn in_projections(fixed_terms: &HashSet<FlatTerm>, args: &[FlatTerm]) -> BTreeMap<usize, FlatTerm> {
+fn in_projections(
+    fixed_terms: &BTreeSet<FlatTerm>,
+    args: &[FlatTerm],
+) -> BTreeMap<usize, FlatTerm> {
     args.iter()
         .copied()
         .enumerate()
@@ -27,7 +30,7 @@ fn in_projections(fixed_terms: &HashSet<FlatTerm>, args: &[FlatTerm]) -> BTreeMa
 }
 
 fn out_projections(
-    fixed_terms: &HashSet<FlatTerm>,
+    fixed_terms: &BTreeSet<FlatTerm>,
     args: &[FlatTerm],
 ) -> BTreeMap<usize, FlatTerm> {
     args.iter()
@@ -37,7 +40,7 @@ fn out_projections(
         .collect()
 }
 
-fn translate_query_atom(fixed_terms: &mut HashSet<FlatTerm>, atom: &FlatAtom) -> QueryAtom {
+fn translate_query_atom(fixed_terms: &mut BTreeSet<FlatTerm>, atom: &FlatAtom) -> QueryAtom {
     match atom {
         FlatAtom::Equal(lhs, rhs) => {
             debug_assert!(fixed_terms.contains(lhs));
@@ -72,7 +75,7 @@ fn translate_query_atom(fixed_terms: &mut HashSet<FlatTerm>, atom: &FlatAtom) ->
 
 fn translate_action_atom(
     sorts: &BTreeMap<FlatTerm, String>,
-    fixed_terms: &mut HashSet<FlatTerm>,
+    fixed_terms: &mut BTreeSet<FlatTerm>,
     atom: &FlatAtom,
 ) -> ActionAtom {
     match atom {
@@ -145,8 +148,8 @@ fn action_inputs(atoms: &[ActionAtom]) -> BTreeSet<FlatTerm> {
     query_terms
 }
 
-fn query_outputs(atoms: &[QueryAtom]) -> HashSet<FlatTerm> {
-    let mut outputs: HashSet<FlatTerm> = HashSet::new();
+fn query_outputs(atoms: &[QueryAtom]) -> BTreeSet<FlatTerm> {
+    let mut outputs: BTreeSet<FlatTerm> = BTreeSet::new();
     for atom in atoms {
         use QueryAtom::*;
         match atom {
@@ -169,7 +172,7 @@ pub fn lower_sequent_naive(
     sequent: &FlatSequent,
     sorts: &BTreeMap<FlatTerm, String>,
 ) -> QueryAction {
-    let mut fixed_terms: HashSet<FlatTerm> = HashSet::new();
+    let mut fixed_terms: BTreeSet<FlatTerm> = BTreeSet::new();
     let query: Vec<QueryAtom> = sequent
         .premise
         .iter()
@@ -191,7 +194,7 @@ pub fn lower_sequent_naive(
 }
 
 pub fn lower_premise_atoms_seminaive(atoms: &[FlatAtom], dirty_index: usize) -> Vec<QueryAtom> {
-    let mut fixed_terms: HashSet<FlatTerm> = HashSet::new();
+    let mut fixed_terms: BTreeSet<FlatTerm> = BTreeSet::new();
     let mut dirty_atom = translate_query_atom(&mut fixed_terms, &atoms[dirty_index]);
     match &mut dirty_atom {
         QueryAtom::Relation { only_dirty, .. } | QueryAtom::Sort { only_dirty, .. } => {

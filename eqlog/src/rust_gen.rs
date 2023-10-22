@@ -6,7 +6,7 @@ use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 
@@ -108,7 +108,7 @@ fn write_table_struct(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
@@ -149,7 +149,7 @@ fn write_table_struct(
 fn write_table_new_fn(
     out: &mut impl Write,
     arity: &[&str],
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let index_inits = indices.iter().copied().format_with("\n", |index, f| {
@@ -244,7 +244,7 @@ impl<'a> Display for DiagonalCheck<'a> {
 fn write_table_insert_dirt_fn(
     out: &mut impl Write,
     relation: &str,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let master_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
     let master = IndexName(&master_index);
@@ -288,7 +288,7 @@ fn write_table_insert_fn(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let master_index = index_selection.get(&QuerySpec::all()).unwrap();
     let master = IndexName(&master_index);
@@ -422,7 +422,7 @@ fn write_table_iter_fn(
 fn write_table_contains_fn(
     out: &mut impl Write,
     relation: &str,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let master = index_selection.get(&QuerySpec::all()).unwrap();
     let master_name = IndexName(master);
@@ -438,7 +438,7 @@ fn write_table_contains_fn(
 
 fn write_table_is_dirty_fn(
     out: &mut impl Write,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let master_dirty = IndexName(index_selection.get(&QuerySpec::all_dirty()).unwrap());
 
@@ -451,7 +451,7 @@ fn write_table_is_dirty_fn(
 
 fn write_table_drop_dirt_fn(
     out: &mut impl Write,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let clears = indices
@@ -471,7 +471,7 @@ fn write_table_drop_dirt_fn(
 
 fn write_table_retire_dirt_fn(
     out: &mut impl Write,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let dirty_master = index_selection.get(&QuerySpec::all_dirty()).unwrap();
@@ -497,7 +497,7 @@ fn write_table_retire_dirt_fn(
 fn write_table_drain_with_element(
     out: &mut impl Write,
     relation: &str,
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
     sort: &str,
 ) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
@@ -541,7 +541,7 @@ fn write_table_drain_with_element(
 fn write_table_recall_previous_dirt(
     out: &mut impl Write,
     arity: &[&str],
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let sorts = arity.iter().copied().collect::<BTreeSet<&str>>();
     let fn_eq_args = sorts.iter().copied().format_with("", |sort, f| {
@@ -585,7 +585,7 @@ fn write_table_recall_previous_dirt(
 fn write_table_weight(
     out: &mut impl Write,
     arity: &[&str],
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let tuple_weight = arity.len();
@@ -602,7 +602,7 @@ fn write_table_impl(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
-    index_selection: &HashMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let relation_camel = relation.to_case(UpperCamel);

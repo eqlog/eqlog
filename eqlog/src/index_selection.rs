@@ -1,12 +1,11 @@
 use crate::eqlog_util::*;
 use crate::llam::*;
 use eqlog_eqlog::*;
-use maplit::hashset;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use maplit::btreeset;
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter::{once, repeat};
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct QuerySpec {
     pub projections: BTreeSet<usize>,
     pub diagonals: BTreeSet<BTreeSet<usize>>,
@@ -28,33 +27,27 @@ impl QuerySpec {
             only_dirty: true,
         }
     }
-}
 
-impl PartialOrd<QuerySpec> for QuerySpec {
-    fn partial_cmp(&self, rhs: &QuerySpec) -> Option<Ordering> {
-        use Ordering::*;
+    pub fn le_restrictive(&self, rhs: &QuerySpec) -> bool {
         if self.diagonals != rhs.diagonals || self.only_dirty != rhs.only_dirty {
-            None
-        } else if self.projections == rhs.projections {
-            Some(Equal)
-        } else if self.projections.is_subset(&rhs.projections) {
-            Some(Less)
-        } else if self.projections.is_superset(&rhs.projections) {
-            Some(Greater)
+            false
         } else {
-            None
+            self.projections.is_subset(&rhs.projections)
         }
     }
 }
-fn query_spec_chains(indices: HashSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
+
+fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
     let mut specs: Vec<QuerySpec> = indices.into_iter().collect();
     specs.sort_by_key(|index| index.projections.len());
 
     let mut chains: Vec<Vec<QuerySpec>> = Vec::new();
     for spec in specs.into_iter() {
+        // TODO: Don't we have to check that `spec` fits anywhere into a given chain, not just at
+        // the end?
         let compatible_chain = chains
             .iter_mut()
-            .find(|chain| spec >= *chain.last().unwrap());
+            .find(|chain| chain.last().unwrap().le_restrictive(&spec));
         match compatible_chain {
             Some(compatible_chain) => compatible_chain.push(spec),
             None => chains.push(vec![spec]),
@@ -106,7 +99,7 @@ impl IndexSpec {
 }
 
 // Maps relation name and query spec to an index for the relation that can serve the query.
-pub type IndexSelection = HashMap<String, HashMap<QuerySpec, IndexSpec>>;
+pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, IndexSpec>>;
 
 pub fn select_indices<'a, QA, AA>(
     query_atoms: QA,
@@ -120,12 +113,12 @@ where
 {
     // Maps relations to a set of collected query specs. We always need a query for all (dirty)
     // tuples.
-    let mut query_specs: HashMap<String, HashSet<QuerySpec>> =
+    let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> =
         iter_relation_arities(eqlog, identifiers)
             .map(|(rel, _)| {
                 (
                     rel.to_string(),
-                    hashset! {QuerySpec::all(), QuerySpec::all_dirty()},
+                    btreeset! {QuerySpec::all(), QuerySpec::all_dirty()},
                 )
             })
             .collect();
@@ -174,7 +167,7 @@ where
         .into_iter()
         .map(|(rel, query_specs)| {
             let chains = query_spec_chains(query_specs);
-            let query_index_map: HashMap<QuerySpec, IndexSpec> = chains
+            let query_index_map: BTreeMap<QuerySpec, IndexSpec> = chains
                 .into_iter()
                 .flat_map(|queries| {
                     let index = IndexSpec::from_query_spec_chain(
