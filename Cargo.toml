@@ -18,3 +18,12 @@ exclude = [
 	"cwf-theory",
 	"exp-epa",
 ]
+
+
+# Make sure to build eqlog-eqlog always with optimizations.
+[profile.dev.package.eqlog-eqlog]
+opt-level = 1
+debug = false
+[profile.dev.build-override]
+opt-level = 1
+debug = false
