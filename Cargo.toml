@@ -31,10 +31,10 @@ description = "Datalog with equality"
 repository = "https://github.com/eqlog/eqlog/"
 readme = "README.md"
 
-# Make sure to build eqlog-eqlog always with optimizations.
-[profile.dev.package.eqlog-eqlog]
-opt-level = 1
-debug = false
+# Use optimization for build scripts; eqlog is very slow otherwise.
 [profile.dev.build-override]
-opt-level = 1
+opt-level = 3
+debug = false
+[profile.release.build-override]
+opt-level = 3
 debug = false
