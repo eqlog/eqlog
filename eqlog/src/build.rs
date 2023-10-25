@@ -11,11 +11,14 @@ use crate::semantics::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::eprintdoc;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
 use std::fs;
+use std::fs::File;
 use std::io;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
@@ -107,8 +110,49 @@ fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
+fn digest_source(theory_name: &str, src: &str) -> Vec<u8> {
+    Sha256::new()
+        .chain_update(env!("EQLOG_SOURCE_DIGEST").as_bytes())
+        .chain_update(theory_name.as_bytes())
+        .chain_update(src.as_bytes())
+        .finalize()
+        .as_slice()
+        .into()
+}
+
+fn read_out_digest(out_file_path: &Path) -> Option<Vec<u8>> {
+    let file = File::open(out_file_path).ok()?;
+    let first_line = BufReader::new(file).lines().next()?.ok()?;
+    let digest_part = first_line.strip_prefix("// src-digest: ")?;
+    base16ct::upper::decode_vec(digest_part.as_bytes()).ok()
+}
+
+fn write_src_digest(out: &mut impl io::Write, digest: &[u8]) -> Result<(), Box<dyn Error>> {
+    writeln!(
+        out,
+        "// src-digest: {}",
+        base16ct::upper::encode_string(digest)
+    )?;
+    Ok(())
+}
+
 fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
+    let theory_name = in_file
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_case(Case::UpperCamel);
     let source = fs::read_to_string(in_file)?;
+
+    let src_digest = digest_source(theory_name.as_str(), source.as_str());
+    let out_digest = read_out_digest(out_file);
+
+    // TODO: Add a check to verify that the out file hasn't been corrupted?
+    if out_digest.as_ref().map(|od| od.as_slice()) == Some(src_digest.as_slice()) {
+        return Ok(());
+    }
+
     let source_without_comments = whipe_comments(&source);
     let (mut eqlog, identifiers, locations, _module) =
         parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
@@ -154,8 +198,10 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .to_str()
         .unwrap()
         .to_case(Case::UpperCamel);
+
     let mut result: Vec<u8> = Vec::new();
-    // TODO: write_module needs query_actions.
+    write_src_digest(&mut result, src_digest.as_slice())?;
+
     write_module(
         &mut result,
         &theory_name,
