@@ -196,23 +196,43 @@ pub fn lower_sequent_naive(
 }
 
 pub fn lower_premise_atoms_seminaive(atoms: &[FlatAtom], dirty_index: usize) -> Vec<QueryAtom> {
+    let mut remaining_atoms: Vec<&FlatAtom> = atoms.iter().collect();
+    let mut result = Vec::new();
     let mut fixed_terms: BTreeSet<FlatTerm> = BTreeSet::new();
-    let mut dirty_atom = translate_query_atom(&mut fixed_terms, &atoms[dirty_index]);
+
+    let mut dirty_atom = translate_query_atom(&mut fixed_terms, &remaining_atoms[dirty_index]);
     match &mut dirty_atom {
         QueryAtom::Relation { only_dirty, .. } | QueryAtom::Sort { only_dirty, .. } => {
             *only_dirty = true
         }
-        QueryAtom::Equal(_, _) => panic!("Equal in premise of sequents should not occur"),
+        QueryAtom::Equal(_, _) => panic!("Equal in premise of flat sequents should not occur"),
+    }
+    result.push(dirty_atom);
+    remaining_atoms.swap_remove(dirty_index);
+
+    // We pick the next atom to query according to which atom allows us to use indices the most
+    // effictively to reduce the number of results for that query. A good heuristic is to pick the
+    // number of elements that are already fixed due to earlier queries.
+    while !remaining_atoms.is_empty() {
+        let (best_index, best_atom) = remaining_atoms
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, atom)| match atom {
+                FlatAtom::Equal(_, _) => panic!("equality should not occur in premise"),
+                FlatAtom::Relation(_, args) => args
+                    .iter()
+                    .copied()
+                    .filter(|tm| fixed_terms.contains(tm))
+                    .count(),
+                FlatAtom::Unconstrained(_, _) => 0,
+            })
+            .unwrap();
+
+        result.push(translate_query_atom(&mut fixed_terms, best_atom));
+        remaining_atoms.swap_remove(best_index);
     }
 
-    once(dirty_atom)
-        .chain(
-            atoms[..dirty_index]
-                .iter()
-                .chain(atoms[dirty_index + 1..].iter())
-                .map(|atom| translate_query_atom(&mut fixed_terms, atom)),
-        )
-        .collect()
+    result
 }
 
 #[allow(dead_code)]
