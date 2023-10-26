@@ -1,8 +1,0 @@
-[package]
-name = "eqlog-tree"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-# This activates the "rebuild" feature for *all* crates in the containing workspace:
-eqlog-eqlog = { path = "../eqlog-eqlog", features = ["rebuild"] }

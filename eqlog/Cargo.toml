@@ -23,3 +23,7 @@ eqlog-eqlog = { path= "../eqlog-eqlog", version = "= 0.5.1" }
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
+
+[features]
+default = []
+rebuild = []

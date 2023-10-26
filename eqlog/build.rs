@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 
-#[cfg(any(feature = "tree-rebuild", feature = "tree-prebuilt"))]
+#[cfg(feature = "rebuild")]
 fn digest_source() -> String {
     use std::process::Command;
 
@@ -20,7 +20,7 @@ fn digest_source() -> String {
     base16ct::upper::encode_string(&binary_digest)
 }
 
-#[cfg(not(any(feature = "tree-rebuild", feature = "tree-prebuilt")))]
+#[cfg(not(feature = "rebuild"))]
 fn digest_source() -> String {
     use std::env;
 
