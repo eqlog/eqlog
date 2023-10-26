@@ -7,3 +7,4 @@ edition = "2021"
 # These activate features for *all* crates in the containing workspace:
 eqlog-eqlog = { path = "../eqlog-eqlog", features = ["rebuild"] }
 eqlog = { path = "../eqlog", features = ["rebuild"] }
+eqlog-tree = { path = "../eqlog-tree", features = ["rebuild"] }

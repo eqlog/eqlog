@@ -1,0 +1,296 @@
+use eqlog_eqlog::*;
+use std::collections::BTreeMap;
+use crate::grammar_util::*;
+
+grammar(
+    eqlog: &mut Eqlog,
+    identifiers: &mut BTreeMap<String, Ident>,
+    locations: &mut BTreeMap<Location, Loc>
+);
+
+extern {
+    type Error = NeverType;
+}
+
+Id: Ident  = {
+    <s : r"[A-Za-z][A-Za-z0-9'_]*"> => {
+        *identifiers.entry(s.to_string()).or_insert_with(|| {
+            eqlog.new_ident()
+        })
+    },
+}
+
+PairFirst<First, Second>: First = {
+    <first: First> <second: Second> => first,
+}
+
+NonEmptyIntersperse<Item, Separator>: Vec<Item> = {
+    <mut init: PairFirst<Item, Separator>*> <last: Item> => {
+        init.push(last);
+        init
+    },
+}
+
+Intersperse<Item, Separator>: Vec<Item> = {
+    <non_empty: NonEmptyIntersperse<Item, Separator>> => non_empty,
+    () => vec![],
+}
+
+Variable: TermNode = {
+    <l: @L> <ident: Id> <r: @R> => {
+        let tm = eqlog.new_term_node();
+        eqlog.insert_var_term_node(tm, ident);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_node_loc(tm, loc);
+
+        tm
+    },
+}
+
+Wildcard: TermNode = {
+    <l: @L> "_" <r: @R> => {
+        let tm = eqlog.new_term_node();
+        eqlog.insert_wildcard_term_node(tm);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_node_loc(tm, loc);
+
+        tm
+    },
+}
+
+ApplicationTerm: TermNode = {
+    <l: @L> <func: Id> <args: ArgList> <r: @R> => {
+        let tm = eqlog.new_term_node();
+        eqlog.insert_app_term_node(tm, func, args);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_node_loc(tm, loc);
+
+        tm
+    },
+}
+
+Term: TermNode = {
+    <var: Variable> => var,
+    <wildcard: Wildcard> => wildcard,
+    <application: ApplicationTerm> => application,
+}
+
+ArgList: TermListNode = {
+    <l: @L> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
+        let tms = term_list_node(args.as_slice(), eqlog);
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_list_node_loc(tms, loc);
+        tms
+    },
+}
+
+IfAtom: IfAtomNode = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
+        let atom = eqlog.new_if_atom_node();
+        eqlog.insert_equal_if_atom_node(atom, lhs, rhs);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_if_atom_node_loc(atom, loc);
+
+        atom
+    },
+    <l: @L> <tm: Term> "!" <r: @R> => {
+        let atom = eqlog.new_if_atom_node();
+        eqlog.insert_defined_if_atom_node(atom, tm);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_if_atom_node_loc(atom, loc);
+
+        atom
+    },
+    <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
+        let atom = eqlog.new_if_atom_node();
+        eqlog.insert_pred_if_atom_node(atom, pred, args);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_if_atom_node_loc(atom, loc);
+
+        atom
+    },
+    <l: @L> <term: Term> ":" <typ: Id> <r: @R> => {
+        let atom = eqlog.new_if_atom_node();
+        eqlog.insert_var_if_atom_node(atom, term, typ);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_if_atom_node_loc(atom, loc);
+
+        atom
+    },
+}
+
+ThenAtom: ThenAtomNode = {
+    <l: @L> <lhs: Term> "=" <rhs: Term> <r: @R> => {
+        let atom = eqlog.new_then_atom_node();
+        eqlog.insert_equal_then_atom_node(atom, lhs, rhs);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_then_atom_node_loc(atom, loc);
+
+        atom
+    },
+    <l: @L> <var: PairFirst<Term, ":=">?> <term: Term> "!" <r: @R> => {
+        let atom = eqlog.new_then_atom_node();
+        let var = opt_term_node(var, eqlog);
+        eqlog.insert_defined_then_atom_node(atom, var, term);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_then_atom_node_loc(atom, loc);
+
+        atom
+    },
+    <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
+        let atom = eqlog.new_then_atom_node();
+        eqlog.insert_pred_then_atom_node(atom, pred, args);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_then_atom_node_loc(atom, loc);
+
+        atom
+    },
+}
+
+Stmt: StmtNode = {
+    <l: @L> "if" <atom: IfAtom> ";" <r: @R> => {
+        let stmt = eqlog.new_stmt_node();
+        eqlog.insert_if_stmt_node(stmt, atom);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_stmt_node_loc(stmt, loc);
+
+        stmt
+    },
+    <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => {
+        let stmt = eqlog.new_stmt_node();
+        eqlog.insert_then_stmt_node(stmt, atom);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_stmt_node_loc(stmt, loc);
+
+        stmt
+    },
+}
+
+RuleDecl: RuleDeclNode = {
+    <l: @L> "rule" <name: Id?> "{" <body: Stmt*> "}" <r: @R> => {
+        let rule = eqlog.new_rule_decl_node();
+        let body = stmt_list_node(body.as_slice(), eqlog);
+        eqlog.insert_rule_decl(rule, body);
+
+        if let Some(name) = name {
+            eqlog.insert_rule_name(rule, name);
+        }
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_rule_decl_node_loc(rule, loc);
+
+        rule
+    },
+}
+
+TypeDecl: TypeDeclNode = {
+    <l: @L>  "type" <name: Id> ";" <r: @R> => {
+        // TODO: This node should be associated with data.
+        let typ = eqlog.new_type_decl_node();
+        eqlog.insert_type_decl(typ, name);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_type_decl_node_loc(typ, loc);
+
+        typ
+    },
+}
+
+ArgDecl: ArgDeclNode = {
+    <l: @L> <name: PairFirst<Id, ":">?> <typ: Id> <r: @R> => {
+        let arg_decl = eqlog.new_arg_decl_node();
+        if let Some(name) = name {
+            eqlog.insert_arg_decl_node_name(arg_decl, name);
+        }
+        eqlog.insert_arg_decl_node_type(arg_decl, typ);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_arg_decl_node_loc(arg_decl, loc);
+
+        arg_decl
+    },
+}
+
+ArgDeclList: ArgDeclListNode = {
+    <l: @L> "(" <arg_decls: Intersperse<ArgDecl, ",">> ")" <r: @R> => {
+        let arg_decls = arg_decl_list_node(arg_decls.as_slice(), eqlog);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_arg_decl_list_node_loc(arg_decls, loc);
+
+        arg_decls
+    },
+}
+
+PredDecl: PredDeclNode = {
+    <l: @L> "pred" <name: Id> <arg_decls: ArgDeclList> ";" <r: @R> => {
+        let pred = eqlog.new_pred_decl_node();
+        eqlog.insert_pred_decl(pred, name, arg_decls);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_pred_decl_node_loc(pred, loc);
+
+        pred
+    },
+}
+
+FuncDecl: FuncDeclNode = {
+    <l: @L> "func" <name: Id> <arg_decls: ArgDeclList> "->" <result: Id> ";" <r: @R> => {
+        let func = eqlog.new_func_decl_node();
+        eqlog.insert_func_decl(func, name, arg_decls, result);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_func_decl_node_loc(func, loc);
+
+        func
+    },
+}
+
+Decl: DeclNode = {
+    <typ: TypeDecl> => {
+        let decl = eqlog.new_decl_node();
+        eqlog.insert_decl_node_type(decl, typ);
+        decl
+    },
+    <pred: PredDecl> => {
+        let decl = eqlog.new_decl_node();
+        eqlog.insert_decl_node_pred(decl, pred);
+        decl
+    },
+    <func: FuncDecl> => {
+        let decl = eqlog.new_decl_node();
+        eqlog.insert_decl_node_func(decl, func);
+        decl
+    },
+    <rule: RuleDecl> => {
+        let decl = eqlog.new_decl_node();
+        eqlog.insert_decl_node_rule(decl, rule);
+        decl
+    },
+}
+
+pub Module: ModuleNode = {
+    <l: @L> <decls: Decl*> <r: @R> => {
+        let module = eqlog.new_module_node();
+        let decls = decl_list_node(decls.as_slice(), eqlog);
+        eqlog.insert_decls_module_node(module, decls);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_decl_list_node_loc(decls, loc);
+        eqlog.insert_module_node_loc(module, loc);
+
+        module
+    }
+}

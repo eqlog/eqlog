@@ -1,0 +1,33 @@
+[package]
+name = "eqlog-tree"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.eqlog-eqlog]
+package = "eqlog-eqlog-tree"
+path = "../eqlog-eqlog-tree"
+
+[[bin]]
+name = "eqlog-tree"
+path = "main.rs"
+
+# The remainder of this file must be kept in sync with the
+# dependencies of the  eqlog crate:
+[dependencies]
+lalrpop-util = { version = ">= 0", features = [ "lexer" ] }
+regex = ">= 0"
+maplit = ">= 0"
+itertools = ">= 0"
+convert_case = ">= 0"
+indoc = ">= 0"
+sha2 = ">= 0"
+base16ct = { version = ">= 0", features = ["alloc"] }
+
+[build-dependencies]
+lalrpop = { version = ">= 0", features = [ "lexer" ] }
+sha2 = ">= 0"
+base16ct = { version = ">= 0", features = ["alloc"] }
+
+[features]
+default = []
+rebuild = []

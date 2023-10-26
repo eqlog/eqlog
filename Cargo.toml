@@ -9,6 +9,8 @@ members = [
   "examples/inference",
   "eqlog-eqlog",
   "activate-rebuild-features",
+  "eqlog-eqlog-tree",
+  "eqlog-tree",
 ]
 
 # Keep examples out of workspace. It should be possible to build them without a
