@@ -8,4 +8,4 @@ eqlog-runtime = { path = "../eqlog-runtime" }
 maplit = "*"
 
 [build-dependencies]
-eqlog = { path = "../eqlog-tree", package = "eqlog-tree" }
+eqlog = { path = "../eqlog" }

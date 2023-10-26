@@ -17,17 +17,9 @@ convert_case = ">= 0"
 indoc = ">= 0"
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
-eqlog-eqlog-crates-prebuilt = { version = "= 0.5.1", package = "eqlog-eqlog", optional = true }
-eqlog-eqlog-tree-prebuilt = { version = ">= 0", path = "../eqlog-eqlog", package = "eqlog-eqlog", optional = true }
-eqlog-eqlog-tree-rebuild = { version = ">= 0", path = "../eqlog-eqlog", package = "eqlog-eqlog", features = ["rebuild"], optional = true }
+eqlog-eqlog = { path= "../eqlog-eqlog", version = "= 0.5.1" }
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
-
-[features]
-default = ["crates-prebuilt"]
-crates-prebuilt = ["dep:eqlog-eqlog-crates-prebuilt"]
-tree-prebuilt = ["dep:eqlog-eqlog-tree-prebuilt"]
-tree-rebuild = ["dep:eqlog-eqlog-tree-rebuild"]
