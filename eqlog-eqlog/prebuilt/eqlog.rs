@@ -1,4 +1,4 @@
-// src-digest: 719B41514FCB57B7AB0C12983E62A7129DF2AFE376F3CAB54E23B461C29D518E
+// src-digest: 33A05B94730F75CF1E6186E7E116056B4EB8607986B9A89488117E08FF094C9B
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -1357,7 +1357,8 @@ struct ConsArgDeclListNode(pub ArgDeclListNode, pub ArgDeclNode, pub ArgDeclList
 #[derive(Clone, Hash, Debug)]
 struct ConsArgDeclListNodeTable {
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
 
@@ -1366,11 +1367,12 @@ struct ConsArgDeclListNodeTable {
 }
 impl ConsArgDeclListNodeTable {
     #[allow(unused)]
-    const WEIGHT: usize = 9;
+    const WEIGHT: usize = 12;
     fn new() -> Self {
         Self {
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_2_0: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
+            index_all_2_0_1: BTreeSet::new(),
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_arg_decl_list_node: BTreeMap::new(),
             element_index_arg_decl_node: BTreeMap::new(),
@@ -1378,8 +1380,9 @@ impl ConsArgDeclListNodeTable {
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: ConsArgDeclListNode) -> bool {
-        if self.index_all_1_2_0.insert(Self::permute_1_2_0(t)) {
+        if self.index_all_1_0_2.insert(Self::permute_1_0_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_arg_decl_list_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -1416,7 +1419,7 @@ impl ConsArgDeclListNodeTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: ConsArgDeclListNode) -> bool {
-        self.index_all_1_2_0.contains(&Self::permute_1_2_0(t))
+        self.index_all_1_0_2.contains(&Self::permute_1_0_2(t))
     }
     fn drop_dirt(&mut self) {
         self.index_dirty_0_1_2.clear();
@@ -1442,25 +1445,37 @@ impl ConsArgDeclListNodeTable {
         )
     }
     #[allow(unused)]
-    fn permute_1_2_0(t: ConsArgDeclListNode) -> (u32, u32, u32) {
-        (t.1.into(), t.2.into(), t.0.into())
+    fn permute_1_0_2(t: ConsArgDeclListNode) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> ConsArgDeclListNode {
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> ConsArgDeclListNode {
         ConsArgDeclListNode(
-            ArgDeclListNode::from(t.2),
-            ArgDeclNode::from(t.0),
             ArgDeclListNode::from(t.1),
+            ArgDeclNode::from(t.0),
+            ArgDeclListNode::from(t.2),
+        )
+    }
+    #[allow(unused)]
+    fn permute_2_0_1(t: ConsArgDeclListNode) -> (u32, u32, u32) {
+        (t.2.into(), t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_2_0_1(t: (u32, u32, u32)) -> ConsArgDeclListNode {
+        ConsArgDeclListNode(
+            ArgDeclListNode::from(t.1),
+            ArgDeclNode::from(t.2),
+            ArgDeclListNode::from(t.0),
         )
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = ConsArgDeclListNode> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_1_2_0
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_2_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = ConsArgDeclListNode> {
@@ -1476,25 +1491,20 @@ impl ConsArgDeclListNodeTable {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
         let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_2_0
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_2_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
-    fn iter_all_1_2(
-        &self,
-        arg1: ArgDeclNode,
-        arg2: ArgDeclListNode,
-    ) -> impl '_ + Iterator<Item = ConsArgDeclListNode> {
-        let arg1 = arg1.0;
+    fn iter_all_2(&self, arg2: ArgDeclListNode) -> impl '_ + Iterator<Item = ConsArgDeclListNode> {
         let arg2 = arg2.0;
-        let min = (arg1, arg2, u32::MIN);
-        let max = (arg1, arg2, u32::MAX);
-        self.index_all_1_2_0
+        let min = (arg2, u32::MIN, u32::MIN);
+        let max = (arg2, u32::MAX, u32::MAX);
+        self.index_all_2_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_2_0)
+            .map(Self::permute_inverse_2_0_1)
     }
     #[allow(dead_code)]
     fn drain_with_element_arg_decl_list_node(
@@ -1507,8 +1517,9 @@ impl ConsArgDeclListNodeTable {
         };
 
         ts.into_iter().filter(|t| {
-            if self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t)) {
+            if self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
                 false
@@ -1526,8 +1537,9 @@ impl ConsArgDeclListNodeTable {
         };
 
         ts.into_iter().filter(|t| {
-            if self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t)) {
+            if self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
                 false
@@ -4682,7 +4694,7 @@ struct DefinedThenAtomNode(pub ThenAtomNode, pub OptTermNode, pub TermNode);
 struct DefinedThenAtomNodeTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
     index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
@@ -4698,7 +4710,7 @@ impl DefinedThenAtomNodeTable {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_2_0: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
             index_all_2_0_1: BTreeSet::new(),
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_opt_term_node: BTreeMap::new(),
@@ -4710,7 +4722,7 @@ impl DefinedThenAtomNodeTable {
     fn insert(&mut self, t: DefinedThenAtomNode) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_2_0.insert(Self::permute_1_2_0(t));
+            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
             self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_then_atom_node.get_mut(&t.0) {
@@ -4774,15 +4786,15 @@ impl DefinedThenAtomNodeTable {
         )
     }
     #[allow(unused)]
-    fn permute_1_2_0(t: DefinedThenAtomNode) -> (u32, u32, u32) {
-        (t.1.into(), t.2.into(), t.0.into())
+    fn permute_1_0_2(t: DefinedThenAtomNode) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> DefinedThenAtomNode {
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> DefinedThenAtomNode {
         DefinedThenAtomNode(
-            ThenAtomNode::from(t.2),
+            ThenAtomNode::from(t.1),
             OptTermNode::from(t.0),
-            TermNode::from(t.1),
+            TermNode::from(t.2),
         )
     }
     #[allow(unused)]
@@ -4830,25 +4842,10 @@ impl DefinedThenAtomNodeTable {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
         let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_2_0
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_2_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1_2(
-        &self,
-        arg1: OptTermNode,
-        arg2: TermNode,
-    ) -> impl '_ + Iterator<Item = DefinedThenAtomNode> {
-        let arg1 = arg1.0;
-        let arg2 = arg2.0;
-        let min = (arg1, arg2, u32::MIN);
-        let max = (arg1, arg2, u32::MAX);
-        self.index_all_1_2_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_2_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_all_2(&self, arg2: TermNode) -> impl '_ + Iterator<Item = DefinedThenAtomNode> {
@@ -4873,7 +4870,7 @@ impl DefinedThenAtomNodeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -4894,7 +4891,7 @@ impl DefinedThenAtomNodeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -4915,7 +4912,7 @@ impl DefinedThenAtomNodeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -5778,7 +5775,7 @@ struct ConsStmtListNode(pub StmtListNode, pub StmtNode, pub StmtListNode);
 struct ConsStmtListNodeTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
     index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
@@ -5793,7 +5790,7 @@ impl ConsStmtListNodeTable {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_2_0: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
             index_all_2_0_1: BTreeSet::new(),
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_stmt_list_node: BTreeMap::new(),
@@ -5804,7 +5801,7 @@ impl ConsStmtListNodeTable {
     fn insert(&mut self, t: ConsStmtListNode) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_2_0.insert(Self::permute_1_2_0(t));
+            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
             self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_stmt_list_node.get_mut(&t.0) {
@@ -5868,15 +5865,15 @@ impl ConsStmtListNodeTable {
         )
     }
     #[allow(unused)]
-    fn permute_1_2_0(t: ConsStmtListNode) -> (u32, u32, u32) {
-        (t.1.into(), t.2.into(), t.0.into())
+    fn permute_1_0_2(t: ConsStmtListNode) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> ConsStmtListNode {
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> ConsStmtListNode {
         ConsStmtListNode(
-            StmtListNode::from(t.2),
-            StmtNode::from(t.0),
             StmtListNode::from(t.1),
+            StmtNode::from(t.0),
+            StmtListNode::from(t.2),
         )
     }
     #[allow(unused)]
@@ -5920,76 +5917,14 @@ impl ConsStmtListNodeTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: StmtListNode,
-        arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = ConsStmtListNode> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1, u32::MIN);
-        let max = (arg0, arg1, u32::MAX);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1_2(
-        &self,
-        arg0: StmtListNode,
-        arg1: StmtNode,
-        arg2: StmtListNode,
-    ) -> impl '_ + Iterator<Item = ConsStmtListNode> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let arg2 = arg2.0;
-        let min = (arg0, arg1, arg2);
-        let max = (arg0, arg1, arg2);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_2(
-        &self,
-        arg0: StmtListNode,
-        arg2: StmtListNode,
-    ) -> impl '_ + Iterator<Item = ConsStmtListNode> {
-        let arg0 = arg0.0;
-        let arg2 = arg2.0;
-        let min = (arg2, arg0, u32::MIN);
-        let max = (arg2, arg0, u32::MAX);
-        self.index_all_2_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_2_0_1)
-    }
-    #[allow(dead_code)]
     fn iter_all_1(&self, arg1: StmtNode) -> impl '_ + Iterator<Item = ConsStmtListNode> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
         let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_2_0
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_2_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1_2(
-        &self,
-        arg1: StmtNode,
-        arg2: StmtListNode,
-    ) -> impl '_ + Iterator<Item = ConsStmtListNode> {
-        let arg1 = arg1.0;
-        let arg2 = arg2.0;
-        let min = (arg1, arg2, u32::MIN);
-        let max = (arg1, arg2, u32::MAX);
-        self.index_all_1_2_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_2_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_all_2(&self, arg2: StmtListNode) -> impl '_ + Iterator<Item = ConsStmtListNode> {
@@ -6014,7 +5949,7 @@ impl ConsStmtListNodeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -6035,7 +5970,7 @@ impl ConsStmtListNodeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -17263,6 +17198,7 @@ struct RuleChildTerm(pub TermNode, pub RuleChildNode);
 struct RuleChildTermTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -17271,11 +17207,12 @@ struct RuleChildTermTable {
 }
 impl RuleChildTermTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_rule_child_node: BTreeMap::new(),
             element_index_term_node: BTreeMap::new(),
@@ -17285,6 +17222,7 @@ impl RuleChildTermTable {
     fn insert(&mut self, t: RuleChildTerm) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_term_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -17335,6 +17273,14 @@ impl RuleChildTermTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildTerm {
         RuleChildTerm(TermNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildTerm) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildTerm {
+        RuleChildTerm(TermNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildTerm> {
         let min = (u32::MIN, u32::MIN);
@@ -17364,19 +17310,14 @@ impl RuleChildTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: TermNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildTerm> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildTerm> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_rule_child_node(
@@ -17391,6 +17332,7 @@ impl RuleChildTermTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17410,6 +17352,7 @@ impl RuleChildTermTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17456,6 +17399,7 @@ struct RuleChildTermList(pub TermListNode, pub RuleChildNode);
 struct RuleChildTermListTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -17464,11 +17408,12 @@ struct RuleChildTermListTable {
 }
 impl RuleChildTermListTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_rule_child_node: BTreeMap::new(),
             element_index_term_list_node: BTreeMap::new(),
@@ -17478,6 +17423,7 @@ impl RuleChildTermListTable {
     fn insert(&mut self, t: RuleChildTermList) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_term_list_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -17528,6 +17474,14 @@ impl RuleChildTermListTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildTermList {
         RuleChildTermList(TermListNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildTermList) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildTermList {
+        RuleChildTermList(TermListNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildTermList> {
         let min = (u32::MIN, u32::MIN);
@@ -17557,19 +17511,14 @@ impl RuleChildTermListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: TermListNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildTermList> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildTermList> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_rule_child_node(
@@ -17584,6 +17533,7 @@ impl RuleChildTermListTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17603,6 +17553,7 @@ impl RuleChildTermListTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17649,6 +17600,7 @@ struct RuleChildOptTerm(pub OptTermNode, pub RuleChildNode);
 struct RuleChildOptTermTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -17657,11 +17609,12 @@ struct RuleChildOptTermTable {
 }
 impl RuleChildOptTermTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_opt_term_node: BTreeMap::new(),
             element_index_rule_child_node: BTreeMap::new(),
@@ -17671,6 +17624,7 @@ impl RuleChildOptTermTable {
     fn insert(&mut self, t: RuleChildOptTerm) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_opt_term_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -17721,6 +17675,14 @@ impl RuleChildOptTermTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildOptTerm {
         RuleChildOptTerm(OptTermNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildOptTerm) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildOptTerm {
+        RuleChildOptTerm(OptTermNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
         let min = (u32::MIN, u32::MIN);
@@ -17750,19 +17712,14 @@ impl RuleChildOptTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: OptTermNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_opt_term_node(
@@ -17777,6 +17734,7 @@ impl RuleChildOptTermTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17796,6 +17754,7 @@ impl RuleChildOptTermTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17842,6 +17801,7 @@ struct RuleChildIfAtom(pub IfAtomNode, pub RuleChildNode);
 struct RuleChildIfAtomTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -17850,11 +17810,12 @@ struct RuleChildIfAtomTable {
 }
 impl RuleChildIfAtomTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_if_atom_node: BTreeMap::new(),
             element_index_rule_child_node: BTreeMap::new(),
@@ -17864,6 +17825,7 @@ impl RuleChildIfAtomTable {
     fn insert(&mut self, t: RuleChildIfAtom) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_if_atom_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -17914,6 +17876,14 @@ impl RuleChildIfAtomTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildIfAtom {
         RuleChildIfAtom(IfAtomNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildIfAtom) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildIfAtom {
+        RuleChildIfAtom(IfAtomNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
         let min = (u32::MIN, u32::MIN);
@@ -17943,19 +17913,14 @@ impl RuleChildIfAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: IfAtomNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_if_atom_node(
@@ -17970,6 +17935,7 @@ impl RuleChildIfAtomTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -17989,6 +17955,7 @@ impl RuleChildIfAtomTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -18035,6 +18002,7 @@ struct RuleChildThenAtom(pub ThenAtomNode, pub RuleChildNode);
 struct RuleChildThenAtomTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -18043,11 +18011,12 @@ struct RuleChildThenAtomTable {
 }
 impl RuleChildThenAtomTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_rule_child_node: BTreeMap::new(),
             element_index_then_atom_node: BTreeMap::new(),
@@ -18057,6 +18026,7 @@ impl RuleChildThenAtomTable {
     fn insert(&mut self, t: RuleChildThenAtom) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_then_atom_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -18107,6 +18077,14 @@ impl RuleChildThenAtomTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildThenAtom {
         RuleChildThenAtom(ThenAtomNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildThenAtom) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildThenAtom {
+        RuleChildThenAtom(ThenAtomNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
         let min = (u32::MIN, u32::MIN);
@@ -18136,19 +18114,14 @@ impl RuleChildThenAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: ThenAtomNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_rule_child_node(
@@ -18163,6 +18136,7 @@ impl RuleChildThenAtomTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -18182,6 +18156,7 @@ impl RuleChildThenAtomTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -18228,6 +18203,7 @@ struct RuleChildStmt(pub StmtNode, pub RuleChildNode);
 struct RuleChildStmtTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -18236,11 +18212,12 @@ struct RuleChildStmtTable {
 }
 impl RuleChildStmtTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_rule_child_node: BTreeMap::new(),
             element_index_stmt_node: BTreeMap::new(),
@@ -18250,6 +18227,7 @@ impl RuleChildStmtTable {
     fn insert(&mut self, t: RuleChildStmt) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_stmt_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -18300,6 +18278,14 @@ impl RuleChildStmtTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildStmt {
         RuleChildStmt(StmtNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildStmt) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildStmt {
+        RuleChildStmt(StmtNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildStmt> {
         let min = (u32::MIN, u32::MIN);
@@ -18329,19 +18315,14 @@ impl RuleChildStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: StmtNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmt> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildStmt> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_rule_child_node(
@@ -18356,6 +18337,7 @@ impl RuleChildStmtTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -18375,6 +18357,7 @@ impl RuleChildStmtTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -18421,6 +18404,7 @@ struct RuleChildStmtList(pub StmtListNode, pub RuleChildNode);
 struct RuleChildStmtListTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -18429,11 +18413,12 @@ struct RuleChildStmtListTable {
 }
 impl RuleChildStmtListTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_rule_child_node: BTreeMap::new(),
             element_index_stmt_list_node: BTreeMap::new(),
@@ -18443,6 +18428,7 @@ impl RuleChildStmtListTable {
     fn insert(&mut self, t: RuleChildStmtList) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_stmt_list_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -18493,6 +18479,14 @@ impl RuleChildStmtListTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildStmtList {
         RuleChildStmtList(StmtListNode::from(t.0), RuleChildNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleChildStmtList) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildStmtList {
+        RuleChildStmtList(StmtListNode::from(t.1), RuleChildNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildStmtList> {
         let min = (u32::MIN, u32::MIN);
@@ -18522,19 +18516,14 @@ impl RuleChildStmtListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: StmtListNode,
-        arg1: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmtList> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildStmtList> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_rule_child_node(
@@ -18549,6 +18538,7 @@ impl RuleChildStmtListTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -18568,6 +18558,7 @@ impl RuleChildStmtListTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19347,6 +19338,7 @@ struct SemanticPred(pub Ident, pub Pred);
 struct SemanticPredTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -19355,11 +19347,12 @@ struct SemanticPredTable {
 }
 impl SemanticPredTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_ident: BTreeMap::new(),
             element_index_pred: BTreeMap::new(),
@@ -19369,6 +19362,7 @@ impl SemanticPredTable {
     fn insert(&mut self, t: SemanticPred) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_ident.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -19419,6 +19413,14 @@ impl SemanticPredTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> SemanticPred {
         SemanticPred(Ident::from(t.0), Pred::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: SemanticPred) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> SemanticPred {
+        SemanticPred(Ident::from(t.1), Pred::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = SemanticPred> {
         let min = (u32::MIN, u32::MIN);
@@ -19448,15 +19450,14 @@ impl SemanticPredTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Ident, arg1: Pred) -> impl '_ + Iterator<Item = SemanticPred> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: Pred) -> impl '_ + Iterator<Item = SemanticPred> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_ident(&mut self, tm: Ident) -> impl '_ + Iterator<Item = SemanticPred> {
@@ -19468,6 +19469,7 @@ impl SemanticPredTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19484,6 +19486,7 @@ impl SemanticPredTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19530,6 +19533,7 @@ struct Arity(pub Pred, pub TypeList);
 struct ArityTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -19538,11 +19542,12 @@ struct ArityTable {
 }
 impl ArityTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_pred: BTreeMap::new(),
             element_index_type_list: BTreeMap::new(),
@@ -19552,6 +19557,7 @@ impl ArityTable {
     fn insert(&mut self, t: Arity) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_pred.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -19602,6 +19608,14 @@ impl ArityTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> Arity {
         Arity(Pred::from(t.0), TypeList::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: Arity) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> Arity {
+        Arity(Pred::from(t.1), TypeList::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = Arity> {
         let min = (u32::MIN, u32::MIN);
@@ -19642,6 +19656,16 @@ impl ArityTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = Arity> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_pred(&mut self, tm: Pred) -> impl '_ + Iterator<Item = Arity> {
         let ts = match self.element_index_pred.remove(&tm) {
             None => Vec::new(),
@@ -19651,6 +19675,7 @@ impl ArityTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19667,6 +19692,7 @@ impl ArityTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19713,6 +19739,7 @@ struct SemanticFunc(pub Ident, pub Func);
 struct SemanticFuncTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -19721,11 +19748,12 @@ struct SemanticFuncTable {
 }
 impl SemanticFuncTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_func: BTreeMap::new(),
             element_index_ident: BTreeMap::new(),
@@ -19735,6 +19763,7 @@ impl SemanticFuncTable {
     fn insert(&mut self, t: SemanticFunc) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_ident.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -19785,6 +19814,14 @@ impl SemanticFuncTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> SemanticFunc {
         SemanticFunc(Ident::from(t.0), Func::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: SemanticFunc) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> SemanticFunc {
+        SemanticFunc(Ident::from(t.1), Func::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = SemanticFunc> {
         let min = (u32::MIN, u32::MIN);
@@ -19814,15 +19851,14 @@ impl SemanticFuncTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Ident, arg1: Func) -> impl '_ + Iterator<Item = SemanticFunc> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: Func) -> impl '_ + Iterator<Item = SemanticFunc> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_func(&mut self, tm: Func) -> impl '_ + Iterator<Item = SemanticFunc> {
@@ -19834,6 +19870,7 @@ impl SemanticFuncTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19850,6 +19887,7 @@ impl SemanticFuncTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -19896,6 +19934,7 @@ struct Domain(pub Func, pub TypeList);
 struct DomainTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -19904,11 +19943,12 @@ struct DomainTable {
 }
 impl DomainTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_func: BTreeMap::new(),
             element_index_type_list: BTreeMap::new(),
@@ -19918,6 +19958,7 @@ impl DomainTable {
     fn insert(&mut self, t: Domain) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_func.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -19968,6 +20009,14 @@ impl DomainTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> Domain {
         Domain(Func::from(t.0), TypeList::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: Domain) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> Domain {
+        Domain(Func::from(t.1), TypeList::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = Domain> {
         let min = (u32::MIN, u32::MIN);
@@ -20008,6 +20057,16 @@ impl DomainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_func(&mut self, tm: Func) -> impl '_ + Iterator<Item = Domain> {
         let ts = match self.element_index_func.remove(&tm) {
             None => Vec::new(),
@@ -20017,6 +20076,7 @@ impl DomainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -20033,6 +20093,7 @@ impl DomainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -20471,6 +20532,7 @@ struct ConsElList(pub El, pub ElList, pub ElList);
 struct ConsElListTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
     index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
@@ -20480,11 +20542,12 @@ struct ConsElListTable {
 }
 impl ConsElListTable {
     #[allow(unused)]
-    const WEIGHT: usize = 12;
+    const WEIGHT: usize = 15;
     fn new() -> Self {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
             index_all_2_0_1: BTreeSet::new(),
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_el: BTreeMap::new(),
@@ -20495,6 +20558,7 @@ impl ConsElListTable {
     fn insert(&mut self, t: ConsElList) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
             self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_el.get_mut(&t.0) {
@@ -20552,6 +20616,14 @@ impl ConsElListTable {
     #[allow(unused)]
     fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> ConsElList {
         ConsElList(El::from(t.0), ElList::from(t.1), ElList::from(t.2))
+    }
+    #[allow(unused)]
+    fn permute_1_0_2(t: ConsElList) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> ConsElList {
+        ConsElList(El::from(t.1), ElList::from(t.0), ElList::from(t.2))
     }
     #[allow(unused)]
     fn permute_2_0_1(t: ConsElList) -> (u32, u32, u32) {
@@ -20618,6 +20690,16 @@ impl ConsElListTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: ElList) -> impl '_ + Iterator<Item = ConsElList> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN, u32::MIN);
+        let max = (arg1, u32::MAX, u32::MAX);
+        self.index_all_1_0_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0_2)
+    }
+    #[allow(dead_code)]
     fn iter_all_2(&self, arg2: ElList) -> impl '_ + Iterator<Item = ConsElList> {
         let arg2 = arg2.0;
         let min = (arg2, u32::MIN, u32::MIN);
@@ -20637,6 +20719,7 @@ impl ConsElListTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -20654,6 +20737,7 @@ impl ConsElListTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
@@ -20702,8 +20786,7 @@ struct FuncApp(pub Func, pub ElList, pub El);
 struct FuncAppTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
-    index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
+    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
 
@@ -20713,13 +20796,12 @@ struct FuncAppTable {
 }
 impl FuncAppTable {
     #[allow(unused)]
-    const WEIGHT: usize = 15;
+    const WEIGHT: usize = 12;
     fn new() -> Self {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_0_2: BTreeSet::new(),
-            index_all_2_0_1: BTreeSet::new(),
+            index_all_1_2_0: BTreeSet::new(),
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_el: BTreeMap::new(),
             element_index_el_list: BTreeMap::new(),
@@ -20730,8 +20812,7 @@ impl FuncAppTable {
     fn insert(&mut self, t: FuncApp) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
-            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
+            self.index_all_1_2_0.insert(Self::permute_1_2_0(t));
 
             match self.element_index_func.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -20790,20 +20871,12 @@ impl FuncAppTable {
         FuncApp(Func::from(t.0), ElList::from(t.1), El::from(t.2))
     }
     #[allow(unused)]
-    fn permute_1_0_2(t: FuncApp) -> (u32, u32, u32) {
-        (t.1.into(), t.0.into(), t.2.into())
+    fn permute_1_2_0(t: FuncApp) -> (u32, u32, u32) {
+        (t.1.into(), t.2.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> FuncApp {
-        FuncApp(Func::from(t.1), ElList::from(t.0), El::from(t.2))
-    }
-    #[allow(unused)]
-    fn permute_2_0_1(t: FuncApp) -> (u32, u32, u32) {
-        (t.2.into(), t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_2_0_1(t: (u32, u32, u32)) -> FuncApp {
-        FuncApp(Func::from(t.1), ElList::from(t.2), El::from(t.0))
+    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> FuncApp {
+        FuncApp(Func::from(t.2), ElList::from(t.0), El::from(t.1))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = FuncApp> {
@@ -20866,20 +20939,21 @@ impl FuncAppTable {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
         let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_0_2
+        self.index_all_1_2_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_0_2)
+            .map(Self::permute_inverse_1_2_0)
     }
     #[allow(dead_code)]
-    fn iter_all_2(&self, arg2: El) -> impl '_ + Iterator<Item = FuncApp> {
+    fn iter_all_1_2(&self, arg1: ElList, arg2: El) -> impl '_ + Iterator<Item = FuncApp> {
+        let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg2, u32::MIN, u32::MIN);
-        let max = (arg2, u32::MAX, u32::MAX);
-        self.index_all_2_0_1
+        let min = (arg1, arg2, u32::MIN);
+        let max = (arg1, arg2, u32::MAX);
+        self.index_all_1_2_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_0_1)
+            .map(Self::permute_inverse_1_2_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_el(&mut self, tm: El) -> impl '_ + Iterator<Item = FuncApp> {
@@ -20891,8 +20965,7 @@ impl FuncAppTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
-                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
                 true
             } else {
                 false
@@ -20909,8 +20982,7 @@ impl FuncAppTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
-                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
                 true
             } else {
                 false
@@ -20927,8 +20999,7 @@ impl FuncAppTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
-                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(*t));
                 true
             } else {
                 false
@@ -21849,6 +21920,7 @@ struct Cod(pub Morphism, pub Structure);
 struct CodTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -21857,11 +21929,12 @@ struct CodTable {
 }
 impl CodTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_morphism: BTreeMap::new(),
             element_index_structure: BTreeMap::new(),
@@ -21871,6 +21944,7 @@ impl CodTable {
     fn insert(&mut self, t: Cod) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_morphism.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -21921,6 +21995,14 @@ impl CodTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> Cod {
         Cod(Morphism::from(t.0), Structure::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: Cod) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> Cod {
+        Cod(Morphism::from(t.1), Structure::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = Cod> {
         let min = (u32::MIN, u32::MIN);
@@ -21961,6 +22043,16 @@ impl CodTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_morphism(&mut self, tm: Morphism) -> impl '_ + Iterator<Item = Cod> {
         let ts = match self.element_index_morphism.remove(&tm) {
             None => Vec::new(),
@@ -21970,6 +22062,7 @@ impl CodTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -21986,6 +22079,7 @@ impl CodTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -24882,6 +24976,7 @@ struct StmtListChain(pub StmtListNode, pub Chain);
 struct StmtListChainTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -24890,11 +24985,12 @@ struct StmtListChainTable {
 }
 impl StmtListChainTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_chain: BTreeMap::new(),
             element_index_stmt_list_node: BTreeMap::new(),
@@ -24904,6 +25000,7 @@ impl StmtListChainTable {
     fn insert(&mut self, t: StmtListChain) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_stmt_list_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -24954,6 +25051,14 @@ impl StmtListChainTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> StmtListChain {
         StmtListChain(StmtListNode::from(t.0), Chain::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: StmtListChain) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> StmtListChain {
+        StmtListChain(StmtListNode::from(t.1), Chain::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = StmtListChain> {
         let min = (u32::MIN, u32::MIN);
@@ -24983,19 +25088,14 @@ impl StmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: StmtListNode,
-        arg1: Chain,
-    ) -> impl '_ + Iterator<Item = StmtListChain> {
-        let arg0 = arg0.0;
+    fn iter_all_1(&self, arg1: Chain) -> impl '_ + Iterator<Item = StmtListChain> {
         let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_chain(&mut self, tm: Chain) -> impl '_ + Iterator<Item = StmtListChain> {
@@ -25007,6 +25107,7 @@ impl StmtListChainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -25026,6 +25127,7 @@ impl StmtListChainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -35062,221 +35164,221 @@ impl Eqlog {
 
         while self.is_dirty() {
             loop {
-                self.query_and_record_0(&mut delta);
-                self.query_and_record_1(&mut delta);
-                self.query_and_record_2(&mut delta);
-                self.query_and_record_3(&mut delta);
-                self.query_and_record_4(&mut delta);
-                self.query_and_record_5(&mut delta);
-                self.query_and_record_6(&mut delta);
-                self.query_and_record_7(&mut delta);
-                self.query_and_record_8(&mut delta);
-                self.query_and_record_9(&mut delta);
-                self.query_and_record_10(&mut delta);
-                self.query_and_record_11(&mut delta);
-                self.query_and_record_12(&mut delta);
-                self.query_and_record_13(&mut delta);
-                self.query_and_record_14(&mut delta);
-                self.query_and_record_15(&mut delta);
-                self.query_and_record_16(&mut delta);
-                self.query_and_record_17(&mut delta);
-                self.query_and_record_18(&mut delta);
-                self.query_and_record_19(&mut delta);
-                self.query_and_record_20(&mut delta);
-                self.query_and_record_21(&mut delta);
-                self.query_and_record_22(&mut delta);
-                self.query_and_record_23(&mut delta);
-                self.query_and_record_24(&mut delta);
-                self.query_and_record_25(&mut delta);
-                self.query_and_record_26(&mut delta);
-                self.query_and_record_27(&mut delta);
-                self.query_and_record_28(&mut delta);
-                self.query_and_record_29(&mut delta);
-                self.query_and_record_30(&mut delta);
-                self.query_and_record_31(&mut delta);
-                self.query_and_record_32(&mut delta);
-                self.query_and_record_33(&mut delta);
-                self.query_and_record_34(&mut delta);
-                self.query_and_record_35(&mut delta);
-                self.query_and_record_36(&mut delta);
-                self.query_and_record_37(&mut delta);
-                self.query_and_record_38(&mut delta);
-                self.query_and_record_39(&mut delta);
-                self.query_and_record_40(&mut delta);
-                self.query_and_record_41(&mut delta);
-                self.query_and_record_42(&mut delta);
-                self.query_and_record_43(&mut delta);
-                self.query_and_record_44(&mut delta);
-                self.query_and_record_45(&mut delta);
-                self.query_and_record_46(&mut delta);
-                self.query_and_record_47(&mut delta);
-                self.query_and_record_48(&mut delta);
-                self.query_and_record_49(&mut delta);
-                self.query_and_record_50(&mut delta);
-                self.query_and_record_51(&mut delta);
-                self.query_and_record_52(&mut delta);
-                self.query_and_record_53(&mut delta);
-                self.query_and_record_54(&mut delta);
-                self.query_and_record_55(&mut delta);
-                self.query_and_record_56(&mut delta);
-                self.query_and_record_57(&mut delta);
-                self.query_and_record_58(&mut delta);
-                self.query_and_record_59(&mut delta);
-                self.query_and_record_60(&mut delta);
-                self.query_and_record_61(&mut delta);
-                self.query_and_record_62(&mut delta);
-                self.query_and_record_63(&mut delta);
-                self.query_and_record_64(&mut delta);
-                self.query_and_record_65(&mut delta);
-                self.query_and_record_66(&mut delta);
-                self.query_and_record_67(&mut delta);
-                self.query_and_record_68(&mut delta);
-                self.query_and_record_69(&mut delta);
-                self.query_and_record_70(&mut delta);
-                self.query_and_record_79(&mut delta);
-                self.query_and_record_80(&mut delta);
-                self.query_and_record_81(&mut delta);
-                self.query_and_record_82(&mut delta);
-                self.query_and_record_83(&mut delta);
-                self.query_and_record_84(&mut delta);
-                self.query_and_record_85(&mut delta);
-                self.query_and_record_86(&mut delta);
-                self.query_and_record_87(&mut delta);
-                self.query_and_record_88(&mut delta);
-                self.query_and_record_89(&mut delta);
-                self.query_and_record_90(&mut delta);
-                self.query_and_record_91(&mut delta);
-                self.query_and_record_92(&mut delta);
-                self.query_and_record_93(&mut delta);
-                self.query_and_record_94(&mut delta);
-                self.query_and_record_99(&mut delta);
-                self.query_and_record_101(&mut delta);
-                self.query_and_record_102(&mut delta);
-                self.query_and_record_103(&mut delta);
-                self.query_and_record_104(&mut delta);
-                self.query_and_record_105(&mut delta);
-                self.query_and_record_106(&mut delta);
-                self.query_and_record_107(&mut delta);
-                self.query_and_record_110(&mut delta);
-                self.query_and_record_111(&mut delta);
-                self.query_and_record_112(&mut delta);
-                self.query_and_record_113(&mut delta);
-                self.query_and_record_114(&mut delta);
-                self.query_and_record_115(&mut delta);
-                self.query_and_record_116(&mut delta);
-                self.query_and_record_117(&mut delta);
-                self.query_and_record_120(&mut delta);
-                self.query_and_record_122(&mut delta);
-                self.query_and_record_123(&mut delta);
-                self.query_and_record_124(&mut delta);
-                self.query_and_record_125(&mut delta);
-                self.query_and_record_126(&mut delta);
-                self.query_and_record_127(&mut delta);
-                self.query_and_record_128(&mut delta);
-                self.query_and_record_129(&mut delta);
-                self.query_and_record_130(&mut delta);
-                self.query_and_record_133(&mut delta);
-                self.query_and_record_134(&mut delta);
-                self.query_and_record_137(&mut delta);
-                self.query_and_record_139(&mut delta);
-                self.query_and_record_140(&mut delta);
-                self.query_and_record_141(&mut delta);
-                self.query_and_record_142(&mut delta);
-                self.query_and_record_143(&mut delta);
-                self.query_and_record_144(&mut delta);
-                self.query_and_record_145(&mut delta);
-                self.query_and_record_146(&mut delta);
-                self.query_and_record_147(&mut delta);
-                self.query_and_record_149(&mut delta);
-                self.query_and_record_150(&mut delta);
-                self.query_and_record_152(&mut delta);
-                self.query_and_record_153(&mut delta);
-                self.query_and_record_154(&mut delta);
-                self.query_and_record_155(&mut delta);
-                self.query_and_record_156(&mut delta);
-                self.query_and_record_160(&mut delta);
-                self.query_and_record_161(&mut delta);
-                self.query_and_record_162(&mut delta);
-                self.query_and_record_163(&mut delta);
-                self.query_and_record_164(&mut delta);
-                self.query_and_record_165(&mut delta);
-                self.query_and_record_166(&mut delta);
-                self.query_and_record_167(&mut delta);
-                self.query_and_record_168(&mut delta);
-                self.query_and_record_169(&mut delta);
-                self.query_and_record_170(&mut delta);
-                self.query_and_record_171(&mut delta);
-                self.query_and_record_172(&mut delta);
-                self.query_and_record_173(&mut delta);
-                self.query_and_record_174(&mut delta);
-                self.query_and_record_177(&mut delta);
-                self.query_and_record_178(&mut delta);
-                self.query_and_record_179(&mut delta);
-                self.query_and_record_180(&mut delta);
-                self.query_and_record_181(&mut delta);
-                self.query_and_record_182(&mut delta);
-                self.query_and_record_184(&mut delta);
-                self.query_and_record_185(&mut delta);
-                self.query_and_record_186(&mut delta);
-                self.query_and_record_187(&mut delta);
-                self.query_and_record_188(&mut delta);
-                self.query_and_record_189(&mut delta);
-                self.query_and_record_190(&mut delta);
-                self.query_and_record_191(&mut delta);
-                self.query_and_record_193(&mut delta);
-                self.query_and_record_194(&mut delta);
-                self.query_and_record_195(&mut delta);
-                self.query_and_record_196(&mut delta);
-                self.query_and_record_197(&mut delta);
-                self.query_and_record_198(&mut delta);
-                self.query_and_record_199(&mut delta);
-                self.query_and_record_200(&mut delta);
-                self.query_and_record_201(&mut delta);
-                self.query_and_record_202(&mut delta);
-                self.query_and_record_203(&mut delta);
-                self.query_and_record_204(&mut delta);
-                self.query_and_record_205(&mut delta);
-                self.query_and_record_206(&mut delta);
-                self.query_and_record_207(&mut delta);
-                self.query_and_record_208(&mut delta);
-                self.query_and_record_209(&mut delta);
-                self.query_and_record_210(&mut delta);
-                self.query_and_record_211(&mut delta);
-                self.query_and_record_212(&mut delta);
-                self.query_and_record_213(&mut delta);
-                self.query_and_record_214(&mut delta);
-                self.query_and_record_215(&mut delta);
-                self.query_and_record_216(&mut delta);
-                self.query_and_record_217(&mut delta);
-                self.query_and_record_218(&mut delta);
-                self.query_and_record_219(&mut delta);
-                self.query_and_record_220(&mut delta);
-                self.query_and_record_221(&mut delta);
-                self.query_and_record_222(&mut delta);
-                self.query_and_record_223(&mut delta);
-                self.query_and_record_224(&mut delta);
-                self.query_and_record_225(&mut delta);
-                self.query_and_record_226(&mut delta);
-                self.query_and_record_227(&mut delta);
-                self.query_and_record_228(&mut delta);
-                self.query_and_record_229(&mut delta);
-                self.query_and_record_230(&mut delta);
-                self.query_and_record_231(&mut delta);
-                self.query_and_record_232(&mut delta);
-                self.query_and_record_233(&mut delta);
-                self.query_and_record_234(&mut delta);
-                self.query_and_record_235(&mut delta);
-                self.query_and_record_236(&mut delta);
-                self.query_and_record_237(&mut delta);
-                self.query_and_record_238(&mut delta);
-                self.query_and_record_239(&mut delta);
-                self.query_and_record_240(&mut delta);
-                self.query_and_record_241(&mut delta);
-                self.query_and_record_242(&mut delta);
-                self.query_and_record_243(&mut delta);
-                self.query_and_record_244(&mut delta);
-                self.query_and_record_245(&mut delta);
-                self.query_and_record_246(&mut delta);
+                self.query_and_record_functionality_real_virt_ident(&mut delta);
+                self.query_and_record_functionality_rule_name(&mut delta);
+                self.query_and_record_functionality_type_decl_node_loc(&mut delta);
+                self.query_and_record_functionality_arg_decl_node_loc(&mut delta);
+                self.query_and_record_functionality_arg_decl_list_node_loc(&mut delta);
+                self.query_and_record_functionality_pred_decl_node_loc(&mut delta);
+                self.query_and_record_functionality_func_decl_node_loc(&mut delta);
+                self.query_and_record_functionality_term_node_loc(&mut delta);
+                self.query_and_record_functionality_term_list_node_loc(&mut delta);
+                self.query_and_record_functionality_opt_term_node_loc(&mut delta);
+                self.query_and_record_functionality_if_atom_node_loc(&mut delta);
+                self.query_and_record_functionality_then_atom_node_loc(&mut delta);
+                self.query_and_record_functionality_stmt_node_loc(&mut delta);
+                self.query_and_record_functionality_stmt_list_node_loc(&mut delta);
+                self.query_and_record_functionality_rule_decl_node_loc(&mut delta);
+                self.query_and_record_functionality_decl_node_loc(&mut delta);
+                self.query_and_record_functionality_decl_list_node_loc(&mut delta);
+                self.query_and_record_functionality_module_node_loc(&mut delta);
+                self.query_and_record_functionality_rule_child_term(&mut delta);
+                self.query_and_record_functionality_rule_child_term_list(&mut delta);
+                self.query_and_record_functionality_rule_child_opt_term(&mut delta);
+                self.query_and_record_functionality_rule_child_if_atom(&mut delta);
+                self.query_and_record_functionality_rule_child_then_atom(&mut delta);
+                self.query_and_record_functionality_rule_child_stmt(&mut delta);
+                self.query_and_record_functionality_rule_child_stmt_list(&mut delta);
+                self.query_and_record_functionality_nil_type_list(&mut delta);
+                self.query_and_record_functionality_cons_type_list(&mut delta);
+                self.query_and_record_functionality_semantic_type(&mut delta);
+                self.query_and_record_functionality_semantic_arg_types(&mut delta);
+                self.query_and_record_functionality_semantic_pred(&mut delta);
+                self.query_and_record_functionality_arity(&mut delta);
+                self.query_and_record_functionality_semantic_func(&mut delta);
+                self.query_and_record_functionality_domain(&mut delta);
+                self.query_and_record_functionality_codomain(&mut delta);
+                self.query_and_record_functionality_nil_el_list(&mut delta);
+                self.query_and_record_functionality_cons_el_list(&mut delta);
+                self.query_and_record_functionality_func_app(&mut delta);
+                self.query_and_record_functionality_var(&mut delta);
+                self.query_and_record_functionality_el_structure(&mut delta);
+                self.query_and_record_functionality_els_structure(&mut delta);
+                self.query_and_record_functionality_dom(&mut delta);
+                self.query_and_record_functionality_cod(&mut delta);
+                self.query_and_record_functionality_map_el(&mut delta);
+                self.query_and_record_functionality_map_els(&mut delta);
+                self.query_and_record_functionality_initial_structure(&mut delta);
+                self.query_and_record_functionality_initiality_morphism(&mut delta);
+                self.query_and_record_functionality_nil_chain(&mut delta);
+                self.query_and_record_functionality_chain_tail(&mut delta);
+                self.query_and_record_functionality_chain_head_structure(&mut delta);
+                self.query_and_record_functionality_chain_head_transition(&mut delta);
+                self.query_and_record_functionality_type_symbol(&mut delta);
+                self.query_and_record_functionality_pred_symbol(&mut delta);
+                self.query_and_record_functionality_func_symbol(&mut delta);
+                self.query_and_record_functionality_rule_symbol(&mut delta);
+                self.query_and_record_functionality_zero(&mut delta);
+                self.query_and_record_functionality_succ(&mut delta);
+                self.query_and_record_functionality_type_list_len(&mut delta);
+                self.query_and_record_functionality_term_list_len(&mut delta);
+                self.query_and_record_functionality_rule_chain(&mut delta);
+                self.query_and_record_functionality_stmt_list_chain(&mut delta);
+                self.query_and_record_functionality_stmt_structure(&mut delta);
+                self.query_and_record_functionality_if_atom_structure(&mut delta);
+                self.query_and_record_functionality_then_atom_structure(&mut delta);
+                self.query_and_record_functionality_term_structure(&mut delta);
+                self.query_and_record_functionality_terms_structure(&mut delta);
+                self.query_and_record_functionality_opt_term_structure(&mut delta);
+                self.query_and_record_functionality_semantic_el(&mut delta);
+                self.query_and_record_functionality_semantic_els(&mut delta);
+                self.query_and_record_functionality_wildcard_virt_ident(&mut delta);
+                self.query_and_record_functionality_grouped_rule_chain(&mut delta);
+                self.query_and_record_functionality_grouped_stmt_list_chain(&mut delta);
+                self.query_and_record_rule_child_rule_decl(&mut delta);
+                self.query_and_record_rule_child_stmts_cons(&mut delta);
+                self.query_and_record_rule_child_stmt_if(&mut delta);
+                self.query_and_record_rule_child_stmt_then(&mut delta);
+                self.query_and_record_rule_child_if_atom_equal(&mut delta);
+                self.query_and_record_rule_child_if_atom_defined(&mut delta);
+                self.query_and_record_rule_child_if_atom_pred(&mut delta);
+                self.query_and_record_rule_child_if_atom_var(&mut delta);
+                self.query_and_record_rule_child_then_atom_equal(&mut delta);
+                self.query_and_record_rule_child_then_atom_defined(&mut delta);
+                self.query_and_record_rule_child_then_atom_pred(&mut delta);
+                self.query_and_record_rule_child_terms_cons(&mut delta);
+                self.query_and_record_rule_child_opt_term_some(&mut delta);
+                self.query_and_record_rule_child_term_app(&mut delta);
+                self.query_and_record_type_list_nil_not_cons(&mut delta);
+                self.query_and_record_type_list_cons_injective(&mut delta);
+                self.query_and_record_arity_decl(&mut delta);
+                self.query_and_record_domain_decl(&mut delta);
+                self.query_and_record_el_list_cons_injective(&mut delta);
+                self.query_and_record_el_list_cons_nil(&mut delta);
+                self.query_and_record_nil_els_structure(&mut delta);
+                self.query_and_record_cons_els_structure(&mut delta);
+                self.query_and_record_func_app_structure(&mut delta);
+                self.query_and_record_var_structure(&mut delta);
+                self.query_and_record_cons_el_types_reverse(&mut delta);
+                self.query_and_record_func_app_types(&mut delta);
+                self.query_and_record_pred_app_types(&mut delta);
+                self.query_and_record_func_app_constrained(&mut delta);
+                self.query_and_record_pred_app_constrained(&mut delta);
+                self.query_and_record_constrained_head_tail(&mut delta);
+                self.query_and_record_map_el_structure(&mut delta);
+                self.query_and_record_map_els_structure(&mut delta);
+                self.query_and_record_map_nil_els(&mut delta);
+                self.query_and_record_map_app_func(&mut delta);
+                self.query_and_record_map_var(&mut delta);
+                self.query_and_record_map_pred_app(&mut delta);
+                self.query_and_record_map_preserves_el_type(&mut delta);
+                self.query_and_record_map_reflects_el_type(&mut delta);
+                self.query_and_record_in_ker_rule(&mut delta);
+                self.query_and_record_el_in_img_rule(&mut delta);
+                self.query_and_record_pred_tuple_in_img_rule(&mut delta);
+                self.query_and_record_func_app_in_img_rule(&mut delta);
+                self.query_and_record_dom_cod_initiality_morphism(&mut delta);
+                self.query_and_record_initiality_uniqueness(&mut delta);
+                self.query_and_record_chain_transition_signature(&mut delta);
+                self.query_and_record_type_decl_defines_symbol(&mut delta);
+                self.query_and_record_pred_decl_defines_symbol(&mut delta);
+                self.query_and_record_func_decl_defines_symbol(&mut delta);
+                self.query_and_record_rule_decl_defines_symbol(&mut delta);
+                self.query_and_record_arg_decl_should_be_type(&mut delta);
+                self.query_and_record_var_atom_should_be_type(&mut delta);
+                self.query_and_record_pred_if_atom_should_be_pred(&mut delta);
+                self.query_and_record_pred_then_atom_should_be_pred(&mut delta);
+                self.query_and_record_app_atom_should_be_func(&mut delta);
+                self.query_and_record_type_list_len_nil(&mut delta);
+                self.query_and_record_type_list_len_cons(&mut delta);
+                self.query_and_record_term_list_len_nil(&mut delta);
+                self.query_and_record_term_list_len_cons(&mut delta);
+                self.query_and_record_pred_if_atom_arg_num_should_match(&mut delta);
+                self.query_and_record_pred_then_atom_arg_num_should_match(&mut delta);
+                self.query_and_record_app_term_arg_num_should_match(&mut delta);
+                self.query_and_record_stmt_list_chain_nil(&mut delta);
+                self.query_and_record_stmt_list_chain_cons(&mut delta);
+                self.query_and_record_stmt_structure_chain(&mut delta);
+                self.query_and_record_if_stmt_structure(&mut delta);
+                self.query_and_record_then_stmt_structure(&mut delta);
+                self.query_and_record_equal_if_atom_structure(&mut delta);
+                self.query_and_record_defined_if_atom_structure(&mut delta);
+                self.query_and_record_pred_if_atom_structure(&mut delta);
+                self.query_and_record_var_if_atom_structure(&mut delta);
+                self.query_and_record_equal_then_atom_structure(&mut delta);
+                self.query_and_record_defined_then_atom_structure(&mut delta);
+                self.query_and_record_pred_then_atom_structure(&mut delta);
+                self.query_and_record_cons_term_list_structure(&mut delta);
+                self.query_and_record_some_opt_term_structure(&mut delta);
+                self.query_and_record_app_term_structure(&mut delta);
+                self.query_and_record_semantic_els_nil(&mut delta);
+                self.query_and_record_semantic_els_cons(&mut delta);
+                self.query_and_record_semantic_el_struct(&mut delta);
+                self.query_and_record_semantic_els_struct(&mut delta);
+                self.query_and_record_app_term_semantics(&mut delta);
+                self.query_and_record_var_term_semantics(&mut delta);
+                self.query_and_record_wildcard_term_semantics(&mut delta);
+                self.query_and_record_equal_if_atom_semantics(&mut delta);
+                self.query_and_record_pred_if_atom_semantics(&mut delta);
+                self.query_and_record_var_if_atom_semantics(&mut delta);
+                self.query_and_record_equal_then_atom_semantics(&mut delta);
+                self.query_and_record_defined_then_atom_semantics(&mut delta);
+                self.query_and_record_pred_then_atom_semantics(&mut delta);
+                self.query_and_record_grouped_rule_stmt_list_chain(&mut delta);
+                self.query_and_record_grouped_stmt_list_chain_nil(&mut delta);
+                self.query_and_record_grouped_chain_if_if(&mut delta);
+                self.query_and_record_stmt_list_chain_then_then(&mut delta);
+                self.query_and_record_stmt_list_chain_singleton(&mut delta);
+                self.query_and_record_grouped_chain_if_then(&mut delta);
+                self.query_and_record_grouped_chain_then_if(&mut delta);
+                self.query_and_record_var_before_stmts_cons(&mut delta);
+                self.query_and_record_var_before_stmt_if(&mut delta);
+                self.query_and_record_var_before_stmt_then(&mut delta);
+                self.query_and_record_var_before_if_atom_equal(&mut delta);
+                self.query_and_record_var_before_if_atom_defined(&mut delta);
+                self.query_and_record_var_before_if_atom_pred(&mut delta);
+                self.query_and_record_var_before_if_atom_var(&mut delta);
+                self.query_and_record_var_before_then_atom_equal(&mut delta);
+                self.query_and_record_var_before_then_atom_defined(&mut delta);
+                self.query_and_record_var_before_then_atom_pred(&mut delta);
+                self.query_and_record_var_before_terms_cons(&mut delta);
+                self.query_and_record_var_before_opt_term_some(&mut delta);
+                self.query_and_record_var_before_term_app(&mut delta);
+                self.query_and_record_var_in_term_var(&mut delta);
+                self.query_and_record_var_in_term_wildcard(&mut delta);
+                self.query_and_record_var_in_term_app(&mut delta);
+                self.query_and_record_var_in_terms_cons_head(&mut delta);
+                self.query_and_record_var_in_terms_cons_tail(&mut delta);
+                self.query_and_record_var_in_opt_terms(&mut delta);
+                self.query_and_record_var_in_if_atom_equal_lhs(&mut delta);
+                self.query_and_record_var_in_if_atom_equal_rhs(&mut delta);
+                self.query_and_record_var_in_if_atom_defined(&mut delta);
+                self.query_and_record_var_in_if_atom_pred(&mut delta);
+                self.query_and_record_var_in_if_atom_var(&mut delta);
+                self.query_and_record_var_in_then_atom_equal_lhs(&mut delta);
+                self.query_and_record_var_in_then_atom_equal_rhs(&mut delta);
+                self.query_and_record_var_in_then_atom_defined_var_term(&mut delta);
+                self.query_and_record_var_in_then_atom_defined_term(&mut delta);
+                self.query_and_record_var_in_then_atom_pred(&mut delta);
+                self.query_and_record_var_in_stmt_if(&mut delta);
+                self.query_and_record_var_in_stmt_then(&mut delta);
+                self.query_and_record_var_in_var_before(&mut delta);
+                self.query_and_record_terms_should_be_epic_ok_cons(&mut delta);
+                self.query_and_record_terms_should_be_epic_ok_app(&mut delta);
+                self.query_and_record_then_atom_epic_ok_equal(&mut delta);
+                self.query_and_record_then_atom_epic_ok_defined(&mut delta);
+                self.query_and_record_then_atom_epic_ok_pred(&mut delta);
+                self.query_and_record_then_stmt_surjective(&mut delta);
+                self.query_and_record_cons_head_tail_terms_surjective_exempted(&mut delta);
+                self.query_and_record_head_tail_cons_terms_surjective_exempted(&mut delta);
+                self.query_and_record_subterms_surjective_exempted(&mut delta);
+                self.query_and_record_defined_atom_surjective_exempted(&mut delta);
+                self.query_and_record_semantic_el_exempted(&mut delta);
+                self.query_and_record_surjective_codomain_should_be_ok(&mut delta);
+                self.query_and_record_surjective_exempted_el_is_ok(&mut delta);
+                self.query_and_record_surjective_img_el_is_ok(&mut delta);
+                self.query_and_record_var_term_in_rule_child(&mut delta);
+                self.query_and_record_after_then_should_be_if(&mut delta);
 
                 self.retire_dirt();
                 delta.apply(self);
@@ -35291,38 +35393,38 @@ impl Eqlog {
             }
 
             self.recall_previous_dirt();
-            self.query_and_record_71(&mut delta);
-            self.query_and_record_72(&mut delta);
-            self.query_and_record_73(&mut delta);
-            self.query_and_record_74(&mut delta);
-            self.query_and_record_75(&mut delta);
-            self.query_and_record_76(&mut delta);
-            self.query_and_record_77(&mut delta);
-            self.query_and_record_78(&mut delta);
-            self.query_and_record_95(&mut delta);
-            self.query_and_record_96(&mut delta);
-            self.query_and_record_97(&mut delta);
-            self.query_and_record_98(&mut delta);
-            self.query_and_record_100(&mut delta);
-            self.query_and_record_108(&mut delta);
-            self.query_and_record_109(&mut delta);
-            self.query_and_record_118(&mut delta);
-            self.query_and_record_119(&mut delta);
-            self.query_and_record_121(&mut delta);
-            self.query_and_record_131(&mut delta);
-            self.query_and_record_132(&mut delta);
-            self.query_and_record_135(&mut delta);
-            self.query_and_record_136(&mut delta);
+            self.query_and_record_real_virt_ident_total(&mut delta);
+            self.query_and_record_rule_child_term_total(&mut delta);
+            self.query_and_record_rule_child_term_list_total(&mut delta);
+            self.query_and_record_rule_child_opt_term_total(&mut delta);
+            self.query_and_record_rule_child_if_atom_total(&mut delta);
+            self.query_and_record_rule_child_then_atom_total(&mut delta);
+            self.query_and_record_rule_child_stmt_total(&mut delta);
+            self.query_and_record_rule_child_stmt_list_total(&mut delta);
+            self.query_and_record_semantic_decl_type(&mut delta);
+            self.query_and_record_semantic_arg_types_nil(&mut delta);
+            self.query_and_record_semantic_arg_types_cons(&mut delta);
+            self.query_and_record_semantic_decl_pred(&mut delta);
+            self.query_and_record_semantic_decl_func(&mut delta);
+            self.query_and_record_nil_el_types(&mut delta);
+            self.query_and_record_cons_el_types(&mut delta);
+            self.query_and_record_map_el_defined(&mut delta);
+            self.query_and_record_map_els_defined(&mut delta);
+            self.query_and_record_map_cons_els(&mut delta);
+            self.query_and_record_initial_structure_total(&mut delta);
+            self.query_and_record_initiality_morphism_total(&mut delta);
+            self.query_and_record_chain_head_structure_defined(&mut delta);
+            self.query_and_record_chain_head_transition_defined(&mut delta);
             self.query_and_record_138(&mut delta);
-            self.query_and_record_148(&mut delta);
-            self.query_and_record_151(&mut delta);
-            self.query_and_record_157(&mut delta);
-            self.query_and_record_158(&mut delta);
-            self.query_and_record_159(&mut delta);
-            self.query_and_record_175(&mut delta);
-            self.query_and_record_176(&mut delta);
-            self.query_and_record_183(&mut delta);
-            self.query_and_record_192(&mut delta);
+            self.query_and_record_type_list_len_total(&mut delta);
+            self.query_and_record_term_list_len_total(&mut delta);
+            self.query_and_record_rule_chain_total(&mut delta);
+            self.query_and_record_rule_stmt_list_chain(&mut delta);
+            self.query_and_record_stmt_list_chain_total(&mut delta);
+            self.query_and_record_semantic_el_total(&mut delta);
+            self.query_and_record_semantic_els_total(&mut delta);
+            self.query_and_record_wildcard_virt_ident_defined(&mut delta);
+            self.query_and_record_grouped_stmt_list_chain_total(&mut delta);
             self.drop_dirt();
             delta.apply(self);
             if condition(self) {
@@ -41215,7 +41317,7 @@ impl Eqlog {
             delta.new_virt_ident_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_0(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_real_virt_ident(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RealVirtIdent(tm0, tm1) in self.real_virt_ident.iter_all() {
             #[allow(unused_variables)]
@@ -41229,7 +41331,7 @@ impl Eqlog {
             delta.new_ident_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_1(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_name(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleName(tm0, tm1) in self.rule_name.iter_all() {
             #[allow(unused_variables)]
@@ -41243,7 +41345,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_2(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_type_decl_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TypeDeclNodeLoc(tm0, tm1) in self.type_decl_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41257,7 +41359,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_3(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_arg_decl_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ArgDeclNodeLoc(tm0, tm1) in self.arg_decl_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41271,7 +41373,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_4(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_arg_decl_list_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ArgDeclListNodeLoc(tm0, tm1) in self.arg_decl_list_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41285,7 +41387,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_5(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_pred_decl_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredDeclNodeLoc(tm0, tm1) in self.pred_decl_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41299,7 +41401,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_6(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_func_decl_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncDeclNodeLoc(tm0, tm1) in self.func_decl_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41313,7 +41415,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_7(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_term_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermNodeLoc(tm0, tm1) in self.term_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41327,7 +41429,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_8(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_term_list_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermListNodeLoc(tm0, tm1) in self.term_list_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41341,7 +41443,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_9(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_opt_term_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for OptTermNodeLoc(tm0, tm1) in self.opt_term_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41355,7 +41457,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_10(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_if_atom_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfAtomNodeLoc(tm0, tm1) in self.if_atom_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41369,7 +41471,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_11(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_then_atom_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenAtomNodeLoc(tm0, tm1) in self.then_atom_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41383,7 +41485,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_12(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_stmt_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for StmtNodeLoc(tm0, tm1) in self.stmt_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41397,7 +41499,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_13(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_stmt_list_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for StmtListNodeLoc(tm0, tm1) in self.stmt_list_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41411,7 +41513,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_14(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_decl_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleDeclNodeLoc(tm0, tm1) in self.rule_decl_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41425,7 +41527,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_15(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_decl_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DeclNodeLoc(tm0, tm1) in self.decl_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41439,7 +41541,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_16(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_decl_list_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DeclListNodeLoc(tm0, tm1) in self.decl_list_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41453,7 +41555,7 @@ impl Eqlog {
             delta.new_loc_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_17(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_module_node_loc(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ModuleNodeLoc(tm0, tm1) in self.module_node_loc.iter_all() {
             #[allow(unused_variables)]
@@ -41467,7 +41569,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_18(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_term(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildTerm(tm0, tm1) in self.rule_child_term.iter_all() {
             #[allow(unused_variables)]
@@ -41481,7 +41583,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_19(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_term_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildTermList(tm0, tm1) in self.rule_child_term_list.iter_all() {
             #[allow(unused_variables)]
@@ -41495,7 +41597,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_20(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_opt_term(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildOptTerm(tm0, tm1) in self.rule_child_opt_term.iter_all() {
             #[allow(unused_variables)]
@@ -41509,7 +41611,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_21(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_if_atom(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildIfAtom(tm0, tm1) in self.rule_child_if_atom.iter_all() {
             #[allow(unused_variables)]
@@ -41523,7 +41625,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_22(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_then_atom(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildThenAtom(tm0, tm1) in self.rule_child_then_atom.iter_all() {
             #[allow(unused_variables)]
@@ -41537,7 +41639,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_23(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_stmt(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildStmt(tm0, tm1) in self.rule_child_stmt.iter_all() {
             #[allow(unused_variables)]
@@ -41551,7 +41653,7 @@ impl Eqlog {
             delta.new_rule_child_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_24(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_child_stmt_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChildStmtList(tm0, tm1) in self.rule_child_stmt_list.iter_all() {
             #[allow(unused_variables)]
@@ -41565,7 +41667,7 @@ impl Eqlog {
             delta.new_type_list_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_25(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_nil_type_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilTypeList(tm0) in self.nil_type_list.iter_all() {
             #[allow(unused_variables)]
@@ -41579,7 +41681,7 @@ impl Eqlog {
             delta.new_type_list_equalities.push((tm2, tm3));
         }
     }
-    fn query_and_record_26(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_cons_type_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_all() {
             #[allow(unused_variables)]
@@ -41593,7 +41695,7 @@ impl Eqlog {
             delta.new_type_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_27(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_semantic_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticType(tm0, tm1) in self.semantic_type.iter_all() {
             #[allow(unused_variables)]
@@ -41607,7 +41709,7 @@ impl Eqlog {
             delta.new_type_list_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_28(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_semantic_arg_types(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticArgTypes(tm0, tm1) in self.semantic_arg_types.iter_all() {
             #[allow(unused_variables)]
@@ -41621,7 +41723,7 @@ impl Eqlog {
             delta.new_pred_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_29(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_semantic_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticPred(tm0, tm1) in self.semantic_pred.iter_all() {
             #[allow(unused_variables)]
@@ -41635,7 +41737,7 @@ impl Eqlog {
             delta.new_type_list_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_30(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_arity(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Arity(tm0, tm1) in self.arity.iter_all() {
             #[allow(unused_variables)]
@@ -41649,7 +41751,7 @@ impl Eqlog {
             delta.new_func_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_31(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_semantic_func(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticFunc(tm0, tm1) in self.semantic_func.iter_all() {
             #[allow(unused_variables)]
@@ -41663,7 +41765,7 @@ impl Eqlog {
             delta.new_type_list_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_32(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_domain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Domain(tm0, tm1) in self.domain.iter_all() {
             #[allow(unused_variables)]
@@ -41677,7 +41779,7 @@ impl Eqlog {
             delta.new_type_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_33(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_codomain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Codomain(tm0, tm1) in self.codomain.iter_all() {
             #[allow(unused_variables)]
@@ -41691,7 +41793,7 @@ impl Eqlog {
             delta.new_el_list_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_34(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_nil_el_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_all() {
             #[allow(unused_variables)]
@@ -41705,7 +41807,7 @@ impl Eqlog {
             delta.new_el_list_equalities.push((tm2, tm3));
         }
     }
-    fn query_and_record_35(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_cons_el_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_all() {
             #[allow(unused_variables)]
@@ -41719,7 +41821,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm2, tm3));
         }
     }
-    fn query_and_record_36(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_func_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_all() {
             #[allow(unused_variables)]
@@ -41733,7 +41835,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm2, tm3));
         }
     }
-    fn query_and_record_37(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Var(tm0, tm1, tm2) in self.var.iter_all() {
             #[allow(unused_variables)]
@@ -41747,7 +41849,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_38(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_el_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElStructure(tm0, tm1) in self.el_structure.iter_all() {
             #[allow(unused_variables)]
@@ -41761,7 +41863,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_39(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_els_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElsStructure(tm0, tm1) in self.els_structure.iter_all() {
             #[allow(unused_variables)]
@@ -41775,7 +41877,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_40(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_dom(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Dom(tm0, tm1) in self.dom.iter_all() {
             #[allow(unused_variables)]
@@ -41789,7 +41891,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_41(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_cod(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Cod(tm0, tm1) in self.cod.iter_all() {
             #[allow(unused_variables)]
@@ -41803,7 +41905,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm2, tm3));
         }
     }
-    fn query_and_record_42(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_map_el(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MapEl(tm0, tm1, tm2) in self.map_el.iter_all() {
             #[allow(unused_variables)]
@@ -41817,7 +41919,7 @@ impl Eqlog {
             delta.new_el_list_equalities.push((tm2, tm3));
         }
     }
-    fn query_and_record_43(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_map_els(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MapEls(tm0, tm1, tm2) in self.map_els.iter_all() {
             #[allow(unused_variables)]
@@ -41831,7 +41933,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_44(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_initial_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for InitialStructure(tm0) in self.initial_structure.iter_all() {
             #[allow(unused_variables)]
@@ -41845,7 +41947,7 @@ impl Eqlog {
             delta.new_morphism_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_45(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_initiality_morphism(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for InitialityMorphism(tm0, tm1) in self.initiality_morphism.iter_all() {
             #[allow(unused_variables)]
@@ -41859,7 +41961,7 @@ impl Eqlog {
             delta.new_chain_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_46(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_nil_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilChain(tm0) in self.nil_chain.iter_all() {
             #[allow(unused_variables)]
@@ -41873,7 +41975,7 @@ impl Eqlog {
             delta.new_chain_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_47(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_chain_tail(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ChainTail(tm0, tm1) in self.chain_tail.iter_all() {
             #[allow(unused_variables)]
@@ -41887,7 +41989,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_48(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_chain_head_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ChainHeadStructure(tm0, tm1) in self.chain_head_structure.iter_all() {
             #[allow(unused_variables)]
@@ -41901,7 +42003,7 @@ impl Eqlog {
             delta.new_morphism_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_49(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_chain_head_transition(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ChainHeadTransition(tm0, tm1) in self.chain_head_transition.iter_all() {
             #[allow(unused_variables)]
@@ -41915,7 +42017,7 @@ impl Eqlog {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_50(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_type_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TypeSymbol(tm0) in self.type_symbol.iter_all() {
             #[allow(unused_variables)]
@@ -41929,7 +42031,7 @@ impl Eqlog {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_51(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_pred_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredSymbol(tm0) in self.pred_symbol.iter_all() {
             #[allow(unused_variables)]
@@ -41943,7 +42045,7 @@ impl Eqlog {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_52(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_func_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncSymbol(tm0) in self.func_symbol.iter_all() {
             #[allow(unused_variables)]
@@ -41957,7 +42059,7 @@ impl Eqlog {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_53(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleSymbol(tm0) in self.rule_symbol.iter_all() {
             #[allow(unused_variables)]
@@ -41971,7 +42073,7 @@ impl Eqlog {
             delta.new_nat_equalities.push((tm0, tm1));
         }
     }
-    fn query_and_record_54(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_zero(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Zero(tm0) in self.zero.iter_all() {
             #[allow(unused_variables)]
@@ -41985,7 +42087,7 @@ impl Eqlog {
             delta.new_nat_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_55(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_succ(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Succ(tm0, tm1) in self.succ.iter_all() {
             #[allow(unused_variables)]
@@ -41999,7 +42101,7 @@ impl Eqlog {
             delta.new_nat_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_56(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_type_list_len(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TypeListLen(tm0, tm1) in self.type_list_len.iter_all() {
             #[allow(unused_variables)]
@@ -42013,7 +42115,7 @@ impl Eqlog {
             delta.new_nat_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_57(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_term_list_len(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermListLen(tm0, tm1) in self.term_list_len.iter_all() {
             #[allow(unused_variables)]
@@ -42027,7 +42129,7 @@ impl Eqlog {
             delta.new_chain_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_58(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleChain(tm0, tm1) in self.rule_chain.iter_all() {
             #[allow(unused_variables)]
@@ -42041,7 +42143,7 @@ impl Eqlog {
             delta.new_chain_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_59(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_stmt_list_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for StmtListChain(tm0, tm1) in self.stmt_list_chain.iter_all() {
             #[allow(unused_variables)]
@@ -42055,7 +42157,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_60(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_stmt_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for StmtStructure(tm0, tm1) in self.stmt_structure.iter_all() {
             #[allow(unused_variables)]
@@ -42069,7 +42171,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_61(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_if_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm1) in self.if_atom_structure.iter_all() {
             #[allow(unused_variables)]
@@ -42083,7 +42185,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_62(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_then_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm1) in self.then_atom_structure.iter_all() {
             #[allow(unused_variables)]
@@ -42097,7 +42199,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_63(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_term_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermStructure(tm0, tm1) in self.term_structure.iter_all() {
             #[allow(unused_variables)]
@@ -42111,7 +42213,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_64(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_terms_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermsStructure(tm0, tm1) in self.terms_structure.iter_all() {
             #[allow(unused_variables)]
@@ -42125,7 +42227,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_65(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_opt_term_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for OptTermStructure(tm0, tm1) in self.opt_term_structure.iter_all() {
             #[allow(unused_variables)]
@@ -42139,7 +42241,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_66(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_semantic_el(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticEl(tm0, tm1) in self.semantic_el.iter_all() {
             #[allow(unused_variables)]
@@ -42153,7 +42255,7 @@ impl Eqlog {
             delta.new_el_list_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_67(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_semantic_els(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticEls(tm0, tm1) in self.semantic_els.iter_all() {
             #[allow(unused_variables)]
@@ -42167,7 +42269,7 @@ impl Eqlog {
             delta.new_virt_ident_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_68(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_wildcard_virt_ident(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for WildcardVirtIdent(tm0, tm1) in self.wildcard_virt_ident.iter_all() {
             #[allow(unused_variables)]
@@ -42181,7 +42283,7 @@ impl Eqlog {
             delta.new_chain_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_69(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_grouped_rule_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for GroupedRuleChain(tm0, tm1) in self.grouped_rule_chain.iter_all() {
             #[allow(unused_variables)]
@@ -42195,7 +42297,7 @@ impl Eqlog {
             delta.new_chain_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_70(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_grouped_stmt_list_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm0, tm1) in self.grouped_stmt_list_chain.iter_all() {
             #[allow(unused_variables)]
@@ -42216,7 +42318,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_71(&self, delta: &mut ModelDelta) {
+    fn query_and_record_real_virt_ident_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.ident_dirty.iter().copied() {
             self.record_action_71(delta, tm0);
@@ -42234,7 +42336,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_72(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_term_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_node_dirty.iter().copied() {
             self.record_action_72(delta, tm0);
@@ -42254,7 +42356,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_73(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_term_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
             self.record_action_73(delta, tm0);
@@ -42274,7 +42376,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_74(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_opt_term_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.opt_term_node_dirty.iter().copied() {
             self.record_action_74(delta, tm0);
@@ -42292,7 +42394,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_75(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_if_atom_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.if_atom_node_dirty.iter().copied() {
             self.record_action_75(delta, tm0);
@@ -42312,7 +42414,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_76(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_then_atom_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.then_atom_node_dirty.iter().copied() {
             self.record_action_76(delta, tm0);
@@ -42330,7 +42432,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_77(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_stmt_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_node_dirty.iter().copied() {
             self.record_action_77(delta, tm0);
@@ -42350,7 +42452,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_78(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_stmt_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_list_node_dirty.iter().copied() {
             self.record_action_78(delta, tm0);
@@ -42367,7 +42469,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_79(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_rule_decl(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -42409,19 +42511,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_80(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_stmts_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                    for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, _) in
-                            self.rule_child_stmt_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_80(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42431,15 +42531,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_all() {
+            for RuleChildStmtList(tm0, _) in self.rule_child_stmt_list.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, _) in
-                            self.rule_child_stmt_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
                             self.record_action_80(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42451,13 +42549,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, _) in
-                            self.rule_child_stmt_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
                             self.record_action_80(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42469,13 +42565,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, tm1, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                    for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, _) in
-                            self.rule_child_stmt_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_80(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42485,13 +42579,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildStmtList(tm0, tm3) in self.rule_child_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                        for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
                             self.record_action_80(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42510,15 +42604,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_81(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_stmt_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+            for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
+                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, _) in self.rule_child_stmt.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_81(delta, tm3, tm4);
                     }
                 }
@@ -42527,11 +42621,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
+                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, _) in self.rule_child_stmt.iter_all_0_1(tm0, tm2) {
+                    for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
                         self.record_action_81(delta, tm3, tm4);
                     }
                 }
@@ -42542,9 +42636,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for IfStmtNode(tm0, _) in self.if_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, _) in self.rule_child_stmt.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_81(delta, tm3, tm4);
                     }
                 }
@@ -42553,9 +42647,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildStmt(tm0, tm2) in self.rule_child_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
                         self.record_action_81(delta, tm3, tm4);
@@ -42575,15 +42669,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_82(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_stmt_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+            for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
+                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, _) in self.rule_child_stmt.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_82(delta, tm3, tm4);
                     }
                 }
@@ -42592,11 +42686,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
+                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, _) in self.rule_child_stmt.iter_all_0_1(tm0, tm2) {
+                    for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
                         self.record_action_82(delta, tm3, tm4);
                     }
                 }
@@ -42607,9 +42701,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, _) in self.rule_child_stmt.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_82(delta, tm3, tm4);
                     }
                 }
@@ -42618,9 +42712,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildStmt(tm0, tm2) in self.rule_child_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
                         self.record_action_82(delta, tm3, tm4);
@@ -42655,18 +42749,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_83(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_if_atom_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_83(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42676,14 +42769,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_all() {
+            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                             self.record_action_83(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42695,12 +42787,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, tm1, _) in self.equal_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                             self.record_action_83(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42712,12 +42803,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                    for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_83(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42727,13 +42817,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildIfAtom(tm0, tm3) in self.rule_child_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                             self.record_action_83(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42752,15 +42842,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_84(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_if_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_84(delta, tm3, tm4);
                     }
                 }
@@ -42769,11 +42859,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_all() {
+            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm2) {
+                    for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
                         self.record_action_84(delta, tm3, tm4);
                     }
                 }
@@ -42784,9 +42874,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(tm0, _) in self.defined_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+                for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_84(delta, tm3, tm4);
                     }
                 }
@@ -42795,9 +42885,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildIfAtom(tm0, tm2) in self.rule_child_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
                         self.record_action_84(delta, tm3, tm4);
@@ -42817,15 +42907,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_85(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_if_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_85(delta, tm4, tm5);
                     }
                 }
@@ -42834,11 +42924,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_all() {
+            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3) {
+                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_85(delta, tm4, tm5);
                     }
                 }
@@ -42849,9 +42939,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_85(delta, tm4, tm5);
                     }
                 }
@@ -42860,9 +42950,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildIfAtom(tm0, tm3) in self.rule_child_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_85(delta, tm4, tm5);
@@ -42882,15 +42972,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_86(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_if_atom_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_86(delta, tm4, tm5);
                     }
                 }
@@ -42899,11 +42989,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
+            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3) {
+                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                         self.record_action_86(delta, tm4, tm5);
                     }
                 }
@@ -42914,9 +43004,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, _) in self.rule_child_if_atom.iter_all_0_1(tm0, tm3) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_86(delta, tm4, tm5);
                     }
                 }
@@ -42925,9 +43015,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildIfAtom(tm0, tm3) in self.rule_child_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                         self.record_action_86(delta, tm4, tm5);
@@ -42962,19 +43052,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_87(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_then_atom_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_87(delta, tm4, tm5, tm6);
                         }
                     }
@@ -42984,15 +43072,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_all() {
+            for RuleChildThenAtom(tm0, _) in self.rule_child_then_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                             self.record_action_87(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43004,13 +43090,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                             self.record_action_87(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43022,13 +43106,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_87(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43038,13 +43120,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildThenAtom(tm0, tm3) in self.rule_child_then_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                             self.record_action_87(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43078,19 +43160,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_88(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_then_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_88(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43100,15 +43180,14 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_all() {
+            for RuleChildThenAtom(tm0, _) in self.rule_child_then_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
                     for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                             self.record_action_88(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43120,13 +43199,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
                             self.record_action_88(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43138,13 +43215,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildThenAtom(_, _) in
-                            self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_88(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43154,13 +43229,14 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildThenAtom(tm0, tm3) in self.rule_child_then_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                    for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
                             self.record_action_88(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43179,16 +43255,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_89(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_then_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, _) in self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                    {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_89(delta, tm4, tm5);
                     }
                 }
@@ -43197,12 +43272,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_all() {
+            for RuleChildThenAtom(tm0, _) in self.rule_child_then_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, _) in self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                    {
+                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_89(delta, tm4, tm5);
                     }
                 }
@@ -43213,10 +43287,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, _) in self.rule_child_then_atom.iter_all_0_1(tm0, tm3)
-                    {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_89(delta, tm4, tm5);
                     }
                 }
@@ -43225,9 +43298,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildThenAtom(tm0, tm3) in self.rule_child_then_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_89(delta, tm4, tm5);
@@ -43262,19 +43335,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_90(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_terms_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildTermList(_, _) in
-                            self.rule_child_term_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_90(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43284,15 +43355,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_all() {
+            for RuleChildTermList(tm0, _) in self.rule_child_term_list.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for RuleChildTermList(_, _) in
-                            self.rule_child_term_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                             self.record_action_90(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43304,13 +43373,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildTermList(_, _) in
-                            self.rule_child_term_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
                             self.record_action_90(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43322,13 +43389,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChildTermList(_, _) in
-                            self.rule_child_term_list.iter_all_0_1(tm0, tm3)
-                        {
+                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                             self.record_action_90(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43338,13 +43403,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildTermList(tm0, tm3) in self.rule_child_term_list.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
                             self.record_action_90(delta, tm4, tm5, tm6);
                         }
                     }
@@ -43363,15 +43428,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_91(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_opt_term_some(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, _) in self.rule_child_opt_term.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_91(delta, tm3, tm4);
                     }
                 }
@@ -43380,11 +43445,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for SomeTermNode(tm0, tm1) in self.some_term_node.iter_all() {
+            for RuleChildOptTerm(tm0, _) in self.rule_child_opt_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, _) in self.rule_child_opt_term.iter_all_0_1(tm0, tm2) {
+                    for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
                         self.record_action_91(delta, tm3, tm4);
                     }
                 }
@@ -43395,9 +43460,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for SomeTermNode(tm0, _) in self.some_term_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+                for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, _) in self.rule_child_opt_term.iter_all_0_1(tm0, tm2) {
+                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                         self.record_action_91(delta, tm3, tm4);
                     }
                 }
@@ -43406,9 +43471,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildOptTerm(tm0, tm2) in self.rule_child_opt_term.iter_dirty() {
             #[allow(unused_variables)]
-            for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
+            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
                         self.record_action_91(delta, tm3, tm4);
@@ -43428,13 +43493,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_92(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_term_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm3) in self.rule_child_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, _) in self.rule_child_term.iter_all_0_1(tm0, tm3) {
+                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_92(delta, tm4, tm5);
@@ -43445,9 +43510,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
+            for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, _) in self.rule_child_term.iter_all_0_1(tm0, tm3) {
+                for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_92(delta, tm4, tm5);
@@ -43458,9 +43523,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildTerm(tm0, tm3) in self.rule_child_term.iter_dirty() {
             #[allow(unused_variables)]
-            for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
+            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
                         self.record_action_92(delta, tm4, tm5);
@@ -43473,9 +43538,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(tm3, tm4) in self.rule_child.iter_all() {
+                for RuleChildTerm(_, tm3) in self.rule_child_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, _) in self.rule_child_term.iter_all_0_1(tm0, tm3) {
+                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         self.record_action_92(delta, tm4, tm5);
                     }
                 }
@@ -43493,7 +43558,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_93(&self, delta: &mut ModelDelta) {
+    fn query_and_record_type_list_nil_not_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -43530,7 +43595,7 @@ impl Eqlog {
             delta.new_type_list_equalities.push((tm4, tm1));
         }
     }
-    fn query_and_record_94(&self, delta: &mut ModelDelta) {
+    fn query_and_record_type_list_cons_injective(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -43558,7 +43623,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_95(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_decl_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TypeDecl(tm0, tm1) in self.type_decl.iter_dirty() {
             self.record_action_95(delta, tm1);
@@ -43587,7 +43652,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_96(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_arg_types_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilArgDeclListNode(tm0) in self.nil_arg_decl_list_node.iter_dirty() {
             self.record_action_96(delta, tm0);
@@ -43622,13 +43687,14 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_97(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_arg_types_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsArgDeclListNode(tm2, _, tm3) in self.cons_arg_decl_list_node.iter_all_1(tm0) {
+            for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
+                for ConsArgDeclListNode(tm2, _, tm3) in self.cons_arg_decl_list_node.iter_all_1(tm0)
+                {
                     #[allow(unused_variables)]
                     for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm3) {
                         self.record_action_97(delta, tm2, tm4, tm5);
@@ -43639,11 +43705,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsArgDeclListNode(tm2, tm0, tm3) in self.cons_arg_decl_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
+            for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
+                for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm3) {
+                    for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
                         self.record_action_97(delta, tm2, tm4, tm5);
                     }
                 }
@@ -43666,11 +43732,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticArgTypes(tm3, tm5) in self.semantic_arg_types.iter_dirty() {
             #[allow(unused_variables)]
-            for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
+            for ConsArgDeclListNode(tm2, tm0, _) in self.cons_arg_decl_list_node.iter_all_2(tm3) {
                 #[allow(unused_variables)]
-                for ConsArgDeclListNode(tm2, _, _) in
-                    self.cons_arg_decl_list_node.iter_all_1_2(tm0, tm3)
-                {
+                for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
                         self.record_action_97(delta, tm2, tm4, tm5);
@@ -43691,7 +43755,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_98(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_decl_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_dirty() {
             self.record_action_98(delta, tm1);
@@ -43708,7 +43772,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_99(&self, delta: &mut ModelDelta) {
+    fn query_and_record_arity_decl(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -43752,7 +43816,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_100(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_decl_func(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_dirty() {
             self.record_action_100(delta, tm1);
@@ -43778,13 +43842,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_101(&self, delta: &mut ModelDelta) {
+    fn query_and_record_domain_decl(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_dirty() {
             #[allow(unused_variables)]
-            for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
+            for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
+                for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
                         self.record_action_101(delta, tm4, tm5, tm6);
@@ -43797,9 +43861,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for FuncDecl(tm0, tm1, tm2, _) in self.func_decl.iter_all_3(tm3) {
                 #[allow(unused_variables)]
-                for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
+                for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
+                    for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
                         self.record_action_101(delta, tm4, tm5, tm6);
                     }
                 }
@@ -43853,7 +43917,7 @@ impl Eqlog {
             delta.new_el_list_equalities.push((tm4, tm1));
         }
     }
-    fn query_and_record_102(&self, delta: &mut ModelDelta) {
+    fn query_and_record_el_list_cons_injective(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -43880,7 +43944,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_103(&self, delta: &mut ModelDelta) {
+    fn query_and_record_el_list_cons_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -43907,7 +43971,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_104(&self, delta: &mut ModelDelta) {
+    fn query_and_record_nil_els_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
             self.record_action_104(delta, tm0, tm1);
@@ -43933,7 +43997,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_105(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cons_els_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -43960,7 +44024,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_106(&self, delta: &mut ModelDelta) {
+    fn query_and_record_func_app_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
             #[allow(unused_variables)]
@@ -43987,7 +44051,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_107(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
             self.record_action_107(delta, tm0, tm2);
@@ -44014,7 +44078,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_108(&self, delta: &mut ModelDelta) {
+    fn query_and_record_nil_el_types(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
             self.record_action_108(delta, tm1);
@@ -44041,13 +44105,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_109(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cons_el_types(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElType(tm0, tm1) in self.el_type.iter_dirty() {
             #[allow(unused_variables)]
-            for ElTypes(tm2, tm3) in self.el_types.iter_all() {
+            for ConsElList(_, tm2, tm4) in self.cons_el_list.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ConsElList(_, _, tm4) in self.cons_el_list.iter_all_0_1(tm0, tm2) {
+                for ElTypes(_, tm3) in self.el_types.iter_all_0(tm2) {
                     self.record_action_109(delta, tm1, tm3, tm4);
                 }
             }
@@ -44055,9 +44119,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ElTypes(tm2, tm3) in self.el_types.iter_dirty() {
             #[allow(unused_variables)]
-            for ElType(tm0, tm1) in self.el_type.iter_all() {
+            for ConsElList(tm0, _, tm4) in self.cons_el_list.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsElList(_, _, tm4) in self.cons_el_list.iter_all_0_1(tm0, tm2) {
+                for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
                     self.record_action_109(delta, tm1, tm3, tm4);
                 }
             }
@@ -44065,9 +44129,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsElList(tm0, tm2, tm4) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
-            for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
+            for ElTypes(_, tm3) in self.el_types.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for ElTypes(_, tm3) in self.el_types.iter_all_0(tm2) {
+                for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
                     self.record_action_109(delta, tm1, tm3, tm4);
                 }
             }
@@ -44100,7 +44164,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_110(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cons_el_types_reverse(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElTypes(tm0, tm1) in self.el_types.iter_dirty() {
             #[allow(unused_variables)]
@@ -44159,7 +44223,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_111(&self, delta: &mut ModelDelta) {
+    fn query_and_record_func_app_types(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Domain(tm0, tm1) in self.domain.iter_dirty() {
             #[allow(unused_variables)]
@@ -44173,9 +44237,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Codomain(tm0, tm2) in self.codomain.iter_dirty() {
             #[allow(unused_variables)]
-            for Domain(_, tm1) in self.domain.iter_all_0(tm0) {
+            for FuncApp(_, tm3, tm4) in self.func_app.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for FuncApp(_, tm3, tm4) in self.func_app.iter_all_0(tm0) {
+                for Domain(_, tm1) in self.domain.iter_all_0(tm0) {
                     self.record_action_111(delta, tm1, tm2, tm3, tm4);
                 }
             }
@@ -44183,9 +44247,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm3, tm4) in self.func_app.iter_dirty() {
             #[allow(unused_variables)]
-            for Domain(_, tm1) in self.domain.iter_all_0(tm0) {
+            for Codomain(_, tm2) in self.codomain.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Codomain(_, tm2) in self.codomain.iter_all_0(tm0) {
+                for Domain(_, tm1) in self.domain.iter_all_0(tm0) {
                     self.record_action_111(delta, tm1, tm2, tm3, tm4);
                 }
             }
@@ -44202,7 +44266,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_112(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_app_types(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             #[allow(unused_variables)]
@@ -44238,7 +44302,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_113(&self, delta: &mut ModelDelta) {
+    fn query_and_record_func_app_constrained(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
             self.record_action_113(delta, tm1, tm2);
@@ -44255,7 +44319,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_114(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_app_constrained(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             self.record_action_114(delta, tm1);
@@ -44281,7 +44345,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_115(&self, delta: &mut ModelDelta) {
+    fn query_and_record_constrained_head_tail(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConstrainedEls(tm0) in self.constrained_els.iter_dirty() {
             #[allow(unused_variables)]
@@ -44308,7 +44372,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_116(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_el_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Cod(tm0, tm1) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
@@ -44335,7 +44399,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_117(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_els_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Cod(tm0, tm1) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
@@ -44363,7 +44427,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_118(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_el_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
             #[allow(unused_variables)]
@@ -44391,7 +44455,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_119(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_els_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
             #[allow(unused_variables)]
@@ -44418,13 +44482,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_120(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_nil_els(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(tm2, tm3) in self.cod.iter_all() {
+            for MapEls(tm2, _, tm4) in self.map_els.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for MapEls(_, _, tm4) in self.map_els.iter_all_0_1(tm2, tm1) {
+                for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
                     self.record_action_120(delta, tm3, tm4);
                 }
             }
@@ -44432,9 +44496,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Cod(tm2, tm3) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for NilElList(tm0, tm1) in self.nil_el_list.iter_all() {
+            for MapEls(_, tm1, tm4) in self.map_els.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for MapEls(_, _, tm4) in self.map_els.iter_all_0_1(tm2, tm1) {
+                for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
                     self.record_action_120(delta, tm3, tm4);
                 }
             }
@@ -44442,9 +44506,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for MapEls(tm2, tm1, tm4) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
-            for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
+            for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
+                for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
                     self.record_action_120(delta, tm3, tm4);
                 }
             }
@@ -44488,7 +44552,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_121(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_cons_els(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -44515,7 +44579,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_122(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_app_func(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
             #[allow(unused_variables)]
@@ -44529,9 +44593,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for MapEl(tm3, tm2, tm4) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
-            for FuncApp(tm0, tm1, _) in self.func_app.iter_all_2(tm2) {
+            for MapEls(_, tm1, tm5) in self.map_els.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for MapEls(_, _, tm5) in self.map_els.iter_all_0_1(tm3, tm1) {
+                for FuncApp(tm0, _, _) in self.func_app.iter_all_1_2(tm1, tm2) {
                     self.record_action_122(delta, tm0, tm4, tm5);
                 }
             }
@@ -44539,9 +44603,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for MapEls(tm3, tm1, tm5) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
-            for FuncApp(tm0, _, tm2) in self.func_app.iter_all_1(tm1) {
+            for MapEl(_, tm2, tm4) in self.map_el.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for MapEl(_, _, tm4) in self.map_el.iter_all_0_1(tm3, tm2) {
+                for FuncApp(tm0, _, _) in self.func_app.iter_all_1_2(tm1, tm2) {
                     self.record_action_122(delta, tm0, tm4, tm5);
                 }
             }
@@ -44558,13 +44622,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_123(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(tm3, tm4) in self.cod.iter_all() {
+            for MapEl(tm3, _, tm5) in self.map_el.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for MapEl(_, _, tm5) in self.map_el.iter_all_0_1(tm3, tm2) {
+                for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                     self.record_action_123(delta, tm1, tm4, tm5);
                 }
             }
@@ -44572,9 +44636,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Cod(tm3, tm4) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for Var(tm0, tm1, tm2) in self.var.iter_all() {
+            for MapEl(_, tm2, tm5) in self.map_el.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for MapEl(_, _, tm5) in self.map_el.iter_all_0_1(tm3, tm2) {
+                for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
                     self.record_action_123(delta, tm1, tm4, tm5);
                 }
             }
@@ -44582,9 +44646,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for MapEl(tm3, tm2, tm5) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
-            for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
+            for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
+                for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
                     self.record_action_123(delta, tm1, tm4, tm5);
                 }
             }
@@ -44601,7 +44665,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_124(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_pred_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             #[allow(unused_variables)]
@@ -44628,7 +44692,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_125(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_preserves_el_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElType(tm0, tm1) in self.el_type.iter_dirty() {
             #[allow(unused_variables)]
@@ -44655,7 +44719,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_126(&self, delta: &mut ModelDelta) {
+    fn query_and_record_map_reflects_el_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElType(tm0, tm1) in self.el_type.iter_dirty() {
             #[allow(unused_variables)]
@@ -44682,7 +44746,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_127(&self, delta: &mut ModelDelta) {
+    fn query_and_record_in_ker_rule(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
@@ -44709,7 +44773,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_128(&self, delta: &mut ModelDelta) {
+    fn query_and_record_el_in_img_rule(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
             self.record_action_128(delta, tm0, tm2);
@@ -44728,7 +44792,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_129(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_tuple_in_img_rule(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             #[allow(unused_variables)]
@@ -44755,7 +44819,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_130(&self, delta: &mut ModelDelta) {
+    fn query_and_record_func_app_in_img_rule(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
             #[allow(unused_variables)]
@@ -44783,7 +44847,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_131(&self, delta: &mut ModelDelta) {
+    fn query_and_record_initial_structure_total(&self, delta: &mut ModelDelta) {
         if self.empty_join_is_dirty {
             self.record_action_131(delta);
         }
@@ -44802,7 +44866,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_132(&self, delta: &mut ModelDelta) {
+    fn query_and_record_initiality_morphism_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.structure_dirty.iter().copied() {
             self.record_action_132(delta, tm0);
@@ -44834,7 +44898,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_133(&self, delta: &mut ModelDelta) {
+    fn query_and_record_dom_cod_initiality_morphism(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for InitialStructure(tm0) in self.initial_structure.iter_dirty() {
             #[allow(unused_variables)]
@@ -44863,7 +44927,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_134(&self, delta: &mut ModelDelta) {
+    fn query_and_record_initiality_uniqueness(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Dom(tm0, tm1) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
@@ -44909,7 +44973,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_135(&self, delta: &mut ModelDelta) {
+    fn query_and_record_chain_head_structure_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ChainTail(tm0, tm1) in self.chain_tail.iter_dirty() {
             self.record_action_135(delta, tm0);
@@ -44929,7 +44993,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_136(&self, delta: &mut ModelDelta) {
+    fn query_and_record_chain_head_transition_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ChainTail(tm0, tm1) in self.chain_tail.iter_dirty() {
             #[allow(unused_variables)]
@@ -44971,13 +45035,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_137(&self, delta: &mut ModelDelta) {
+    fn query_and_record_chain_transition_signature(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ChainTail(tm0, tm1) in self.chain_tail.iter_dirty() {
             #[allow(unused_variables)]
-            for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
+            for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
+                for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
                         self.record_action_137(delta, tm2, tm3, tm4);
@@ -44990,9 +45054,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ChainTail(tm0, _) in self.chain_tail.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
+                for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
+                    for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
                         self.record_action_137(delta, tm2, tm3, tm4);
                     }
                 }
@@ -45001,11 +45065,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadStructure(tm0, tm3) in self.chain_head_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for ChainTail(_, tm1) in self.chain_tail.iter_all_0(tm0) {
+            for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
+                for ChainTail(_, tm1) in self.chain_tail.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
+                    for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
                         self.record_action_137(delta, tm2, tm3, tm4);
                     }
                 }
@@ -45014,11 +45078,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadTransition(tm0, tm4) in self.chain_head_transition.iter_dirty() {
             #[allow(unused_variables)]
-            for ChainTail(_, tm1) in self.chain_tail.iter_all_0(tm0) {
+            for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
+                for ChainTail(_, tm1) in self.chain_tail.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
+                    for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
                         self.record_action_137(delta, tm2, tm3, tm4);
                     }
                 }
@@ -45083,7 +45147,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_139(&self, delta: &mut ModelDelta) {
+    fn query_and_record_type_decl_defines_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TypeDecl(tm0, tm1) in self.type_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -45107,9 +45171,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TypeSymbol(tm3) in self.type_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for TypeDecl(tm0, tm1) in self.type_decl.iter_all() {
+            for TypeDeclNodeLoc(tm0, tm2) in self.type_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for TypeDeclNodeLoc(_, tm2) in self.type_decl_node_loc.iter_all_0(tm0) {
+                for TypeDecl(_, tm1) in self.type_decl.iter_all_0(tm0) {
                     self.record_action_139(delta, tm1, tm2, tm3);
                 }
             }
@@ -45126,7 +45190,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_140(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_decl_defines_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -45150,9 +45214,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for PredSymbol(tm4) in self.pred_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_all() {
+            for PredDeclNodeLoc(tm0, tm3) in self.pred_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for PredDeclNodeLoc(_, tm3) in self.pred_decl_node_loc.iter_all_0(tm0) {
+                for PredDecl(_, tm1, tm2) in self.pred_decl.iter_all_0(tm0) {
                     self.record_action_140(delta, tm1, tm3, tm4);
                 }
             }
@@ -45169,7 +45233,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_141(&self, delta: &mut ModelDelta) {
+    fn query_and_record_func_decl_defines_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -45193,9 +45257,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for FuncSymbol(tm5) in self.func_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
+            for FuncDeclNodeLoc(tm0, tm4) in self.func_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for FuncDeclNodeLoc(_, tm4) in self.func_decl_node_loc.iter_all_0(tm0) {
+                for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
                     self.record_action_141(delta, tm1, tm4, tm5);
                 }
             }
@@ -45212,13 +45276,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_142(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_decl_defines_symbol(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
+            for RuleDeclNodeLoc(_, tm3) in self.rule_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleDeclNodeLoc(_, tm3) in self.rule_decl_node_loc.iter_all_0(tm0) {
+                for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
                         self.record_action_142(delta, tm2, tm3, tm4);
@@ -45229,9 +45293,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleName(tm0, tm2) in self.rule_name.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
+            for RuleDeclNodeLoc(_, tm3) in self.rule_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleDeclNodeLoc(_, tm3) in self.rule_decl_node_loc.iter_all_0(tm0) {
+                for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
                         self.record_action_142(delta, tm2, tm3, tm4);
@@ -45242,9 +45306,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleDeclNodeLoc(tm0, tm3) in self.rule_decl_node_loc.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
+            for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
+                for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
                         self.record_action_142(delta, tm2, tm3, tm4);
@@ -45255,11 +45319,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleSymbol(tm4) in self.rule_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleDecl(tm0, tm1) in self.rule_decl.iter_all() {
+            for RuleDeclNodeLoc(tm0, tm3) in self.rule_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleDeclNodeLoc(_, tm3) in self.rule_decl_node_loc.iter_all_0(tm0) {
+                    for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                         self.record_action_142(delta, tm2, tm3, tm4);
                     }
                 }
@@ -45279,7 +45343,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_143(&self, delta: &mut ModelDelta) {
+    fn query_and_record_arg_decl_should_be_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_dirty() {
             #[allow(unused_variables)]
@@ -45303,9 +45367,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TypeSymbol(tm3) in self.type_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
+            for ArgDeclNodeLoc(tm0, tm2) in self.arg_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for ArgDeclNodeLoc(_, tm2) in self.arg_decl_node_loc.iter_all_0(tm0) {
+                for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                     self.record_action_143(delta, tm1, tm2, tm3);
                 }
             }
@@ -45324,7 +45388,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_144(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_atom_should_be_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -45348,9 +45412,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TypeSymbol(tm4) in self.type_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
+            for IfAtomNodeLoc(tm0, tm3) in self.if_atom_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+                for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     self.record_action_144(delta, tm2, tm3, tm4);
                 }
             }
@@ -45369,7 +45433,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_145(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_if_atom_should_be_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -45393,9 +45457,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for PredSymbol(tm4) in self.pred_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_all() {
+            for IfAtomNodeLoc(tm0, tm3) in self.if_atom_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+                for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     self.record_action_145(delta, tm1, tm3, tm4);
                 }
             }
@@ -45414,7 +45478,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_146(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_then_atom_should_be_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -45438,9 +45502,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for PredSymbol(tm4) in self.pred_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_all() {
+            for ThenAtomNodeLoc(tm0, tm3) in self.then_atom_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
+                for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     self.record_action_146(delta, tm1, tm3, tm4);
                 }
             }
@@ -45459,7 +45523,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_147(&self, delta: &mut ModelDelta) {
+    fn query_and_record_app_atom_should_be_func(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -45483,9 +45547,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for FuncSymbol(tm4) in self.func_symbol.iter_dirty() {
             #[allow(unused_variables)]
-            for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
+            for TermNodeLoc(tm0, tm3) in self.term_node_loc.iter_all() {
                 #[allow(unused_variables)]
-                for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
+                for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     self.record_action_147(delta, tm1, tm3, tm4);
                 }
             }
@@ -45503,7 +45567,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_148(&self, delta: &mut ModelDelta) {
+    fn query_and_record_type_list_len_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.type_list_dirty.iter().copied() {
             self.record_action_148(delta, tm0);
@@ -45520,7 +45584,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_149(&self, delta: &mut ModelDelta) {
+    fn query_and_record_type_list_len_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -45547,7 +45611,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_150(&self, delta: &mut ModelDelta) {
+    fn query_and_record_type_list_len_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
             #[allow(unused_variables)]
@@ -45591,7 +45655,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_151(&self, delta: &mut ModelDelta) {
+    fn query_and_record_term_list_len_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
             self.record_action_151(delta, tm0);
@@ -45608,7 +45672,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_152(&self, delta: &mut ModelDelta) {
+    fn query_and_record_term_list_len_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilTermListNode(tm0) in self.nil_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -45635,7 +45699,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_153(&self, delta: &mut ModelDelta) {
+    fn query_and_record_term_list_len_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -45683,17 +45747,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_154(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_if_atom_arg_num_should_match(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+            for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
+                for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                    for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_154(delta, tm3, tm6, tm7);
@@ -45712,9 +45776,9 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                             #[allow(unused_variables)]
-                            for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
+                            for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                 self.record_action_154(delta, tm3, tm6, tm7);
                             }
                         }
@@ -45725,13 +45789,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticPred(tm1, tm4) in self.semantic_pred.iter_dirty() {
             #[allow(unused_variables)]
-            for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
+            for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+                for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                    for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_154(delta, tm3, tm6, tm7);
@@ -45744,13 +45808,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Arity(tm4, tm5) in self.arity.iter_dirty() {
             #[allow(unused_variables)]
-            for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_all() {
+            for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                 #[allow(unused_variables)]
-                for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm4) {
                     #[allow(unused_variables)]
-                    for SemanticPred(_, _) in self.semantic_pred.iter_all_0_1(tm1, tm4) {
+                    for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_154(delta, tm3, tm6, tm7);
@@ -45763,13 +45827,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
             #[allow(unused_variables)]
-            for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_all() {
+            for Arity(tm4, _) in self.arity.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm4) {
                     #[allow(unused_variables)]
-                    for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
+                    for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for Arity(_, _) in self.arity.iter_all_0_1(tm4, tm5) {
+                        for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_154(delta, tm3, tm6, tm7);
@@ -45784,11 +45848,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
+                for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
+                    for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                        for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                 self.record_action_154(delta, tm3, tm6, tm7);
@@ -45815,17 +45879,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_155(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_then_atom_arg_num_should_match(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
+            for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
+                for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                    for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_155(delta, tm3, tm6, tm7);
@@ -45844,9 +45908,9 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                             #[allow(unused_variables)]
-                            for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
+                            for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                 self.record_action_155(delta, tm3, tm6, tm7);
                             }
                         }
@@ -45857,13 +45921,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticPred(tm1, tm4) in self.semantic_pred.iter_dirty() {
             #[allow(unused_variables)]
-            for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
+            for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
+                for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                    for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_155(delta, tm3, tm6, tm7);
@@ -45876,13 +45940,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Arity(tm4, tm5) in self.arity.iter_dirty() {
             #[allow(unused_variables)]
-            for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_all() {
+            for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                 #[allow(unused_variables)]
-                for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
+                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm4) {
                     #[allow(unused_variables)]
-                    for SemanticPred(_, _) in self.semantic_pred.iter_all_0_1(tm1, tm4) {
+                    for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_155(delta, tm3, tm6, tm7);
@@ -45895,13 +45959,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
             #[allow(unused_variables)]
-            for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_all() {
+            for Arity(tm4, _) in self.arity.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
+                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm4) {
                     #[allow(unused_variables)]
-                    for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
+                    for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for Arity(_, _) in self.arity.iter_all_0_1(tm4, tm5) {
+                        for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_155(delta, tm3, tm6, tm7);
@@ -45916,11 +45980,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
+                for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
+                    for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                        for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                 self.record_action_155(delta, tm3, tm6, tm7);
@@ -45947,17 +46011,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_156(&self, delta: &mut ModelDelta) {
+    fn query_and_record_app_term_arg_num_should_match(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
+            for SemanticFunc(_, tm4) in self.semantic_func.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for SemanticFunc(_, tm4) in self.semantic_func.iter_all_0(tm1) {
+                for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
+                    for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_156(delta, tm3, tm6, tm7);
@@ -45976,9 +46040,9 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                             #[allow(unused_variables)]
-                            for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
+                            for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                 self.record_action_156(delta, tm3, tm6, tm7);
                             }
                         }
@@ -45989,13 +46053,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticFunc(tm1, tm4) in self.semantic_func.iter_dirty() {
             #[allow(unused_variables)]
-            for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
+            for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
+                for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
+                    for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_156(delta, tm3, tm6, tm7);
@@ -46008,13 +46072,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Domain(tm4, tm5) in self.domain.iter_dirty() {
             #[allow(unused_variables)]
-            for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
+            for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                 #[allow(unused_variables)]
-                for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
+                for SemanticFunc(tm1, _) in self.semantic_func.iter_all_1(tm4) {
                     #[allow(unused_variables)]
-                    for SemanticFunc(_, _) in self.semantic_func.iter_all_0_1(tm1, tm4) {
+                    for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
+                        for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_156(delta, tm3, tm6, tm7);
@@ -46027,13 +46091,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
             #[allow(unused_variables)]
-            for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
+            for Domain(tm4, _) in self.domain.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
+                for SemanticFunc(tm1, _) in self.semantic_func.iter_all_1(tm4) {
                     #[allow(unused_variables)]
-                    for SemanticFunc(_, tm4) in self.semantic_func.iter_all_0(tm1) {
+                    for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for Domain(_, _) in self.domain.iter_all_0_1(tm4, tm5) {
+                        for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                                 self.record_action_156(delta, tm3, tm6, tm7);
@@ -46048,11 +46112,11 @@ impl Eqlog {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
+                for SemanticFunc(_, tm4) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for SemanticFunc(_, tm4) in self.semantic_func.iter_all_0(tm1) {
+                    for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
+                        for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                 self.record_action_156(delta, tm3, tm6, tm7);
@@ -46075,7 +46139,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_157(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_chain_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.rule_decl_node_dirty.iter().copied() {
             self.record_action_157(delta, tm0);
@@ -46113,7 +46177,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_158(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_stmt_list_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -46157,7 +46221,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_159(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_list_chain_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_list_node_dirty.iter().copied() {
             self.record_action_159(delta, tm0);
@@ -46174,7 +46238,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_160(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_list_chain_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46201,7 +46265,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_161(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_list_chain_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46244,13 +46308,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_162(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_structure_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_all() {
+            for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm0, tm3) {
+                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
                     self.record_action_162(delta, tm1, tm4);
                 }
             }
@@ -46258,9 +46322,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_all() {
+            for StmtListChain(tm0, _) in self.stmt_list_chain.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm0, tm3) {
+                for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                     self.record_action_162(delta, tm1, tm4);
                 }
             }
@@ -46268,9 +46332,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for StmtListChain(tm0, tm3) in self.stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+            for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
+                for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                     self.record_action_162(delta, tm1, tm4);
                 }
             }
@@ -46287,7 +46351,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_163(&self, delta: &mut ModelDelta) {
+    fn query_and_record_if_stmt_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46316,7 +46380,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_164(&self, delta: &mut ModelDelta) {
+    fn query_and_record_then_stmt_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46358,7 +46422,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_165(&self, delta: &mut ModelDelta) {
+    fn query_and_record_equal_if_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46385,7 +46449,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_166(&self, delta: &mut ModelDelta) {
+    fn query_and_record_defined_if_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46412,7 +46476,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_167(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_if_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46439,7 +46503,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_168(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_if_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46481,7 +46545,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_169(&self, delta: &mut ModelDelta) {
+    fn query_and_record_equal_then_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46525,7 +46589,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_170(&self, delta: &mut ModelDelta) {
+    fn query_and_record_defined_then_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46552,7 +46616,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_171(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_then_atom_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46594,7 +46658,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_172(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cons_term_list_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46621,7 +46685,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_173(&self, delta: &mut ModelDelta) {
+    fn query_and_record_some_opt_term_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46648,7 +46712,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_174(&self, delta: &mut ModelDelta) {
+    fn query_and_record_app_term_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46676,7 +46740,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_175(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_el_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_node_dirty.iter().copied() {
             self.record_action_175(delta, tm0);
@@ -46694,7 +46758,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_176(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_els_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
             self.record_action_176(delta, tm0);
@@ -46711,7 +46775,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_177(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_els_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilTermListNode(tm0) in self.nil_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -46725,9 +46789,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TermsStructure(tm0, tm1) in self.terms_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
+            for SemanticEls(_, tm2) in self.semantic_els.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for SemanticEls(_, tm2) in self.semantic_els.iter_all_0(tm0) {
+                for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
                     self.record_action_177(delta, tm1, tm2);
                 }
             }
@@ -46735,9 +46799,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticEls(tm0, tm2) in self.semantic_els.iter_dirty() {
             #[allow(unused_variables)]
-            for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
+            for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
+                for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
                     self.record_action_177(delta, tm1, tm2);
                 }
             }
@@ -46754,13 +46818,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_178(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_els_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm1) {
+            for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
+                for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm0) {
                         self.record_action_178(delta, tm3, tm4, tm5);
@@ -46773,9 +46837,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
+                for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm0) {
+                    for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
                         self.record_action_178(delta, tm3, tm4, tm5);
                     }
                 }
@@ -46819,7 +46883,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_179(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_el_struct(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermStructure(tm0, tm1) in self.term_structure.iter_dirty() {
             #[allow(unused_variables)]
@@ -46846,7 +46910,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_180(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_els_struct(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermsStructure(tm0, tm1) in self.terms_structure.iter_dirty() {
             #[allow(unused_variables)]
@@ -46873,13 +46937,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_181(&self, delta: &mut ModelDelta) {
+    fn query_and_record_app_term_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
+            for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
+                for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm2) {
                         self.record_action_181(delta, tm3, tm4, tm5);
@@ -46892,9 +46956,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
+                for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm2) {
+                    for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
                         self.record_action_181(delta, tm3, tm4, tm5);
                     }
                 }
@@ -46938,13 +47002,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_182(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_term_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
+            for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
+                for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
                         self.record_action_182(delta, tm2, tm3, tm4);
@@ -46957,9 +47021,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for VarTermNode(tm0, _) in self.var_term_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
+                for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
+                    for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
                         self.record_action_182(delta, tm2, tm3, tm4);
                     }
                 }
@@ -46968,11 +47032,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TermStructure(tm0, tm3) in self.term_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
+            for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
+                for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
+                    for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
                         self.record_action_182(delta, tm2, tm3, tm4);
                     }
                 }
@@ -46981,11 +47045,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticEl(tm0, tm4) in self.semantic_el.iter_dirty() {
             #[allow(unused_variables)]
-            for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
+            for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
+                for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
+                    for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
                         self.record_action_182(delta, tm2, tm3, tm4);
                     }
                 }
@@ -47006,7 +47070,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_183(&self, delta: &mut ModelDelta) {
+    fn query_and_record_wildcard_virt_ident_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
             self.record_action_183(delta, tm0);
@@ -47023,13 +47087,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_184(&self, delta: &mut ModelDelta) {
+    fn query_and_record_wildcard_term_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
+            for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
+                for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
                         self.record_action_184(delta, tm1, tm2, tm3);
@@ -47040,11 +47104,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for TermStructure(tm0, tm1) in self.term_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
+            for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
+                for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
+                    for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
                         self.record_action_184(delta, tm1, tm2, tm3);
                     }
                 }
@@ -47053,11 +47117,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticEl(tm0, tm2) in self.semantic_el.iter_dirty() {
             #[allow(unused_variables)]
-            for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
+            for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
+                    for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
                         self.record_action_184(delta, tm1, tm2, tm3);
                     }
                 }
@@ -47066,11 +47130,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for WildcardVirtIdent(tm0, tm3) in self.wildcard_virt_ident.iter_dirty() {
             #[allow(unused_variables)]
-            for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
+            for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
+                    for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
                         self.record_action_184(delta, tm1, tm2, tm3);
                     }
                 }
@@ -47085,7 +47149,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm4, tm3));
         }
     }
-    fn query_and_record_185(&self, delta: &mut ModelDelta) {
+    fn query_and_record_equal_if_atom_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47128,7 +47192,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_186(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_if_atom_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47171,7 +47235,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_187(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_if_atom_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47211,7 +47275,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm4, tm3));
         }
     }
-    fn query_and_record_188(&self, delta: &mut ModelDelta) {
+    fn query_and_record_equal_then_atom_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47251,7 +47315,7 @@ impl Eqlog {
             delta.new_el_equalities.push((tm5, tm4));
         }
     }
-    fn query_and_record_189(&self, delta: &mut ModelDelta) {
+    fn query_and_record_defined_then_atom_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47268,9 +47332,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm2, tm0, tm3) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
+            for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm3) {
                 #[allow(unused_variables)]
-                for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm3) {
+                for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm5) in self.semantic_el.iter_all_0(tm1) {
                         self.record_action_189(delta, tm4, tm5);
@@ -47281,11 +47345,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SemanticEl(tm3, tm4) in self.semantic_el.iter_dirty() {
             #[allow(unused_variables)]
-            for SomeTermNode(tm0, tm1) in self.some_term_node.iter_all() {
+            for DefinedThenAtomNode(tm2, tm0, _) in self.defined_then_atom_node.iter_all_2(tm3) {
                 #[allow(unused_variables)]
-                for DefinedThenAtomNode(tm2, _, _) in
-                    self.defined_then_atom_node.iter_all_1_2(tm0, tm3)
-                {
+                for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm5) in self.semantic_el.iter_all_0(tm1) {
                         self.record_action_189(delta, tm4, tm5);
@@ -47319,7 +47381,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_190(&self, delta: &mut ModelDelta) {
+    fn query_and_record_pred_then_atom_semantics(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47364,7 +47426,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_191(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_rule_stmt_list_chain(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
@@ -47394,7 +47456,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_192(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_list_chain_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_list_node_dirty.iter().copied() {
             self.record_action_192(delta, tm0);
@@ -47411,7 +47473,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_193(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_list_chain_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -47440,17 +47502,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_194(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_chain_if_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm2, tm3) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for GroupedStmtListChain(_, tm7) in
                             self.grouped_stmt_list_chain.iter_all_0(tm6)
@@ -47464,17 +47524,14 @@ impl Eqlog {
         #[allow(unused_variables)]
         for IfStmtNode(tm2, tm3) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
+                    for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6)
                     {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
+                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                             self.record_action_194(delta, tm4, tm7);
                         }
                     }
@@ -47484,17 +47541,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                 #[allow(unused_variables)]
-                for IfStmtNode(tm2, tm3) in self.if_stmt_node.iter_all() {
+                for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
+                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                             self.record_action_194(delta, tm4, tm7);
                         }
                     }
@@ -47504,17 +47557,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                    {
+                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
+                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                             self.record_action_194(delta, tm4, tm7);
                         }
                     }
@@ -47524,15 +47573,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm6, tm7) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for IfStmtNode(tm2, tm3) in self.if_stmt_node.iter_all() {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(_, _, _) in
-                            self.cons_stmt_list_node.iter_all_0_1_2(tm6, tm2, tm4)
-                        {
+                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                             self.record_action_194(delta, tm4, tm7);
                         }
                     }
@@ -47553,17 +47600,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_195(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_list_chain_then_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for GroupedStmtListChain(_, tm7) in
                             self.grouped_stmt_list_chain.iter_all_0(tm6)
@@ -47577,17 +47622,14 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
+                    for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6)
                     {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_195(delta, tm4, tm7);
                         }
                     }
@@ -47597,17 +47639,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_195(delta, tm4, tm7);
                         }
                     }
@@ -47617,17 +47655,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                    {
+                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_195(delta, tm4, tm7);
                         }
                     }
@@ -47637,15 +47671,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm6, tm7) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(_, _, _) in
-                            self.cons_stmt_list_node.iter_all_0_1_2(tm6, tm2, tm4)
-                        {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_195(delta, tm4, tm7);
                         }
                     }
@@ -47675,18 +47707,17 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_196(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_list_chain_singleton(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+            for GroupedStmtListChain(_, tm5) in self.grouped_stmt_list_chain.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_all() {
+                for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm1, tm3) {
+                    for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm5) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm0)
+                        for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3)
                         {
                             #[allow(unused_variables)]
                             for GroupedStmtListChain(_, tm6) in
@@ -47702,19 +47733,17 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm1, tm2, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
+            for GroupedStmtListChain(_, tm5) in self.grouped_stmt_list_chain.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_all() {
+                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm1, tm3) {
+                    for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm5) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm0)
+                        for GroupedStmtListChain(_, tm6) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm1)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm6) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm1)
-                            {
+                            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
                                 self.record_action_196(delta, tm4, tm5, tm6);
                             }
                         }
@@ -47725,19 +47754,17 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_all() {
+            for StmtListChain(tm1, _) in self.stmt_list_chain.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                for GroupedStmtListChain(_, tm6) in self.grouped_stmt_list_chain.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm1, tm3) {
+                    for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for GroupedStmtListChain(_, tm5) in
                             self.grouped_stmt_list_chain.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm6) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm1)
-                            {
+                            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
                                 self.record_action_196(delta, tm4, tm5, tm6);
                             }
                         }
@@ -47748,19 +47775,17 @@ impl Eqlog {
         #[allow(unused_variables)]
         for StmtListChain(tm1, tm3) in self.stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_all() {
+            for GroupedStmtListChain(_, tm6) in self.grouped_stmt_list_chain.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm2, _) in self.cons_stmt_list_node.iter_all_0_2(tm1, tm0) {
+                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
+                    for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for GroupedStmtListChain(_, tm5) in
                             self.grouped_stmt_list_chain.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm6) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm1)
-                            {
+                            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
                                 self.record_action_196(delta, tm4, tm5, tm6);
                             }
                         }
@@ -47771,17 +47796,17 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm0, tm5) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
+            for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_all() {
+                    for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm1, tm3) {
+                        for GroupedStmtListChain(_, tm6) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm1)
+                        {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm6) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm1)
-                            {
+                            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
                                 self.record_action_196(delta, tm4, tm5, tm6);
                             }
                         }
@@ -47792,17 +47817,17 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm1, tm6) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_all() {
+            for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm2, _) in self.cons_stmt_list_node.iter_all_0_2(tm1, tm0) {
+                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_all() {
+                    for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm1, tm3) {
+                        for GroupedStmtListChain(_, tm5) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm0)
+                        {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm5) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm0)
-                            {
+                            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
                                 self.record_action_196(delta, tm4, tm5, tm6);
                             }
                         }
@@ -47833,25 +47858,25 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_197(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_chain_if_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
+                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm0, tm4)
-                    {
+                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for ConsStmtListNode(_, tm2, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
                                     for GroupedStmtListChain(_, tm10) in
                                         self.grouped_stmt_list_chain.iter_all_0(tm6)
@@ -47868,25 +47893,24 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
+                for ConsStmtListNode(tm6, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm0, tm4)
-                    {
+                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for GroupedStmtListChain(_, tm9) in
+                                self.grouped_stmt_list_chain.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
+                                for GroupedStmtListChain(_, tm10) in
+                                    self.grouped_stmt_list_chain.iter_all_0(tm6)
                                 {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -47899,25 +47923,22 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm4, tm2, tm5) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                for ConsStmtListNode(tm6, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm0, tm4)
-                    {
+                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for GroupedStmtListChain(_, tm10) in
+                                self.grouped_stmt_list_chain.iter_all_0(tm6)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -47930,25 +47951,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm6, tm0, tm4) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                    {
+                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for GroupedStmtListChain(_, tm10) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm6)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for ConsStmtListNode(_, tm2, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -47961,25 +47980,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for StmtListChain(tm6, _) in self.stmt_list_chain.iter_all_1(tm7) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
+                    for ConsStmtListNode(_, tm0, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, _) in
-                            self.cons_stmt_list_node.iter_all_1_2(tm0, tm4)
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for ConsStmtListNode(_, tm2, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -47992,27 +48009,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for StmtListChain(tm6, tm7) in self.stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
+                    for ConsStmtListNode(_, tm0, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(_, _, _) in
-                            self.cons_stmt_list_node.iter_all_0_1_2(tm6, tm0, tm4)
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for ChainHeadStructure(_, tm8) in
-                                self.chain_head_structure.iter_all_0(tm7)
+                            for ConsStmtListNode(_, tm2, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48025,28 +48038,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm4, tm9) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                    {
+                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, _) in
-                            self.cons_stmt_list_node.iter_all_1_2(tm0, tm4)
+                        for GroupedStmtListChain(_, tm10) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm6)
                         {
                             #[allow(unused_variables)]
-                            for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all()
+                            for ConsStmtListNode(_, tm2, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for StmtListChain(_, _) in
-                                    self.stmt_list_chain.iter_all_0_1(tm6, tm7)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48059,26 +48067,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm6, tm10) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
+                    for ConsStmtListNode(_, tm0, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(_, _, _) in
-                            self.cons_stmt_list_node.iter_all_0_1_2(tm6, tm0, tm4)
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all()
+                            for ConsStmtListNode(_, tm2, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for StmtListChain(_, _) in
-                                    self.stmt_list_chain.iter_all_0_1(tm6, tm7)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm9) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_197(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48111,25 +48116,24 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_198(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_chain_then_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for GroupedStmtListChain(_, tm9) in
+                                self.grouped_stmt_list_chain.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
                                     for GroupedStmtListChain(_, tm10) in
                                         self.grouped_stmt_list_chain.iter_all_0(tm6)
@@ -48146,25 +48150,25 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for ConsStmtListNode(_, tm0, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
+                                for GroupedStmtListChain(_, tm10) in
+                                    self.grouped_stmt_list_chain.iter_all_0(tm6)
                                 {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48177,25 +48181,22 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for GroupedStmtListChain(_, tm10) in
+                                self.grouped_stmt_list_chain.iter_all_0(tm6)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48208,25 +48209,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                    {
+                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all() {
+                        for GroupedStmtListChain(_, tm10) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm6)
+                        {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for ConsStmtListNode(_, tm0, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48239,25 +48238,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for StmtListChain(tm6, _) in self.stmt_list_chain.iter_all_1(tm7) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                    for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, _) in
-                            self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm6, tm7) {
+                            for ConsStmtListNode(_, tm0, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48270,27 +48267,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for StmtListChain(tm6, tm7) in self.stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                    for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(_, _, _) in
-                            self.cons_stmt_list_node.iter_all_0_1_2(tm6, tm2, tm4)
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for ChainHeadStructure(_, tm8) in
-                                self.chain_head_structure.iter_all_0(tm7)
+                            for ConsStmtListNode(_, tm0, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm9) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48303,28 +48296,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm4, tm9) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                    {
+                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, _) in
-                            self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
+                        for GroupedStmtListChain(_, tm10) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm6)
                         {
                             #[allow(unused_variables)]
-                            for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all()
+                            for ConsStmtListNode(_, tm0, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for StmtListChain(_, _) in
-                                    self.stmt_list_chain.iter_all_0_1(tm6, tm7)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48337,26 +48325,23 @@ impl Eqlog {
         #[allow(unused_variables)]
         for GroupedStmtListChain(tm6, tm10) in self.grouped_stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                    for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(_, _, _) in
-                            self.cons_stmt_list_node.iter_all_0_1_2(tm6, tm2, tm4)
+                        for GroupedStmtListChain(_, tm9) in
+                            self.grouped_stmt_list_chain.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_all()
+                            for ConsStmtListNode(_, tm0, tm5) in
+                                self.cons_stmt_list_node.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for StmtListChain(_, _) in
-                                    self.stmt_list_chain.iter_all_0_1(tm6, tm7)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm9) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm4)
-                                    {
+                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                                         self.record_action_198(delta, tm8, tm9, tm10);
                                     }
                                 }
@@ -48393,7 +48378,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_199(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_stmts_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48420,7 +48405,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_200(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_stmt_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48449,7 +48434,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_201(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_stmt_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48491,7 +48476,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_202(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_if_atom_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48518,7 +48503,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_203(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_if_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48545,7 +48530,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_204(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_if_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48572,7 +48557,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_205(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_if_atom_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48614,7 +48599,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_206(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_then_atom_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48658,7 +48643,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_207(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_then_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48685,7 +48670,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_208(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_then_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48727,7 +48712,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_209(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_terms_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48754,7 +48739,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_210(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_opt_term_some(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48781,7 +48766,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_211(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_term_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48808,7 +48793,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_212(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_term_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48835,7 +48820,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_213(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_term_wildcard(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48862,7 +48847,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_214(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_term_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48889,7 +48874,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_215(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_terms_cons_head(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48916,7 +48901,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_216(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_terms_cons_tail(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48943,7 +48928,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_217(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_opt_terms(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48970,7 +48955,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_218(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_if_atom_equal_lhs(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -48997,7 +48982,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_219(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_if_atom_equal_rhs(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49024,7 +49009,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_220(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_if_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49051,7 +49036,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_221(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_if_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49078,7 +49063,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_222(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_if_atom_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49105,7 +49090,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_223(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_equal_lhs(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49132,7 +49117,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_224(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_equal_rhs(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49159,7 +49144,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_225(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_defined_var_term(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49186,7 +49171,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_226(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_defined_term(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49213,7 +49198,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_227(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49240,7 +49225,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_228(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_stmt_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49267,7 +49252,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_229(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_stmt_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49294,7 +49279,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_230(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_var_before(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49334,7 +49319,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_231(&self, delta: &mut ModelDelta) {
+    fn query_and_record_terms_should_be_epic_ok_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49363,7 +49348,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_232(&self, delta: &mut ModelDelta) {
+    fn query_and_record_terms_should_be_epic_ok_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49403,7 +49388,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_233(&self, delta: &mut ModelDelta) {
+    fn query_and_record_then_atom_epic_ok_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             self.record_action_233(delta, tm1, tm2);
@@ -49422,7 +49407,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_234(&self, delta: &mut ModelDelta) {
+    fn query_and_record_then_atom_epic_ok_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             self.record_action_234(delta, tm2);
@@ -49441,7 +49426,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_235(&self, delta: &mut ModelDelta) {
+    fn query_and_record_then_atom_epic_ok_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             self.record_action_235(delta, tm2);
@@ -49458,7 +49443,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_236(&self, delta: &mut ModelDelta) {
+    fn query_and_record_then_stmt_surjective(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49466,9 +49451,11 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(tm4, tm5, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
                     #[allow(unused_variables)]
-                    for ChainHeadTransition(tm6, tm7) in self.chain_head_transition.iter_all() {
+                    for StmtListChain(_, tm6) in self.stmt_list_chain.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm4, tm6) {
+                        for ChainHeadTransition(_, tm7) in
+                            self.chain_head_transition.iter_all_0(tm6)
+                        {
                             self.record_action_236(delta, tm7);
                         }
                     }
@@ -49478,13 +49465,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm2, tm0, tm3) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+            for ConsStmtListNode(tm4, tm5, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, tm5, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
+                for StmtListChain(_, tm6) in self.stmt_list_chain.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ChainHeadTransition(tm6, tm7) in self.chain_head_transition.iter_all() {
+                    for ChainHeadTransition(_, tm7) in self.chain_head_transition.iter_all_0(tm6) {
                         #[allow(unused_variables)]
-                        for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm4, tm6) {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_236(delta, tm7);
                         }
                     }
@@ -49494,13 +49481,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm4, tm5, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for StmtListChain(_, tm6) in self.stmt_list_chain.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, _, tm3) in self.cons_stmt_list_node.iter_all_0_1(tm2, tm0) {
+                for ChainHeadTransition(_, tm7) in self.chain_head_transition.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ChainHeadTransition(tm6, tm7) in self.chain_head_transition.iter_all() {
+                    for ConsStmtListNode(_, tm0, tm3) in self.cons_stmt_list_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm4, tm6) {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_236(delta, tm7);
                         }
                     }
@@ -49510,13 +49497,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ChainHeadTransition(tm6, tm7) in self.chain_head_transition.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for StmtListChain(tm4, _) in self.stmt_list_chain.iter_all_1(tm6) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm2, _, tm3) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(_, tm5, tm2) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm4, tm5, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
+                    for ConsStmtListNode(_, tm0, tm3) in self.cons_stmt_list_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for StmtListChain(_, _) in self.stmt_list_chain.iter_all_0_1(tm4, tm6) {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_236(delta, tm7);
                         }
                     }
@@ -49526,17 +49513,13 @@ impl Eqlog {
         #[allow(unused_variables)]
         for StmtListChain(tm4, tm6) in self.stmt_list_chain.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_all() {
+            for ChainHeadTransition(_, tm7) in self.chain_head_transition.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm2, _, tm3) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(_, tm5, tm2) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm5, _) in
-                        self.cons_stmt_list_node.iter_all_0_2(tm4, tm2)
-                    {
+                    for ConsStmtListNode(_, tm0, tm3) in self.cons_stmt_list_node.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for ChainHeadTransition(_, tm7) in
-                            self.chain_head_transition.iter_all_0(tm6)
-                        {
+                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                             self.record_action_236(delta, tm7);
                         }
                     }
@@ -49568,7 +49551,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_237(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cons_head_tail_terms_surjective_exempted(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49597,7 +49580,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_238(&self, delta: &mut ModelDelta) {
+    fn query_and_record_head_tail_cons_terms_surjective_exempted(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49642,7 +49625,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_239(&self, delta: &mut ModelDelta) {
+    fn query_and_record_subterms_surjective_exempted(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
@@ -49671,7 +49654,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_240(&self, delta: &mut ModelDelta) {
+    fn query_and_record_defined_atom_surjective_exempted(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             self.record_action_240(delta, tm2);
@@ -49690,7 +49673,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_241(&self, delta: &mut ModelDelta) {
+    fn query_and_record_semantic_el_exempted(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermSurjectiveExempted(tm0) in self.term_surjective_exempted.iter_dirty() {
             #[allow(unused_variables)]
@@ -49719,13 +49702,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_242(&self, delta: &mut ModelDelta) {
+    fn query_and_record_surjective_codomain_should_be_ok(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ShouldBeSurjective(tm0) in self.should_be_surjective.iter_dirty() {
             #[allow(unused_variables)]
-            for ElStructure(tm1, tm2) in self.el_structure.iter_all() {
+            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Cod(_, _) in self.cod.iter_all_0_1(tm0, tm2) {
+                for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                     self.record_action_242(delta, tm1);
                 }
             }
@@ -49733,9 +49716,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ElStructure(tm1, tm2) in self.el_structure.iter_dirty() {
             #[allow(unused_variables)]
-            for ShouldBeSurjective(tm0) in self.should_be_surjective.iter_all() {
+            for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for Cod(_, _) in self.cod.iter_all_0_1(tm0, tm2) {
+                for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
                     self.record_action_242(delta, tm1);
                 }
             }
@@ -49743,9 +49726,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for Cod(tm0, tm2) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
+            for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
+                for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
                     self.record_action_242(delta, tm1);
                 }
             }
@@ -49762,7 +49745,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_243(&self, delta: &mut ModelDelta) {
+    fn query_and_record_surjective_exempted_el_is_ok(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElSurjectiveExempted(tm0) in self.el_surjective_exempted.iter_dirty() {
             self.record_action_243(delta, tm0);
@@ -49779,7 +49762,7 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_244(&self, delta: &mut ModelDelta) {
+    fn query_and_record_surjective_img_el_is_ok(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ElInImg(tm0, tm1) in self.el_in_img.iter_dirty() {
             #[allow(unused_variables)]
@@ -49814,13 +49797,13 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_245(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_term_in_rule_child(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(tm2, tm3) in self.rule_child.iter_all() {
+            for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, _) in self.rule_child_term.iter_all_0_1(tm0, tm2) {
+                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                     self.record_action_245(delta, tm0, tm1, tm3);
                 }
             }
@@ -49828,9 +49811,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
             #[allow(unused_variables)]
-            for VarTermNode(tm0, tm1) in self.var_term_node.iter_all() {
+            for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, _) in self.rule_child_term.iter_all_0_1(tm0, tm2) {
+                for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     self.record_action_245(delta, tm0, tm1, tm3);
                 }
             }
@@ -49838,9 +49821,9 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildTerm(tm0, tm2) in self.rule_child_term.iter_dirty() {
             #[allow(unused_variables)]
-            for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
+            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     self.record_action_245(delta, tm0, tm1, tm3);
                 }
             }
@@ -49857,17 +49840,15 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_246(&self, delta: &mut ModelDelta) {
+    fn query_and_record_after_then_should_be_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                         self.record_action_246(delta, tm0);
                     }
                 }
@@ -49876,13 +49857,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                         self.record_action_246(delta, tm0);
                     }
                 }
@@ -49891,13 +49870,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                 #[allow(unused_variables)]
-                for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_all() {
+                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm6, _, _) in
-                        self.cons_stmt_list_node.iter_all_1_2(tm2, tm4)
-                    {
+                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                         self.record_action_246(delta, tm0);
                     }
                 }
@@ -49906,13 +49883,11 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_all() {
+            for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                 #[allow(unused_variables)]
                 for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, _, tm5) in
-                        self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                    {
+                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                         self.record_action_246(delta, tm0);
                     }
                 }
