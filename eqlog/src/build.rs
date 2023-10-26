@@ -181,11 +181,9 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .into_iter()
         .map(|rule| flatten(rule, &eqlog, &identifiers))
         .collect();
-    query_actions.extend(
-        rule_flattenings
-            .into_iter()
-            .map(|flattening| lower_sequent_seminaive(&flattening.sequent, &flattening.sorts)),
-    );
+    query_actions.extend(rule_flattenings.into_iter().map(|flattening| {
+        lower_sequent_seminaive(&flattening.name, &flattening.sequent, &flattening.sorts)
+    }));
     let query_atoms = query_actions
         .iter()
         .map(|qa| qa.queries.iter().flatten())

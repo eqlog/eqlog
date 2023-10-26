@@ -42,6 +42,7 @@ pub enum ActionAtom {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub struct QueryAction {
+    pub name: Option<String>,
     pub queries: Vec<Vec<QueryAtom>>,
     pub action_inputs: BTreeSet<FlatTerm>,
     pub action: Vec<ActionAtom>,

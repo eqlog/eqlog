@@ -1305,6 +1305,13 @@ fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Resul
     Ok(())
 }
 
+fn display_rule_name<'a>(axiom_index: usize, query_action: &'a QueryAction) -> impl 'a + Display {
+    match &query_action.name {
+        Some(name) => name.to_string(),
+        None => format!("{axiom_index}"),
+    }
+}
+
 fn write_query_and_record_fn(
     out: &mut impl Write,
     query_action: &QueryAction,
@@ -1312,8 +1319,9 @@ fn write_query_and_record_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
+    let name = display_rule_name(axiom_index, query_action);
     writedoc! {out, "
-        fn query_and_record_{axiom_index}(&self, delta: &mut ModelDelta) {{
+        fn query_and_record_{name}(&self, delta: &mut ModelDelta) {{
     "}?;
 
     for query in query_action.queries.iter() {
@@ -1556,16 +1564,22 @@ fn write_recall_previous_dirt(
 fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
     let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
 
-    let surjective_axioms = (0..query_actions.len())
-        .filter(is_surjective_axiom)
-        .format_with("\n", |i, f| {
-            f(&format_args!("self.query_and_record_{i}(&mut delta);"))
+    let surjective_axioms = query_actions
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| is_surjective_axiom(i))
+        .format_with("\n", |(i, qa), f| {
+            let name = display_rule_name(i, qa);
+            f(&format_args!("self.query_and_record_{name}(&mut delta);"))
         });
 
-    let non_surjective_axioms = (0..query_actions.len())
-        .filter(|i| !is_surjective_axiom(i))
-        .format_with("\n", |i, f| {
-            f(&format_args!("self.query_and_record_{i}(&mut delta);"))
+    let non_surjective_axioms = query_actions
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !is_surjective_axiom(i))
+        .format_with("\n", |(i, qa), f| {
+            let name = display_rule_name(i, qa);
+            f(&format_args!("self.query_and_record_{name}(&mut delta);"))
         });
 
     writedoc! {out, "

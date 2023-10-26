@@ -5,6 +5,7 @@ use maplit::btreeset;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub struct SequentFlattening {
+    pub name: Option<String>,
     pub sequent: FlatSequent,
     pub sorts: BTreeMap<FlatTerm, String>,
 }
@@ -278,6 +279,9 @@ pub fn flatten(
 ) -> SequentFlattening {
     let chain = eqlog.grouped_rule_chain(rule).unwrap();
     let restricted_chain = RestrictedChain::from_chain(chain, eqlog);
+    let name = eqlog
+        .rule_name(rule)
+        .map(|ident| identifiers.get(&ident).unwrap().to_string());
 
     let flattening = match restricted_chain {
         RestrictedChain::Empty { chain: _ } => {
@@ -286,7 +290,11 @@ pub fn flatten(
                 conclusion: Vec::new(),
             };
             let sorts = BTreeMap::new();
-            SequentFlattening { sequent, sorts }
+            SequentFlattening {
+                name,
+                sequent,
+                sorts,
+            }
         }
         RestrictedChain::Singleton {
             chain: _,
@@ -303,7 +311,11 @@ pub fn flatten(
                 conclusion,
             };
             let sorts = sort_map(&flat_names, eqlog, identifiers);
-            SequentFlattening { sequent, sorts }
+            SequentFlattening {
+                name,
+                sequent,
+                sorts,
+            }
         }
         RestrictedChain::Morphism {
             chain: _,
@@ -324,7 +336,11 @@ pub fn flatten(
                 conclusion,
             };
             let sorts = sort_map(&flat_names, eqlog, identifiers);
-            SequentFlattening { sequent, sorts }
+            SequentFlattening {
+                name,
+                sequent,
+                sorts,
+            }
         }
     };
 

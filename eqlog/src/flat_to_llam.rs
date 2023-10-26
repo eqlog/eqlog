@@ -169,6 +169,7 @@ fn query_outputs(atoms: &[QueryAtom]) -> BTreeSet<FlatTerm> {
 
 #[allow(dead_code)]
 pub fn lower_sequent_naive(
+    name: Option<String>,
     sequent: &FlatSequent,
     sorts: &BTreeMap<FlatTerm, String>,
 ) -> QueryAction {
@@ -186,6 +187,7 @@ pub fn lower_sequent_naive(
 
     let action_inputs = action_inputs(action.as_slice());
     QueryAction {
+        name,
         queries: vec![query],
         action,
         action_inputs,
@@ -215,6 +217,7 @@ pub fn lower_premise_atoms_seminaive(atoms: &[FlatAtom], dirty_index: usize) -> 
 
 #[allow(dead_code)]
 pub fn lower_sequent_seminaive(
+    name: &Option<String>,
     sequent: &FlatSequent,
     sorts: &BTreeMap<FlatTerm, String>,
 ) -> QueryAction {
@@ -236,6 +239,7 @@ pub fn lower_sequent_seminaive(
 
     let action_inputs = action_inputs(action.as_slice());
     QueryAction {
+        name: name.clone(),
         queries,
         action,
         action_inputs,
@@ -281,6 +285,7 @@ pub fn functionality(relation: &str, arity: &[&str]) -> QueryAction {
     };
 
     QueryAction {
+        name: Some(format!("functionality_{relation}")),
         queries: vec![vec![lhs_query, rhs_query]],
         sorts,
         action_inputs,
