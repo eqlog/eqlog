@@ -14,55 +14,64 @@ pub struct SequentFlattening {
 ///
 /// This is useful for the time being since general chains are not supported yet.
 enum RestrictedChain {
-    Empty {
-        #[allow(unused)]
-        chain: Chain,
+    // The chain is given by just the initial structure, representing the empty rule.
+    Initial(),
+    // The chain is given by just then-transition from the initial structure, representing a rule
+    // without if statements.
+    OnlyThen {
+        then_transition: Morphism,
     },
-    Singleton {
-        #[allow(unused)]
-        chain: Chain,
-        structure: Structure,
-    },
-    Morphism {
-        #[allow(unused)]
-        chain: Chain,
-        domain: Structure,
-        morphism: Morphism,
-        #[allow(unused)]
-        codomain: Structure,
+    // The chain is given by an "if" transition from the initial structure, followed by a "then"
+    // transition. This represents a rule with if statements followed by then statements.
+    IfThen {
+        if_transition: Morphism,
+        then_transition: Morphism,
     },
 }
 
 impl RestrictedChain {
-    fn from_chain(chain: Chain, eqlog: &Eqlog) -> Self {
-        if eqlog
-            .iter_nil_chain()
-            .find(|ch| eqlog.are_equal_chain(*ch, chain))
-            .is_some()
-        {
-            return RestrictedChain::Empty { chain };
+    fn from_grouped_rule_chain(chain: Chain, eqlog: &Eqlog) -> Self {
+        let tail = eqlog
+            .chain_tail(chain)
+            .expect("Grouped rule chains should not be empty");
+        let first_struct = eqlog
+            .chain_head_structure(chain)
+            .expect("Grouped rule chains should not be empty");
+        assert!(
+            eqlog.are_equal_structure(first_struct, eqlog.initial_structure().unwrap()),
+            "Grouped rule chains should always start with the initial structure"
+        );
+
+        if eqlog.are_equal_chain(tail, eqlog.nil_chain().unwrap()) {
+            return RestrictedChain::Initial();
         }
 
-        let tail = eqlog.chain_tail(chain).unwrap();
-        let structure = eqlog.chain_head_structure(chain).unwrap();
-
-        if eqlog
-            .iter_nil_chain()
-            .find(|ch| eqlog.are_equal_chain(*ch, tail))
-            .is_some()
-        {
-            return RestrictedChain::Singleton { chain, structure };
+        let first_second_trans = eqlog
+            .chain_head_transition(chain)
+            .expect("Chains with non-nil tail should have a head transition");
+        let tail_tail = eqlog
+            .chain_tail(tail)
+            .expect("Non-nil chain should have a tail");
+        if eqlog.are_equal_chain(tail_tail, eqlog.nil_chain().unwrap()) {
+            return RestrictedChain::OnlyThen {
+                then_transition: first_second_trans,
+            };
         }
 
-        let domain = structure;
-        let morphism = eqlog.chain_head_transition(chain).unwrap();
-        let codomain = eqlog.chain_head_structure(tail).unwrap();
+        let second_third_trans = eqlog
+            .chain_head_transition(tail)
+            .expect("Chains with non-nil tail should have a head transition");
+        let tail_tail_tail = eqlog
+            .chain_tail(tail_tail)
+            .expect("Chains with non-nil tail should have a head transition");
+        assert!(
+            eqlog.are_equal_chain(tail_tail_tail, eqlog.nil_chain().unwrap()),
+            "Grouped rule chains should not have more than 3 structures"
+        );
 
-        RestrictedChain::Morphism {
-            chain,
-            domain,
-            morphism,
-            codomain,
+        RestrictedChain::IfThen {
+            if_transition: first_second_trans,
+            then_transition: second_third_trans,
         }
     }
 }
@@ -278,13 +287,13 @@ pub fn flatten(
     identifiers: &BTreeMap<Ident, String>,
 ) -> SequentFlattening {
     let chain = eqlog.grouped_rule_chain(rule).unwrap();
-    let restricted_chain = RestrictedChain::from_chain(chain, eqlog);
+    let restricted_chain = RestrictedChain::from_grouped_rule_chain(chain, eqlog);
     let name = eqlog
         .rule_name(rule)
         .map(|ident| identifiers.get(&ident).unwrap().to_string());
 
     let flattening = match restricted_chain {
-        RestrictedChain::Empty { chain: _ } => {
+        RestrictedChain::Initial() => {
             let sequent = FlatSequent {
                 premise: Vec::new(),
                 conclusion: Vec::new(),
@@ -296,16 +305,15 @@ pub fn flatten(
                 sorts,
             }
         }
-        RestrictedChain::Singleton {
-            chain: _,
-            structure,
-        } => {
-            let premise: Vec<FlatAtom> = Vec::new();
-            let initiality_morphism = eqlog.initiality_morphism(structure).unwrap();
+        RestrictedChain::OnlyThen { then_transition } => {
+            let premise = Vec::new();
+            let flat_names = BTreeMap::new();
+            let premise_terms: BTreeSet<FlatTerm> = BTreeSet::new();
+
             let (flat_names, mut conclusion) =
-                flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
-            let premise_terms = BTreeSet::new();
+                flatten_delta(then_transition, flat_names, eqlog, identifiers);
             conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
+
             let sequent = FlatSequent {
                 premise,
                 conclusion,
@@ -317,20 +325,20 @@ pub fn flatten(
                 sorts,
             }
         }
-        RestrictedChain::Morphism {
-            chain: _,
-            domain,
-            morphism,
-            codomain: _,
+        RestrictedChain::IfThen {
+            if_transition,
+            then_transition,
         } => {
-            let initiality_morphism = eqlog.initiality_morphism(domain).unwrap();
+            let flat_names = BTreeMap::new();
             let (flat_names, premise) =
-                flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
+                flatten_delta(if_transition, flat_names, eqlog, identifiers);
             let premise_terms: BTreeSet<FlatTerm> =
                 flat_names.values().flatten().copied().collect();
+
             let (flat_names, mut conclusion) =
-                flatten_delta(morphism, flat_names, eqlog, identifiers);
+                flatten_delta(then_transition, flat_names, eqlog, identifiers);
             conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
+
             let sequent = FlatSequent {
                 premise,
                 conclusion,
@@ -341,7 +349,31 @@ pub fn flatten(
                 sequent,
                 sorts,
             }
-        }
+        } // RestrictedChain::Morphism {
+          //     chain: _,
+          //     domain,
+          //     morphism,
+          //     codomain: _,
+          // } => {
+          //     let initiality_morphism = eqlog.initiality_morphism(domain).unwrap();
+          //     let (flat_names, premise) =
+          //         flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
+          //     let premise_terms: BTreeSet<FlatTerm> =
+          //         flat_names.values().flatten().copied().collect();
+          //     let (flat_names, mut conclusion) =
+          //         flatten_delta(morphism, flat_names, eqlog, identifiers);
+          //     conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
+          //     let sequent = FlatSequent {
+          //         premise,
+          //         conclusion,
+          //     };
+          //     let sorts = sort_map(&flat_names, eqlog, identifiers);
+          //     SequentFlattening {
+          //         name,
+          //         sequent,
+          //         sorts,
+          //     }
+          // }
     };
 
     #[cfg(debug_assertions)]

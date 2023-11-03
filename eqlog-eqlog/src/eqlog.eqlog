@@ -995,10 +995,19 @@ rule pred_then_atom_semantics {
 // is the structure in the (ungrouped) chain of the last statement in that
 // group.
 func grouped_rule_chain(RuleDeclNode) -> Chain;
+
+rule grouped_rule_chain_total {
+    if rule_decl(rul, _);
+    then grouped_rule_chain(rul)!;
+}
+
 rule grouped_rule_stmt_list_chain {
-    if rule_decl(node, stmts);
-    if grouped_chain = grouped_stmt_list_chain(stmts);
-    then grouped_rule_chain(node) = grouped_chain;
+    if rule_decl(rul, stmts);
+    if grc = grouped_rule_chain(rul);
+    if gsc = grouped_stmt_list_chain(stmts);
+    if is = initial_structure();
+    then chain_head_structure(grc) = is;
+    then chain_tail(grc) = gsc;
 }
 
 func grouped_stmt_list_chain(StmtListNode) -> Chain;
