@@ -1,5 +1,5 @@
 [package]
-name = "eqlog-test-failure"
+name = "eqlog-test-compile"
 version = "0.1.0"
 edition = "2021"
 

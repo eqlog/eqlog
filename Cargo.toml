@@ -4,8 +4,8 @@ resolver = "2"
 members = [
   "eqlog",
   "eqlog-runtime",
-  "eqlog-test",
-  "eqlog-test-failure",
+  "eqlog-test-eval",
+  "eqlog-test-compile",
 	"v1_to_v2",
   "examples/inference",
   "eqlog-eqlog",
