@@ -1,0 +1,6 @@
+Error: function takes 0 arguments but 1 were supplied
+ --> error-test-source/bad-argument-number-function-nullary/theory.eql:5
+  | 
+5 |     if bar(x) = y;
+  |        ^^^^^^     
+  | 

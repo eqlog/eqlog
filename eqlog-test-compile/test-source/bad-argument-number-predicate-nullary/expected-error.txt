@@ -1,6 +1,0 @@
-Error: predicate takes 0 arguments but 1 were supplied
- --> test-source/bad-argument-number-predicate-nullary/theory.eql:6
-  | 
-6 |     then bar(x);
-  |          ^^^^^^ 
-  | 

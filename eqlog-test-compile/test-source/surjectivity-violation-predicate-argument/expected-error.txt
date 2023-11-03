@@ -1,6 +1,0 @@
-Error: term does not appear earlier in this rule
- --> test-source/surjectivity-violation-predicate-argument/theory.eql:8
-  | 
-8 |     then bar(foo(x));
-  |              ^^^^^^  
-  | 

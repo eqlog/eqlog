@@ -1,0 +1,12 @@
+Error: expected function, found predicate "bar"
+ --> error-test-source/bad-symbol-kind-predicate-function/theory.eql:5
+  | 
+5 |     if x = bar(a);
+  |            ^^^^^^ 
+  | 
+"bar" declared as predicate here:
+ --> error-test-source/bad-symbol-kind-predicate-function/theory.eql:2
+  | 
+2 | pred bar(Foo);
+  | ^^^^^^^^^^^^^^
+  | 

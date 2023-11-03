@@ -1,0 +1,6 @@
+Error: variable introduced in then statement
+ --> error-test-source/variable-introduced-in-then-statement/theory.eql:8
+  | 
+8 |     then foo(z) = x;
+  |              ^      
+  | 

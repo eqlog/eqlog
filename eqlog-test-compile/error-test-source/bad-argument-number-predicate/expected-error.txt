@@ -1,0 +1,6 @@
+Error: predicate takes 3 arguments but 2 were supplied
+ --> error-test-source/bad-argument-number-predicate/theory.eql:5
+  | 
+5 |     if bar(x, y);
+  |        ^^^^^^^^^ 
+  | 

@@ -1,0 +1,6 @@
+Error: undeclared symbol "A"
+ --> error-test-source/undeclared-type/theory.eql:1
+  | 
+1 | pred foo(A);
+  |          ^  
+  | 

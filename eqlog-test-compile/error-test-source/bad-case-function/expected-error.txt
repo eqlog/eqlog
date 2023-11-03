@@ -1,0 +1,6 @@
+Error: function "Foo" is not lower_snake_case
+ --> error-test-source/bad-case-function/theory.eql:2
+  | 
+2 | func Foo() -> Bar;
+  | ^^^^^^^^^^^^^^^^^^
+  | 

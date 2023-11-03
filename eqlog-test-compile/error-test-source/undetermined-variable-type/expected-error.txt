@@ -1,0 +1,6 @@
+Error: sort of term undetermined
+ --> error-test-source/undetermined-variable-type/theory.eql:2
+  | 
+2 |     if x = y;
+  |        ^     
+  | 

@@ -1,6 +1,0 @@
-Error: variable has already been introduced earlier
- --> test-source/then-defined-variable-not-new/theory.eql:7
-  | 
-7 |     then y := foo(x)!;
-  |          ^            
-  | 

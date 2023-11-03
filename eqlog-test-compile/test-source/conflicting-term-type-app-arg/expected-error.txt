@@ -1,6 +1,0 @@
-Error: term has conflicting types
- --> test-source/conflicting-term-type-app-arg/theory.eql:8
-  | 
-8 |     if bar(foo()) = x;
-  |            ^^^^^      
-  | 

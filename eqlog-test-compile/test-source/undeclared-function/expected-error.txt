@@ -1,6 +1,0 @@
-Error: undeclared symbol "foo"
- --> test-source/undeclared-function/theory.eql:2
-  | 
-2 |     if x = foo();
-  |            ^^^^^ 
-  | 
