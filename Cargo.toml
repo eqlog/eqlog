@@ -9,7 +9,6 @@ members = [
 	"v1_to_v2",
   "examples/inference",
   "eqlog-eqlog",
-  "activate-rebuild-features",
   "eqlog-eqlog-tree",
   "eqlog-tree",
 ]

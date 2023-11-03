@@ -7,4 +7,4 @@ edition = "2021"
 eqlog-runtime = { path = "../eqlog-runtime" }
 
 [build-dependencies]
-eqlog = { path = "../eqlog" }
+eqlog = { path = "../eqlog", features = ["rebuild"] }

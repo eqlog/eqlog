@@ -11,6 +11,10 @@ path = "../eqlog-eqlog-tree"
 name = "eqlog-tree"
 path = "main.rs"
 
+[features]
+default = ["rebuild"]
+rebuild = []
+
 # The remainder of this file must be kept in sync with the
 # dependencies of the  eqlog crate:
 [dependencies]
@@ -27,7 +31,3 @@ base16ct = { version = ">= 0", features = ["alloc"] }
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
-
-[features]
-default = []
-rebuild = []
