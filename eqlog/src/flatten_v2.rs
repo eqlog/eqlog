@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables)]
 
-use std::{collections::BTreeMap, iter::successors};
+use std::collections::BTreeMap;
 
 use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
@@ -53,63 +53,63 @@ fn flatten_non_surjective_then(
     todo!()
 }
 
-/// An iterator over the iterated tails of a [Chain]
-///
-/// This includes the provided `chain` itself and the final `nil_chain`.
-fn iter_tails<'a>(chain: Chain, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Chain> {
-    successors(Some(chain), |prev_chain| {
-        let next_chain = eqlog.chain_tail(*prev_chain);
-        if let None = next_chain {
-            assert!(
-                eqlog.are_equal_chain(*prev_chain, eqlog.nil_chain().unwrap()),
-                "Every chain except for the nil chain should have a tail"
-            );
-        }
-        next_chain
-    })
-}
-
-/// An iterator over the transitions in a [Chain].
-fn iter_transitions<'a>(chain: Chain, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Morphism> {
-    iter_tails(chain, eqlog).filter_map(|c| eqlog.chain_head_transition(c))
-}
-
-/// Assign compatible [FlatVar] to the elements of structs in a [Chain].
-///
-/// Since distinct structures have disjoint sets of elements, a single map can hold all assigned
-/// flat variables.
-fn assign_el_vars(chain: Chain, eqlog: &Eqlog) -> BTreeMap<El, FlatVar> {
-    let mut el_vars = BTreeMap::new();
-
-    // Note that if there is no transition at all, then the chain must consist of only the initial
-    // structure. In that case the resulting `BTreeMap` must be empty.
-    for transition in iter_transitions(chain, eqlog) {
-        let dom = eqlog
-            .dom(transition)
-            .expect("Every morphism should have a domain");
-        let cod = eqlog
-            .cod(transition)
-            .expect("Every morphism should have a domain");
-
-        for (m, preimage, image) in eqlog.iter_map_el() {
-            if !eqlog.are_equal_morphism(m, transition) {
-                continue;
-            }
-
-            if let Some(var) = el_vars.get(&preimage).copied() {
-                el_vars.insert(image, var);
-            }
-        }
-    }
-
-    el_vars
-}
+// /// An iterator over the iterated tails of a [Chain]
+// ///
+// /// This includes the provided `chain` itself and the final `nil_chain`.
+// fn iter_tails<'a>(chain: Chain, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Chain> {
+//     successors(Some(chain), |prev_chain| {
+//         let next_chain = eqlog.chain_tail(*prev_chain);
+//         if let None = next_chain {
+//             assert!(
+//                 eqlog.are_equal_chain(*prev_chain, eqlog.nil_chain().unwrap()),
+//                 "Every chain except for the nil chain should have a tail"
+//             );
+//         }
+//         next_chain
+//     })
+// }
+//
+// /// An iterator over the transitions in a [Chain].
+// fn iter_transitions<'a>(chain: Chain, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Morphism> {
+//     iter_tails(chain, eqlog).filter_map(|c| eqlog.chain_head_transition(c))
+// }
+//
+// /// Assign compatible [FlatVar] to the elements of structs in a [Chain].
+// ///
+// /// Since distinct structures have disjoint sets of elements, a single map can hold all assigned
+// /// flat variables.
+// fn assign_el_vars(chain: Chain, eqlog: &Eqlog) -> BTreeMap<El, FlatVar> {
+//     let mut el_vars = BTreeMap::new();
+//
+//     // Note that if there is no transition at all, then the chain must consist of only the initial
+//     // structure. In that case the resulting `BTreeMap` must be empty.
+//     for transition in iter_transitions(chain, eqlog) {
+//         let dom = eqlog
+//             .dom(transition)
+//             .expect("Every morphism should have a domain");
+//         let cod = eqlog
+//             .cod(transition)
+//             .expect("Every morphism should have a domain");
+//
+//         for (m, preimage, image) in eqlog.iter_map_el() {
+//             if !eqlog.are_equal_morphism(m, transition) {
+//                 continue;
+//             }
+//
+//             if let Some(var) = el_vars.get(&preimage).copied() {
+//                 el_vars.insert(image, var);
+//             }
+//         }
+//     }
+//
+//     el_vars
+// }
 
 fn flatten_rule(rule: RuleDeclNode, eqlog: &Eqlog) -> Vec<FlatStmt> {
-    let chain = eqlog
-        .grouped_rule_chain(rule)
-        .expect("grouped_rule_chain should be total");
-    let el_vars = assign_el_vars(chain, eqlog);
+    // let chain = eqlog
+    //     .grouped_rule_chain(rule)
+    //     .expect("grouped_rule_chain should be total");
+    // let el_vars = assign_el_vars(chain, eqlog);
 
     todo!()
 }

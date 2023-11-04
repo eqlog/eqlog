@@ -439,6 +439,16 @@ rule constrained_head_tail {
 type Morphism;
 func dom(Morphism) -> Structure;
 func cod(Morphism) -> Structure;
+
+rule dom_total {
+    if morph: Morphism;
+    then dom(morph)!;
+}
+rule cod_total {
+    if morph: Morphism;
+    then cod(morph)!;
+}
+
 func map_el(Morphism, El) -> El;
 func map_els(Morphism, ElList) -> ElList;
 
@@ -537,58 +547,6 @@ rule func_app_in_img_rule {
     if map_els(morphism, dom_els) = cod_els;
     if func_app(function, dom_els)!;
     then func_app_in_img(morphism, function, cod_els);
-}
-
-// ## The initial structure
-
-func initial_structure() -> Structure;
-func initiality_morphism(Structure) -> Morphism;
-
-rule initial_structure_total {
-    then initial_structure()!;
-}
-
-rule initiality_morphism_total {
-    if structure: Structure;
-    then initiality_morphism(structure)!;
-}
-
-rule dom_cod_initiality_morphism {
-    if initial_struct = initial_structure();
-    if initiality_morph = initiality_morphism(structure);
-    then dom(initiality_morph) = initial_struct;
-    then cod(initiality_morph) = structure;
-}
-
-rule initiality_uniqueness {
-    if dom(morph) = initial_structure();
-    if cod(morph) = structure;
-    then morph = initiality_morphism(structure);
-}
-
-// ## Non-empty chains of structures.
-
-type Chain;
-func nil_chain() -> Chain;
-func chain_tail(Chain) -> Chain;
-func chain_head_structure(Chain) -> Structure;
-func chain_head_transition(Chain) -> Morphism;
-
-rule chain_head_structure_defined {
-    if chain_tail(chain)!;
-    then chain_head_structure(chain)!;
-}
-rule chain_head_transition_defined {
-    if chain_tail(chain_tail(chain))!;
-    then chain_head_transition(chain)!;
-}
-rule chain_transition_signature {
-    if tail = chain_tail(chain);
-    if head_0 = chain_head_structure(chain);
-    if trans = chain_head_transition(chain);
-    if head_1 = chain_head_structure(tail);
-    then dom(trans) = head_0;
-    then cod(trans) = head_1;
 }
 
 // ## Symbol checks
@@ -744,49 +702,62 @@ rule app_term_arg_num_should_match {
     then func_arg_num_should_match(got_len, expected_len, loc);
 }
 
-// ## The Chain associated to a RuleDeclNode
+// ## The morphisms associated to statements.
 //
-// The chain of a rule has one structure for each statement in the rule. The
-// structure associated to statement corresponds to all the data that has been
-// hypothesized or concluded in this and prior statements.
+// Each statement in a rule corresponds to a morphism of structures. The domain
+// of this morphism corresponds to the data that has been queries or asserted
+// earlier in the rule, and the codomain to the result of adjoining the data in
+// that statement. Codomain and domain of subsequent statements match, so their
+// morphisms are composable.
 
-func rule_chain(RuleDeclNode) -> Chain;
-rule rule_chain_total {
-    if rul: RuleDeclNode;
-    then rule_chain(rul)!;
-}
-// The chain of rule always starts with the initial structure, with tail of the
-// being given by the statements in the rule.
-rule rule_stmt_list_chain {
-    if rule_decl(rul, stmts);
-    if rule_chain = rule_chain(rul);
-    if stmts_chain = stmt_list_chain(stmts);
-    then chain_tail(rule_chain) = stmts_chain;
-    then initial_structure()!;
-    then chain_head_structure(rule_chain) = initial_structure();
+func stmt_morphism(StmtNode) -> Morphism;
+rule stmt_morphism_total {
+    if stmt: StmtNode;
+    then stmt_morphism(stmt)!;
 }
 
-// ### The structure of the chain
-func stmt_list_chain(StmtListNode) -> Chain;
-rule stmt_list_chain_total {
-    if stmts: StmtListNode;
-    then stmt_list_chain(stmts)!;
+rule stmt_morphism_dom_cod {
+    if cons_stmt_list_node(_, first , tail);
+    if cons_stmt_list_node(tail, second , _);
+    if cod_first = cod(stmt_morphism(first));
+    if dom_second = dom(stmt_morphism(second));
+    then cod_first = dom_second;
 }
 
-rule stmt_list_chain_nil {
-    if nil_stmt_list_node(stmts);
-    if chain = stmt_list_chain(stmts);
-    then chain = nil_chain();
+pred if_morphism(Morphism);
+pred surj_then_morphism(Morphism);
+pred non_surj_then_morphism(Morphism);
+
+rule if_stmt_morphism {
+    if if_stmt_node(stmt, _);
+    if morph = stmt_morphism(stmt);
+    then if_morphism(morph);
 }
-rule stmt_list_chain_cons {
-    if cons_stmt_list_node(stmts, _, tail_stmts);
-    if stmts_chain = stmt_list_chain(stmts);
-    if tail_chain = stmt_list_chain(tail_stmts);
-    then chain_tail(stmts_chain) = tail_chain;
+rule then_equal_stmt_morphism {
+    if then_stmt_node(stmt, atom);
+    if equal_then_atom_node(atom, _, _);
+    if morph = stmt_morphism(stmt);
+    then surj_then_morphism(morph);
+}
+rule then_pred_stmt_morphism {
+    if then_stmt_node(stmt, atom);
+    if pred_then_atom_node(atom, _, _);
+    if morph = stmt_morphism(stmt);
+    then surj_then_morphism(morph);
+}
+rule then_defined_stmt_morphism {
+    if then_stmt_node(stmt, atom);
+    if defined_then_atom_node(atom, _, _);
+    if morph = stmt_morphism(stmt);
+    then non_surj_then_morphism(morph);
 }
 
 // ### Propagation of associated structures through the AST
-
+//
+// Even though a statement corresponds to a morphism, inside the statement we
+// only need access to the codomain of that morphism. That's the
+// stmt_structure, and similarly for subnodes of statements.
+//
 // #### Propagate stmt structure through if and then stmts.
 func stmt_structure(StmtNode) -> Structure;
 func if_atom_structure(IfAtomNode) -> Structure;
@@ -795,10 +766,9 @@ func term_structure(TermNode) -> Structure;
 func terms_structure(TermListNode) -> Structure;
 func opt_term_structure(OptTermNode) -> Structure;
 
-rule stmt_structure_chain {
-    if cons_stmt_list_node(stmts, stmt, _);
-    if structure = chain_head_structure(stmt_list_chain(stmts));
-    then stmt_structure(stmt) = structure;
+rule stmt_structure_morphism {
+    if s = cod(stmt_morphism(stmt));
+    then stmt_structure(stmt) = s;
 }
 
 rule if_stmt_structure {
@@ -986,100 +956,146 @@ rule pred_then_atom_semantics {
     then pred_app(predicate, arg_els);
 }
 
-
-// ### The *grouped* Chain associated to a RuleDeclNode
+// ### The *grouped* morphism associated to a statement
 //
-// The chain of a rule has one object for each *group* of statements, where
-// groups are given by consecutive statements of the same type (i.e. either
-// `if` or `then` statements). The structure associated to a statement group 
-// is the structure in the (ungrouped) chain of the last statement in that
-// group.
-func grouped_rule_chain(RuleDeclNode) -> Chain;
-
-rule grouped_rule_chain_total {
-    if rule_decl(rul, _);
-    then grouped_rule_chain(rul)!;
+// Consecutive if statements and surjective then statements have the same
+// grouped morphism.
+func grouped_stmt_morphism(StmtNode) -> Morphism;
+rule grouped_stmt_morphism_total {
+    if stmt: StmtNode;
+    then grouped_stmt_morphism(stmt)!;
 }
 
-rule grouped_rule_stmt_list_chain {
+// ### The first grouped morphism associated to a rule.
+func rule_first_grouped_morphism(RuleDeclNode) -> Morphism;
+rule rule_stmt_first_grouped {
     if rule_decl(rul, stmts);
-    if grc = grouped_rule_chain(rul);
-    if gsc = grouped_stmt_list_chain(stmts);
-    if is = initial_structure();
-    then chain_head_structure(grc) = is;
-    then chain_tail(grc) = gsc;
+    if cons_stmt_list_node(stmts, first, _);
+    if gsm = grouped_stmt_morphism(first);
+    then rule_first_grouped_morphism(rul) = gsm;
 }
 
-func grouped_stmt_list_chain(StmtListNode) -> Chain;
-rule grouped_stmt_list_chain_total {
-    if stmts: StmtListNode;
-    then grouped_stmt_list_chain(stmts)!;
+// #### The grouped statement morphism has the same type as the ungrouped one.
+rule grouped_stmt_morphism_if {
+    if if_morphism(stmt_morphism(stmt));
+    if gsm = grouped_stmt_morphism(stmt);
+    then if_morphism(gsm);
+}
+rule grouped_stmt_morphism_surj_then {
+    if surj_then_morphism(stmt_morphism(stmt));
+    if gsm = grouped_stmt_morphism(stmt);
+    then surj_then_morphism(gsm);
+}
+rule grouped_stmt_morphism_non_surj_then {
+    if non_surj_then_morphism(stmt_morphism(stmt));
+    if gsm = grouped_stmt_morphism(stmt);
+    then non_surj_then_morphism(gsm);
 }
 
-// The grouped chain of the empty statement list is the empty chain.
-rule grouped_stmt_list_chain_nil {
-    if nil_stmt_list_node(stmts);
-    if grouped_chain = grouped_stmt_list_chain(stmts);
-    then grouped_chain = nil_chain();
+// #### The domain of a grouped morphism of the first statement in a rule.
+rule grouped_stmt_morphism_first_in_rule {
+    if rule_decl(_, stmts);
+    if cons_stmt_list_node(stmts, first, _);
+    if sm_dom = dom(stmt_morphism(first));
+    if gsm_dom = dom(grouped_stmt_morphism(first));
+    then sm_dom = gsm_dom;
 }
 
-// For either
-//
-// - two consecutive `if` statements, or
-// - two consecutive `then` statements
-//
-// the chains of the two statements agree.
-rule grouped_chain_if_if {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if if_stmt_node(first, _);
-    if if_stmt_node(second, _);
-    if stmts_chain = grouped_stmt_list_chain(stmts);
-    then grouped_stmt_list_chain(stmts_tail) = stmts_chain;
-}
-rule stmt_list_chain_then_then {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if then_stmt_node(first, _);
-    if then_stmt_node(second, _);
-    if stmts_chain = grouped_stmt_list_chain(stmts);
-    then grouped_stmt_list_chain(stmts_tail) = stmts_chain;
+// #### The codomain of a grouped morphism of a singleton statement.
+rule grouped_stmt_morphism_singleton {
+    if cons_stmt_list_node(_, first, tail);
+    if nil_stmt_list_node(tail);
+    if gsm_cod = cod(grouped_stmt_morphism(first));
+    if sm_cod = cod(stmt_morphism(first));
+    then gsm_cod = sm_cod;
 }
 
-// For a statement followed by a statement of different type (e.g. `if`
-// statement followed by a `then` statement or no statement at all), there is a
-// transition in the grouped chain. The head of the chain agrees with the head
-// of the ungrouped chain.
-rule stmt_list_chain_singleton {
-    if cons_stmt_list_node(stmts, _, stmts_tail);
-    if nil_stmt_list_node(stmts_tail);
-    if grouped_chain = grouped_stmt_list_chain(stmts);
-    if grouped_tail_chain = grouped_stmt_list_chain(stmts_tail);
-    if ungrouped_chain_head = chain_head_structure(stmt_list_chain(stmts));
-    then chain_tail(grouped_chain) = grouped_tail_chain;
-    then chain_head_structure(grouped_chain) = ungrouped_chain_head;
+// #### The next grouped morphism in a statement list
+func next_grouped_morphism(Morphism) -> Morphism;
+rule next_grouped_dom_cod {
+    if cons_stmt_list_node(_, first, tail);
+    if cons_stmt_list_node(tail, second, _);
+    if first_gsm = grouped_stmt_morphism(first);
+    if second_gsm = grouped_stmt_morphism(second);
+    if next_grouped_morphism(first_gsm) = second_gsm;
+    if s = cod(stmt_morphism(first));
+    then cod(first_gsm) = s;
+    then dom(second_gsm) = s;
 }
-rule grouped_chain_if_then {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if if_stmt_node(first, _);
-    if then_stmt_node(second, _);
-    if grouped_chain = grouped_stmt_list_chain(stmts);
-    if grouped_tail_chain = grouped_stmt_list_chain(stmts_tail);
-    if ungrouped_chain_head = chain_head_structure(stmt_list_chain(stmts));
-    then chain_tail(grouped_chain) = grouped_tail_chain;
-    then chain_head_structure(grouped_chain) = ungrouped_chain_head;
+
+// #### Grouping rules for an if morphism followed by a morphism.
+rule grouped_stmt_morphism_if_if {
+    if cons_stmt_list_node(_, first, tail);
+    if if_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+    if if_morphism(stmt_morphism(second));
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then gsm_first = gsm_second;
 }
-rule grouped_chain_then_if {
-    if cons_stmt_list_node(stmts, first, stmts_tail);
-    if cons_stmt_list_node(stmts_tail, second, _);
-    if then_stmt_node(first, _);
-    if if_stmt_node(second, _);
-    if grouped_chain = grouped_stmt_list_chain(stmts);
-    if grouped_tail_chain = grouped_stmt_list_chain(stmts_tail);
-    if ungrouped_chain_head = chain_head_structure(stmt_list_chain(stmts));
-    then chain_tail(grouped_chain) = grouped_tail_chain;
-    then chain_head_structure(grouped_chain) = ungrouped_chain_head;
+rule grouped_stmt_morphism_if_surj_then {
+    if cons_stmt_list_node(_, first, tail);
+    if if_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+    if surj_then_morphism(stmt_morphism(second));
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then next_grouped_morphism(gsm_first) = gsm_second;
+}
+rule grouped_stmt_morphism_if_non_surj_then {
+    if cons_stmt_list_node(_, first, tail);
+    if if_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+    if non_surj_then_morphism(stmt_morphism(second));
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then next_grouped_morphism(gsm_first) = gsm_second;
+}
+
+// #### Grouping rules for a surjective then morphism followed by a morphism.
+rule grouped_stmt_morphism_surj_then_if {
+    if cons_stmt_list_node(_, first, tail);
+    if surj_then_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+    if if_morphism(stmt_morphism(second));
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then next_grouped_morphism(gsm_first) = gsm_second;
+}
+rule grouped_stmt_morphism_surj_then_surj_then {
+    if cons_stmt_list_node(_, first, tail);
+    if surj_then_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+    if surj_then_morphism(stmt_morphism(second));
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then gsm_first = gsm_second;
+}
+rule grouped_stmt_morphism_surj_then_non_surj_then {
+    if cons_stmt_list_node(_, first, tail);
+    if surj_then_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+    if non_surj_then_morphism(stmt_morphism(second));
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then next_grouped_morphism(gsm_first) = gsm_second;
+}
+
+// #### Grouping rule for a non-surjective then morphism followed by a morphism.
+rule grouped_stmt_morphism_non_surj {
+    if cons_stmt_list_node(_, first, tail);
+    if non_surj_then_morphism(stmt_morphism(first));
+    if cons_stmt_list_node(tail, second, _);
+
+    if gsm_first = grouped_stmt_morphism(first);
+    if gsm_second = grouped_stmt_morphism(second);
+    then next_grouped_morphism(gsm_first) = gsm_second;
 }
 
 // ## Epic check
@@ -1326,53 +1342,12 @@ rule then_atom_epic_ok_pred {
 
 // ## Surjectivity check
 
+// Only *ungrouped* surjective then morphisms need surjectivity checking.
 pred should_be_surjective(Morphism);
-rule then_stmt_surjective {
-    if cons_stmt_list_node(stmts, _, tail_stmts);
-    if cons_stmt_list_node(tail_stmts, second_stmt, _);
-    if then_stmt_node(second_stmt, _);
-    if chain = stmt_list_chain(stmts);
-    // TODO: This doesn't work if the first statement in a rule is a then
-    // statement, since then there's no chain_head_transition. This should be
-    // fixed by making every chain start with the initial structure.
-    if morph = chain_head_transition(chain);
+rule surj_then_should_be_surjective {
+    if morph = stmt_morphism(_);
+    if surj_then_morphism(morph);
     then should_be_surjective(morph);
-}
-
-pred term_surjective_exempted(TermNode);
-pred terms_surjective_exempted(TermListNode);
-
-rule cons_head_tail_terms_surjective_exempted {
-    if cons_term_list_node(tms, head, tail);
-    if terms_surjective_exempted(tms);
-    then term_surjective_exempted(head);
-    then terms_surjective_exempted(tail);
-}
-
-rule head_tail_cons_terms_surjective_exempted {
-    if cons_term_list_node(tms, head, tail);
-    if term_surjective_exempted(head);
-    if terms_surjective_exempted(tail);
-    then terms_surjective_exempted(tms);
-}
-
-rule subterms_surjective_exempted {
-    if app_term_node(tm, _, args);
-    if term_surjective_exempted(tm);
-    then terms_surjective_exempted(args);
-}
-
-rule defined_atom_surjective_exempted {
-    if defined_then_atom_node(_, _, tm);
-    then term_surjective_exempted(tm);
-}
-
-pred el_surjective_exempted(El);
-
-rule semantic_el_exempted {
-    if term_surjective_exempted(tm);
-    if el = semantic_el(tm);
-    then el_surjective_exempted(el);
 }
 
 pred el_should_be_surjective_ok(El);
@@ -1382,11 +1357,6 @@ rule surjective_codomain_should_be_ok {
     if should_be_surjective(morph);
     if el_structure(el) = cod(morph);
     then el_should_be_surjective_ok(el);
-}
-
-rule surjective_exempted_el_is_ok {
-    if el_surjective_exempted(el);
-    then el_is_surjective_ok(el);
 }
 
 rule surjective_img_el_is_ok {

@@ -3,6 +3,7 @@ use crate::flat_ast::*;
 use eqlog_eqlog::*;
 use maplit::btreeset;
 use std::collections::{BTreeMap, BTreeSet};
+use std::iter::successors;
 
 pub struct SequentFlattening {
     pub name: Option<String>,
@@ -10,70 +11,13 @@ pub struct SequentFlattening {
     pub sorts: BTreeMap<FlatTerm, String>,
 }
 
-/// A chain with at most one morphism (i.e. two objects).
-///
-/// This is useful for the time being since general chains are not supported yet.
-enum RestrictedChain {
-    // The chain is given by just the initial structure, representing the empty rule.
-    Initial(),
-    // The chain is given by just then-transition from the initial structure, representing a rule
-    // without if statements.
-    OnlyThen {
-        then_transition: Morphism,
-    },
-    // The chain is given by an "if" transition from the initial structure, followed by a "then"
-    // transition. This represents a rule with if statements followed by then statements.
-    IfThen {
-        if_transition: Morphism,
-        then_transition: Morphism,
-    },
-}
-
-impl RestrictedChain {
-    fn from_grouped_rule_chain(chain: Chain, eqlog: &Eqlog) -> Self {
-        let tail = eqlog
-            .chain_tail(chain)
-            .expect("Grouped rule chains should not be empty");
-        let first_struct = eqlog
-            .chain_head_structure(chain)
-            .expect("Grouped rule chains should not be empty");
-        assert!(
-            eqlog.are_equal_structure(first_struct, eqlog.initial_structure().unwrap()),
-            "Grouped rule chains should always start with the initial structure"
-        );
-
-        if eqlog.are_equal_chain(tail, eqlog.nil_chain().unwrap()) {
-            return RestrictedChain::Initial();
-        }
-
-        let first_second_trans = eqlog
-            .chain_head_transition(chain)
-            .expect("Chains with non-nil tail should have a head transition");
-        let tail_tail = eqlog
-            .chain_tail(tail)
-            .expect("Non-nil chain should have a tail");
-        if eqlog.are_equal_chain(tail_tail, eqlog.nil_chain().unwrap()) {
-            return RestrictedChain::OnlyThen {
-                then_transition: first_second_trans,
-            };
-        }
-
-        let second_third_trans = eqlog
-            .chain_head_transition(tail)
-            .expect("Chains with non-nil tail should have a head transition");
-        let tail_tail_tail = eqlog
-            .chain_tail(tail_tail)
-            .expect("Chains with non-nil tail should have a head transition");
-        assert!(
-            eqlog.are_equal_chain(tail_tail_tail, eqlog.nil_chain().unwrap()),
-            "Grouped rule chains should not have more than 3 structures"
-        );
-
-        RestrictedChain::IfThen {
-            if_transition: first_second_trans,
-            then_transition: second_third_trans,
-        }
-    }
+fn iter_grouped_morphisms<'a>(
+    rule: RuleDeclNode,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = Morphism> {
+    successors(eqlog.rule_first_grouped_morphism(rule), |prev| {
+        eqlog.next_grouped_morphism(*prev)
+    })
 }
 
 fn get_flat_term_or_create(el: El, flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>) -> FlatTerm {
@@ -87,30 +31,30 @@ fn get_flat_term_or_create(el: El, flat_names: &mut BTreeMap<El, BTreeSet<FlatTe
 
 fn flatten_delta(
     morphism: Morphism,
-    mut flat_names: BTreeMap<El, BTreeSet<FlatTerm>>,
+    flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> (BTreeMap<El, BTreeSet<FlatTerm>>, Vec<FlatAtom>) {
+) -> Vec<FlatAtom> {
     let codomain = eqlog.cod(morphism).unwrap();
     let mut atoms: Vec<FlatAtom> = Vec::new();
 
     for (el0, el1) in iter_in_ker(morphism, eqlog) {
         if !eqlog.are_equal_el(el0, el1) {
-            let tm0 = get_flat_term_or_create(el0, &mut flat_names);
-            let tm1 = get_flat_term_or_create(el1, &mut flat_names);
+            let tm0 = get_flat_term_or_create(el0, flat_names);
+            let tm1 = get_flat_term_or_create(el1, flat_names);
             atoms.push(FlatAtom::Equal(tm0, tm1));
         }
     }
 
-    flat_names = {
+    *flat_names = {
         let mut new_flat_names = BTreeMap::new();
-        for (el, tms) in flat_names.into_iter() {
-            let img_el = eqlog.map_el(morphism, el).unwrap();
+        for (el, tms) in flat_names.iter() {
+            let img_el = eqlog.map_el(morphism, *el).unwrap();
             for tm in tms {
                 new_flat_names
                     .entry(img_el)
                     .or_insert(BTreeSet::new())
-                    .insert(tm);
+                    .insert(*tm);
             }
         }
         new_flat_names
@@ -120,7 +64,7 @@ fn flatten_delta(
         if !eqlog.pred_tuple_in_img(morphism, pred, els) {
             let el_terms: Vec<FlatTerm> = el_list_vec(els, eqlog)
                 .into_iter()
-                .map(|el| get_flat_term_or_create(el, &mut flat_names))
+                .map(|el| get_flat_term_or_create(el, flat_names))
                 .collect();
             let pred_ident = eqlog
                 .iter_semantic_pred()
@@ -135,9 +79,9 @@ fn flatten_delta(
         if !eqlog.func_app_in_img(morphism, func, args) {
             let arg_terms: Vec<FlatTerm> = el_list_vec(args, eqlog)
                 .into_iter()
-                .map(|el| get_flat_term_or_create(el, &mut flat_names))
+                .map(|el| get_flat_term_or_create(el, flat_names))
                 .collect();
-            let result_term = get_flat_term_or_create(result, &mut flat_names);
+            let result_term = get_flat_term_or_create(result, flat_names);
 
             let mut tuple = arg_terms;
             tuple.push(result_term);
@@ -153,7 +97,7 @@ fn flatten_delta(
 
     for el in iter_els(codomain, eqlog) {
         if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
-            let tm = get_flat_term_or_create(el, &mut flat_names);
+            let tm = get_flat_term_or_create(el, flat_names);
 
             let typ = el_type(el, eqlog).unwrap();
             let type_ident = eqlog
@@ -165,7 +109,7 @@ fn flatten_delta(
         }
     }
 
-    (flat_names, atoms)
+    atoms
 }
 
 fn sort_map(
@@ -286,97 +230,69 @@ pub fn flatten(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> SequentFlattening {
-    let chain = eqlog.grouped_rule_chain(rule).unwrap();
-    let restricted_chain = RestrictedChain::from_grouped_rule_chain(chain, eqlog);
     let name = eqlog
         .rule_name(rule)
         .map(|ident| identifiers.get(&ident).unwrap().to_string());
+    let mut premise_flat_terms = BTreeSet::new();
+    let mut premise = Vec::new();
+    let mut conclusion = Vec::new();
+    let mut flat_names = BTreeMap::new();
 
-    let flattening = match restricted_chain {
-        RestrictedChain::Initial() => {
+    let mut grouped_morphisms = iter_grouped_morphisms(rule, eqlog);
+    let first_morphism = match grouped_morphisms.next() {
+        None => {
+            let sorts = BTreeMap::new();
             let sequent = FlatSequent {
                 premise: Vec::new(),
                 conclusion: Vec::new(),
             };
-            let sorts = BTreeMap::new();
-            SequentFlattening {
+            return SequentFlattening {
                 name,
                 sequent,
                 sorts,
-            }
-        }
-        RestrictedChain::OnlyThen { then_transition } => {
-            let premise = Vec::new();
-            let flat_names = BTreeMap::new();
-            let premise_terms: BTreeSet<FlatTerm> = BTreeSet::new();
-
-            let (flat_names, mut conclusion) =
-                flatten_delta(then_transition, flat_names, eqlog, identifiers);
-            conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
-
-            let sequent = FlatSequent {
-                premise,
-                conclusion,
             };
-            let sorts = sort_map(&flat_names, eqlog, identifiers);
-            SequentFlattening {
-                name,
-                sequent,
-                sorts,
-            }
         }
-        RestrictedChain::IfThen {
-            if_transition,
-            then_transition,
-        } => {
-            let flat_names = BTreeMap::new();
-            let (flat_names, premise) =
-                flatten_delta(if_transition, flat_names, eqlog, identifiers);
-            let premise_terms: BTreeSet<FlatTerm> =
-                flat_names.values().flatten().copied().collect();
+        Some(m) => m,
+    };
 
-            let (flat_names, mut conclusion) =
-                flatten_delta(then_transition, flat_names, eqlog, identifiers);
-            conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
+    if eqlog.if_morphism(first_morphism) {
+        premise = flatten_delta(first_morphism, &mut flat_names, eqlog, identifiers);
+        premise_flat_terms = flat_names.values().flatten().copied().collect();
+    } else {
+        assert!(
+            eqlog.surj_then_morphism(first_morphism)
+                || eqlog.non_surj_then_morphism(first_morphism),
+            "Every grouped morphism should be if, surj_then or non_surj_then"
+        );
+        conclusion.extend(flatten_delta(
+            first_morphism,
+            &mut flat_names,
+            eqlog,
+            identifiers,
+        ));
+    }
 
-            let sequent = FlatSequent {
-                premise,
-                conclusion,
-            };
-            let sorts = sort_map(&flat_names, eqlog, identifiers);
-            SequentFlattening {
-                name,
-                sequent,
-                sorts,
-            }
-        } // RestrictedChain::Morphism {
-          //     chain: _,
-          //     domain,
-          //     morphism,
-          //     codomain: _,
-          // } => {
-          //     let initiality_morphism = eqlog.initiality_morphism(domain).unwrap();
-          //     let (flat_names, premise) =
-          //         flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
-          //     let premise_terms: BTreeSet<FlatTerm> =
-          //         flat_names.values().flatten().copied().collect();
-          //     let (flat_names, mut conclusion) =
-          //         flatten_delta(morphism, flat_names, eqlog, identifiers);
-          //     conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
-          //     let sequent = FlatSequent {
-          //         premise,
-          //         conclusion,
-          //     };
-          //     let sorts = sort_map(&flat_names, eqlog, identifiers);
-          //     SequentFlattening {
-          //         name,
-          //         sequent,
-          //         sorts,
-          //     }
-          // }
+    for morph in grouped_morphisms {
+        assert!(
+            eqlog.surj_then_morphism(morph) || eqlog.non_surj_then_morphism(morph),
+            "Every morphism after the first must be a then morphism"
+        );
+        conclusion.extend(flatten_delta(morph, &mut flat_names, eqlog, identifiers));
+    }
+
+    let conclusion = sort_then_atoms(conclusion, premise_flat_terms, eqlog, identifiers);
+    let sorts = sort_map(&flat_names, eqlog, identifiers);
+    let sequent = FlatSequent {
+        premise,
+        conclusion,
     };
 
     #[cfg(debug_assertions)]
-    flattening.sequent.check();
-    flattening
+    sequent.check();
+
+    SequentFlattening {
+        name,
+        sequent,
+        sorts,
+    }
 }
