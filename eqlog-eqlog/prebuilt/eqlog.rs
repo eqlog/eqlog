@@ -1,4 +1,4 @@
-// src-digest: 245D811FE5DAFEBF6FA2FADA1C845760C5E145E85773E43A56A822BDE66FB73C
+// src-digest: DE98AB3D57C59D27506EB5EF248C8A62412D6DEDEC66ACBB050C31B3D1B42813
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
