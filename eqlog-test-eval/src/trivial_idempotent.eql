@@ -3,7 +3,7 @@ func e() -> M;
 func mul(M, M) -> M;
 
 
-rule {
+rule idempotent {
     if a = mul(a, a);
     if e()!;
     then a = e();
