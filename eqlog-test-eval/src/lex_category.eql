@@ -192,7 +192,9 @@ rule {
 // Right(prod).
 rule {
     if tuple(prod, l, r)!;
+    then left(prod)!;
     then comp(left(prod), l)!;
+    then right(prod)!;
     then comp(right(prod), r)!;
     then comp(left(prod), l) = comp(right(prod), r);
 }

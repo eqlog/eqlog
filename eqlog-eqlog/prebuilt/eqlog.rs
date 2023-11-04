@@ -1,4 +1,4 @@
-// src-digest: DE98AB3D57C59D27506EB5EF248C8A62412D6DEDEC66ACBB050C31B3D1B42813
+// src-digest: A5F0199E7185290168D570F8F427FFB0CB54F2BE7D210115EAC88CF40E43D80B
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -13684,6 +13684,149 @@ impl fmt::Display for ElIsSurjectiveOkTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ElIsSurjectiveExempted(pub El);
+#[derive(Clone, Hash, Debug)]
+struct ElIsSurjectiveExemptedTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
+
+    element_index_el: BTreeMap<El, Vec<ElIsSurjectiveExempted>>,
+}
+impl ElIsSurjectiveExemptedTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
+            element_index_el: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ElIsSurjectiveExempted) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_el.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: ElIsSurjectiveExempted) -> bool {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ElIsSurjectiveExempted) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: ElIsSurjectiveExempted) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> ElIsSurjectiveExempted {
+        ElIsSurjectiveExempted(El::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: El) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_el(
+        &mut self,
+        tm: El,
+    ) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let ts = match self.element_index_el.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, el_equalities: &mut Unification<El>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
+
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == el_equalities.root(tuple.0) {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for ElIsSurjectiveExemptedTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("el_is_surjective_exempted"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct VarTermInRule(pub TermNode, pub Ident, pub RuleDeclNode);
 #[derive(Clone, Hash, Debug)]
 struct VarTermInRuleTable {
@@ -26311,6 +26454,7 @@ struct ModelDelta {
     new_should_be_surjective: Vec<ShouldBeSurjective>,
     new_el_should_be_surjective_ok: Vec<ElShouldBeSurjectiveOk>,
     new_el_is_surjective_ok: Vec<ElIsSurjectiveOk>,
+    new_el_is_surjective_exempted: Vec<ElIsSurjectiveExempted>,
     new_var_term_in_rule: Vec<VarTermInRule>,
     new_if_after_then: Vec<IfAfterThen>,
     new_real_virt_ident: Vec<RealVirtIdent>,
@@ -26691,6 +26835,7 @@ pub struct Eqlog {
     should_be_surjective: ShouldBeSurjectiveTable,
     el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,
     el_is_surjective_ok: ElIsSurjectiveOkTable,
+    el_is_surjective_exempted: ElIsSurjectiveExemptedTable,
     var_term_in_rule: VarTermInRuleTable,
     if_after_then: IfAfterThenTable,
     real_virt_ident: RealVirtIdentTable,
@@ -26835,6 +26980,7 @@ impl ModelDelta {
             new_should_be_surjective: Vec::new(),
             new_el_should_be_surjective_ok: Vec::new(),
             new_el_is_surjective_ok: Vec::new(),
+            new_el_is_surjective_exempted: Vec::new(),
             new_var_term_in_rule: Vec::new(),
             new_if_after_then: Vec::new(),
             new_real_virt_ident: Vec::new(),
@@ -31301,6 +31447,16 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_el_is_surjective_exempted.extend(
+                model
+                    .el_is_surjective_exempted
+                    .drain_with_element_el(child)
+                    .inspect(|t| {
+                        let weight0 = model.el_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= ElIsSurjectiveExemptedTable::WEIGHT;
+                    }),
+            );
+
             self.new_cons_el_list
                 .extend(
                     model
@@ -32675,6 +32831,14 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
+        for mut t in self.new_el_is_surjective_exempted.drain(..) {
+            t.0 = model.el_equalities.root(t.0);
+            if model.el_is_surjective_exempted.insert(t) {
+                model.el_weights[t.0 .0 as usize] += ElIsSurjectiveExemptedTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
         for mut t in self.new_var_term_in_rule.drain(..) {
             t.0 = model.term_node_equalities.root(t.0);
             t.1 = model.ident_equalities.root(t.1);
@@ -33783,6 +33947,7 @@ impl Eqlog {
             should_be_surjective: ShouldBeSurjectiveTable::new(),
             el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),
             el_is_surjective_ok: ElIsSurjectiveOkTable::new(),
+            el_is_surjective_exempted: ElIsSurjectiveExemptedTable::new(),
             var_term_in_rule: VarTermInRuleTable::new(),
             if_after_then: IfAfterThenTable::new(),
             real_virt_ident: RealVirtIdentTable::new(),
@@ -34086,8 +34251,10 @@ impl Eqlog {
                 self.query_and_record_then_atom_epic_ok_defined(&mut delta);
                 self.query_and_record_then_atom_epic_ok_pred(&mut delta);
                 self.query_and_record_surj_then_should_be_surjective(&mut delta);
+                self.query_and_record_non_surj_then_should_be_surjective(&mut delta);
                 self.query_and_record_surjective_codomain_should_be_ok(&mut delta);
                 self.query_and_record_surjective_img_el_is_ok(&mut delta);
+                self.query_and_record_surjective_exempted_then_defined_term(&mut delta);
                 self.query_and_record_var_term_in_rule_child(&mut delta);
                 self.query_and_record_after_then_should_be_if(&mut delta);
 
@@ -39537,6 +39704,30 @@ impl Eqlog {
             .push(ElIsSurjectiveOk(arg0));
     }
 
+    /// Returns `true` if `el_is_surjective_exempted(arg0)` holds.
+    #[allow(dead_code)]
+    pub fn el_is_surjective_exempted(&self, mut arg0: El) -> bool {
+        arg0 = self.root_el(arg0);
+        self.el_is_surjective_exempted
+            .contains(ElIsSurjectiveExempted(arg0))
+    }
+    /// Returns an iterator over elements satisfying the `el_is_surjective_exempted` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_el_is_surjective_exempted(&self) -> impl '_ + Iterator<Item = El> {
+        self.el_is_surjective_exempted.iter_all().map(|t| t.0)
+    }
+    /// Makes `el_is_surjective_exempted(arg0)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_el_is_surjective_exempted(&mut self, arg0: El) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_el_is_surjective_exempted
+            .push(ElIsSurjectiveExempted(arg0));
+    }
+
     /// Returns `true` if `var_term_in_rule(arg0, arg1, arg2)` holds.
     #[allow(dead_code)]
     pub fn var_term_in_rule(
@@ -39664,6 +39855,7 @@ impl Eqlog {
             || self.should_be_surjective.is_dirty()
             || self.el_should_be_surjective_ok.is_dirty()
             || self.el_is_surjective_ok.is_dirty()
+            || self.el_is_surjective_exempted.is_dirty()
             || self.var_term_in_rule.is_dirty()
             || self.if_after_then.is_dirty()
             || self.real_virt_ident.is_dirty()
@@ -49132,7 +49324,34 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_234(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_234(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        let existing_row = self.should_be_surjective.iter_all_0(tm0).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(ShouldBeSurjective(_)) => (),
+            None => {
+                delta.new_should_be_surjective.push(ShouldBeSurjective(tm0));
+                ()
+            }
+        };
+    }
+    fn query_and_record_non_surj_then_should_be_surjective(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for NonSurjThenMorphism(tm0) in self.non_surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm0) {
+                self.record_action_234(delta, tm0);
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm0) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
+                self.record_action_234(delta, tm0);
+            }
+        }
+    }
+    fn record_action_235(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_should_be_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49152,7 +49371,7 @@ impl Eqlog {
             for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.record_action_234(delta, tm1);
+                    self.record_action_235(delta, tm1);
                 }
             }
         }
@@ -49162,7 +49381,7 @@ impl Eqlog {
             for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                    self.record_action_234(delta, tm1);
+                    self.record_action_235(delta, tm1);
                 }
             }
         }
@@ -49172,12 +49391,12 @@ impl Eqlog {
             for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                    self.record_action_234(delta, tm1);
+                    self.record_action_235(delta, tm1);
                 }
             }
         }
     }
-    fn record_action_235(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_236(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_is_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49193,18 +49412,47 @@ impl Eqlog {
         for ElInImg(tm0, tm1) in self.el_in_img.iter_dirty() {
             #[allow(unused_variables)]
             for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                self.record_action_235(delta, tm1);
+                self.record_action_236(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for ShouldBeSurjective(tm0) in self.should_be_surjective.iter_dirty() {
             #[allow(unused_variables)]
             for ElInImg(_, tm1) in self.el_in_img.iter_all_0(tm0) {
-                self.record_action_235(delta, tm1);
+                self.record_action_236(delta, tm1);
             }
         }
     }
-    fn record_action_236(
+    fn record_action_237(&self, delta: &mut ModelDelta, tm3: El) {
+        let existing_row = self.el_is_surjective_exempted.iter_all_0(tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(ElIsSurjectiveExempted(_)) => (),
+            None => {
+                delta
+                    .new_el_is_surjective_exempted
+                    .push(ElIsSurjectiveExempted(tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_surjective_exempted_then_defined_term(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm2) {
+                self.record_action_237(delta, tm3);
+            }
+        }
+        #[allow(unused_variables)]
+        for SemanticEl(tm2, tm3) in self.semantic_el.iter_dirty() {
+            #[allow(unused_variables)]
+            for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
+                self.record_action_237(delta, tm3);
+            }
+        }
+    }
+    fn record_action_238(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -49230,7 +49478,7 @@ impl Eqlog {
             for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                    self.record_action_236(delta, tm0, tm1, tm3);
+                    self.record_action_238(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -49240,7 +49488,7 @@ impl Eqlog {
             for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_236(delta, tm0, tm1, tm3);
+                    self.record_action_238(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -49250,12 +49498,12 @@ impl Eqlog {
             for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_236(delta, tm0, tm1, tm3);
+                    self.record_action_238(delta, tm0, tm1, tm3);
                 }
             }
         }
     }
-    fn record_action_237(&self, delta: &mut ModelDelta, tm0: StmtNode) {
+    fn record_action_239(&self, delta: &mut ModelDelta, tm0: StmtNode) {
         let existing_row = self.if_after_then.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49275,7 +49523,7 @@ impl Eqlog {
                 for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
                     for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        self.record_action_237(delta, tm0);
+                        self.record_action_239(delta, tm0);
                     }
                 }
             }
@@ -49288,7 +49536,7 @@ impl Eqlog {
                 for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_237(delta, tm0);
+                        self.record_action_239(delta, tm0);
                     }
                 }
             }
@@ -49301,7 +49549,7 @@ impl Eqlog {
                 for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_237(delta, tm0);
+                        self.record_action_239(delta, tm0);
                     }
                 }
             }
@@ -49314,7 +49562,7 @@ impl Eqlog {
                 for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_237(delta, tm0);
+                        self.record_action_239(delta, tm0);
                     }
                 }
             }
@@ -49392,6 +49640,7 @@ impl Eqlog {
         self.should_be_surjective.drop_dirt();
         self.el_should_be_surjective_ok.drop_dirt();
         self.el_is_surjective_ok.drop_dirt();
+        self.el_is_surjective_exempted.drop_dirt();
         self.var_term_in_rule.drop_dirt();
         self.if_after_then.drop_dirt();
         self.real_virt_ident.drop_dirt();
@@ -49563,6 +49812,7 @@ impl Eqlog {
         self.should_be_surjective.retire_dirt();
         self.el_should_be_surjective_ok.retire_dirt();
         self.el_is_surjective_ok.retire_dirt();
+        self.el_is_surjective_exempted.retire_dirt();
         self.var_term_in_rule.retire_dirt();
         self.if_after_then.retire_dirt();
         self.real_virt_ident.retire_dirt();
@@ -50029,6 +50279,8 @@ impl Eqlog {
         self.el_should_be_surjective_ok
             .recall_previous_dirt(&mut self.el_equalities);
         self.el_is_surjective_ok
+            .recall_previous_dirt(&mut self.el_equalities);
+        self.el_is_surjective_exempted
             .recall_previous_dirt(&mut self.el_equalities);
         self.var_term_in_rule.recall_previous_dirt(
             &mut self.ident_equalities,
@@ -50914,6 +51166,7 @@ impl fmt::Display for Eqlog {
         self.should_be_surjective.fmt(f)?;
         self.el_should_be_surjective_ok.fmt(f)?;
         self.el_is_surjective_ok.fmt(f)?;
+        self.el_is_surjective_exempted.fmt(f)?;
         self.var_term_in_rule.fmt(f)?;
         self.if_after_then.fmt(f)?;
         self.real_virt_ident.fmt(f)?;

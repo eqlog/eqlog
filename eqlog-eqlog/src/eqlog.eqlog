@@ -1349,9 +1349,15 @@ rule surj_then_should_be_surjective {
     if surj_then_morphism(morph);
     then should_be_surjective(morph);
 }
+rule non_surj_then_should_be_surjective {
+    if morph = stmt_morphism(_);
+    if non_surj_then_morphism(morph);
+    then should_be_surjective(morph);
+}
 
 pred el_should_be_surjective_ok(El);
 pred el_is_surjective_ok(El);
+pred el_is_surjective_exempted(El);
 
 rule surjective_codomain_should_be_ok {
     if should_be_surjective(morph);
@@ -1363,6 +1369,12 @@ rule surjective_img_el_is_ok {
     if should_be_surjective(morph);
     if el_in_img(morph, el);
     then el_is_surjective_ok(el);
+}
+
+rule surjective_exempted_then_defined_term {
+    if defined_then_atom_node(_, _, tm);
+    if el = semantic_el(tm);
+    then el_is_surjective_exempted(el);
 }
 
 // ## Variable occurs twice check

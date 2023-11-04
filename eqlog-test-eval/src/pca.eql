@@ -15,6 +15,8 @@ rule {
 rule {
     if x: El;
     if y: El;
+    then k()!;
+    then app(k(), x)!;
     then app(app(k(), x), y)!;
 }
 rule {
@@ -28,6 +30,8 @@ rule {
 rule {
     if x: El;
     if y: El;
+    then s()!;
+    then app(s(), x)!;
     then app(app(s(), x), y)!;
 }
 

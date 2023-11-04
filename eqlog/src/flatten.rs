@@ -133,98 +133,6 @@ fn sort_map(
         .collect()
 }
 
-/// Sort atoms so that each atom corresponds to an epimorphic delta.
-///
-/// This is necessary so that we add subterms before terms.
-/// Consider this eqlog/PHL then atom:
-/// ```eqlog
-/// then foo(bar())!;
-/// ```
-///
-/// This might correspond to the following flat/RHL atoms:
-/// ```eqlog
-/// then bar(tm0);
-/// then foo(tm0, tm1);
-/// ```
-/// but it might also correspond to
-/// ```eqlog
-/// then foo(tm0, tm1);
-/// then bar(tm0);
-/// ```
-///
-/// The second version is bad, since here we're introducing the new flat term `tm0` not as last
-/// argument, so we want the first one.
-///
-/// This function reorders the provided atoms so that we always introduce new flat terms only as
-/// last arguments. This must be possible; otherwise the function panics.
-fn sort_then_atoms(
-    mut atoms: Vec<FlatAtom>,
-    premise_flat_terms: BTreeSet<FlatTerm>,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> Vec<FlatAtom> {
-    let mut result = Vec::new();
-    let mut added_flat_terms = premise_flat_terms;
-    while !atoms.is_empty() {
-        let before_len = atoms.len();
-        atoms = atoms
-            .into_iter()
-            .filter_map(|atom| {
-                let should_add = match &atom {
-                    FlatAtom::Equal(lhs, rhs) => {
-                        added_flat_terms.contains(lhs) && added_flat_terms.contains(rhs)
-                    }
-                    FlatAtom::Relation(rel, args) => {
-                        let rel_ident = *identifiers
-                            .iter()
-                            .find_map(|(i, s)| (s == rel).then_some(i))
-                            .unwrap();
-                        let is_func = eqlog.semantic_func(rel_ident).is_some();
-                        let is_pred = eqlog.semantic_pred(rel_ident).is_some();
-                        assert!(
-                            is_func ^ is_pred,
-                            "rel should be either function or relation"
-                        );
-                        let last_arg_is_ok = is_func
-                            || match args.last() {
-                                Some(last_arg) => added_flat_terms.contains(last_arg),
-                                None => true,
-                            };
-
-                        last_arg_is_ok
-                            && args[0..args.len().saturating_sub(1)]
-                                .iter()
-                                .all(|arg| added_flat_terms.contains(arg))
-                    }
-                    FlatAtom::Unconstrained(_, _) => true,
-                };
-
-                if should_add {
-                    match &atom {
-                        FlatAtom::Equal(lhs, rhs) => {
-                            added_flat_terms.insert(*lhs);
-                            added_flat_terms.insert(*rhs);
-                        }
-                        FlatAtom::Relation(_, args) => {
-                            added_flat_terms.extend(args);
-                        }
-                        FlatAtom::Unconstrained(tm, _) => {
-                            added_flat_terms.insert(*tm);
-                        }
-                    }
-                    result.push(atom);
-                    None
-                } else {
-                    Some(atom)
-                }
-            })
-            .collect();
-        assert!(atoms.len() < before_len);
-    }
-
-    result
-}
-
 pub fn flatten(
     rule: RuleDeclNode,
     eqlog: &Eqlog,
@@ -233,7 +141,6 @@ pub fn flatten(
     let name = eqlog
         .rule_name(rule)
         .map(|ident| identifiers.get(&ident).unwrap().to_string());
-    let mut premise_flat_terms = BTreeSet::new();
     let mut premise = Vec::new();
     let mut conclusion = Vec::new();
     let mut flat_names = BTreeMap::new();
@@ -257,7 +164,6 @@ pub fn flatten(
 
     if eqlog.if_morphism(first_morphism) {
         premise = flatten_delta(first_morphism, &mut flat_names, eqlog, identifiers);
-        premise_flat_terms = flat_names.values().flatten().copied().collect();
     } else {
         assert!(
             eqlog.surj_then_morphism(first_morphism)
@@ -280,7 +186,6 @@ pub fn flatten(
         conclusion.extend(flatten_delta(morph, &mut flat_names, eqlog, identifiers));
     }
 
-    let conclusion = sort_then_atoms(conclusion, premise_flat_terms, eqlog, identifiers);
     let sorts = sort_map(&flat_names, eqlog, identifiers);
     let sequent = FlatSequent {
         premise,
