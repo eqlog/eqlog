@@ -1,8 +1,7 @@
 use crate::eqlog_util::*;
 use crate::flat_ast::*;
 use eqlog_eqlog::*;
-use maplit::btreeset;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::iter::successors;
 
 pub struct SequentFlattening {
@@ -20,18 +19,54 @@ fn iter_grouped_morphisms<'a>(
     })
 }
 
-fn get_flat_term_or_create(el: El, flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>) -> FlatTerm {
-    let len = flat_names
-        .iter()
-        .map(|(_, flat_terms)| flat_terms.len())
-        .sum();
-    let names = flat_names.entry(el).or_insert(btreeset! {FlatTerm(len)});
-    *names.iter().next().unwrap()
+/// Assign compatible [FlatTerm]s to the [El]s of in a chain of morphisms. The first morphism must
+/// have empty domain.
+///
+/// The assigne [FlatTerm]s are compatible with morphisms in the sense that if f : X -> Y is a
+/// morphism in the chain and y is in the range of f, then the [FlatTerm] assigned to y is one of
+/// the [FlatTerm]s assigned to a preimage of y.
+fn assign_el_terms(
+    chain: impl IntoIterator<Item = Morphism>,
+    eqlog: &Eqlog,
+) -> BTreeMap<El, FlatTerm> {
+    let mut el_terms = BTreeMap::new();
+    let mut unused_flat_terms = (0..).into_iter().map(FlatTerm);
+
+    let mut is_first = true;
+    for transition in chain {
+        if is_first {
+            let dom = eqlog.dom(transition).expect("dom should be total");
+            assert!(
+                iter_els(dom, eqlog).next().is_none(),
+                "the first domain should be empty"
+            );
+            is_first = false;
+        }
+
+        for (m, preimage, image) in eqlog.iter_map_el() {
+            if !eqlog.are_equal_morphism(m, transition) {
+                continue;
+            }
+
+            if let Some(tm) = el_terms.get(&preimage) {
+                el_terms.insert(image, *tm);
+            }
+        }
+
+        let cod = eqlog.cod(transition).expect("cod should be total");
+        for el in iter_els(cod, eqlog) {
+            el_terms
+                .entry(el)
+                .or_insert_with(|| unused_flat_terms.next().unwrap());
+        }
+    }
+
+    el_terms
 }
 
 fn flatten_delta(
     morphism: Morphism,
-    flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>,
+    flat_terms: &BTreeMap<El, FlatTerm>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> Vec<FlatAtom> {
@@ -40,31 +75,17 @@ fn flatten_delta(
 
     for (el0, el1) in iter_in_ker(morphism, eqlog) {
         if !eqlog.are_equal_el(el0, el1) {
-            let tm0 = get_flat_term_or_create(el0, flat_names);
-            let tm1 = get_flat_term_or_create(el1, flat_names);
+            let tm0 = *flat_terms.get(&el0).unwrap();
+            let tm1 = *flat_terms.get(&el1).unwrap();
             atoms.push(FlatAtom::Equal(tm0, tm1));
         }
     }
-
-    *flat_names = {
-        let mut new_flat_names = BTreeMap::new();
-        for (el, tms) in flat_names.iter() {
-            let img_el = eqlog.map_el(morphism, *el).unwrap();
-            for tm in tms {
-                new_flat_names
-                    .entry(img_el)
-                    .or_insert(BTreeSet::new())
-                    .insert(*tm);
-            }
-        }
-        new_flat_names
-    };
 
     for (pred, els) in iter_pred_app(codomain, eqlog) {
         if !eqlog.pred_tuple_in_img(morphism, pred, els) {
             let el_terms: Vec<FlatTerm> = el_list_vec(els, eqlog)
                 .into_iter()
-                .map(|el| get_flat_term_or_create(el, flat_names))
+                .map(|el| *flat_terms.get(&el).unwrap())
                 .collect();
             let pred_ident = eqlog
                 .iter_semantic_pred()
@@ -79,9 +100,9 @@ fn flatten_delta(
         if !eqlog.func_app_in_img(morphism, func, args) {
             let arg_terms: Vec<FlatTerm> = el_list_vec(args, eqlog)
                 .into_iter()
-                .map(|el| get_flat_term_or_create(el, flat_names))
+                .map(|el| *flat_terms.get(&el).unwrap())
                 .collect();
-            let result_term = get_flat_term_or_create(result, flat_names);
+            let result_term = *flat_terms.get(&result).unwrap();
 
             let mut tuple = arg_terms;
             tuple.push(result_term);
@@ -97,7 +118,7 @@ fn flatten_delta(
 
     for el in iter_els(codomain, eqlog) {
         if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
-            let tm = get_flat_term_or_create(el, flat_names);
+            let tm = *flat_terms.get(&el).unwrap();
 
             let typ = el_type(el, eqlog).unwrap();
             let type_ident = eqlog
@@ -113,23 +134,22 @@ fn flatten_delta(
 }
 
 fn sort_map(
-    flat_names: &BTreeMap<El, BTreeSet<FlatTerm>>,
+    flat_names: &BTreeMap<El, FlatTerm>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> BTreeMap<FlatTerm, String> {
     flat_names
         .iter()
-        .map(|(el, tms)| {
+        .map(|(el, tm)| {
             let typ = el_type(*el, eqlog).unwrap();
             let type_ident = eqlog
                 .iter_semantic_type()
                 .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))
                 .unwrap();
-            let type_name: &str = identifiers.get(&type_ident).unwrap().as_str();
+            let type_name = identifiers.get(&type_ident).unwrap().to_string();
 
-            tms.iter().copied().map(|tm| (tm, type_name.to_string()))
+            (*tm, type_name)
         })
-        .flatten()
         .collect()
 }
 
@@ -143,7 +163,7 @@ pub fn flatten(
         .map(|ident| identifiers.get(&ident).unwrap().to_string());
     let mut premise = Vec::new();
     let mut conclusion = Vec::new();
-    let mut flat_names = BTreeMap::new();
+    let flat_terms = assign_el_terms(iter_grouped_morphisms(rule, eqlog), eqlog);
 
     let mut grouped_morphisms = iter_grouped_morphisms(rule, eqlog);
     let first_morphism = match grouped_morphisms.next() {
@@ -163,7 +183,7 @@ pub fn flatten(
     };
 
     if eqlog.if_morphism(first_morphism) {
-        premise = flatten_delta(first_morphism, &mut flat_names, eqlog, identifiers);
+        premise = flatten_delta(first_morphism, &flat_terms, eqlog, identifiers);
     } else {
         assert!(
             eqlog.surj_then_morphism(first_morphism)
@@ -172,7 +192,7 @@ pub fn flatten(
         );
         conclusion.extend(flatten_delta(
             first_morphism,
-            &mut flat_names,
+            &flat_terms,
             eqlog,
             identifiers,
         ));
@@ -183,10 +203,10 @@ pub fn flatten(
             eqlog.surj_then_morphism(morph) || eqlog.non_surj_then_morphism(morph),
             "Every morphism after the first must be a then morphism"
         );
-        conclusion.extend(flatten_delta(morph, &mut flat_names, eqlog, identifiers));
+        conclusion.extend(flatten_delta(morph, &flat_terms, eqlog, identifiers));
     }
 
-    let sorts = sort_map(&flat_names, eqlog, identifiers);
+    let sorts = sort_map(&flat_terms, eqlog, identifiers);
     let sequent = FlatSequent {
         premise,
         conclusion,
