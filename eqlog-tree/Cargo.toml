@@ -3,6 +3,12 @@ name = "eqlog-tree"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+# The eqlog doc tests don't work because docs have to
+# refer to identifers in the `eqlog` crate, but here
+# they're in the `eqlog_tree` crate.
+doctest = false
+
 [dependencies.eqlog-eqlog]
 package = "eqlog-eqlog-tree"
 path = "../eqlog-eqlog-tree"
