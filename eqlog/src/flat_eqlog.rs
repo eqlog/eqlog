@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::collections::BTreeMap;
+
 use eqlog_eqlog::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -9,7 +11,6 @@ pub struct FlatVar(pub usize);
 pub struct FlatStmtEqual {
     pub lhs: FlatVar,
     pub rhs: FlatVar,
-    pub typ: Type,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -19,23 +20,15 @@ pub enum Rel {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct FlatIfRelArg {
-    pub var: FlatVar,
-    pub typ: Type,
-    pub fresh: bool,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtRelation {
     pub rel: Rel,
-    pub args: Vec<FlatIfRelArg>,
+    pub args: Vec<FlatVar>,
     pub only_dirty: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtType {
     pub var: FlatVar,
-    pub typ: Type,
     pub only_dirty: bool,
 }
 
@@ -47,15 +40,9 @@ pub enum FlatIfStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct FlatThenRelArg {
-    pub var: FlatVar,
-    pub typ: Type,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatThenStmtRelation {
     pub rel: Rel,
-    pub args: Vec<FlatThenRelArg>,
+    pub args: Vec<FlatVar>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -79,4 +66,10 @@ pub enum FlatStmt {
     SurjThen(FlatSurjThenStmt),
     NonSurjThen(FlatNonSurjThenStmt),
     Fork(Vec<Vec<FlatStmt>>),
+}
+
+pub struct FlatRule {
+    pub name: Option<Ident>,
+    pub stmts: Vec<FlatStmt>,
+    pub var_types: BTreeMap<FlatVar, Type>,
 }
