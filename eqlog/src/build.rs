@@ -1,5 +1,6 @@
 use crate::eqlog_util::*;
 use crate::error::*;
+use crate::flat_eqlog::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
 use crate::grammar::*;
@@ -170,6 +171,11 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         source_path: in_file.into(),
     })?;
     assert!(!eqlog.absurd());
+
+    let _flat_rules: Vec<FlatRule> = eqlog
+        .iter_rule_decl_node()
+        .map(|rule| flatten_v2(rule, &eqlog, &identifiers))
+        .collect();
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
     query_actions.extend(
