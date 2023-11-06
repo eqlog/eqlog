@@ -635,3 +635,51 @@ pub fn flatten_v2(rule: RuleDeclNode, eqlog: &Eqlog) -> FlatRule {
         var_types,
     }
 }
+
+pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
+    let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
+    let codomain = eqlog.codomain(func).expect("codomain should be total");
+
+    let rel = Rel::Func(func);
+    let func_args: Vec<FlatVar> = (0..domain.len()).map(FlatVar).collect();
+    let result0 = FlatVar(domain.len());
+    let result1 = FlatVar(domain.len() + 1);
+
+    let rel_args0: Vec<FlatVar> = func_args.iter().copied().chain(once(result0)).collect();
+    let rel_args1: Vec<FlatVar> = func_args.iter().copied().chain(once(result1)).collect();
+
+    let dirty_rel = FlatIfStmtRelation {
+        rel,
+        args: rel_args0,
+        only_dirty: true,
+    };
+    let non_dirty_rel = FlatIfStmtRelation {
+        rel,
+        args: rel_args1,
+        only_dirty: false,
+    };
+    let eq = FlatStmtEqual {
+        lhs: result0,
+        rhs: result1,
+    };
+
+    let stmts = vec![
+        FlatStmt::If(FlatIfStmt::Relation(dirty_rel)),
+        FlatStmt::If(FlatIfStmt::Relation(non_dirty_rel)),
+        FlatStmt::SurjThen(FlatSurjThenStmt::Equal(eq)),
+    ];
+    let var_types: BTreeMap<FlatVar, Type> = func_args
+        .iter()
+        .copied()
+        .zip(domain)
+        .chain([(result0, codomain), (result1, codomain)])
+        .collect();
+    // TODO: Can we get a name here?
+    let name = None;
+
+    FlatRule {
+        stmts,
+        var_types,
+        name,
+    }
+}

@@ -105,30 +105,41 @@ fn out_projections(args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> BTreeMap
         .collect()
 }
 
-fn quantifier(rel: Rel, args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> Quantifier {
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum CanAssumeFunctionality {
+    Yes,
+    No,
+}
+
+fn quantifier(
+    rel: Rel,
+    args: &[FlatVar],
+    func_assumption: CanAssumeFunctionality,
+    fixed_vars: &BTreeSet<FlatVar>,
+) -> Quantifier {
     let all_args_fixed = args.iter().all(|arg| fixed_vars.contains(&arg));
     if all_args_fixed {
         return Quantifier::Any;
     }
 
-    match rel {
-        Rel::Pred(_) => {}
-        Rel::Func(_) => {
-            assert!(
-                args.len() >= 1,
-                "A function relation must have at least one argument"
-            );
-            let func_args = &args[0..args.len() - 1];
-            let all_func_args_fixed = func_args.iter().all(|arg| fixed_vars.contains(&arg));
-            if all_func_args_fixed {
-                return Quantifier::Any;
-            }
+    if func_assumption == CanAssumeFunctionality::Yes && matches!(rel, Rel::Func(_)) {
+        assert!(
+            args.len() >= 1,
+            "A function relation must have at least one argument"
+        );
+        let func_args = &args[0..args.len() - 1];
+        let all_func_args_fixed = func_args.iter().all(|arg| fixed_vars.contains(&arg));
+        if all_func_args_fixed {
+            return Quantifier::Any;
         }
-    };
+    }
     return Quantifier::All;
 }
 
-pub fn relation_info_pass<'a>(fixed_vars: &FixedVars<'a>) -> RelationInfos<'a> {
+pub fn relation_info_pass<'a>(
+    func_assumption: CanAssumeFunctionality,
+    fixed_vars: &FixedVars<'a>,
+) -> RelationInfos<'a> {
     let mut infos = RelationInfos(BTreeMap::new());
     for (ByAddress(stmt), fixed_vars) in fixed_vars.0.iter() {
         let stmt = match stmt {
@@ -146,7 +157,7 @@ pub fn relation_info_pass<'a>(fixed_vars: &FixedVars<'a>) -> RelationInfos<'a> {
             diagonals: diagonals(args.as_slice()),
             in_projections: in_projections(args.as_slice(), fixed_vars),
             out_projections: out_projections(args.as_slice(), fixed_vars),
-            quantifier: quantifier(*rel, args.as_slice(), fixed_vars),
+            quantifier: quantifier(*rel, args.as_slice(), func_assumption, fixed_vars),
         };
         infos.0.insert(ByAddress(stmt), info);
     }

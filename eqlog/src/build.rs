@@ -175,14 +175,21 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     assert!(!eqlog.absurd());
 
     let _flat_rules: Vec<FlatRule> = eqlog
-        .iter_rule_decl_node()
-        .map(|rule| {
+        .iter_func()
+        .map(|func| {
+            let flat_rule = functionality_v2(func, &eqlog);
+            // No need to sort if stmts in flat_rule, they're already OK.
+            let fixed_vars = fixed_vars_pass(&flat_rule);
+            let _relation_infos = relation_info_pass(CanAssumeFunctionality::No, &fixed_vars);
+            flat_rule
+        })
+        .chain(eqlog.iter_rule_decl_node().map(|rule| {
             let mut flat_rule = flatten_v2(rule, &eqlog);
             sort_if_stmts_pass(&mut flat_rule);
             let fixed_vars = fixed_vars_pass(&flat_rule);
-            let _relation_infos = relation_info_pass(&fixed_vars);
+            let _relation_infos = relation_info_pass(CanAssumeFunctionality::Yes, &fixed_vars);
             flat_rule
-        })
+        }))
         .collect();
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
