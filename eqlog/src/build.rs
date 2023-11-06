@@ -177,7 +177,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     let _flat_rules: Vec<FlatRule> = eqlog
         .iter_rule_decl_node()
         .map(|rule| {
-            let mut flat_rule = flatten_v2(rule, &eqlog, &identifiers);
+            let mut flat_rule = flatten_v2(rule, &eqlog);
             sort_if_stmts_pass(&mut flat_rule);
             let fixed_vars = fixed_vars_pass(&flat_rule);
             let _relation_infos = relation_info_pass(&fixed_vars);
