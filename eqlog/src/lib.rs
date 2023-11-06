@@ -15,5 +15,6 @@ mod llam;
 mod rust_gen;
 mod slice_group_by;
 mod source_display;
+mod var_info_pass;
 
 pub use crate::build::{process, process_root, Config};

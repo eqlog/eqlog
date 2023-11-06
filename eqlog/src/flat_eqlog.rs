@@ -11,7 +11,7 @@ pub struct FlatStmtEqual {
     pub rhs: FlatVar,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum Rel {
     Pred(Pred),
     Func(Func),

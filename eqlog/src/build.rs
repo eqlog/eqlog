@@ -10,6 +10,7 @@ use crate::llam::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
 use crate::sort_if_stmts_pass::*;
+use crate::var_info_pass::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::eprintdoc;
@@ -178,6 +179,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .map(|rule| {
             let mut flat_rule = flatten_v2(rule, &eqlog, &identifiers);
             sort_if_stmts_pass(&mut flat_rule);
+            let fixed_vars = fixed_vars_pass(&flat_rule);
+            let _relation_infos = relation_info_pass(&fixed_vars);
             flat_rule
         })
         .collect();

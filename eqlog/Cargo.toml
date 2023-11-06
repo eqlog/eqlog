@@ -18,6 +18,7 @@ indoc = ">= 0"
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
 eqlog-eqlog = { path = "../eqlog-eqlog", version = "= 0.6.0" }
+by_address = ">= 0"
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }
