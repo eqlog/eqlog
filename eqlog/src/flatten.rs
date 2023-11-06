@@ -483,7 +483,7 @@ fn flatten_surj_then(
                 .collect();
             let rel = Rel::Pred(pred);
             stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
-                FlatThenStmtRelation { rel, args },
+                FlatSurjThenStmtRelation { rel, args },
             )));
         }
     }
@@ -504,7 +504,7 @@ fn flatten_surj_then(
 
             let rel = Rel::Func(func);
             stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
-                FlatThenStmtRelation { rel, args },
+                FlatSurjThenStmtRelation { rel, args },
             )));
         }
     }
@@ -574,13 +574,16 @@ fn flatten_non_surj_then(
         "Arguments to obtain new element should be in image"
     );
 
-    let rel = Rel::Func(func);
-    let args: Vec<FlatVar> = func_arg_els
+    let func_args = func_arg_els
         .into_iter()
-        .chain(once(new_el))
         .map(|el| *el_vars.get(&el).unwrap())
         .collect();
-    Some(FlatThenStmtRelation { rel, args })
+    let result = *el_vars.get(&new_el).unwrap();
+    Some(FlatNonSurjThenStmt {
+        func,
+        func_args,
+        result,
+    })
 }
 
 #[allow(unused)]

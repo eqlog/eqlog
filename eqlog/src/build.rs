@@ -9,6 +9,7 @@ use crate::index_selection::*;
 use crate::llam::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
+use crate::sort_if_stmts_pass::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::eprintdoc;
@@ -174,7 +175,11 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
 
     let _flat_rules: Vec<FlatRule> = eqlog
         .iter_rule_decl_node()
-        .map(|rule| flatten_v2(rule, &eqlog, &identifiers))
+        .map(|rule| {
+            let mut flat_rule = flatten_v2(rule, &eqlog, &identifiers);
+            sort_if_stmts_pass(&mut flat_rule);
+            flat_rule
+        })
         .collect();
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
