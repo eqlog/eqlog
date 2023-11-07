@@ -109,13 +109,18 @@ pub enum CanAssumeFunctionality {
     No,
 }
 
-fn quantifier(rel: Rel, args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> Quantifier {
+fn quantifier(
+    rel: Rel,
+    args: &[FlatVar],
+    can_assume_functionality: CanAssumeFunctionality,
+    fixed_vars: &BTreeSet<FlatVar>,
+) -> Quantifier {
     let all_args_fixed = args.iter().all(|arg| fixed_vars.contains(&arg));
     if all_args_fixed {
         return Quantifier::Any;
     }
 
-    if matches!(rel, Rel::Func(_)) {
+    if can_assume_functionality == CanAssumeFunctionality::Yes && matches!(rel, Rel::Func(_)) {
         assert!(
             args.len() >= 1,
             "A function relation must have at least one argument"
@@ -129,30 +134,57 @@ fn quantifier(rel: Rel, args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> Qua
     return Quantifier::All;
 }
 
-pub fn relation_info_pass<'a>(fixed_vars: &FixedVars<'a>) -> RelationInfos<'a> {
-    let mut infos = RelationInfos(BTreeMap::new());
-    for (ByAddress(stmt), fixed_vars) in fixed_vars.0.iter() {
-        let stmt = match stmt {
-            FlatStmt::If(FlatIfStmt::Relation(stmt)) => stmt,
-            _ => {
-                continue;
+pub fn relation_info_rec<'a>(
+    stmts: &'a [FlatStmt],
+    can_assume_functionality: CanAssumeFunctionality,
+    infos: &mut RelationInfos<'a>,
+    fixed_vars: &FixedVars<'a>,
+) {
+    for stmt in stmts {
+        match stmt {
+            FlatStmt::If(if_stmt) => match if_stmt {
+                FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
+                FlatIfStmt::Relation(rel_if_stmt) => {
+                    let fixed_vars = fixed_vars.0.get(&ByAddress(stmt)).unwrap();
+                    let FlatIfStmtRelation {
+                        rel,
+                        args,
+                        only_dirty: _,
+                    } = rel_if_stmt;
+
+                    let _quantifier =
+                        quantifier(*rel, args.as_slice(), can_assume_functionality, fixed_vars);
+
+                    let info = RelationInfo {
+                        diagonals: diagonals(args.as_slice()),
+                        in_projections: in_projections(args.as_slice(), fixed_vars),
+                        out_projections: out_projections(args.as_slice(), fixed_vars),
+                    };
+                    infos.0.insert(ByAddress(rel_if_stmt), info);
+                }
+            },
+            FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
+            FlatStmt::Fork(blocks) => {
+                for block in blocks.iter() {
+                    relation_info_rec(block, can_assume_functionality, infos, fixed_vars);
+                }
             }
-        };
-        let FlatIfStmtRelation {
-            rel,
-            args,
-            only_dirty: _,
-        } = stmt;
-        // TODO: _quantifier is only reliable *assuming functionality*, so we must not use it for
-        // functionality axioms. So to use it at all, we first need to make sure that we're not
-        // emitting Quantifier::Any in functionality axioms
-        let _quantifier = quantifier(*rel, args.as_slice(), fixed_vars);
-        let info = RelationInfo {
-            diagonals: diagonals(args.as_slice()),
-            in_projections: in_projections(args.as_slice(), fixed_vars),
-            out_projections: out_projections(args.as_slice(), fixed_vars),
-        };
-        infos.0.insert(ByAddress(stmt), info);
+        }
+    }
+}
+
+pub fn relation_info_pass<'a>(
+    rules: impl Iterator<Item = (&'a FlatRule, CanAssumeFunctionality)>,
+    fixed_vars: &FixedVars<'a>,
+) -> RelationInfos<'a> {
+    let mut infos = RelationInfos(BTreeMap::new());
+    for (rule, can_assume_functionality) in rules {
+        relation_info_rec(
+            rule.stmts.as_slice(),
+            can_assume_functionality,
+            &mut infos,
+            fixed_vars,
+        );
     }
     infos
 }

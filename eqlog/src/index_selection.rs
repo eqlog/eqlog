@@ -185,7 +185,30 @@ where
         .collect()
 }
 
-pub fn select_indices_v2(
+pub fn collect_relation_if_stmts<'a>(
+    stmts: impl Iterator<Item = &'a FlatStmt>,
+    out: &mut Vec<&'a FlatIfStmtRelation>,
+) {
+    for stmt in stmts {
+        match stmt {
+            FlatStmt::If(if_stmt) => match if_stmt {
+                FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
+                FlatIfStmt::Relation(if_stmt_relation) => {
+                    out.push(if_stmt_relation);
+                }
+            },
+            FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
+            FlatStmt::Fork(blocks) => {
+                for block in blocks {
+                    collect_relation_if_stmts(block.iter(), out);
+                }
+            }
+        }
+    }
+}
+
+pub fn select_indices_v2<'a>(
+    rules: impl Iterator<Item = &'a FlatRule>,
     relation_infos: &RelationInfos,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
@@ -217,7 +240,9 @@ pub fn select_indices_v2(
     }
 
     // Every relation if stmt needs a QuerySpec.
-    for (ByAddress(rel_stmt), info) in relation_infos.0.iter() {
+    let mut rel_stmts = Vec::new();
+    collect_relation_if_stmts(rules.flat_map(|rule| rule.stmts.iter()), &mut rel_stmts);
+    for rel_stmt in rel_stmts {
         let FlatIfStmtRelation {
             rel,
             args: _,
@@ -228,7 +253,10 @@ pub fn select_indices_v2(
             diagonals,
             in_projections,
             out_projections: _,
-        } = info;
+        } = relation_infos
+            .0
+            .get(&ByAddress(rel_stmt))
+            .expect("Every relation if stmt should have an info");
         let spec = QuerySpec {
             diagonals: diagonals.clone(),
             projections: in_projections.keys().copied().collect(),

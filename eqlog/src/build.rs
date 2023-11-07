@@ -22,6 +22,7 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
+use std::iter::repeat;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
@@ -174,12 +175,11 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     })?;
     assert!(!eqlog.absurd());
 
-    // Implicit functionality rules:
     let mut flat_rules: Vec<FlatRule> = eqlog
         .iter_func()
         .map(|func| functionality_v2(func, &eqlog))
         .collect();
-    // Explicit user-specified rules:
+    let functionality_rule_num = flat_rules.len();
     flat_rules.extend(eqlog.iter_rule_decl_node().map(|rule| {
         let mut flat_rule = flatten_v2(rule, &eqlog);
         // Necessary here for explicit rules, but not for implicit functionality rules, since the
@@ -187,9 +187,23 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         sort_if_stmts_pass(&mut flat_rule);
         flat_rule
     }));
+
+    let (functionality_rules, explicit_rules) = flat_rules.split_at(functionality_rule_num);
+
     let fixed_vars = fixed_vars_pass(flat_rules.iter());
-    let relation_infos = relation_info_pass(&fixed_vars);
-    let _index_selection = select_indices_v2(&relation_infos, &eqlog, &identifiers);
+    let relation_infos = relation_info_pass(
+        functionality_rules
+            .iter()
+            .zip(repeat(CanAssumeFunctionality::No))
+            .chain(
+                explicit_rules
+                    .iter()
+                    .zip(repeat(CanAssumeFunctionality::Yes)),
+            ),
+        &fixed_vars,
+    );
+    let _index_selection =
+        select_indices_v2(flat_rules.iter(), &relation_infos, &eqlog, &identifiers);
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
     query_actions.extend(
