@@ -41,10 +41,12 @@ pub fn fixed_vars_rec<'a>(
     }
 }
 
-pub fn fixed_vars_pass<'a>(rule: &'a FlatRule) -> FixedVars<'a> {
-    let current_fixed_vars = BTreeSet::new();
+pub fn fixed_vars_pass<'a>(rules: impl Iterator<Item = &'a FlatRule>) -> FixedVars<'a> {
     let mut all_fixed_vars = FixedVars(BTreeMap::new());
-    fixed_vars_rec(&rule.stmts, current_fixed_vars, &mut all_fixed_vars);
+    for rule in rules {
+        let current_fixed_vars = BTreeSet::new();
+        fixed_vars_rec(&rule.stmts, current_fixed_vars, &mut all_fixed_vars);
+    }
     all_fixed_vars
 }
 
@@ -60,18 +62,14 @@ pub struct RelationInfo {
     ///
     /// A diagonal is a maximal set of argument indices in which the same variable is passed. The
     /// diagonal is non-trivial if it has more than one element.
-    diagonals: BTreeSet<BTreeSet<usize>>,
+    pub diagonals: BTreeSet<BTreeSet<usize>>,
 
     /// The set of argument indices where an already fixed variable is passed.
-    in_projections: BTreeMap<usize, FlatVar>,
+    pub in_projections: BTreeMap<usize, FlatVar>,
 
     /// The set of new (not already fixed) variables among the arguments, and one argument index
     /// where the new variable occurs.
-    out_projections: BTreeMap<FlatVar, usize>,
-
-    /// Whether it suffices to consider a single match for the relation ([Quantifier::Any]), or
-    /// whether all matches must be considered ([Quantifier::All]).
-    quantifier: Quantifier,
+    pub out_projections: BTreeMap<FlatVar, usize>,
 }
 
 pub struct RelationInfos<'a>(pub BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>);
@@ -111,18 +109,13 @@ pub enum CanAssumeFunctionality {
     No,
 }
 
-fn quantifier(
-    rel: Rel,
-    args: &[FlatVar],
-    func_assumption: CanAssumeFunctionality,
-    fixed_vars: &BTreeSet<FlatVar>,
-) -> Quantifier {
+fn quantifier(rel: Rel, args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> Quantifier {
     let all_args_fixed = args.iter().all(|arg| fixed_vars.contains(&arg));
     if all_args_fixed {
         return Quantifier::Any;
     }
 
-    if func_assumption == CanAssumeFunctionality::Yes && matches!(rel, Rel::Func(_)) {
+    if matches!(rel, Rel::Func(_)) {
         assert!(
             args.len() >= 1,
             "A function relation must have at least one argument"
@@ -136,10 +129,7 @@ fn quantifier(
     return Quantifier::All;
 }
 
-pub fn relation_info_pass<'a>(
-    func_assumption: CanAssumeFunctionality,
-    fixed_vars: &FixedVars<'a>,
-) -> RelationInfos<'a> {
+pub fn relation_info_pass<'a>(fixed_vars: &FixedVars<'a>) -> RelationInfos<'a> {
     let mut infos = RelationInfos(BTreeMap::new());
     for (ByAddress(stmt), fixed_vars) in fixed_vars.0.iter() {
         let stmt = match stmt {
@@ -153,11 +143,14 @@ pub fn relation_info_pass<'a>(
             args,
             only_dirty: _,
         } = stmt;
+        // TODO: _quantifier is only reliable *assuming functionality*, so we must not use it for
+        // functionality axioms. So to use it at all, we first need to make sure that we're not
+        // emitting Quantifier::Any in functionality axioms
+        let _quantifier = quantifier(*rel, args.as_slice(), fixed_vars);
         let info = RelationInfo {
             diagonals: diagonals(args.as_slice()),
             in_projections: in_projections(args.as_slice(), fixed_vars),
             out_projections: out_projections(args.as_slice(), fixed_vars),
-            quantifier: quantifier(*rel, args.as_slice(), func_assumption, fixed_vars),
         };
         infos.0.insert(ByAddress(stmt), info);
     }

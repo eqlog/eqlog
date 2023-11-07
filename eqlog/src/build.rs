@@ -174,23 +174,22 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     })?;
     assert!(!eqlog.absurd());
 
-    let _flat_rules: Vec<FlatRule> = eqlog
+    // Implicit functionality rules:
+    let mut flat_rules: Vec<FlatRule> = eqlog
         .iter_func()
-        .map(|func| {
-            let flat_rule = functionality_v2(func, &eqlog);
-            // No need to sort if stmts in flat_rule, they're already OK.
-            let fixed_vars = fixed_vars_pass(&flat_rule);
-            let _relation_infos = relation_info_pass(CanAssumeFunctionality::No, &fixed_vars);
-            flat_rule
-        })
-        .chain(eqlog.iter_rule_decl_node().map(|rule| {
-            let mut flat_rule = flatten_v2(rule, &eqlog);
-            sort_if_stmts_pass(&mut flat_rule);
-            let fixed_vars = fixed_vars_pass(&flat_rule);
-            let _relation_infos = relation_info_pass(CanAssumeFunctionality::Yes, &fixed_vars);
-            flat_rule
-        }))
+        .map(|func| functionality_v2(func, &eqlog))
         .collect();
+    // Explicit user-specified rules:
+    flat_rules.extend(eqlog.iter_rule_decl_node().map(|rule| {
+        let mut flat_rule = flatten_v2(rule, &eqlog);
+        // Necessary here for explicit rules, but not for implicit functionality rules, since the
+        // latter are already ordered reasonably.
+        sort_if_stmts_pass(&mut flat_rule);
+        flat_rule
+    }));
+    let fixed_vars = fixed_vars_pass(flat_rules.iter());
+    let relation_infos = relation_info_pass(&fixed_vars);
+    let _index_selection = select_indices_v2(&relation_infos, &eqlog, &identifiers);
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
     query_actions.extend(

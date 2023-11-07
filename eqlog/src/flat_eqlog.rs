@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, iter::once};
+use std::{collections::BTreeMap, fmt::Display, iter::once};
 
 use eqlog_eqlog::*;
 
@@ -178,4 +178,24 @@ pub struct FlatRule {
     pub name: Option<Ident>,
     pub stmts: Vec<FlatStmt>,
     pub var_types: BTreeMap<FlatVar, Type>,
+}
+
+impl Rel {
+    pub fn display<'a>(
+        &'a self,
+        eqlog: &'a Eqlog,
+        identifiers: &'a BTreeMap<Ident, String>,
+    ) -> impl 'a + Display {
+        let ident = match *self {
+            Rel::Pred(pred) => eqlog
+                .iter_semantic_pred()
+                .find_map(|(ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
+                .expect("semantic_pred should be surjective"),
+            Rel::Func(func) => eqlog
+                .iter_semantic_func()
+                .find_map(|(ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident))
+                .expect("semantic_func should be surjective"),
+        };
+        identifiers.get(&ident).unwrap().as_str()
+    }
 }
