@@ -67,9 +67,9 @@ pub struct RelationInfo {
     /// The set of argument indices where an already fixed variable is passed.
     pub in_projections: BTreeMap<usize, FlatVar>,
 
-    /// The set of new (not already fixed) variables among the arguments, and one argument index
-    /// where the new variable occurs.
-    pub out_projections: BTreeMap<FlatVar, usize>,
+    /// The list of new (i.e., not already fixed) variables among arguments. A [FlatVar] must not
+    /// occur twice; in case of a diagonal any one entry should be in the map.
+    pub out_projections: BTreeMap<usize, FlatVar>,
 }
 
 pub struct RelationInfos<'a>(pub BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>);
@@ -95,12 +95,14 @@ fn in_projections(args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> BTreeMap<
         .collect()
 }
 
-fn out_projections(args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> BTreeMap<FlatVar, usize> {
-    args.iter()
+fn out_projections(args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> BTreeMap<usize, FlatVar> {
+    let out_projs: BTreeMap<FlatVar, usize> =
+        args.iter()
         .copied()
         .enumerate()
         .filter_map(|(i, var)| (!fixed_vars.contains(&var)).then_some((var, i)))
-        .collect()
+        .collect();
+    out_projs.into_iter().map(|(var, i)| (i, var)).collect()
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
