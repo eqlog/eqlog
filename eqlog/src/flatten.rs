@@ -598,7 +598,9 @@ pub fn flatten_v2(rule: RuleDeclNode, eqlog: &Eqlog) -> FlatRule {
             let fork_blocks = once(stmts)
                 .chain(flatten_if_fresh(morphism, &el_vars, eqlog))
                 .collect();
-            stmts = vec![FlatStmt::Fork(fork_blocks)];
+            stmts = vec![FlatStmt::Fork(FlatForkStmt {
+                blocks: fork_blocks,
+            })];
         } else if eqlog.surj_then_morphism(morphism) {
             stmts.extend(flatten_surj_then(morphism, &el_vars, eqlog));
         } else if eqlog.non_surj_then_morphism(morphism) {
@@ -621,7 +623,9 @@ pub fn flatten_v2(rule: RuleDeclNode, eqlog: &Eqlog) -> FlatRule {
             let if_block = if_blocks.into_iter().next().unwrap();
 
             let fork_blocks = vec![stmts, if_block];
-            stmts = vec![FlatStmt::Fork(fork_blocks)];
+            stmts = vec![FlatStmt::Fork(FlatForkStmt {
+                blocks: fork_blocks,
+            })];
         } else {
             panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
         }

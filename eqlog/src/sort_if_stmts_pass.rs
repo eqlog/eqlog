@@ -146,8 +146,8 @@ fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatV
                     FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => {
                         fixed_vars.extend(stmt.iter_vars());
                     }
-                    FlatStmt::Fork(blocks) => {
-                        for block in blocks.iter_mut() {
+                    FlatStmt::Fork(fork_stmt) => {
+                        for block in fork_stmt.blocks.iter_mut() {
                             sort_if_stmts_rec(block.as_mut_slice(), &mut fixed_vars.clone());
                         }
                         fixed_vars.extend(stmt.iter_vars());

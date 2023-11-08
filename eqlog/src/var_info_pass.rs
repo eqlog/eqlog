@@ -20,11 +20,12 @@ pub fn fixed_vars_rec<'a>(
             FlatStmt::If(_) | FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => {
                 current_fixed_vars.extend(stmt.iter_vars());
             }
-            FlatStmt::Fork(blocks) => {
-                for stmts in blocks {
+            FlatStmt::Fork(fork_stmt) => {
+                for stmts in fork_stmt.blocks.iter() {
                     fixed_vars_rec(stmts, current_fixed_vars.clone(), all_fixed_vars);
                 }
-                let shared_used_vars = blocks
+                let shared_used_vars = fork_stmt
+                    .blocks
                     .iter()
                     .map(|block_stmts| -> BTreeSet<FlatVar> {
                         block_stmts
@@ -96,8 +97,8 @@ fn in_projections(args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> BTreeMap<
 }
 
 fn out_projections(args: &[FlatVar], fixed_vars: &BTreeSet<FlatVar>) -> BTreeMap<usize, FlatVar> {
-    let out_projs: BTreeMap<FlatVar, usize> =
-        args.iter()
+    let out_projs: BTreeMap<FlatVar, usize> = args
+        .iter()
         .copied()
         .enumerate()
         .filter_map(|(i, var)| (!fixed_vars.contains(&var)).then_some((var, i)))
@@ -166,8 +167,8 @@ pub fn relation_info_rec<'a>(
                 }
             },
             FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
-            FlatStmt::Fork(blocks) => {
-                for block in blocks.iter() {
+            FlatStmt::Fork(fork_stmt) => {
+                for block in fork_stmt.blocks.iter() {
                     relation_info_rec(block, can_assume_functionality, infos, fixed_vars);
                 }
             }

@@ -35,7 +35,7 @@ impl QuerySpec {
         let domain = eqlog.domain(func).expect("domain should be total");
         let dom_len = type_list_vec(domain, eqlog).len();
         QuerySpec {
-            projections: (0 .. dom_len).collect(),
+            projections: (0..dom_len).collect(),
             diagonals: BTreeSet::new(),
             only_dirty: false,
         }
@@ -208,8 +208,8 @@ pub fn collect_relation_if_stmts<'a>(
                 }
             },
             FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
-            FlatStmt::Fork(blocks) => {
-                for block in blocks {
+            FlatStmt::Fork(fork_stmt) => {
+                for block in fork_stmt.blocks.iter() {
                     collect_relation_if_stmts(block.iter(), out);
                 }
             }

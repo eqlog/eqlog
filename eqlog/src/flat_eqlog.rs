@@ -63,11 +63,16 @@ pub struct FlatNonSurjThenStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatForkStmt {
+    pub blocks: Vec<Vec<FlatStmt>>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatStmt {
     If(FlatIfStmt),
     SurjThen(FlatSurjThenStmt),
     NonSurjThen(FlatNonSurjThenStmt),
-    Fork(Vec<Vec<FlatStmt>>),
+    Fork(FlatForkStmt),
 }
 
 impl FlatStmtEqual {
@@ -159,9 +164,10 @@ impl FlatStmt {
             FlatStmt::NonSurjThen(non_surj_then_stmt) => {
                 vars.extend(non_surj_then_stmt.iter_vars());
             }
-            FlatStmt::Fork(blocks) => {
+            FlatStmt::Fork(fork_stmt) => {
                 vars.extend(
-                    blocks
+                    fork_stmt
+                        .blocks
                         .iter()
                         .flatten()
                         .map(|stmt| stmt.iter_vars())
