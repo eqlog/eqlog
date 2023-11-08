@@ -13,10 +13,6 @@ doctest = false
 package = "eqlog-eqlog-tree"
 path = "../eqlog-eqlog-tree"
 
-[[bin]]
-name = "eqlog-tree"
-path = "main.rs"
-
 [features]
 default = ["rebuild"]
 rebuild = []
