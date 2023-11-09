@@ -645,6 +645,12 @@ rule arg_decl_should_be_type {
     if loc = arg_decl_node_loc(arg_decl);
     then should_be_symbol(name, kind, loc);
 }
+rule result_should_be_type {
+    if func_decl(func_decl, _, _, result_type);
+    if kind = type_symbol();
+    if loc = func_decl_node_loc(func_decl);
+    then should_be_symbol(result_type, kind, loc);
+}
 rule var_atom_should_be_type {
     if var_if_atom_node(atom, _, name);
     if kind = type_symbol();

@@ -1,0 +1,6 @@
+Error: undeclared symbol "B"
+ --> error-test-source/undeclared-type-func-arg/theory.eql:4
+  | 
+4 | func foo(A, B) -> C;
+  |             ^       
+  | 

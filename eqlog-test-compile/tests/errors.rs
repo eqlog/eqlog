@@ -63,9 +63,18 @@ fn test_case(case_src: &Path) {
 }
 
 #[test]
-fn undeclared_type() {
-    test_case(Path::new("undeclared-type"));
+fn undeclared_type_pred_arg() {
+    test_case(Path::new("undeclared-type-pred-arg"));
 }
+#[test]
+fn undeclared_type_func_arg() {
+    test_case(Path::new("undeclared-type-func-arg"));
+}
+#[test]
+fn undeclared_type_func_result() {
+    test_case(Path::new("undeclared-type-func-result"));
+}
+
 #[test]
 fn undeclared_predicate() {
     test_case(Path::new("undeclared-predicate"));

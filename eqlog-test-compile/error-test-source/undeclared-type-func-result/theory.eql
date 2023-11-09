@@ -1,0 +1,4 @@
+type A;
+type B;
+
+func foo(A, B) -> C;

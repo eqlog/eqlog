@@ -1,5 +1,5 @@
 Error: undeclared symbol "A"
- --> error-test-source/undeclared-type/theory.eql:1
+ --> error-test-source/undeclared-type-pred-arg/theory.eql:1
   | 
 1 | pred foo(A);
   |          ^  
