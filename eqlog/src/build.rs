@@ -3,7 +3,7 @@ use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
-use crate::fork_suffix_pass::*;
+use crate::fork_continuations_pass::*;
 use crate::grammar::*;
 use crate::grammar_util::*;
 use crate::index_selection::*;
@@ -188,9 +188,9 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         sort_if_stmts_pass(&mut flat_rule);
         flat_rule
     }));
-    let _fork_suffixes: Vec<ForkSuffixes> = flat_rules
+    let _fork_continuations: Vec<ForkContinuations> = flat_rules
         .iter()
-        .map(|rule| fork_postfix_pass(rule))
+        .map(|rule| fork_continuations_pass(rule))
         .collect();
 
     let (functionality_rules, explicit_rules) = flat_rules.split_at(functionality_rule_num);
