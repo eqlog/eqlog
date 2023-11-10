@@ -11,6 +11,7 @@ mod flat_eqlog;
 mod flat_to_llam;
 mod flatten;
 mod fmt_util;
+mod fork_continuations_pass;
 mod index_selection;
 mod llam;
 mod rust_gen;

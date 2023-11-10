@@ -30,6 +30,16 @@ impl QuerySpec {
             only_dirty: true,
         }
     }
+    /// The [QuerySpec] for evaluating a function.
+    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
+        let domain = eqlog.domain(func).expect("domain should be total");
+        let dom_len = type_list_vec(domain, eqlog).len();
+        QuerySpec {
+            projections: (0..dom_len).collect(),
+            diagonals: BTreeSet::new(),
+            only_dirty: false,
+        }
+    }
 
     pub fn le_restrictive(&self, rhs: &QuerySpec) -> bool {
         if self.diagonals != rhs.diagonals || self.only_dirty != rhs.only_dirty {
@@ -198,8 +208,8 @@ pub fn collect_relation_if_stmts<'a>(
                 }
             },
             FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
-            FlatStmt::Fork(blocks) => {
-                for block in blocks {
+            FlatStmt::Fork(fork_stmt) => {
+                for block in fork_stmt.blocks.iter() {
                     collect_relation_if_stmts(block.iter(), out);
                 }
             }
@@ -230,12 +240,7 @@ pub fn select_indices_v2<'a>(
     // the public eval function and for non surjective then statements.
     for func in eqlog.iter_func() {
         let rel = format!("{}", Rel::Func(func).display(eqlog, identifiers));
-        let domain_len = type_list_vec(eqlog.domain(func).expect("should be total"), eqlog).len();
-        let spec = QuerySpec {
-            diagonals: BTreeSet::new(),
-            projections: (0..domain_len).collect(),
-            only_dirty: false,
-        };
+        let spec = QuerySpec::eval_func(func, eqlog);
         query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
     }
 
