@@ -1511,7 +1511,8 @@ fn display_fork<'a>(
         .map(|block| FmtFn(move |f: &mut Formatter| -> Result { todo!() }))
         .format("\n");
 
-    todo!()
+    todo!();
+    ""
 }
 
 fn display_stmts<'a>(
