@@ -1,6 +1,6 @@
 use crate::flat_ast::*;
-use std::collections::{BTreeMap, BTreeSet};
 pub use crate::var_info_pass::Quantifier;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum QueryAtom {

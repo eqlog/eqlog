@@ -1,9 +1,9 @@
 use crate::eqlog_util::*;
 use crate::flat_ast::*;
+use crate::flat_eqlog::*;
+use crate::fmt_util::*;
 use crate::index_selection::*;
 use crate::llam::*;
-use crate::fmt_util::*;
-use crate::flat_eqlog::*;
 use crate::var_info_pass::*;
 use by_address::ByAddress;
 use convert_case::{Case, Casing};
@@ -1310,9 +1310,7 @@ fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Resul
     Ok(())
 }
 
-fn display_var(
-    var: FlatVar,
-) -> impl Display {
+fn display_var(var: FlatVar) -> impl Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let var = var.0;
         write!(f, "tm{var}")?;
@@ -1325,9 +1323,10 @@ fn display_type<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let ident = eqlog.iter_semantic_type().find_map(|(ident, typ0)| {
-        eqlog.are_equal_type(typ0, typ).then_some(ident)
-    }).expect("semantic_type should be surjective");
+    let ident = eqlog
+        .iter_semantic_type()
+        .find_map(|(ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
+        .expect("semantic_type should be surjective");
     identifiers.get(&ident).unwrap().as_str()
 }
 
@@ -1341,20 +1340,28 @@ fn display_if_stmt_header<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         match stmt {
             FlatIfStmt::Equal(eq_stmt) => {
-                let FlatStmtEqual{ lhs, rhs } = eq_stmt;
+                let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
                 let typ = display_type(*types.get(lhs).unwrap(), eqlog, identifiers);
 
                 let lhs = display_var(*lhs);
                 let rhs = display_var(*rhs);
 
-                writedoc!{f, "
+                writedoc! {f, "
                     if (self.are_equal_{typ}({lhs}, {rhs})) {{
                 "}?;
-            },
+            }
             FlatIfStmt::Relation(rel_stmt) => {
-                let FlatIfStmtRelation{ rel, args, only_dirty } = rel_stmt;
-                let RelationInfo { diagonals, in_projections, out_projections } = relation_infos.0.get(&ByAddress(rel_stmt)).unwrap();
+                let FlatIfStmtRelation {
+                    rel,
+                    args,
+                    only_dirty,
+                } = rel_stmt;
+                let RelationInfo {
+                    diagonals,
+                    in_projections,
+                    out_projections,
+                } = relation_infos.0.get(&ByAddress(rel_stmt)).unwrap();
                 let arity_len = args.len();
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
@@ -1381,18 +1388,21 @@ fn display_if_stmt_header<'a>(
                     write!(f, "tm{}, ", tm.0)?;
                 }
                 write!(f, ") {{\n")?;
-            },
+            }
             FlatIfStmt::Type(type_stmt) => {
-                let FlatIfStmtType{ var, only_dirty } = type_stmt;
+                let FlatIfStmtType { var, only_dirty } = type_stmt;
                 let dirty_str = if *only_dirty { "dirty" } else { "all" };
-                let typ = format!("{}", display_type(*types.get(var).unwrap(), eqlog, identifiers));
+                let typ = format!(
+                    "{}",
+                    display_type(*types.get(var).unwrap(), eqlog, identifiers)
+                );
                 let typ_snake = typ.to_case(Snake);
                 let var = display_var(*var);
                 writedoc! {f, "
                     #[allow(unused_variables)]
                     for {var} in self.{typ_snake}_{dirty_str}.iter().copied() {{
                 "}?;
-            },
+            }
         };
 
         Ok(())
@@ -1408,7 +1418,7 @@ fn display_surj_then<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         match stmt {
             FlatSurjThenStmt::Equal(eq_stmt) => {
-                let FlatStmtEqual { lhs, rhs  } = eq_stmt;
+                let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
                 let typ = *types.get(lhs).unwrap();
                 let typ_snake = format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
@@ -1416,25 +1426,34 @@ fn display_surj_then<'a>(
                 let lhs = display_var(*lhs);
                 let rhs = display_var(*rhs);
 
-                writedoc!{f, "
+                writedoc! {f, "
                     delta.new_{typ_snake}_equalities.push(({lhs}, {rhs}));
                 "}?;
-            },
+            }
             FlatSurjThenStmt::Relation(rel_stmt) => {
                 let FlatSurjThenStmtRelation { rel, args } = rel_stmt;
-                let relation_camel = format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
+                let relation_camel =
+                    format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
                 let relation_snake = format!("{}", rel.display(eqlog, identifiers)).to_case(Snake);
-                let args0 = args.iter().copied().map(|arg| display_var(arg)).format(", ");
-                let args1 = args.iter().copied().map(|arg| display_var(arg)).format(", ");
+                let args0 = args
+                    .iter()
+                    .copied()
+                    .map(|arg| display_var(arg))
+                    .format(", ");
+                let args1 = args
+                    .iter()
+                    .copied()
+                    .map(|arg| display_var(arg))
+                    .format(", ");
                 let query_spec = QuerySpec::all();
                 let iter_name = IterName(relation_camel.as_str(), &query_spec);
-                writedoc!{f, "
+                writedoc! {f, "
                     let exists_already = self.{iter_name}({args0}).next().is_some();
                     if !exists_already {{
                     delta.new_{relation_snake}.push({relation_camel}({args1}));
                     }}
                 "}?;
-            },
+            }
         };
 
         Ok(())
@@ -1447,7 +1466,11 @@ fn display_non_surj_then<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let FlatNonSurjThenStmt { func, func_args, result } = stmt;
+        let FlatNonSurjThenStmt {
+            func,
+            func_args,
+            result,
+        } = stmt;
         let rel = Rel::Func(*func);
         let relation_camel = format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
         let relation_snake = format!("{}", rel.display(eqlog, identifiers)).to_case(Snake);
@@ -1461,7 +1484,7 @@ fn display_non_surj_then<'a>(
         let out_arg_wildcards = repeat("_").take(func_args.len()).format(", ");
         let result = display_var(*result);
 
-        writedoc!{f, "
+        writedoc! {f, "
             let {result} = match self.{iter_name}({in_args0}).next() {{
                 Some({relation_camel}({out_arg_wildcards}, res)) => res,
                 None => {{ 
@@ -1483,17 +1506,12 @@ fn display_fork<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let blocks = blocks.iter().map(|block| {
-        FmtFn(move |f: &mut Formatter| -> Result {
-            block = display_block()
-            writedoc!{out, "
-                for _ in [()] {{
+    let blocks = blocks
+        .iter()
+        .map(|block| FmtFn(move |f: &mut Formatter| -> Result { todo!() }))
+        .format("\n");
 
-                }}
-        }
-    }
-    FmtFn(move |f: &mut Formatter| -> Result {
-    })
+    todo!()
 }
 
 fn display_stmts<'a>(
@@ -1506,39 +1524,44 @@ fn display_stmts<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let (head, tail) = match stmts {
-            [] => { return Ok(()); }
+            [] => {
+                return Ok(());
+            }
             [head, tail @ ..] => (head, tail),
         };
 
         match head {
             FlatStmt::If(if_stmt) => {
-                let if_header = display_if_stmt_header(if_stmt, types, relation_infos, eqlog, identifiers);
+                let if_header =
+                    display_if_stmt_header(if_stmt, types, relation_infos, eqlog, identifiers);
                 let if_footer = "}";
-                let tail = display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
-                writedoc!{f, "
+                let tail =
+                    display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
+                writedoc! {f, "
                     {if_header}
                     {tail}
                     {if_footer}
                 "}?;
-            },
+            }
             FlatStmt::SurjThen(surj_then) => {
-                let tail = display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
+                let tail =
+                    display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
                 let surj_then = display_surj_then(surj_then, types, eqlog, identifiers);
-                writedoc!{f, "
+                writedoc! {f, "
                     {surj_then}
                     {tail}
                 "}?;
-            },
+            }
             FlatStmt::NonSurjThen(non_surj_then) => {
-                let tail = display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
+                let tail =
+                    display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
                 let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
-                writedoc!{f, "
+                writedoc! {f, "
                     {non_surj_then}
                     {tail}
                 "}?;
-            },
-            FlatStmt::Fork(fork) => {
-            },
+            }
+            FlatStmt::Fork(fork) => {}
         };
         Ok(())
     })
@@ -1558,7 +1581,7 @@ fn display_stmts_fn<'a>(
             Some(first_stmt) => first_stmt,
             None => {
                 return Ok(());
-            },
+            }
         };
 
         let args = fixed_vars.0.get(&ByAddress(first_stmt)).unwrap();
@@ -1566,16 +1589,10 @@ fn display_stmts_fn<'a>(
         Ok(())
     });
 
-    let stmts = display_stmts(
-        stmts,
-        types,
-        fixed_vars,
-        relation_infos,
-        eqlog,
-        identifiers);
+    let stmts = display_stmts(stmts, types, fixed_vars, relation_infos, eqlog, identifiers);
 
     FmtFn(move |f: &mut Formatter| -> Result {
-        writedoc!{f, "
+        writedoc! {f, "
             fn {name}({arg_list}) {{
             {stmts}
             }}
@@ -1606,8 +1623,27 @@ fn display_rule_fn<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let name = format!("{}", display_rule_name(rule_index, rule.name.map(|ident| identifiers.get(&ident).unwrap().as_str())));
-        write!(f, "{}", display_stmts_fn(name, &rule.stmts, &rule.var_types, fixed_vars, relation_infos, eqlog, identifiers))?;
+        let name = format!(
+            "{}",
+            display_rule_name(
+                rule_index,
+                rule.name
+                    .map(|ident| identifiers.get(&ident).unwrap().as_str())
+            )
+        );
+        write!(
+            f,
+            "{}",
+            display_stmts_fn(
+                name,
+                &rule.stmts,
+                &rule.var_types,
+                fixed_vars,
+                relation_infos,
+                eqlog,
+                identifiers
+            )
+        )?;
         Ok(())
     })
 }
