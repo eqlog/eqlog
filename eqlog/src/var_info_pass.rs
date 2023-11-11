@@ -5,17 +5,20 @@ use by_address::ByAddress;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub struct FixedVars<'a>(pub BTreeMap<ByAddress<&'a FlatStmt>, BTreeSet<FlatVar>>);
+pub struct FixedVars<'a>(pub BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>);
 
 pub fn fixed_vars_rec<'a>(
     stmts: &'a [FlatStmt],
     mut current_fixed_vars: BTreeSet<FlatVar>,
     all_fixed_vars: &mut FixedVars<'a>,
 ) {
-    for stmt in stmts {
+    for i in 0..stmts.len() {
+        let suffix = &stmts[i..];
         all_fixed_vars
             .0
-            .insert(ByAddress(stmt), current_fixed_vars.clone());
+            .insert(ByAddress(suffix), current_fixed_vars.clone());
+
+        let stmt = &stmts[i];
         match stmt {
             FlatStmt::If(_) | FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => {
                 current_fixed_vars.extend(stmt.iter_vars());
@@ -40,6 +43,10 @@ pub fn fixed_vars_rec<'a>(
             }
         }
     }
+    let empty_suffix = &stmts[stmts.len()..];
+    all_fixed_vars
+        .0
+        .insert(ByAddress(empty_suffix), current_fixed_vars);
 }
 
 pub fn fixed_vars_pass<'a>(rules: impl Iterator<Item = &'a FlatRule>) -> FixedVars<'a> {
@@ -143,12 +150,14 @@ pub fn relation_info_rec<'a>(
     infos: &mut RelationInfos<'a>,
     fixed_vars: &FixedVars<'a>,
 ) {
-    for stmt in stmts {
+    for i in 0..stmts.len() {
+        let stmt = &stmts[i];
+        let tail = &stmts[i..];
         match stmt {
             FlatStmt::If(if_stmt) => match if_stmt {
                 FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
                 FlatIfStmt::Relation(rel_if_stmt) => {
-                    let fixed_vars = fixed_vars.0.get(&ByAddress(stmt)).unwrap();
+                    let fixed_vars = fixed_vars.0.get(&ByAddress(tail)).unwrap();
                     let FlatIfStmtRelation {
                         rel,
                         args,
