@@ -69,6 +69,11 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
 }
 
 pub struct FlatRuleAnalysis<'a> {
+    /// The types of [FlatVar]s.
+    ///
+    /// This is currently just a reference to the corresponding field in [FlatRule], but perhaps
+    /// this field should live here instead.
+    pub var_types: &'a BTreeMap<FlatVar, Type>,
     /// A map that assigns to each suffix of consecutive statements in a rule the set of variables
     /// that are already bound before those statements.
     pub fixed_vars: BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
@@ -90,6 +95,7 @@ impl<'a> FlatRuleAnalysis<'a> {
         let (fork_suffixes, fork_continuations) = forks_continuations(rule);
 
         Self {
+            var_types: &rule.var_types,
             fixed_vars,
             if_stmt_rel_infos,
             fork_suffixes,
