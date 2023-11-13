@@ -1,22 +1,18 @@
 #![allow(dead_code)]
 
-use crate::flat_eqlog::*;
+use super::ast::*;
 use by_address::ByAddress;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub struct FixedVars<'a>(pub BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>);
-
-pub fn fixed_vars_rec<'a>(
+fn fixed_vars_rec<'a>(
     stmts: &'a [FlatStmt],
     mut current_fixed_vars: BTreeSet<FlatVar>,
-    all_fixed_vars: &mut FixedVars<'a>,
+    all_fixed_vars: &mut BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
 ) {
     for i in 0..stmts.len() {
         let suffix = &stmts[i..];
-        all_fixed_vars
-            .0
-            .insert(ByAddress(suffix), current_fixed_vars.clone());
+        all_fixed_vars.insert(ByAddress(suffix), current_fixed_vars.clone());
 
         let stmt = &stmts[i];
         match stmt {
@@ -44,27 +40,26 @@ pub fn fixed_vars_rec<'a>(
         }
     }
     let empty_suffix = &stmts[stmts.len()..];
-    all_fixed_vars
-        .0
-        .insert(ByAddress(empty_suffix), current_fixed_vars);
+    all_fixed_vars.insert(ByAddress(empty_suffix), current_fixed_vars);
 }
 
-pub fn fixed_vars_pass<'a>(rules: impl Iterator<Item = &'a FlatRule>) -> FixedVars<'a> {
-    let mut all_fixed_vars = FixedVars(BTreeMap::new());
-    for rule in rules {
-        let current_fixed_vars = BTreeSet::new();
-        fixed_vars_rec(&rule.stmts, current_fixed_vars, &mut all_fixed_vars);
-    }
+pub fn fixed_vars<'a>(
+    rule: &'a FlatRule,
+) -> BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>> {
+    let mut all_fixed_vars = BTreeMap::new();
+    let current_fixed_vars = BTreeSet::new();
+    fixed_vars_rec(&rule.stmts, current_fixed_vars, &mut all_fixed_vars);
     all_fixed_vars
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum Quantifier {
     All,
     Any,
 }
 
 /// Annotation of a [FlatIfStmt] that takes the context of the statement into account.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelationInfo {
     /// The set of non-trivial diagonals among arguments.
     ///
@@ -78,9 +73,11 @@ pub struct RelationInfo {
     /// The list of new (i.e., not already fixed) variables among arguments. A [FlatVar] must not
     /// occur twice; in case of a diagonal any one entry should be in the map.
     pub out_projections: BTreeMap<usize, FlatVar>,
-}
 
-pub struct RelationInfos<'a>(pub BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>);
+    /// Whether it suffices to consider one match of the variables in the rel statement
+    /// ([Quantifier::Any]), or if all matches must be considered ([Quantifier::All]).
+    pub quantifier: Quantifier,
+}
 
 fn diagonals(args: &[FlatVar]) -> BTreeSet<BTreeSet<usize>> {
     let mut enumerated_args: Vec<(usize, FlatVar)> = args.iter().copied().enumerate().collect();
@@ -147,8 +144,8 @@ fn quantifier(
 pub fn relation_info_rec<'a>(
     stmts: &'a [FlatStmt],
     can_assume_functionality: CanAssumeFunctionality,
-    infos: &mut RelationInfos<'a>,
-    fixed_vars: &FixedVars<'a>,
+    infos: &mut BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
+    fixed_vars: &BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
 ) {
     for i in 0..stmts.len() {
         let stmt = &stmts[i];
@@ -157,22 +154,25 @@ pub fn relation_info_rec<'a>(
             FlatStmt::If(if_stmt) => match if_stmt {
                 FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
                 FlatIfStmt::Relation(rel_if_stmt) => {
-                    let fixed_vars = fixed_vars.0.get(&ByAddress(tail)).unwrap();
+                    let fixed_vars = fixed_vars.get(&ByAddress(tail)).unwrap();
                     let FlatIfStmtRelation {
                         rel,
                         args,
                         only_dirty: _,
                     } = rel_if_stmt;
 
-                    let _quantifier =
-                        quantifier(*rel, args.as_slice(), can_assume_functionality, fixed_vars);
-
                     let info = RelationInfo {
                         diagonals: diagonals(args.as_slice()),
                         in_projections: in_projections(args.as_slice(), fixed_vars),
                         out_projections: out_projections(args.as_slice(), fixed_vars),
+                        quantifier: quantifier(
+                            *rel,
+                            args.as_slice(),
+                            can_assume_functionality,
+                            fixed_vars,
+                        ),
                     };
-                    infos.0.insert(ByAddress(rel_if_stmt), info);
+                    infos.insert(ByAddress(rel_if_stmt), info);
                 }
             },
             FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
@@ -185,18 +185,17 @@ pub fn relation_info_rec<'a>(
     }
 }
 
-pub fn relation_info_pass<'a>(
-    rules: impl Iterator<Item = (&'a FlatRule, CanAssumeFunctionality)>,
-    fixed_vars: &FixedVars<'a>,
-) -> RelationInfos<'a> {
-    let mut infos = RelationInfos(BTreeMap::new());
-    for (rule, can_assume_functionality) in rules {
-        relation_info_rec(
-            rule.stmts.as_slice(),
-            can_assume_functionality,
-            &mut infos,
-            fixed_vars,
-        );
-    }
+pub fn if_stmt_rel_infos<'a>(
+    rule: &'a FlatRule,
+    can_assume_functionality: CanAssumeFunctionality,
+    fixed_vars: &BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
+) -> BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo> {
+    let mut infos = BTreeMap::new();
+    relation_info_rec(
+        rule.stmts.as_slice(),
+        can_assume_functionality,
+        &mut infos,
+        fixed_vars,
+    );
     infos
 }

@@ -3,27 +3,25 @@ use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flat_to_llam::*;
 use crate::flatten::*;
-use crate::fork_continuations_pass::*;
 use crate::grammar::*;
 use crate::grammar_util::*;
 use crate::index_selection::*;
 use crate::llam::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
-use crate::sort_if_stmts_pass::*;
-use crate::var_info_pass::*;
+use by_address::ByAddress;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::eprintdoc;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::env;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
-use std::iter::repeat;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
@@ -185,30 +183,28 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         let mut flat_rule = flatten_v2(rule, &eqlog);
         // Necessary here for explicit rules, but not for implicit functionality rules, since the
         // latter are already ordered reasonably.
-        sort_if_stmts_pass(&mut flat_rule);
+        sort_if_stmts(&mut flat_rule);
         flat_rule
     }));
-    let _fork_continuations: Vec<ForkContinuations> = flat_rules
+
+    let (flat_functionality_rules, flat_explicit_rules) =
+        flat_rules.split_at(functionality_rule_num);
+    let flat_analyses: Vec<FlatRuleAnalysis> = flat_functionality_rules
         .iter()
-        .map(|rule| fork_continuations_pass(rule))
+        .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::No))
+        .chain(
+            flat_explicit_rules
+                .iter()
+                .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::Yes)),
+        )
         .collect();
 
-    let (functionality_rules, explicit_rules) = flat_rules.split_at(functionality_rule_num);
-
-    let fixed_vars = fixed_vars_pass(flat_rules.iter());
-    let relation_infos = relation_info_pass(
-        functionality_rules
-            .iter()
-            .zip(repeat(CanAssumeFunctionality::No))
-            .chain(
-                explicit_rules
-                    .iter()
-                    .zip(repeat(CanAssumeFunctionality::Yes)),
-            ),
-        &fixed_vars,
-    );
-    let _index_selection =
-        select_indices_v2(flat_rules.iter(), &relation_infos, &eqlog, &identifiers);
+    let if_stmt_rel_infos: BTreeSet<(&FlatIfStmtRelation, &RelationInfo)> = flat_analyses
+        .iter()
+        .flat_map(|analysis| analysis.if_stmt_rel_infos.iter())
+        .map(|(ByAddress(if_stmt_rel), info)| (*if_stmt_rel, info))
+        .collect();
+    let _index_selection = select_indices_v2(&if_stmt_rel_infos, &eqlog, &identifiers);
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
     query_actions.extend(
