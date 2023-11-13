@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use std::collections::BTreeSet;
 
-use crate::flat_eqlog::*;
-use crate::slice_group_by::*;
+use super::ast::*;
+use super::slice_group_by::*;
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
 struct IfStmtGoodness {
@@ -159,7 +159,7 @@ fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatV
 }
 
 /// A pass that optimizes the order of  consecutive [FlatIfStmt] in `rule`.
-pub fn sort_if_stmts_pass<'a>(rule: &mut FlatRule) {
+pub fn sort_if_stmts<'a>(rule: &mut FlatRule) {
     let mut fixed_vars = BTreeSet::new();
     sort_if_stmts_rec(&mut rule.stmts, &mut fixed_vars);
 }

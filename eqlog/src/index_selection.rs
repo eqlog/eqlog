@@ -1,8 +1,5 @@
 use crate::eqlog_util::*;
-use crate::flat_eqlog::*;
 use crate::llam::*;
-use crate::var_info_pass::*;
-use by_address::ByAddress;
 use eqlog_eqlog::*;
 use maplit::btreeset;
 use std::collections::{BTreeMap, BTreeSet};
@@ -50,7 +47,7 @@ impl QuerySpec {
     }
 }
 
-fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
+pub fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
     let mut specs: Vec<QuerySpec> = indices.into_iter().collect();
     specs.sort_by_key(|index| index.projections.len());
 
@@ -174,100 +171,6 @@ where
             }
             Equate { .. } => (),
         }
-    }
-
-    query_specs
-        .into_iter()
-        .map(|(rel, query_specs)| {
-            let chains = query_spec_chains(query_specs);
-            let query_index_map: BTreeMap<QuerySpec, IndexSpec> = chains
-                .into_iter()
-                .flat_map(|queries| {
-                    let index = IndexSpec::from_query_spec_chain(
-                        get_arity(&rel, eqlog, identifiers).unwrap().len(),
-                        &queries,
-                    );
-                    queries.into_iter().zip(repeat(index))
-                })
-                .collect();
-            (rel, query_index_map)
-        })
-        .collect()
-}
-
-pub fn collect_relation_if_stmts<'a>(
-    stmts: impl Iterator<Item = &'a FlatStmt>,
-    out: &mut Vec<&'a FlatIfStmtRelation>,
-) {
-    for stmt in stmts {
-        match stmt {
-            FlatStmt::If(if_stmt) => match if_stmt {
-                FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
-                FlatIfStmt::Relation(if_stmt_relation) => {
-                    out.push(if_stmt_relation);
-                }
-            },
-            FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
-            FlatStmt::Fork(fork_stmt) => {
-                for block in fork_stmt.blocks.iter() {
-                    collect_relation_if_stmts(block.iter(), out);
-                }
-            }
-        }
-    }
-}
-
-pub fn select_indices_v2<'a>(
-    rules: impl Iterator<Item = &'a FlatRule>,
-    relation_infos: &RelationInfos,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> IndexSelection {
-    // Every relation needs at least a QuerySpec for all tuples.
-    // TODO: Can't we do without the QuerySpec for all dirty tuples though?
-    let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> = eqlog
-        .iter_func()
-        .map(Rel::Func)
-        .chain(eqlog.iter_pred().map(Rel::Pred))
-        .map(|rel| {
-            let rel = format!("{}", rel.display(eqlog, identifiers));
-            let min_spec_set = btreeset! {QuerySpec::all(), QuerySpec::all_dirty()};
-            (rel, min_spec_set)
-        })
-        .collect();
-
-    // Every func needs in addition a QuerySpec for the arguments to the functino to generate
-    // the public eval function and for non surjective then statements.
-    for func in eqlog.iter_func() {
-        let rel = format!("{}", Rel::Func(func).display(eqlog, identifiers));
-        let spec = QuerySpec::eval_func(func, eqlog);
-        query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
-    }
-
-    // Every relation if stmt needs a QuerySpec.
-    let mut rel_stmts = Vec::new();
-    collect_relation_if_stmts(rules.flat_map(|rule| rule.stmts.iter()), &mut rel_stmts);
-    for rel_stmt in rel_stmts {
-        let FlatIfStmtRelation {
-            rel,
-            args: _,
-            only_dirty,
-        } = rel_stmt;
-        let rel = format!("{}", rel.display(eqlog, identifiers));
-        let RelationInfo {
-            diagonals,
-            in_projections,
-            out_projections: _,
-        } = relation_infos
-            .0
-            .get(&ByAddress(rel_stmt))
-            .expect("Every relation if stmt should have an info");
-        let spec = QuerySpec {
-            diagonals: diagonals.clone(),
-            projections: in_projections.keys().copied().collect(),
-            only_dirty: *only_dirty,
-        };
-        query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
     }
 
     query_specs
