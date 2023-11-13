@@ -1,5 +1,5 @@
 use crate::flat_ast::*;
-pub use crate::var_info_pass::Quantifier;
+pub use crate::flat_eqlog::Quantifier;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]

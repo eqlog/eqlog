@@ -4,7 +4,6 @@ use crate::flat_eqlog::*;
 use crate::fmt_util::*;
 use crate::index_selection::*;
 use crate::llam::*;
-use crate::var_info_pass::*;
 use by_address::ByAddress;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
@@ -1332,8 +1331,7 @@ fn display_type<'a>(
 
 fn display_if_stmt_header<'a>(
     stmt: &'a FlatIfStmt,
-    types: &'a BTreeMap<FlatVar, Type>,
-    relation_infos: &'a RelationInfos,
+    analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1342,7 +1340,7 @@ fn display_if_stmt_header<'a>(
             FlatIfStmt::Equal(eq_stmt) => {
                 let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
-                let typ = display_type(*types.get(lhs).unwrap(), eqlog, identifiers);
+                let typ = display_type(*analysis.var_types.get(lhs).unwrap(), eqlog, identifiers);
 
                 let lhs = display_var(*lhs);
                 let rhs = display_var(*rhs);
@@ -1361,7 +1359,11 @@ fn display_if_stmt_header<'a>(
                     diagonals,
                     in_projections,
                     out_projections,
-                } = relation_infos.0.get(&ByAddress(rel_stmt)).unwrap();
+                    quantifier: _,
+                } = analysis
+                    .if_stmt_rel_infos
+                    .get(&ByAddress(rel_stmt))
+                    .unwrap();
                 let arity_len = args.len();
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
@@ -1394,7 +1396,7 @@ fn display_if_stmt_header<'a>(
                 let dirty_str = if *only_dirty { "dirty" } else { "all" };
                 let typ = format!(
                     "{}",
-                    display_type(*types.get(var).unwrap(), eqlog, identifiers)
+                    display_type(*analysis.var_types.get(var).unwrap(), eqlog, identifiers)
                 );
                 let typ_snake = typ.to_case(Snake);
                 let var = display_var(*var);
@@ -1411,7 +1413,7 @@ fn display_if_stmt_header<'a>(
 
 fn display_surj_then<'a>(
     stmt: &'a FlatSurjThenStmt,
-    types: &'a BTreeMap<FlatVar, Type>,
+    analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1420,7 +1422,7 @@ fn display_surj_then<'a>(
             FlatSurjThenStmt::Equal(eq_stmt) => {
                 let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
-                let typ = *types.get(lhs).unwrap();
+                let typ = *analysis.var_types.get(lhs).unwrap();
                 let typ_snake = format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
                 let lhs = display_var(*lhs);
@@ -1499,10 +1501,7 @@ fn display_non_surj_then<'a>(
 
 fn display_fork<'a>(
     blocks: &'a [Vec<FlatStmt>],
-    continuation: &str,
-    types: &'a BTreeMap<FlatVar, Type>,
-    fixed_vars: &'a FixedVars,
-    relation_infos: &'a RelationInfos,
+    analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1517,9 +1516,7 @@ fn display_fork<'a>(
 
 fn display_stmts<'a>(
     stmts: &'a [FlatStmt],
-    types: &'a BTreeMap<FlatVar, Type>,
-    fixed_vars: &'a FixedVars,
-    relation_infos: &'a RelationInfos,
+    analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1533,11 +1530,9 @@ fn display_stmts<'a>(
 
         match head {
             FlatStmt::If(if_stmt) => {
-                let if_header =
-                    display_if_stmt_header(if_stmt, types, relation_infos, eqlog, identifiers);
+                let if_header = display_if_stmt_header(if_stmt, analysis, eqlog, identifiers);
                 let if_footer = "}";
-                let tail =
-                    display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {if_header}
                     {tail}
@@ -1545,17 +1540,15 @@ fn display_stmts<'a>(
                 "}?;
             }
             FlatStmt::SurjThen(surj_then) => {
-                let tail =
-                    display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
-                let surj_then = display_surj_then(surj_then, types, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {surj_then}
                     {tail}
                 "}?;
             }
             FlatStmt::NonSurjThen(non_surj_then) => {
-                let tail =
-                    display_stmts(tail, types, fixed_vars, relation_infos, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
                 writedoc! {f, "
                     {non_surj_then}
@@ -1571,26 +1564,17 @@ fn display_stmts<'a>(
 fn display_stmts_fn<'a>(
     name: String,
     stmts: &'a [FlatStmt],
-    types: &'a BTreeMap<FlatVar, Type>,
-    fixed_vars: &'a FixedVars,
-    relation_infos: &'a RelationInfos,
+    analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     let arg_list = FmtFn(move |f: &mut Formatter| -> Result {
-        let first_stmt = match stmts.first() {
-            Some(first_stmt) => first_stmt,
-            None => {
-                return Ok(());
-            }
-        };
-
-        let args = fixed_vars.0.get(&ByAddress(first_stmt)).unwrap();
+        let args = analysis.fixed_vars.get(&ByAddress(stmts)).unwrap();
         write!(f, "{}", args.iter().copied().map(display_var).format(", "))?;
         Ok(())
     });
 
-    let stmts = display_stmts(stmts, types, fixed_vars, relation_infos, eqlog, identifiers);
+    let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
 
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
@@ -1618,8 +1602,7 @@ fn display_rule_name<'a>(index: usize, name: Option<&'a str>) -> impl 'a + Displ
 fn display_rule_fn<'a>(
     rule: &'a FlatRule,
     rule_index: usize,
-    fixed_vars: &'a FixedVars,
-    relation_infos: &'a RelationInfos,
+    analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1635,15 +1618,7 @@ fn display_rule_fn<'a>(
         write!(
             f,
             "{}",
-            display_stmts_fn(
-                name,
-                &rule.stmts,
-                &rule.var_types,
-                fixed_vars,
-                relation_infos,
-                eqlog,
-                identifiers
-            )
+            display_stmts_fn(name, &rule.stmts, analysis, eqlog, identifiers)
         )?;
         Ok(())
     })

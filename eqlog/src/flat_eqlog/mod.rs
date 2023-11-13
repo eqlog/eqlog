@@ -18,7 +18,7 @@ use forks_continuations::*;
 pub use index_selection::*;
 pub use sort_if_stmts::sort_if_stmts;
 use var_info::*;
-pub use var_info::{CanAssumeFunctionality, RelationInfo};
+pub use var_info::{CanAssumeFunctionality, Quantifier, RelationInfo};
 
 pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
