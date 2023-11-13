@@ -1592,7 +1592,9 @@ fn display_stmts_fn<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
             fn {name}({arg_list}) {{
+            for _ in [()] {{
             {stmts}
+            }}
             }}
         "}
     })
