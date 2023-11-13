@@ -1614,7 +1614,7 @@ fn display_rule_name<'a>(index: usize, name: Option<&'a str>) -> impl 'a + Displ
     })
 }
 
-fn display_rule_fn<'a>(
+fn display_rule_fns<'a>(
     rule: &'a FlatRule,
     rule_index: usize,
     analysis: &'a FlatRuleAnalysis<'a>,
@@ -1630,12 +1630,36 @@ fn display_rule_fn<'a>(
                     .map(|ident| identifiers.get(&ident).unwrap().as_str())
             )
         );
-        write!(
-            f,
-            "{}",
-            display_stmts_fn(name, &rule.stmts, analysis, eqlog, identifiers)
-        )?;
-        Ok(())
+
+        let rule_fn = display_stmts_fn(
+            name.clone(),
+            rule.stmts.as_slice(),
+            analysis,
+            eqlog,
+            identifiers,
+        );
+        let continuation_fns = analysis
+            .fork_suffixes
+            .iter()
+            .enumerate()
+            .map(
+                |(
+                    i,
+                    ForkSuffix {
+                        fork_stmt: _,
+                        suffix,
+                    },
+                )| {
+                    let name = format!("{name}_{i}");
+                    display_stmts_fn(name, suffix, analysis, eqlog, identifiers)
+                },
+            )
+            .format("\n");
+
+        writedoc! {f, "
+            {rule_fn}
+            {continuation_fns}
+        "}
     })
 }
 

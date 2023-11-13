@@ -14,6 +14,7 @@ use crate::eqlog_util::*;
 pub use ast::*;
 use by_address::ByAddress;
 use eqlog_eqlog::*;
+pub use forks_continuations::ForkSuffix;
 use forks_continuations::*;
 pub use index_selection::*;
 pub use sort_if_stmts::sort_if_stmts;
