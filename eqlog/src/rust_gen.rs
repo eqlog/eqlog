@@ -1500,18 +1500,24 @@ fn display_non_surj_then<'a>(
 }
 
 fn display_fork<'a>(
-    blocks: &'a [Vec<FlatStmt>],
+    fork: &'a FlatForkStmt,
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let blocks = blocks
+    fork.blocks
         .iter()
-        .map(|block| FmtFn(move |f: &mut Formatter| -> Result { todo!() }))
-        .format("\n");
-
-    todo!();
-    ""
+        .map(move |stmts| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                for _ in [()] {{
+                    {stmts}
+                }}
+            "}
+            })
+        })
+        .format("\n")
 }
 
 fn display_stmts<'a>(
@@ -1555,7 +1561,14 @@ fn display_stmts<'a>(
                     {tail}
                 "}?;
             }
-            FlatStmt::Fork(fork) => {}
+            FlatStmt::Fork(fork) => {
+                // We're not writing out `tail` here; those statements are written to a different
+                // function that acts as continuation.
+                let fork = display_fork(fork, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {fork}
+                "}?;
+            }
         };
         Ok(())
     })
