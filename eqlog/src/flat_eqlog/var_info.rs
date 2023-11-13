@@ -52,7 +52,7 @@ pub fn fixed_vars<'a>(
     all_fixed_vars
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum Quantifier {
     All,
     Any,
@@ -73,6 +73,10 @@ pub struct RelationInfo {
     /// The list of new (i.e., not already fixed) variables among arguments. A [FlatVar] must not
     /// occur twice; in case of a diagonal any one entry should be in the map.
     pub out_projections: BTreeMap<usize, FlatVar>,
+
+    /// Whether it suffices to consider one match of the variables in the rel statement
+    /// ([Quantifier::Any]), or if all matches must be considered ([Quantifier::All]).
+    pub quantifier: Quantifier,
 }
 
 fn diagonals(args: &[FlatVar]) -> BTreeSet<BTreeSet<usize>> {
@@ -157,13 +161,16 @@ pub fn relation_info_rec<'a>(
                         only_dirty: _,
                     } = rel_if_stmt;
 
-                    let _quantifier =
-                        quantifier(*rel, args.as_slice(), can_assume_functionality, fixed_vars);
-
                     let info = RelationInfo {
                         diagonals: diagonals(args.as_slice()),
                         in_projections: in_projections(args.as_slice(), fixed_vars),
                         out_projections: out_projections(args.as_slice(), fixed_vars),
+                        quantifier: quantifier(
+                            *rel,
+                            args.as_slice(),
+                            can_assume_functionality,
+                            fixed_vars,
+                        ),
                     };
                     infos.insert(ByAddress(rel_if_stmt), info);
                 }

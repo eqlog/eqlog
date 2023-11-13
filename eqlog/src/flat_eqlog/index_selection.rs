@@ -48,6 +48,7 @@ pub fn select_indices_v2<'a>(
             diagonals,
             in_projections,
             out_projections: _,
+            quantifier: _,
         } = info;
         let spec = QuerySpec {
             diagonals: diagonals.clone(),
