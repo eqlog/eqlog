@@ -59,8 +59,7 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
         .zip(domain)
         .chain([(result0, codomain), (result1, codomain)])
         .collect();
-    // TODO: Can we get a name here?
-    let name = None;
+    let name = format!("implicit_functionality_{}", func.0);
 
     FlatRule {
         stmts,

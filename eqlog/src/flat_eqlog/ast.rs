@@ -181,7 +181,7 @@ impl FlatStmt {
 }
 
 pub struct FlatRule {
-    pub name: Option<Ident>,
+    pub name: String,
     pub stmts: Vec<FlatStmt>,
     pub var_types: BTreeMap<FlatVar, Type>,
 }

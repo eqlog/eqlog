@@ -586,8 +586,15 @@ fn flatten_non_surj_then(
     })
 }
 
-pub fn flatten_v2(rule: RuleDeclNode, eqlog: &Eqlog) -> FlatRule {
-    let name = eqlog.rule_name(rule);
+pub fn flatten_v2(
+    rule: RuleDeclNode,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> FlatRule {
+    let name = match eqlog.rule_name(rule) {
+        Some(ident) => identifiers.get(&ident).unwrap().to_string(),
+        None => format!("anonymous_rule_{}", rule.0),
+    };
     let el_vars = assign_el_vars(iter_grouped_morphisms(rule, eqlog), eqlog);
 
     let mut stmts: Vec<FlatStmt> = Vec::new();

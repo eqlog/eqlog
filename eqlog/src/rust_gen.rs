@@ -1622,17 +1622,10 @@ fn display_rule_fns<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let name = format!(
-            "{}",
-            display_rule_name(
-                rule_index,
-                rule.name
-                    .map(|ident| identifiers.get(&ident).unwrap().as_str())
-            )
-        );
+        let name = rule.name.as_str();
 
         let rule_fn = display_stmts_fn(
-            name.clone(),
+            name.to_string(),
             rule.stmts.as_slice(),
             analysis,
             eqlog,

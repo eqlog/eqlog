@@ -180,7 +180,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .collect();
     let functionality_rule_num = flat_rules.len();
     flat_rules.extend(eqlog.iter_rule_decl_node().map(|rule| {
-        let mut flat_rule = flatten_v2(rule, &eqlog);
+        let mut flat_rule = flatten_v2(rule, &eqlog, &identifiers);
         // Necessary here for explicit rules, but not for implicit functionality rules, since the
         // latter are already ordered reasonably.
         sort_if_stmts(&mut flat_rule);
