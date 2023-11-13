@@ -69,6 +69,8 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
 }
 
 pub struct FlatRuleAnalysis<'a> {
+    /// The name of the [FlatRule].
+    pub rule_name: &'a str,
     /// The types of [FlatVar]s.
     ///
     /// This is currently just a reference to the corresponding field in [FlatRule], but perhaps
@@ -95,6 +97,7 @@ impl<'a> FlatRuleAnalysis<'a> {
         let (fork_suffixes, fork_continuations) = forks_continuations(rule);
 
         Self {
+            rule_name: rule.name.as_str(),
             var_types: &rule.var_types,
             fixed_vars,
             if_stmt_rel_infos,

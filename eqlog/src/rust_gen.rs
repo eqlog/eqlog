@@ -1529,6 +1529,21 @@ fn display_stmts<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         let (head, tail) = match stmts {
             [] => {
+                if let Some(continuation_index) = analysis.fork_continuations.get(&ByAddress(stmts))
+                {
+                    let rule_name = analysis.rule_name;
+                    let continuation_name: String = format!("{rule_name}_{continuation_index}");
+                    let args: &BTreeSet<FlatVar> = analysis
+                        .fixed_vars
+                        .get(&ByAddress(
+                            analysis.fork_suffixes[*continuation_index].suffix,
+                        ))
+                        .unwrap();
+                    let args = args.iter().copied().map(display_var).format(", ");
+                    writedoc! {f, "
+                        self.{continuation_name}({args});
+                    "}?;
+                }
                 return Ok(());
             }
             [head, tail @ ..] => (head, tail),
@@ -1616,7 +1631,6 @@ fn display_rule_name<'a>(index: usize, name: Option<&'a str>) -> impl 'a + Displ
 
 fn display_rule_fns<'a>(
     rule: &'a FlatRule,
-    rule_index: usize,
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
