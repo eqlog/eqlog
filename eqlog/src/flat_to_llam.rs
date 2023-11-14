@@ -1,9 +1,7 @@
 use crate::flat_ast::*;
 use crate::llam::*;
 use itertools::Itertools;
-use maplit::{btreemap, btreeset};
 use std::collections::{BTreeMap, BTreeSet};
-use std::iter::once;
 
 fn diagonals(args: &[FlatTerm]) -> BTreeSet<BTreeSet<usize>> {
     let mut enumerated_args: Vec<(usize, FlatTerm)> = args.iter().copied().enumerate().collect();
@@ -264,51 +262,5 @@ pub fn lower_sequent_seminaive(
         action,
         action_inputs,
         sorts: sorts.clone(),
-    }
-}
-
-pub fn functionality(relation: &str, arity: &[&str]) -> QueryAction {
-    assert!(!arity.is_empty());
-    let sorts: BTreeMap<FlatTerm, String> = arity
-        .iter()
-        .enumerate()
-        .chain(once((arity.len(), arity.last().unwrap())))
-        .map(|(i, s)| (FlatTerm(i), s.to_string()))
-        .collect();
-
-    let lhs_query = QueryAtom::Relation {
-        relation: relation.to_string(),
-        diagonals: BTreeSet::new(),
-        in_projections: BTreeMap::new(),
-        out_projections: (0..arity.len()).map(|i| (i, FlatTerm(i))).collect(),
-        only_dirty: false,
-        quantifier: Quantifier::All,
-    };
-    let rhs_query = QueryAtom::Relation {
-        relation: relation.to_string(),
-        diagonals: BTreeSet::new(),
-        in_projections: (0..arity.len() - 1).map(|i| (i, FlatTerm(i))).collect(),
-        out_projections: btreemap! { arity.len() - 1 => FlatTerm(arity.len())},
-        only_dirty: false,
-        quantifier: Quantifier::All,
-    };
-
-    let lhs = FlatTerm(arity.len() - 1);
-    let rhs = FlatTerm(arity.len());
-
-    let action_inputs = btreeset! { lhs, rhs };
-
-    let equate = ActionAtom::Equate {
-        sort: arity.last().unwrap().to_string(),
-        lhs: FlatTerm(arity.len() - 1),
-        rhs: FlatTerm(arity.len()),
-    };
-
-    QueryAction {
-        name: Some(format!("functionality_{relation}")),
-        queries: vec![vec![lhs_query, rhs_query]],
-        sorts,
-        action_inputs,
-        action: vec![equate],
     }
 }

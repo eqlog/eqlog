@@ -1,4 +1,3 @@
-use crate::eqlog_util::*;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flat_to_llam::*;
@@ -206,19 +205,17 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .collect();
     let index_selection_new = select_indices_v2(&if_stmt_rel_infos, &eqlog, &identifiers);
 
-    let mut query_actions: Vec<QueryAction> = Vec::new();
-    query_actions.extend(
-        iter_func_arities(&eqlog, &identifiers)
-            .map(|(func, arity)| functionality(func, arity.as_slice())),
-    );
     let rules: Vec<RuleDeclNode> = eqlog.iter_rule_decl_node().collect();
     let rule_flattenings: Vec<SequentFlattening> = rules
         .into_iter()
         .map(|rule| flatten(rule, &eqlog, &identifiers))
         .collect();
-    query_actions.extend(rule_flattenings.into_iter().map(|flattening| {
-        lower_sequent_seminaive(&flattening.name, &flattening.sequent, &flattening.sorts)
-    }));
+    let query_actions: Vec<QueryAction> = rule_flattenings
+        .into_iter()
+        .map(|flattening| {
+            lower_sequent_seminaive(&flattening.name, &flattening.sequent, &flattening.sorts)
+        })
+        .collect();
     let query_atoms = query_actions
         .iter()
         .map(|qa| qa.queries.iter().flatten())

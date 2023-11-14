@@ -1091,7 +1091,7 @@ fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
             self.apply_new_elements(model);
             self.apply_equalities(model);
             self.apply_tuples(model);
-            self.apply_func_defs(model);
+            // self.apply_func_defs(model);
         }}
     "}
 }
@@ -1262,7 +1262,7 @@ fn write_model_delta_apply_def_fn(
 
     // allow(unused_variables) is there for theories without functions.
     writedoc! {out, "
-        #[allow(unused_variables)]
+        #[allow(unused_variables, dead_code)]
         fn apply_func_defs(&mut self, model: &mut Model) {{
             {func_defs}
         }}
@@ -1993,22 +1993,25 @@ fn write_recall_previous_dirt(
     "}
 }
 
-fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
-    let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
-
-    let surjective_axioms = query_actions
+fn write_close_until_fn(
+    out: &mut impl Write,
+    query_actions: &[QueryAction],
+    rules: &[FlatRule],
+) -> io::Result<()> {
+    let rules = rules
         .iter()
-        .enumerate()
-        .filter(|(i, _)| is_surjective_axiom(i))
-        .format_with("\n", |(i, qa), f| {
-            let name = display_rule_name(i, qa.name.as_ref().map(|s| s.as_str()));
-            f(&format_args!("self.query_and_record_{name}(&mut delta);"))
-        });
+        .map(|rule| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let name = rule.name.as_str();
+                write!(f, "self.{name}(&mut delta);")
+            })
+        })
+        .format("\n");
 
     let non_surjective_axioms = query_actions
         .iter()
         .enumerate()
-        .filter(|(i, _)| !is_surjective_axiom(i))
+        .filter(|(_, qa)| !qa.is_surjective())
         .format_with("\n", |(i, qa), f| {
             let name = display_rule_name(i, qa.name.as_ref().map(|s| s.as_str()));
             f(&format_args!("self.query_and_record_{name}(&mut delta);"))
@@ -2034,7 +2037,7 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
 
             while self.is_dirty() {{
                 loop {{
-        {surjective_axioms}
+        {rules}
             
                     self.retire_dirt();
                     delta.apply(self);
@@ -2202,7 +2205,7 @@ fn write_theory_impl(
     write!(out, "\n")?;
 
     write_close_fn(out)?;
-    write_close_until_fn(out, query_actions)?;
+    write_close_until_fn(out, query_actions, rules)?;
 
     for type_name in iter_types(eqlog, identifiers) {
         write_new_element(out, type_name)?;
