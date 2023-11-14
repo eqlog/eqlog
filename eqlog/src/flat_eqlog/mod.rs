@@ -21,6 +21,24 @@ pub use sort_if_stmts::sort_if_stmts;
 use var_info::*;
 pub use var_info::{CanAssumeFunctionality, Quantifier, RelationInfo};
 
+pub fn ensure_unique_empty_slice_addresses(stmts: &mut Vec<FlatStmt>) {
+    if stmts.is_empty() {
+        stmts.reserve(1);
+        assert_ne!(
+            ByAddress(stmts.as_slice()),
+            ByAddress(Vec::new().as_slice())
+        );
+    } else {
+        for stmt in stmts {
+            if let FlatStmt::Fork(fork) = stmt {
+                for block in fork.blocks.iter_mut() {
+                    ensure_unique_empty_slice_addresses(block);
+                }
+            }
+        }
+    }
+}
+
 pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
     let codomain = eqlog.codomain(func).expect("codomain should be total");

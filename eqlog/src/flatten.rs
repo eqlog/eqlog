@@ -4,7 +4,6 @@ use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::iter::once;
 use std::iter::successors;
 
 pub struct SequentFlattening {
@@ -601,10 +600,13 @@ pub fn flatten_v2(
 
     for morphism in iter_grouped_morphisms(rule, eqlog) {
         if eqlog.if_morphism(morphism) {
-            stmts.extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
-            let fork_blocks = once(stmts)
-                .chain(flatten_if_fresh(morphism, &el_vars, eqlog))
-                .collect();
+            let mut fork_blocks = Vec::new();
+            if !stmts.is_empty() {
+                let mut first_block = stmts;
+                first_block.extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
+                fork_blocks.push(first_block);
+            }
+            fork_blocks.extend(flatten_if_fresh(morphism, &el_vars, eqlog));
             stmts = vec![FlatStmt::Fork(FlatForkStmt {
                 blocks: fork_blocks,
             })];
@@ -640,6 +642,7 @@ pub fn flatten_v2(
 
     let var_types = make_var_type_map(&el_vars, eqlog);
 
+    ensure_unique_empty_slice_addresses(&mut stmts);
     FlatRule {
         name,
         stmts,
