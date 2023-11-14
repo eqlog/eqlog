@@ -147,6 +147,10 @@ pub fn relation_info_rec<'a>(
     infos: &mut BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
     fixed_vars: &BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
 ) {
+    assert!(
+        !stmts.is_empty(),
+        "FIXME: Address of slice of empty vec is undefined"
+    );
     for i in 0..stmts.len() {
         let stmt = &stmts[i];
         let tail = &stmts[i..];

@@ -26,6 +26,10 @@ fn forks_continuations_rec<'a>(
         forks.push(ForkSuffix { fork_stmt, suffix });
 
         for block in fork_stmt.blocks.iter() {
+            assert!(
+                !block.is_empty(),
+                "FIXME: Address of slice of empty vec is undefined"
+            );
             let empty_block_suffix = &block[block.len()..];
             continuations.insert(ByAddress(empty_block_suffix), continuation);
             forks_continuations_rec(block.as_slice(), forks, continuations);
