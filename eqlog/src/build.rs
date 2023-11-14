@@ -204,7 +204,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .flat_map(|analysis| analysis.if_stmt_rel_infos.iter())
         .map(|(ByAddress(if_stmt_rel), info)| (*if_stmt_rel, info))
         .collect();
-    let _index_selection = select_indices_v2(&if_stmt_rel_infos, &eqlog, &identifiers);
+    let index_selection_new = select_indices_v2(&if_stmt_rel_infos, &eqlog, &identifiers);
 
     let mut query_actions: Vec<QueryAction> = Vec::new();
     query_actions.extend(
@@ -224,7 +224,13 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .map(|qa| qa.queries.iter().flatten())
         .flatten();
     let action_atoms = query_actions.iter().map(|qa| qa.action.iter()).flatten();
-    let index_selection = select_indices(query_atoms, action_atoms, &eqlog, &identifiers);
+    let mut index_selection = select_indices(query_atoms, action_atoms, &eqlog, &identifiers);
+    for ((rel0, specs0), (rel1, specs1)) in index_selection.iter_mut().zip(index_selection_new) {
+        assert_eq!(rel0.as_str(), rel1.as_str());
+        for (query, spec) in specs1 {
+            specs0.entry(query).or_insert(spec);
+        }
+    }
     let theory_name = in_file
         .file_stem()
         .unwrap()
@@ -241,6 +247,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         &eqlog,
         &identifiers,
         &query_actions,
+        flat_rules.as_slice(),
+        flat_analyses.as_slice(),
         &index_selection,
     )?;
     fs::write(&out_file, &result)?;

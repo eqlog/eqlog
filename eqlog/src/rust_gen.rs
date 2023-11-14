@@ -64,6 +64,18 @@ fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -
     "}
 }
 
+fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io::Result<()> {
+    let func_camel = func.to_case(UpperCamel);
+    let args = dom
+        .iter()
+        .copied()
+        .format_with(", ", |typ, f| f(&format_args!("pub {typ}")));
+    writedoc! {out, "
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+        struct {func_camel}Args({args});
+    "}
+}
+
 fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
@@ -983,6 +995,15 @@ fn write_model_delta_struct(
             "    new_{name_snake}_equalities: Vec<({name}, {name})>,"
         ))
     });
+
+    let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
+        let name_snake = name.to_case(Snake);
+        let name_camel = name.to_case(UpperCamel);
+        f(&format_args!(
+            "    new_{name_snake}_def: Vec<{name_camel}Args>,"
+        ))
+    });
+
     let new_element_number = eqlog.iter_type_decl().format_with("\n", |(_, ident), f| {
         let name = identifiers.get(&ident).unwrap().as_str();
         let name_snake = name.to_case(Snake);
@@ -995,6 +1016,7 @@ fn write_model_delta_struct(
         {new_tuples}
         {new_equalities}
         {new_element_number}
+        {new_defines}
         }}
     "}
 }
@@ -1014,6 +1036,7 @@ fn write_model_delta_impl(
     write_model_delta_apply_new_elements_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
+    write_model_delta_apply_def_fn(out, eqlog, identifiers)?;
 
     for type_name in iter_types(eqlog, identifiers) {
         write_model_delta_new_element_fn(out, type_name)?;
@@ -1041,6 +1064,10 @@ fn write_model_delta_new_fn(
             "    new_{sort_snake}_equalities: Vec::new(),"
         ))
     });
+    let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
+        let name_snake = name.to_case(Snake);
+        f(&format_args!("    new_{name_snake}_def: Vec::new(),"))
+    });
     let new_element_number = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
         f(&format_args!("    new_{sort_snake}_number: 0,"))
@@ -1052,6 +1079,7 @@ fn write_model_delta_new_fn(
         {new_tuples}
         {new_equalities}
         {new_element_number}
+        {new_defines}
             }}
         }}
     "}
@@ -1063,6 +1091,7 @@ fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
             self.apply_new_elements(model);
             self.apply_equalities(model);
             self.apply_tuples(model);
+            self.apply_func_defs(model);
         }}
     "}
 }
@@ -1204,6 +1233,38 @@ fn write_model_delta_apply_tuples_fn(
     writedoc! {out, "
         fn apply_tuples(&mut self, model: &mut Model) {{
             {relations}
+        }}
+    "}
+}
+
+fn write_model_delta_apply_def_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let func_defs = iter_func_arities(eqlog, identifiers)
+        .map(|(func, arity)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let func_snake = func.to_case(Snake);
+                let func_camel = func.to_case(UpperCamel);
+                let dom = &arity[..arity.len() - 1];
+                let args0 = (0..dom.len()).map(FlatVar).map(display_var).format(", ");
+                let args1 = args0.clone();
+                writedoc! {f, "
+                    for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
+                        model.define_{func_snake}({args1});
+                    }}
+                "}?;
+                Ok(())
+            })
+        })
+        .format("\n");
+
+    // allow(unused_variables) is there for theories without functions.
+    writedoc! {out, "
+        #[allow(unused_variables)]
+        fn apply_func_defs(&mut self, model: &mut Model) {{
+            {func_defs}
         }}
     "}
 }
@@ -1447,7 +1508,11 @@ fn display_surj_then<'a>(
                     .copied()
                     .map(|arg| display_var(arg))
                     .format(", ");
-                let query_spec = QuerySpec::all();
+                let query_spec = QuerySpec {
+                    projections: (0..args.len()).collect(),
+                    diagonals: BTreeSet::new(),
+                    only_dirty: false,
+                };
                 let iter_name = IterName(relation_camel.as_str(), &query_spec);
                 writedoc! {f, "
                     let exists_already = self.{iter_name}({args0}).next().is_some();
@@ -1483,14 +1548,14 @@ fn display_non_surj_then<'a>(
         let in_args0 = func_args.iter().copied().map(display_var).format(", ");
         let in_args1 = func_args.iter().copied().map(display_var).format(", ");
 
-        let out_arg_wildcards = repeat("_").take(func_args.len()).format(", ");
+        let out_arg_wildcards = repeat("_, ").take(func_args.len()).format("");
         let result = display_var(*result);
 
         writedoc! {f, "
             let {result} = match self.{iter_name}({in_args0}).next() {{
-                Some({relation_camel}({out_arg_wildcards}, res)) => res,
+                Some({relation_camel}({out_arg_wildcards} res)) => res,
                 None => {{ 
-                    delta.define_{relation_snake}.push({in_args1});
+                    delta.new_{relation_snake}_def.push({relation_camel}Args({in_args1}));
                     break;
                 }},
             }};
@@ -1541,7 +1606,7 @@ fn display_stmts<'a>(
                         .unwrap();
                     let args = args.iter().copied().map(display_var).format(", ");
                     writedoc! {f, "
-                        self.{continuation_name}({args});
+                        self.{continuation_name}(delta, {args});
                     "}?;
                 }
                 return Ok(());
@@ -1596,17 +1661,26 @@ fn display_stmts_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let arg_list = FmtFn(move |f: &mut Formatter| -> Result {
-        let args = analysis.fixed_vars.get(&ByAddress(stmts)).unwrap();
-        write!(f, "{}", args.iter().copied().map(display_var).format(", "))?;
-        Ok(())
-    });
+    let var_args: &BTreeSet<FlatVar> = analysis.fixed_vars.get(&ByAddress(stmts)).unwrap();
+    let var_args = var_args
+        .iter()
+        .copied()
+        .map(move |var| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let var_name = display_var(var);
+                let typ = *analysis.var_types.get(&var).unwrap();
+                let type_name = display_type(typ, eqlog, identifiers);
+                write!(f, "{var_name}: {type_name}")
+            })
+        })
+        .format(", ");
 
     let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
 
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
-            fn {name}({arg_list}) {{
+            #[allow(unused_variables)]
+            fn {name}(&self, delta: &mut ModelDelta, {var_args}) {{
             for _ in [()] {{
             {stmts}
             }}
@@ -2117,6 +2191,8 @@ fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
     query_actions: &[QueryAction],
+    rules: &[FlatRule],
+    analyses: &[FlatRuleAnalysis],
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
@@ -2168,6 +2244,16 @@ fn write_theory_impl(
             identifiers,
         )?;
         write_query_and_record_fn(out, query_action, i, eqlog, identifiers)?;
+    }
+
+    assert_eq!(
+        rules.len(),
+        analyses.len(),
+        "There should be precisely one analysis for each rule"
+    );
+    for (rule, analysis) in rules.iter().zip(analyses) {
+        let rule_fn = display_rule_fns(rule, analysis, eqlog, identifiers);
+        writeln!(out, "{rule_fn}")?;
     }
 
     write_drop_dirt_fn(out, eqlog, identifiers)?;
@@ -2223,6 +2309,8 @@ pub fn write_module(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
     query_actions: &[QueryAction],
+    rules: &[FlatRule],
+    analyses: &[FlatRuleAnalysis],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
@@ -2242,6 +2330,11 @@ pub fn write_module(
         write_table_impl(out, rel, &arity, index)?;
         write_table_display_impl(out, rel)?;
     }
+    for (func, arity) in iter_func_arities(eqlog, identifiers) {
+        let dom = &arity[0..arity.len() - 1];
+        write_func_args_struct(out, func, dom)?;
+    }
+
     write!(out, "\n")?;
 
     write_model_delta_struct(out, eqlog, identifiers)?;
@@ -2250,7 +2343,15 @@ pub fn write_module(
     write_model_delta_impl(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
-    write_theory_impl(out, name, query_actions, eqlog, identifiers)?;
+    write_theory_impl(
+        out,
+        name,
+        query_actions,
+        rules,
+        analyses,
+        eqlog,
+        identifiers,
+    )?;
     write_theory_display_impl(out, name, eqlog, identifiers)?;
 
     Ok(())
