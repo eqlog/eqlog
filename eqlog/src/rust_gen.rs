@@ -1219,32 +1219,19 @@ fn write_model_delta_apply_tuples_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, arity), f| {
-            let relation_snake = relation.to_case(Snake);
-            let relation_camel = relation.to_case(UpperCamel);
-            let canonicalize = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!(
-                    "t.{i} = model.{sort_snake}_equalities.root(t.{i});"
-                ))
-            });
-            let update_weights = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!(
-                    "model.{sort_snake}_weights[t.{i}.0 as usize] += {relation_camel}Table::WEIGHT;"
-                ))
-            });
-            f(&formatdoc! {"
-                #[allow(unused_mut)]
-                for mut t in self.new_{relation_snake}.drain(..) {{
-                    {canonicalize}
-                    if model.{relation_snake}.insert(t) {{
-                        {update_weights}
+    let relations = iter_relation_arities(eqlog, identifiers)
+        .map(|(relation, _)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let relation_snake = relation.to_case(Snake);
+                writedoc! {f, "
+                    for t in self.new_{relation_snake}.drain(..) {{
+                        model.{relation_snake}.insert(t);
                     }}
-                }}
-            "})
-        });
+                "}
+            })
+        })
+        .format("\n");
+
     writedoc! {out, "
         fn apply_tuples(&mut self, model: &mut Model) {{
             {relations}
