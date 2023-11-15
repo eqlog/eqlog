@@ -1056,18 +1056,11 @@ fn write_model_delta_struct(
         ))
     });
 
-    let new_element_number = eqlog.iter_type_decl().format_with("\n", |(_, ident), f| {
-        let name = identifiers.get(&ident).unwrap().as_str();
-        let name_snake = name.to_case(Snake);
-        f(&format_args!("    new_{name_snake}_number: usize,"))
-    });
-
     writedoc! {out, "
         #[derive(Debug, Clone)]
         struct ModelDelta {{
         {new_tuples}
         {new_equalities}
-        {new_element_number}
         {new_defines}
         }}
     "}
@@ -1087,14 +1080,9 @@ fn write_model_delta_impl(
     write_model_delta_apply_surjective_fn(out)?;
     write_model_delta_apply_non_surjective_fn(out)?;
 
-    write_model_delta_apply_new_elements_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_def_fn(out, eqlog, identifiers)?;
-
-    for type_name in iter_types(eqlog, identifiers) {
-        write_model_delta_new_element_fn(out, type_name)?;
-    }
 
     writedoc! {out, "
         }}
@@ -1122,17 +1110,12 @@ fn write_model_delta_new_fn(
         let name_snake = name.to_case(Snake);
         f(&format_args!("    new_{name_snake}_def: Vec::new(),"))
     });
-    let new_element_number = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!("    new_{sort_snake}_number: 0,"))
-    });
 
     writedoc! {out, "
         fn new() -> ModelDelta {{
             ModelDelta{{
         {new_tuples}
         {new_equalities}
-        {new_element_number}
         {new_defines}
             }}
         }}
@@ -1151,38 +1134,7 @@ fn write_model_delta_apply_surjective_fn(out: &mut impl Write) -> io::Result<()>
 fn write_model_delta_apply_non_surjective_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
         fn apply_non_surjective(&mut self, model: &mut Model) {{
-            self.apply_new_elements(model);
             self.apply_func_defs(model);
-        }}
-    "}
-}
-
-fn write_model_delta_apply_new_elements_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-            let old_{sort_snake}_number = model.{sort_snake}_equalities.len();
-            let new_{sort_snake}_number = old_{sort_snake}_number + self.new_{sort_snake}_number;
-            model.{sort_snake}_equalities.increase_size_to(new_{sort_snake}_number);
-            for i in old_{sort_snake}_number .. new_{sort_snake}_number {{
-                let el = {sort}::from(i as u32);
-                model.{sort_snake}_dirty.insert(el);
-                model.{sort_snake}_all.insert(el);
-            }}
-
-            model.{sort_snake}_weights.resize(new_{sort_snake}_number, 0);
-
-            self.new_{sort_snake}_number = 0;
-        "})
-    });
-    writedoc! {out, "
-        #[allow(unused)]
-        fn apply_new_elements(&mut self, model: &mut Model) {{
-        {sorts}
         }}
     "}
 }
@@ -1269,19 +1221,6 @@ fn write_model_delta_apply_def_fn(
         #[allow(unused_variables)]
         fn apply_func_defs(&mut self, model: &mut Model) {{
             {func_defs}
-        }}
-    "}
-}
-
-fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        #[allow(dead_code)]
-        fn new_{sort_snake}(&mut self, model: &Model) -> {sort} {{
-            let id: usize = model.{sort_snake}_equalities.len() + self.new_{sort_snake}_number;
-            assert!(id <= (u32::MAX as usize));
-            self.new_{sort_snake}_number += 1;
-            {sort}::from(id as u32)
         }}
     "}
 }
