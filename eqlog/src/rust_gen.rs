@@ -2011,7 +2011,6 @@ fn write_close_until_fn(
     let non_surjective_axioms = query_actions
         .iter()
         .enumerate()
-        .filter(|(_, qa)| !qa.is_surjective())
         .format_with("\n", |(i, qa), f| {
             let name = display_rule_name(i, qa.name.as_ref().map(|s| s.as_str()));
             f(&format_args!("self.query_and_record_{name}(&mut delta);"))

@@ -15,15 +15,16 @@ pub fn select_indices_v2<'a>(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> IndexSelection {
-    // Every relation needs at least a QuerySpec for all tuples.
+    // Every relation needs a QuerySpec for all tuples, and a QuerySpec for one specific tuple.
     // TODO: Can't we do without the QuerySpec for all dirty tuples though?
     let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> = eqlog
         .iter_func()
         .map(Rel::Func)
         .chain(eqlog.iter_pred().map(Rel::Pred))
         .map(|rel| {
+            let min_spec_set =
+                btreeset! {QuerySpec::all(), QuerySpec::one(rel, eqlog), QuerySpec::all_dirty()};
             let rel = format!("{}", rel.display(eqlog, identifiers));
-            let min_spec_set = btreeset! {QuerySpec::all(), QuerySpec::all_dirty()};
             (rel, min_spec_set)
         })
         .collect();

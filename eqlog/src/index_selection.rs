@@ -1,4 +1,5 @@
 use crate::eqlog_util::*;
+use crate::flat_eqlog::*;
 use crate::llam::*;
 use eqlog_eqlog::*;
 use maplit::btreeset;
@@ -13,6 +14,7 @@ pub struct QuerySpec {
 }
 
 impl QuerySpec {
+    /// The [QuerySpec] to query for all tuples in a relation.
     pub fn all() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
@@ -20,11 +22,29 @@ impl QuerySpec {
             only_dirty: false,
         }
     }
+    /// The [QuerySpec] to query for all dirty tuples in a relation.
     pub fn all_dirty() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
             diagonals: BTreeSet::new(),
             only_dirty: true,
+        }
+    }
+    /// The [QuerySpec] to query for one specific tuple in a relation.
+    pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
+        let arity_len = match rel {
+            Rel::Pred(p) => {
+                type_list_vec(eqlog.arity(p).expect("arity should be total"), eqlog).len()
+            }
+            Rel::Func(f) => {
+                let dom_len = type_list_vec(eqlog.domain(f).expect("should be total"), eqlog).len();
+                dom_len + 1
+            }
+        };
+        QuerySpec {
+            projections: (0..arity_len).collect(),
+            diagonals: BTreeSet::new(),
+            only_dirty: false,
         }
     }
     /// The [QuerySpec] for evaluating a function.

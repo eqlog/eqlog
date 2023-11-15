@@ -212,8 +212,10 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .collect();
     let query_actions: Vec<QueryAction> = rule_flattenings
         .into_iter()
-        .map(|flattening| {
-            lower_sequent_seminaive(&flattening.name, &flattening.sequent, &flattening.sorts)
+        .filter_map(|flattening| {
+            let query_action =
+                lower_sequent_seminaive(&flattening.name, &flattening.sequent, &flattening.sorts);
+            (!query_action.is_surjective()).then_some(query_action)
         })
         .collect();
     let query_atoms = query_actions
