@@ -1032,7 +1032,9 @@ fn write_model_delta_impl(
 
     write_model_delta_new_fn(out, eqlog, identifiers)?;
 
-    write_model_delta_apply_fn(out)?;
+    write_model_delta_apply_surjective_fn(out)?;
+    write_model_delta_apply_non_surjective_fn(out)?;
+
     write_model_delta_apply_new_elements_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
@@ -1085,13 +1087,20 @@ fn write_model_delta_new_fn(
     "}
 }
 
-fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
+fn write_model_delta_apply_surjective_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
-        fn apply(&mut self, model: &mut Model) {{
-            self.apply_new_elements(model);
+        fn apply_surjective(&mut self, model: &mut Model) {{
             self.apply_equalities(model);
             self.apply_tuples(model);
-            // self.apply_func_defs(model);
+        }}
+    "}
+}
+
+fn write_model_delta_apply_non_surjective_fn(out: &mut impl Write) -> io::Result<()> {
+    writedoc! {out, "
+        fn apply_non_surjective(&mut self, model: &mut Model) {{
+            self.apply_new_elements(model);
+            self.apply_func_defs(model);
         }}
     "}
 }
@@ -1262,7 +1271,7 @@ fn write_model_delta_apply_def_fn(
 
     // allow(unused_variables) is there for theories without functions.
     writedoc! {out, "
-        #[allow(unused_variables, dead_code)]
+        #[allow(unused_variables)]
         fn apply_func_defs(&mut self, model: &mut Model) {{
             {func_defs}
         }}
@@ -2028,7 +2037,8 @@ fn write_close_until_fn(
             std::mem::swap(&mut delta_opt, &mut self.delta);
             let mut delta = delta_opt.unwrap();
 
-            delta.apply(self);
+            delta.apply_surjective(self);
+            delta.apply_non_surjective(self);
             if condition(self) {{
                 self.delta = Some(delta);
                 return true;
@@ -2039,7 +2049,7 @@ fn write_close_until_fn(
         {rules}
             
                     self.retire_dirt();
-                    delta.apply(self);
+                    delta.apply_surjective(self);
 
                     if condition(self) {{
                         self.delta = Some(delta);
@@ -2053,7 +2063,7 @@ fn write_close_until_fn(
                 self.recall_previous_dirt();
         {non_surjective_axioms}
                 self.drop_dirt();
-                delta.apply(self);
+                delta.apply_non_surjective (self);
                 if condition(self) {{
                     self.delta = Some(delta);
                     return true;
