@@ -886,7 +886,7 @@ fn write_equate_elements_new(
             lhs = self.{type_snake}_equalities.root(lhs);
             rhs = self.{type_snake}_equalities.root(rhs);
             if lhs == rhs {{
-                continue;
+                return;
             }}
 
             let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
@@ -938,6 +938,94 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
         #[allow(dead_code)]
         pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
             self.{sort_snake}_all.iter().copied()
+        }}
+    "}
+}
+
+fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
+    let rel_snake = rel.to_case(Snake);
+    let rel_camel = rel.to_case(UpperCamel);
+    let rel_camel = rel_camel.as_str();
+
+    for typ in arity.iter().copied().collect::<BTreeSet<&str>>() {
+        let type_snake = typ.to_case(Snake);
+
+        let canonicalize_ts = arity
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ_i)| {
+                let typ_i_snake = typ_i.to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(f, "t.{i} = self.root_{typ_i_snake}(t.{i});")
+                })
+            })
+            .format("\n");
+
+        let adjust_weights = |sign: char| {
+            arity
+                .iter()
+                .copied()
+                .enumerate()
+                .map(move |(i, typ_i)| {
+                    FmtFn(move |f: &mut Formatter| -> Result {
+                        let typ_i_snake = typ_i.to_case(Snake);
+                        writedoc! {f, "
+                            self.{typ_i_snake}_weights[t.{i}.0 as usize]
+                                {sign}= {rel_camel}Table::WEIGHT;
+                        "}
+                    })
+                })
+                .format("\n")
+        };
+        let reduce_weights = adjust_weights('-');
+        let increase_weights = adjust_weights('+');
+
+        writedoc! {out, "
+            for el in self.{type_snake}_uprooted.iter().copied() {{
+                let ts = self.{rel_snake}.drain_with_element_{type_snake}(el);
+                for mut t in ts {{
+                    {reduce_weights}
+                    {canonicalize_ts}
+                    if self.{rel_snake}.insert(t) {{
+                        {increase_weights}
+                    }}
+                }}
+            }}
+        "}?;
+    }
+    Ok(())
+}
+
+fn write_canonicalize_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let rel_blocks = iter_relation_arities(eqlog, identifiers)
+        .map(|(rel, arity)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                write_canonicalize_rel_block(f, rel, arity.as_slice())
+            })
+        })
+        .format("\n");
+
+    let clear_uprooted_vecs = eqlog
+        .iter_type()
+        .map(|typ| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let type_snake =
+                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                write!(f, "self.{type_snake}_uprooted.clear();")
+            })
+        })
+        .format("\n");
+
+    writedoc! {out, "
+        fn canonicalize(&mut self) {{
+            {rel_blocks}
+
+            {clear_uprooted_vecs}
         }}
     "}
 }
@@ -1875,6 +1963,7 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
 
+    write_canonicalize_fn(out, eqlog, identifiers)?;
     write_is_dirty_fn(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
