@@ -878,53 +878,6 @@ fn write_pub_insert_relation(
     arity: &[&str],
     is_function: bool,
 ) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
-    let rel_fn_args = arity
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("", |(i, s), f| {
-            if is_function && i == arity.len() - 1 {
-                f(&format_args!(", result: {s}"))
-            } else {
-                f(&format_args!(", arg{i}: {s}"))
-            }
-        });
-    let rel_args = (0..arity.len()).format_with("", |i, f| {
-        if is_function && i == arity.len() - 1 {
-            f(&format_args!("result,"))
-        } else {
-            f(&format_args!("arg{i},"))
-        }
-    });
-
-    let docstring = if is_function {
-        let dom = &arity[0..arity.len() - 1];
-        let args = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-        formatdoc! {"
-                /// Makes the equation `{relation}({args}) = result` hold.
-            "}
-    } else {
-        let args = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-        formatdoc! {"
-                /// Makes `{relation}({args})` hold.
-            "}
-    };
-    let relation_camel = relation.to_case(UpperCamel);
-    writedoc! {out, "
-        {docstring}
-        #[allow(dead_code)]
-        pub fn insert_{relation_snake}(&mut self {rel_fn_args}) {{
-            self.delta.as_mut().unwrap().new_{relation_snake}.push({relation_camel}({rel_args}));
-        }}
-    "}
-}
-fn write_pub_insert_relation_new(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-    is_function: bool,
-) -> io::Result<()> {
     let rel_snake = relation.to_case(Snake);
     let rel_camel = relation.to_case(UpperCamel);
 
@@ -996,7 +949,7 @@ fn write_pub_insert_relation_new(
     writedoc! {out, "
         {docstring}
         #[allow(dead_code)]
-        pub fn insert_{rel_snake}_new(&mut self, {rel_fn_args}) {{
+        pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
             {canonicalize}
             if self.{rel_snake}.insert({rel_camel}({rel_args})) {{
                 {update_weights}
@@ -1005,25 +958,7 @@ fn write_pub_insert_relation_new(
     "}
 }
 
-fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        /// Adjoins a new element of sort `{sort}`.
-        #[allow(dead_code)]
-        pub fn new_{sort_snake}(&mut self) -> {sort} {{
-            let mut delta_opt = None;
-            std::mem::swap(&mut delta_opt, &mut self.delta);
-            let mut delta = delta_opt.unwrap();
-
-            let el = delta.new_{sort_snake}(self);
-
-            self.delta = Some(delta);
-            el
-        }}
-    "}
-}
-
-fn write_new_element_new(
+fn write_new_element(
     out: &mut impl Write,
     typ: Type,
     eqlog: &Eqlog,
@@ -1034,7 +969,7 @@ fn write_new_element_new(
     writedoc! {out, "
         /// Adjoins a new element of type [{type_camel}].
         #[allow(dead_code)]
-        pub fn new_{type_snake}_new(&mut self) -> {type_camel} {{
+        pub fn new_{type_snake}(&mut self) -> {type_camel} {{
             let old_len = self.{type_snake}_equalities.len();
             self.{type_snake}_equalities.increase_size_to(old_len + 1);
             let el = {type_camel}::from(u32::try_from(old_len).unwrap());
@@ -1383,7 +1318,7 @@ fn write_model_delta_apply_def_fn(
                 let args1 = args0.clone();
                 writedoc! {f, "
                     for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
-                        model.define_{func_snake}_new({args1});
+                        model.define_{func_snake}({args1});
                     }}
                 "}?;
                 Ok(())
@@ -1976,60 +1911,7 @@ fn write_new_fn(
     Ok(())
 }
 
-fn write_define_fn(out: &mut impl Write, name: &str, arity: &[&str]) -> io::Result<()> {
-    assert!(
-        arity.len() >= 1,
-        "Arity of function should have at least return type"
-    );
-    let arg_types = &arity[0..arity.len() - 1];
-    let result_type = arity.last().unwrap();
-
-    let function_snake = name.to_case(Snake);
-
-    let fn_args = arg_types
-        .iter()
-        .enumerate()
-        .format_with(", ", |(i, typ), f| f(&format_args!("mut arg{i}: {typ}")));
-
-    let query = QuerySpec {
-        projections: (0..arg_types.len()).collect(),
-        diagonals: BTreeSet::new(),
-        only_dirty: false,
-    };
-    let iter = IterName(&name, &query);
-    let iter_args = (0..arg_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-
-    let cod_index = arg_types.len();
-
-    let cod_snake = result_type.to_case(Snake);
-
-    let insert_dom_args = (0..arg_types.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
-
-    let canonicalize = arg_types
-        .iter()
-        .enumerate()
-        .format_with("\n", |(i, arg_type), f| {
-            let sort_snake = arg_type.to_case(Snake);
-            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
-        });
-
-    let args = iter_args.clone();
-    writedoc! {out, "
-        /// Enforces that `{name}({args})` is defined, adjoining a new element if necessary.
-        #[allow(dead_code)]
-        pub fn define_{function_snake}(&mut self, {fn_args}) -> {result_type} {{
-            {canonicalize}
-            if let Some(t) = self.{iter}({iter_args}).next() {{
-                return t.{cod_index};
-            }}
-            let result = self.new_{cod_snake}();
-            self.insert_{function_snake}({insert_dom_args}result);
-            result
-        }}
-    "}
-}
-
-fn write_define_fn_new(
+fn write_define_fn(
     out: &mut impl Write,
     func: Func,
     eqlog: &Eqlog,
@@ -2074,12 +1956,12 @@ fn write_define_fn_new(
     writedoc! {out, "
         /// Enforces that `{func_snake}({args0})` is defined, adjoining a new element if necessary.
         #[allow(dead_code)]
-        pub fn define_{func_snake}_new(&mut self, {fn_args}) -> {codomain_camel} {{
+        pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
             match self.{func_snake}({args1}) {{
                 Some(result) => result,
                 None => {{
-                    let {result_var} = self.new_{codomain_snake}_new();
-                    self.insert_{func_snake}_new({rel_args});
+                    let {result_var} = self.new_{codomain_snake}();
+                    self.insert_{func_snake}({rel_args});
                     {result_var}
                 }}
             }}
@@ -2133,7 +2015,6 @@ fn write_theory_impl(
     write_close_until_fn(out, rules)?;
 
     for type_name in iter_types(eqlog, identifiers) {
-        write_new_element(out, type_name)?;
         write_equate_elements(out, type_name)?;
         write_iter_sort_fn(out, type_name)?;
         write_root_fn(out, type_name)?;
@@ -2141,19 +2022,17 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
     for typ in eqlog.iter_type() {
-        write_new_element_new(out, typ, eqlog, identifiers)?;
+        write_new_element(out, typ, eqlog, identifiers)?;
     }
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
         write_pub_function_eval_fn(out, func_name, &arity)?;
-        write_define_fn(out, func_name, &arity)?;
         write_pub_iter_fn(out, func_name, &arity, true)?;
         write_pub_insert_relation(out, func_name, &arity, true)?;
-        write_pub_insert_relation_new(out, func_name, &arity, true)?;
         write!(out, "\n")?;
     }
     for func in eqlog.iter_func() {
-        write_define_fn_new(out, func, eqlog, identifiers)?;
+        write_define_fn(out, func, eqlog, identifiers)?;
     }
 
     for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
