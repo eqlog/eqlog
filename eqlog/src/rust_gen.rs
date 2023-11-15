@@ -573,9 +573,14 @@ fn write_is_dirty_fn(
         f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
     });
 
+    let uprooted_dirty = iter_types(eqlog, identifiers).format_with("", |typ, f| {
+        let type_snake = typ.to_case(Snake);
+        f(&format_args!(" || !self.{type_snake}_uprooted.is_empty()"))
+    });
+
     writedoc! {out, "
         fn is_dirty(&self) -> bool {{
-            self.empty_join_is_dirty {rels_dirty} {sorts_dirty}
+            self.empty_join_is_dirty {rels_dirty} {sorts_dirty} {uprooted_dirty}
         }}
     "}
 }
@@ -888,6 +893,9 @@ fn write_equate_elements(
                 }};
 
             self.{type_snake}_equalities.union_roots_into(child, root);
+            
+            self.{type_snake}_all.remove(&child);
+            self.{type_snake}_dirty.remove(&child);
             self.{type_snake}_uprooted.push(child);
         }}
     "}
@@ -1182,71 +1190,26 @@ fn write_model_delta_apply_equalities_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
+    let type_equalities = eqlog
+        .iter_type()
+        .map(|typ| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let type_snake =
+                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
-        let arity_contains_sort =
-            |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
-        let clean_rels = iter_relation_arities(eqlog, identifiers)
-            .filter(|(_, arity)| arity_contains_sort(arity))
-            .format_with("\n", |(relation, arity), f| {
-                let relation_snake = relation.to_case(Snake);
-                let relation_camel = relation.to_case(UpperCamel);
-                let update_weights =
-                    arity
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .format_with("\n", |(i, s), f| {
-                            let sort_snake = s.to_case(Snake);
-                            f(&formatdoc! {"
-                                let weight{i} =
-                                    model.{sort_snake}_weights
-                                    .get_mut(t.{i}.0 as usize)
-                                    .unwrap(); 
-                                *weight{i} -= {relation_camel}Table::WEIGHT;
-                            "})
-                        });
-                f(&format_args! {"
-                    self.new_{relation_snake}.extend(
-                        model.{relation_snake}
-                        .drain_with_element_{sort_snake}(child)
-                        .into_iter()
-                        .inspect(|t| {{
-                            {update_weights}
-                        }})
-                    );
-                "})
-            });
+                writedoc! {f, "
+                    for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
+                        model.equate_{type_snake}(lhs, rhs);
+                    }}
+                "}
+            })
+        })
+        .format("\n");
 
-        f(&formatdoc! {"
-            for (mut lhs, mut rhs) in self.new_{sort_snake}_equalities.drain(..) {{
-                lhs = model.{sort_snake}_equalities.root(lhs);
-                rhs = model.{sort_snake}_equalities.root(rhs);
-                if lhs == rhs {{
-                    continue;
-                }}
-
-                let lhs_weight = model.{sort_snake}_weights[lhs.0 as usize];
-                let rhs_weight = model.{sort_snake}_weights[rhs.0 as usize];
-                let (root, child) =
-                    if lhs_weight >= rhs_weight {{
-                        (lhs, rhs)
-                    }} else {{
-                        (rhs, lhs)
-                    }};
-
-                model.{sort_snake}_equalities.union_roots_into(child, root);
-                model.{sort_snake}_all.remove(&child);
-                model.{sort_snake}_dirty.remove(&child);
-                {clean_rels}
-            }}
-        "})
-    });
     writedoc! {out, "
         #[allow(unused)]
         fn apply_equalities(&mut self, model: &mut Model) {{
-        {sorts}
+        {type_equalities}
         }}
     "}
 }
@@ -1745,6 +1708,7 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
 
             delta.apply_non_surjective(self);
             delta.apply_surjective(self);
+            self.canonicalize();
             if condition(self) {{
                 self.delta = Some(delta);
                 return true;
@@ -1752,11 +1716,11 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
 
             while self.is_dirty() {{
                 loop {{
-            self.canonicalize();
         {rules}
                     self.drop_dirt();
             
                     delta.apply_surjective(self);
+                    self.canonicalize();
 
                     if condition(self) {{
                         self.delta = Some(delta);
