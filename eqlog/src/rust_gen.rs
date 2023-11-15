@@ -1636,18 +1636,14 @@ fn display_rule_fns<'a>(
             .fork_suffixes
             .iter()
             .enumerate()
-            .map(
-                |(
-                    i,
-                    ForkSuffix {
-                        fork_stmt: _,
-                        suffix,
-                    },
-                )| {
-                    let name = format!("{name}_{i}");
-                    display_stmts_fn(name, suffix, analysis, eqlog, identifiers)
-                },
-            )
+            .map(|(i, fork_suffix)| {
+                let ForkSuffix {
+                    fork_stmt: _,
+                    suffix,
+                } = fork_suffix;
+                let name = format!("{name}_{i}");
+                display_stmts_fn(name, suffix, analysis, eqlog, identifiers)
+            })
             .format("\n");
 
         writedoc! {f, "
