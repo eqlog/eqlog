@@ -968,7 +968,6 @@ fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) 
                 .map(move |(i, typ_i)| {
                     FmtFn(move |f: &mut Formatter| -> Result {
                         let typ_i_snake = typ_i.to_case(Snake);
-                        // TODO: Why do we need the saturating versions of + and - here?
                         writedoc! {f, "
                             let weight{i} = &mut self.{typ_i_snake}_weights[t.{i}.0 as usize];
                             *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
@@ -1174,12 +1173,15 @@ fn write_model_delta_apply_tuples_fn(
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
     let relations = iter_relation_arities(eqlog, identifiers)
-        .map(|(relation, _)| {
+        .map(|(relation, arity)| {
             FmtFn(move |f: &mut Formatter| -> Result {
                 let relation_snake = relation.to_case(Snake);
+                let relation_camel = relation.to_case(UpperCamel);
+                let args0 = (0..arity.len()).map(FlatVar).map(display_var).format(", ");
+                let args1 = args0.clone();
                 writedoc! {f, "
-                    for t in self.new_{relation_snake}.drain(..) {{
-                        model.{relation_snake}.insert(t);
+                    for {relation_camel}({args0}) in self.new_{relation_snake}.drain(..) {{
+                        model.insert_{relation_snake}({args1});
                     }}
                 "}
             })
