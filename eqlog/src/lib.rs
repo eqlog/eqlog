@@ -5,13 +5,9 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(grammar);
 mod build;
 mod error;
-mod flat_ast;
 mod flat_eqlog;
-mod flat_to_llam;
 mod flatten;
 mod fmt_util;
-mod index_selection;
-mod llam;
 mod rust_gen;
 mod source_display;
 

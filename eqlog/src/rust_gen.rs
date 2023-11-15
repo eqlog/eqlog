@@ -1,7 +1,6 @@
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
-use crate::index_selection::*;
 use by_address::ByAddress;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
