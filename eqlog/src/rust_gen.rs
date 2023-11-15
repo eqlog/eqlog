@@ -1702,30 +1702,25 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
         #[allow(dead_code)]
         pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
         {{
-            let mut delta_opt = None;
-            std::mem::swap(&mut delta_opt, &mut self.delta);
-            let mut delta = delta_opt.unwrap();
+            let mut delta = ModelDelta::new();
 
-            delta.apply_non_surjective(self);
-            delta.apply_surjective(self);
             self.canonicalize();
             if condition(self) {{
-                self.delta = Some(delta);
                 return true;
             }}
 
             while self.is_dirty() {{
                 loop {{
         {rules}
+
                     self.drop_dirt();
-            
                     delta.apply_surjective(self);
                     self.canonicalize();
 
                     if condition(self) {{
-                        self.delta = Some(delta);
                         return true;
                     }}
+
                     if !self.is_dirty() {{
                         break;
                     }}
@@ -1733,13 +1728,11 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
 
                 delta.apply_non_surjective (self);
                 if condition(self) {{
-                    self.delta = Some(delta);
                     return true;
                 }}
             }}
 
-            self.delta = Some(delta);
-            return false;
+            false
         }}
     "}
 }
@@ -1778,7 +1771,6 @@ fn write_new_fn(
         write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
-    write!(out, "delta: Some(Box::new(ModelDelta::new())),\n")?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
@@ -1864,7 +1856,6 @@ fn write_theory_struct(
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
-    write!(out, "delta: Option<Box<ModelDelta>>,\n")?;
     write!(out, "}}\n")?;
     write!(out, "type Model = {name};")?;
     Ok(())
