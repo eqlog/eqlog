@@ -860,18 +860,7 @@ fn write_new_element(
     "}
 }
 
-fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        /// Enforces the equality `lhs = rhs`.
-        #[allow(dead_code)]
-        pub fn equate_{sort_snake}(&mut self, lhs: {sort}, rhs: {sort}) {{
-            self.delta.as_mut().unwrap().new_{sort_snake}_equalities.push((lhs, rhs));
-        }}
-    "}
-}
-
-fn write_equate_elements_new(
+fn write_equate_elements(
     out: &mut impl Write,
     typ: Type,
     eqlog: &Eqlog,
@@ -882,7 +871,7 @@ fn write_equate_elements_new(
     writedoc! {out, "
         /// Enforces the equality `lhs = rhs`.
         #[allow(dead_code)]
-        pub fn equate_{type_snake}_new(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+        pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
             lhs = self.{type_snake}_equalities.root(lhs);
             rhs = self.{type_snake}_equalities.root(rhs);
             if lhs == rhs {{
@@ -1763,6 +1752,7 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
 
             while self.is_dirty() {{
                 loop {{
+            self.canonicalize();
         {rules}
                     self.drop_dirt();
             
@@ -1933,7 +1923,6 @@ fn write_theory_impl(
     write_close_until_fn(out, rules)?;
 
     for type_name in iter_types(eqlog, identifiers) {
-        write_equate_elements(out, type_name)?;
         write_iter_sort_fn(out, type_name)?;
         write_root_fn(out, type_name)?;
         write_are_equal_fn(out, type_name)?;
@@ -1941,7 +1930,7 @@ fn write_theory_impl(
     }
     for typ in eqlog.iter_type() {
         write_new_element(out, typ, eqlog, identifiers)?;
-        write_equate_elements_new(out, typ, eqlog, identifiers)?;
+        write_equate_elements(out, typ, eqlog, identifiers)?;
     }
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
