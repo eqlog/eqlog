@@ -456,28 +456,30 @@ fn write_table_drain_with_element(
             let index_name = IndexName(index);
             let order_name = OrderName(&index.order);
             f(&format_args!(
-                "self.index_{index_name}.remove(&Self::permute{order_name}(*t));"
+                "self.index_{index_name}.remove(&Self::permute{order_name}(t));"
             ))
         });
 
     let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(dead_code)]
-        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation_camel}> {{
-            let ts = match self.element_index_{sort_snake}.remove(&tm) {{
+        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> Vec<{relation_camel}> {{
+            let mut ts = match self.element_index_{sort_snake}.remove(&tm) {{
                 None => Vec::new(),
                 Some(tuples) => tuples,
             }};
 
-            ts.into_iter()
-                .filter(|t| {{
-                    if self.index_{master_index_name}.remove(&Self::permute{master_order_name}(*t)) {{
-                        {slave_removes}
-                        true
-                    }} else {{
-                        false
-                    }}
-                }})
+            let mut i = 0;
+            while i < ts.len() {{
+                let t = ts[i];
+                if self.index_{master_index_name}.remove(&Self::permute{master_order_name}(t)) {{
+                    {slave_removes}
+                    i += 1;
+                }} else {{
+                    ts.swap_remove(i);
+                }}
+            }}
+            ts
         }}
     "}
 }
@@ -1097,6 +1099,7 @@ fn write_model_delta_apply_equalities_fn(
                     self.new_{relation_snake}.extend(
                         model.{relation_snake}
                         .drain_with_element_{sort_snake}(child)
+                        .into_iter()
                         .inspect(|t| {{
                             {update_weights}
                         }})
