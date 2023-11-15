@@ -245,7 +245,6 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         &theory_name,
         &eqlog,
         &identifiers,
-        &query_actions,
         flat_rules.as_slice(),
         flat_analyses.as_slice(),
         &index_selection,
