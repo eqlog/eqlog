@@ -793,15 +793,16 @@ fn write_pub_insert_relation(
         .iter()
         .copied()
         .zip(arity)
-        .map(|(arg, typ)| {
+        .enumerate()
+        .map(|(i, (arg, typ))| {
             FmtFn(move |f: &mut Formatter| -> Result {
                 let arg = display_var(arg);
                 let type_snake = typ.to_case(Snake);
                 let rel_camel = relation.to_case(UpperCamel);
-                write!(
-                    f,
-                    "self.{type_snake}_weights[{arg}.0 as usize] += {rel_camel}Table::WEIGHT;"
-                )
+                writedoc! {f, "
+                    let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
+                    *weight{i} = weight{i}.saturating_add({rel_camel}Table::WEIGHT);
+                "}
             })
         })
         .format("\n");
@@ -959,7 +960,7 @@ fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) 
             })
             .format("\n");
 
-        let adjust_weights = |sign: char| {
+        let adjust_weights = |op: &'static str| {
             arity
                 .iter()
                 .copied()
@@ -967,16 +968,17 @@ fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) 
                 .map(move |(i, typ_i)| {
                     FmtFn(move |f: &mut Formatter| -> Result {
                         let typ_i_snake = typ_i.to_case(Snake);
+                        // TODO: Why do we need the saturating versions of + and - here?
                         writedoc! {f, "
-                            self.{typ_i_snake}_weights[t.{i}.0 as usize]
-                                {sign}= {rel_camel}Table::WEIGHT;
+                            let weight{i} = &mut self.{typ_i_snake}_weights[t.{i}.0 as usize];
+                            *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
                         "}
                     })
                 })
                 .format("\n")
         };
-        let reduce_weights = adjust_weights('-');
-        let increase_weights = adjust_weights('+');
+        let reduce_weights = adjust_weights("sub");
+        let increase_weights = adjust_weights("add");
 
         writedoc! {out, "
             for el in self.{type_snake}_uprooted.iter().copied() {{
