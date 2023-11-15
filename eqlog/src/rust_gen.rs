@@ -1,16 +1,30 @@
 use crate::eqlog_util::*;
-use crate::flat_ast::*;
-use crate::index_selection::*;
-use crate::llam::*;
+use crate::flat_eqlog::*;
+use crate::fmt_util::*;
+use by_address::ByAddress;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display, Formatter, Result};
 use std::io::{self, Write};
+use std::iter::once;
+use std::iter::repeat;
 
 use Case::{Snake, UpperCamel};
+
+fn display_func_snake<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let ident = eqlog
+        .iter_semantic_func()
+        .find_map(|(ident, func0)| eqlog.are_equal_func(func, func0).then_some(ident))
+        .expect("should be surjective");
+    format!("{}", identifiers.get(&ident).unwrap()).to_case(Snake)
+}
 
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
@@ -60,14 +74,26 @@ fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -
     "}
 }
 
+fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io::Result<()> {
+    let func_camel = func.to_case(UpperCamel);
+    let args = dom
+        .iter()
+        .copied()
+        .format_with(", ", |typ, f| f(&format_args!("pub {typ}")));
+    writedoc! {out, "
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+        struct {func_camel}Args({args});
+    "}
+}
+
 fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         {sort_snake}_equalities: Unification<{sort}>,
         {sort_snake}_all: BTreeSet<{sort}>,
         {sort_snake}_dirty: BTreeSet<{sort}>,
-        {sort_snake}_dirty_prev: Vec<BTreeSet<{sort}>>,
         {sort_snake}_weights: Vec<usize>,
+        {sort_snake}_uprooted: Vec<{sort}>,
     "}
 }
 
@@ -121,10 +147,6 @@ fn write_table_struct(
         ))
     });
 
-    let dirty_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let dirty_index_name = IndexName(dirty_index);
-    let prev_dirty_field = format!("index_{dirty_index_name}_prev: Vec<BTreeSet<{tuple_type}>>,");
-
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
     let relation_camel = relation.to_case(UpperCamel);
     let element_index_fields = sorts.iter().copied().format_with("\n", |sort, f| {
@@ -138,9 +160,6 @@ fn write_table_struct(
         #[derive(Clone, Hash, Debug)]
         struct {relation_camel}Table {{
         {index_fields}
-
-        {prev_dirty_field}
-
         {element_index_fields}
         }}
     "}
@@ -159,10 +178,6 @@ fn write_table_new_fn(
         ))
     });
 
-    let dirty_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let dirty_index_name = IndexName(dirty_index);
-    let prev_dirty_init = format!("index_{dirty_index_name}_prev: Vec::new(),");
-
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
     let element_index_inits = sorts.iter().copied().format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
@@ -174,7 +189,6 @@ fn write_table_new_fn(
         fn new() -> Self {{
             Self {{
         {index_inits}
-        {prev_dirty_init}
         {element_index_inits}
             }}
         }}
@@ -238,50 +252,6 @@ impl<'a> Display for DiagonalCheck<'a> {
         });
         write!(f, "{all_clauses}")
     }
-}
-
-// TODO: This and write_table_insert_fn are very similar. Refactor?
-fn write_table_insert_dirt_fn(
-    out: &mut impl Write,
-    relation: &str,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let master_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let master = IndexName(&master_index);
-    let master_order = OrderName(&master_index.order);
-
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let slave_inserts = indices
-        .into_iter()
-        .filter(|index| index.only_dirty && *index != master_index)
-        .format_with("\n", |index, f| {
-            let index_name = IndexName(index);
-            let order = OrderName(&index.order);
-            if index.diagonals.is_empty() {
-                f(&format_args!(
-                    "self.index_{index_name}.insert(Self::permute{order}(t));"
-                ))
-            } else {
-                let check = DiagonalCheck(&index.diagonals);
-                f(&format_args! {"
-                    if {check} {{
-                        self.index_{index_name}.insert(Self::permute{order}(t));
-                    }}
-                "})
-            }
-        });
-
-    let relation_camel = relation.to_case(UpperCamel);
-    writedoc! {out, "
-        fn insert_dirt(&mut self, t: {relation_camel}) -> bool {{
-            if self.index_{master}.insert(Self::permute{master_order}(t)) {{
-        {slave_inserts}
-                true
-            }} else {{
-                false
-            }}
-        }}
-    "}
 }
 
 fn write_table_insert_fn(
@@ -469,31 +439,6 @@ fn write_table_drop_dirt_fn(
     "}
 }
 
-fn write_table_retire_dirt_fn(
-    out: &mut impl Write,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let dirty_master = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let clears = indices
-        .iter()
-        .copied()
-        .filter(|index| index.only_dirty && *index != dirty_master)
-        .format_with("\n", |index, f| {
-            let index_name = IndexName(index);
-            f(&format_args!("    self.index_{index_name}.clear();"))
-        });
-    let dirty_master_name = IndexName(dirty_master);
-    writedoc! {out, "
-        fn retire_dirt(&mut self) {{
-            {clears}
-            let mut tmp_{dirty_master_name} = BTreeSet::new();
-            std::mem::swap(&mut tmp_{dirty_master_name}, &mut self.index_{dirty_master_name});
-            self.index_{dirty_master_name}_prev.push(tmp_{dirty_master_name});
-        }}
-    "}
-}
-
 fn write_table_drain_with_element(
     out: &mut impl Write,
     relation: &str,
@@ -512,72 +457,31 @@ fn write_table_drain_with_element(
             let index_name = IndexName(index);
             let order_name = OrderName(&index.order);
             f(&format_args!(
-                "self.index_{index_name}.remove(&Self::permute{order_name}(*t));"
+                "self.index_{index_name}.remove(&Self::permute{order_name}(t));"
             ))
         });
 
     let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         #[allow(dead_code)]
-        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> impl '_ + Iterator<Item = {relation_camel}> {{
-            let ts = match self.element_index_{sort_snake}.remove(&tm) {{
+        fn drain_with_element_{sort_snake}(&mut self, tm: {sort}) -> Vec<{relation_camel}> {{
+            let mut ts = match self.element_index_{sort_snake}.remove(&tm) {{
                 None => Vec::new(),
                 Some(tuples) => tuples,
             }};
 
-            ts.into_iter()
-                .filter(|t| {{
-                    if self.index_{master_index_name}.remove(&Self::permute{master_order_name}(*t)) {{
-                        {slave_removes}
-                        true
-                    }} else {{
-                        false
-                    }}
-                }})
-        }}
-    "}
-}
-
-fn write_table_recall_previous_dirt(
-    out: &mut impl Write,
-    arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let sorts = arity.iter().copied().collect::<BTreeSet<&str>>();
-    let fn_eq_args = sorts.iter().copied().format_with("", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!(
-            "{sort_snake}_equalities: &mut Unification<{sort}>,"
-        ))
-    });
-    let index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let index_name = IndexName(index);
-    let order_name = OrderName(&index.order);
-
-    let is_canonical_checks =
-        arity
-            .iter()
-            .copied()
-            .enumerate()
-            .format_with("", |(index, sort), f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!(
-                    "&& tuple.{index} == {sort_snake}_equalities.root(tuple.{index})"
-                ))
-            });
-
-    writedoc! {out, "
-        fn recall_previous_dirt(&mut self, {fn_eq_args}) {{
-            let mut tmp_{index_name}_prev = Vec::new();
-            std::mem::swap(&mut tmp_{index_name}_prev, &mut self.index_{index_name}_prev);
-
-            for tuple in tmp_{index_name}_prev.into_iter().flatten() {{
-                #[allow(unused_mut)]
-                let mut tuple = Self::permute_inverse{order_name}(tuple);
-                if true {is_canonical_checks} {{
-                    self.insert_dirt(tuple);
+            let mut i = 0;
+            while i < ts.len() {{
+                let t = ts[i];
+                if self.index_{master_index_name}.remove(&Self::permute{master_order_name}(t)) {{
+                    {slave_removes}
+                    i += 1;
+                }} else {{
+                    ts.swap_remove(i);
                 }}
             }}
+
+            ts
         }}
     "}
 }
@@ -612,10 +516,8 @@ fn write_table_impl(
     write_table_weight(out, arity, index_selection)?;
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
-    write_table_insert_dirt_fn(out, relation, index_selection)?;
     write_table_contains_fn(out, relation, index_selection)?;
     write_table_drop_dirt_fn(out, index_selection)?;
-    write_table_retire_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
     let index_orders: BTreeSet<&[usize]> =
@@ -630,7 +532,6 @@ fn write_table_impl(
     for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
         write_table_drain_with_element(out, relation, index_selection, sort)?;
     }
-    write_table_recall_previous_dirt(out, arity, index_selection)?;
     writedoc! {out, "
         }}
     "}
@@ -672,9 +573,14 @@ fn write_is_dirty_fn(
         f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
     });
 
+    let uprooted_dirty = iter_types(eqlog, identifiers).format_with("", |typ, f| {
+        let type_snake = typ.to_case(Snake);
+        f(&format_args!(" || !self.{type_snake}_uprooted.is_empty()"))
+    });
+
     writedoc! {out, "
         fn is_dirty(&self) -> bool {{
-            self.empty_join_is_dirty {rels_dirty} {sorts_dirty}
+            self.empty_join_is_dirty {rels_dirty} {sorts_dirty} {uprooted_dirty}
         }}
     "}
 }
@@ -852,73 +758,146 @@ fn write_pub_insert_relation(
     arity: &[&str],
     is_function: bool,
 ) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
-    let rel_fn_args = arity
+    let rel_snake = relation.to_case(Snake);
+    let rel_camel = relation.to_case(UpperCamel);
+
+    let rel_args: Vec<FlatVar> = (0..arity.len()).map(FlatVar).collect();
+
+    let rel_fn_args = rel_args
         .iter()
         .copied()
+        .zip(arity)
+        .map(|(arg, typ)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let arg = display_var(arg);
+                let type_camel = typ.to_case(UpperCamel);
+                write!(f, "mut {arg}: {type_camel}")
+            })
+        })
+        .format(", ");
+
+    let canonicalize = rel_args
+        .iter()
+        .copied()
+        .zip(arity)
+        .map(|(arg, typ)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let arg = display_var(arg);
+                let type_snake = typ.to_case(Snake);
+                write!(f, "{arg} = self.{type_snake}_equalities.root({arg});")
+            })
+        })
+        .format("\n");
+
+    let update_weights = rel_args
+        .iter()
+        .copied()
+        .zip(arity)
         .enumerate()
-        .format_with("", |(i, s), f| {
-            if is_function && i == arity.len() - 1 {
-                f(&format_args!(", result: {s}"))
-            } else {
-                f(&format_args!(", arg{i}: {s}"))
-            }
-        });
-    let rel_args = (0..arity.len()).format_with("", |i, f| {
-        if is_function && i == arity.len() - 1 {
-            f(&format_args!("result,"))
-        } else {
-            f(&format_args!("arg{i},"))
-        }
-    });
+        .map(|(i, (arg, typ))| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let arg = display_var(arg);
+                let type_snake = typ.to_case(Snake);
+                let rel_camel = relation.to_case(UpperCamel);
+                writedoc! {f, "
+                    let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
+                    *weight{i} = weight{i}.saturating_add({rel_camel}Table::WEIGHT);
+                "}
+            })
+        })
+        .format("\n");
 
     let docstring = if is_function {
-        let dom = &arity[0..arity.len() - 1];
-        let args = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        let dom_len = arity.len() - 1;
+        let func_args = rel_args[..dom_len]
+            .iter()
+            .copied()
+            .map(display_var)
+            .format(", ");
+        let result = display_var(*rel_args.last().expect("func can't have empty arity"));
         formatdoc! {"
-                /// Makes the equation `{relation}({args}) = result` hold.
-            "}
+            /// Makes the equation `{rel_snake}({func_args}) = {result}` hold.
+        "}
     } else {
-        let args = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        let rel_args = rel_args.iter().copied().map(display_var).format(", ");
         formatdoc! {"
-                /// Makes `{relation}({args})` hold.
-            "}
+            /// Makes `{rel_snake}({rel_args})` hold.
+        "}
     };
-    let relation_camel = relation.to_case(UpperCamel);
+
+    let rel_args = rel_args.iter().copied().map(display_var).format(", ");
+
     writedoc! {out, "
         {docstring}
         #[allow(dead_code)]
-        pub fn insert_{relation_snake}(&mut self {rel_fn_args}) {{
-            self.delta.as_mut().unwrap().new_{relation_snake}.push({relation_camel}({rel_args}));
+        pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
+            {canonicalize}
+            if self.{rel_snake}.insert({rel_camel}({rel_args})) {{
+                {update_weights}
+            }}
         }}
     "}
 }
 
-fn write_new_element(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
+fn write_new_element(
+    out: &mut impl Write,
+    typ: Type,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
+    let type_snake = type_camel.to_case(Snake);
     writedoc! {out, "
-        /// Adjoins a new element of sort `{sort}`.
+        /// Adjoins a new element of type [{type_camel}].
         #[allow(dead_code)]
-        pub fn new_{sort_snake}(&mut self) -> {sort} {{
-            let mut delta_opt = None;
-            std::mem::swap(&mut delta_opt, &mut self.delta);
-            let mut delta = delta_opt.unwrap();
+        pub fn new_{type_snake}(&mut self) -> {type_camel} {{
+            let old_len = self.{type_snake}_equalities.len();
+            self.{type_snake}_equalities.increase_size_to(old_len + 1);
+            let el = {type_camel}::from(u32::try_from(old_len).unwrap());
 
-            let el = delta.new_{sort_snake}(self);
+            self.{type_snake}_dirty.insert(el);
+            self.{type_snake}_all.insert(el);
 
-            self.delta = Some(delta);
+            assert!(self.{type_snake}_weights.len() == old_len);
+            self.{type_snake}_weights.push(0);
+
             el
         }}
     "}
 }
 
-fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
+fn write_equate_elements(
+    out: &mut impl Write,
+    typ: Type,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
+    let type_snake = type_camel.to_case(Snake);
     writedoc! {out, "
         /// Enforces the equality `lhs = rhs`.
         #[allow(dead_code)]
-        pub fn equate_{sort_snake}(&mut self, lhs: {sort}, rhs: {sort}) {{
-            self.delta.as_mut().unwrap().new_{sort_snake}_equalities.push((lhs, rhs));
+        pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+            lhs = self.{type_snake}_equalities.root(lhs);
+            rhs = self.{type_snake}_equalities.root(rhs);
+            if lhs == rhs {{
+                return;
+            }}
+
+            let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
+            let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
+            let (root, child) =
+                if lhs_weight >= rhs_weight {{
+                    (lhs, rhs)
+                }} else {{
+                    (rhs, lhs)
+                }};
+
+            self.{type_snake}_equalities.union_roots_into(child, root);
+            
+            self.{type_snake}_all.remove(&child);
+            self.{type_snake}_dirty.remove(&child);
+            self.{type_snake}_uprooted.push(child);
         }}
     "}
 }
@@ -961,6 +940,94 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
+fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
+    let rel_snake = rel.to_case(Snake);
+    let rel_camel = rel.to_case(UpperCamel);
+    let rel_camel = rel_camel.as_str();
+
+    for typ in arity.iter().copied().collect::<BTreeSet<&str>>() {
+        let type_snake = typ.to_case(Snake);
+
+        let canonicalize_ts = arity
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ_i)| {
+                let typ_i_snake = typ_i.to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(f, "t.{i} = self.root_{typ_i_snake}(t.{i});")
+                })
+            })
+            .format("\n");
+
+        let adjust_weights = |op: &'static str| {
+            arity
+                .iter()
+                .copied()
+                .enumerate()
+                .map(move |(i, typ_i)| {
+                    FmtFn(move |f: &mut Formatter| -> Result {
+                        let typ_i_snake = typ_i.to_case(Snake);
+                        writedoc! {f, "
+                            let weight{i} = &mut self.{typ_i_snake}_weights[t.{i}.0 as usize];
+                            *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
+                        "}
+                    })
+                })
+                .format("\n")
+        };
+        let reduce_weights = adjust_weights("sub");
+        let increase_weights = adjust_weights("add");
+
+        writedoc! {out, "
+            for el in self.{type_snake}_uprooted.iter().copied() {{
+                let ts = self.{rel_snake}.drain_with_element_{type_snake}(el);
+                for mut t in ts {{
+                    {reduce_weights}
+                    {canonicalize_ts}
+                    if self.{rel_snake}.insert(t) {{
+                        {increase_weights}
+                    }}
+                }}
+            }}
+        "}?;
+    }
+    Ok(())
+}
+
+fn write_canonicalize_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let rel_blocks = iter_relation_arities(eqlog, identifiers)
+        .map(|(rel, arity)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                write_canonicalize_rel_block(f, rel, arity.as_slice())
+            })
+        })
+        .format("\n");
+
+    let clear_uprooted_vecs = eqlog
+        .iter_type()
+        .map(|typ| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let type_snake =
+                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                write!(f, "self.{type_snake}_uprooted.clear();")
+            })
+        })
+        .format("\n");
+
+    writedoc! {out, "
+        fn canonicalize(&mut self) {{
+            {rel_blocks}
+
+            {clear_uprooted_vecs}
+        }}
+    "}
+}
+
 fn write_model_delta_struct(
     out: &mut impl Write,
     eqlog: &Eqlog,
@@ -979,10 +1046,13 @@ fn write_model_delta_struct(
             "    new_{name_snake}_equalities: Vec<({name}, {name})>,"
         ))
     });
-    let new_element_number = eqlog.iter_type_decl().format_with("\n", |(_, ident), f| {
-        let name = identifiers.get(&ident).unwrap().as_str();
+
+    let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
         let name_snake = name.to_case(Snake);
-        f(&format_args!("    new_{name_snake}_number: usize,"))
+        let name_camel = name.to_case(UpperCamel);
+        f(&format_args!(
+            "    new_{name_snake}_def: Vec<{name_camel}Args>,"
+        ))
     });
 
     writedoc! {out, "
@@ -990,7 +1060,7 @@ fn write_model_delta_struct(
         struct ModelDelta {{
         {new_tuples}
         {new_equalities}
-        {new_element_number}
+        {new_defines}
         }}
     "}
 }
@@ -1006,14 +1076,12 @@ fn write_model_delta_impl(
 
     write_model_delta_new_fn(out, eqlog, identifiers)?;
 
-    write_model_delta_apply_fn(out)?;
-    write_model_delta_apply_new_elements_fn(out, eqlog, identifiers)?;
+    write_model_delta_apply_surjective_fn(out)?;
+    write_model_delta_apply_non_surjective_fn(out)?;
+
     write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
     write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
-
-    for type_name in iter_types(eqlog, identifiers) {
-        write_model_delta_new_element_fn(out, type_name)?;
-    }
+    write_model_delta_apply_def_fn(out, eqlog, identifiers)?;
 
     writedoc! {out, "
         }}
@@ -1037,9 +1105,9 @@ fn write_model_delta_new_fn(
             "    new_{sort_snake}_equalities: Vec::new(),"
         ))
     });
-    let new_element_number = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!("    new_{sort_snake}_number: 0,"))
+    let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
+        let name_snake = name.to_case(Snake);
+        f(&format_args!("    new_{name_snake}_def: Vec::new(),"))
     });
 
     writedoc! {out, "
@@ -1047,48 +1115,25 @@ fn write_model_delta_new_fn(
             ModelDelta{{
         {new_tuples}
         {new_equalities}
-        {new_element_number}
+        {new_defines}
             }}
         }}
     "}
 }
 
-fn write_model_delta_apply_fn(out: &mut impl Write) -> io::Result<()> {
+fn write_model_delta_apply_surjective_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
-        fn apply(&mut self, model: &mut Model) {{
-            self.apply_new_elements(model);
+        fn apply_surjective(&mut self, model: &mut Model) {{
             self.apply_equalities(model);
             self.apply_tuples(model);
         }}
     "}
 }
 
-fn write_model_delta_apply_new_elements_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-            let old_{sort_snake}_number = model.{sort_snake}_equalities.len();
-            let new_{sort_snake}_number = old_{sort_snake}_number + self.new_{sort_snake}_number;
-            model.{sort_snake}_equalities.increase_size_to(new_{sort_snake}_number);
-            for i in old_{sort_snake}_number .. new_{sort_snake}_number {{
-                let el = {sort}::from(i as u32);
-                model.{sort_snake}_dirty.insert(el);
-                model.{sort_snake}_all.insert(el);
-            }}
-
-            model.{sort_snake}_weights.resize(new_{sort_snake}_number, 0);
-
-            self.new_{sort_snake}_number = 0;
-        "})
-    });
+fn write_model_delta_apply_non_surjective_fn(out: &mut impl Write) -> io::Result<()> {
     writedoc! {out, "
-        #[allow(unused)]
-        fn apply_new_elements(&mut self, model: &mut Model) {{
-        {sorts}
+        fn apply_non_surjective(&mut self, model: &mut Model) {{
+            self.apply_func_defs(model);
         }}
     "}
 }
@@ -1098,70 +1143,26 @@ fn write_model_delta_apply_equalities_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
+    let type_equalities = eqlog
+        .iter_type()
+        .map(|typ| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let type_snake =
+                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
-        let arity_contains_sort =
-            |arity: &[&str]| -> bool { arity.iter().find(|s| **s == sort).is_some() };
-        let clean_rels = iter_relation_arities(eqlog, identifiers)
-            .filter(|(_, arity)| arity_contains_sort(arity))
-            .format_with("\n", |(relation, arity), f| {
-                let relation_snake = relation.to_case(Snake);
-                let relation_camel = relation.to_case(UpperCamel);
-                let update_weights =
-                    arity
-                        .iter()
-                        .copied()
-                        .enumerate()
-                        .format_with("\n", |(i, s), f| {
-                            let sort_snake = s.to_case(Snake);
-                            f(&formatdoc! {"
-                                let weight{i} =
-                                    model.{sort_snake}_weights
-                                    .get_mut(t.{i}.0 as usize)
-                                    .unwrap(); 
-                                *weight{i} -= {relation_camel}Table::WEIGHT;
-                            "})
-                        });
-                f(&format_args! {"
-                    self.new_{relation_snake}.extend(
-                        model.{relation_snake}
-                        .drain_with_element_{sort_snake}(child)
-                        .inspect(|t| {{
-                            {update_weights}
-                        }})
-                    );
-                "})
-            });
+                writedoc! {f, "
+                    for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
+                        model.equate_{type_snake}(lhs, rhs);
+                    }}
+                "}
+            })
+        })
+        .format("\n");
 
-        f(&formatdoc! {"
-            for (mut lhs, mut rhs) in self.new_{sort_snake}_equalities.drain(..) {{
-                lhs = model.{sort_snake}_equalities.root(lhs);
-                rhs = model.{sort_snake}_equalities.root(rhs);
-                if lhs == rhs {{
-                    continue;
-                }}
-
-                let lhs_weight = model.{sort_snake}_weights[lhs.0 as usize];
-                let rhs_weight = model.{sort_snake}_weights[rhs.0 as usize];
-                let (root, child) =
-                    if lhs_weight >= rhs_weight {{
-                        (lhs, rhs)
-                    }} else {{
-                        (rhs, lhs)
-                    }};
-
-                model.{sort_snake}_equalities.union_roots_into(child, root);
-                model.{sort_snake}_all.remove(&child);
-                model.{sort_snake}_dirty.remove(&child);
-                {clean_rels}
-            }}
-        "})
-    });
     writedoc! {out, "
         #[allow(unused)]
         fn apply_equalities(&mut self, model: &mut Model) {{
-        {sorts}
+        {type_equalities}
         }}
     "}
 }
@@ -1171,32 +1172,22 @@ fn write_model_delta_apply_tuples_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, arity), f| {
-            let relation_snake = relation.to_case(Snake);
-            let relation_camel = relation.to_case(UpperCamel);
-            let canonicalize = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!(
-                    "t.{i} = model.{sort_snake}_equalities.root(t.{i});"
-                ))
-            });
-            let update_weights = arity.iter().enumerate().format_with("\n", |(i, sort), f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!(
-                    "model.{sort_snake}_weights[t.{i}.0 as usize] += {relation_camel}Table::WEIGHT;"
-                ))
-            });
-            f(&formatdoc! {"
-                #[allow(unused_mut)]
-                for mut t in self.new_{relation_snake}.drain(..) {{
-                    {canonicalize}
-                    if model.{relation_snake}.insert(t) {{
-                        {update_weights}
+    let relations = iter_relation_arities(eqlog, identifiers)
+        .map(|(relation, arity)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let relation_snake = relation.to_case(Snake);
+                let relation_camel = relation.to_case(UpperCamel);
+                let args0 = (0..arity.len()).map(FlatVar).map(display_var).format(", ");
+                let args1 = args0.clone();
+                writedoc! {f, "
+                    for {relation_camel}({args0}) in self.new_{relation_snake}.drain(..) {{
+                        model.insert_{relation_snake}({args1});
                     }}
-                }}
-            "})
-        });
+                "}
+            })
+        })
+        .format("\n");
+
     writedoc! {out, "
         fn apply_tuples(&mut self, model: &mut Model) {{
             {relations}
@@ -1204,261 +1195,392 @@ fn write_model_delta_apply_tuples_fn(
     "}
 }
 
-fn write_model_delta_new_element_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
+fn write_model_delta_apply_def_fn(
+    out: &mut impl Write,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let func_defs = iter_func_arities(eqlog, identifiers)
+        .map(|(func, arity)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let func_snake = func.to_case(Snake);
+                let func_camel = func.to_case(UpperCamel);
+                let dom = &arity[..arity.len() - 1];
+                let args0 = (0..dom.len()).map(FlatVar).map(display_var).format(", ");
+                let args1 = args0.clone();
+                writedoc! {f, "
+                    for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
+                        model.define_{func_snake}({args1});
+                    }}
+                "}?;
+                Ok(())
+            })
+        })
+        .format("\n");
+
+    // allow(unused_variables) is there for theories without functions.
     writedoc! {out, "
-        #[allow(dead_code)]
-        fn new_{sort_snake}(&mut self, model: &Model) -> {sort} {{
-            let id: usize = model.{sort_snake}_equalities.len() + self.new_{sort_snake}_number;
-            assert!(id <= (u32::MAX as usize));
-            self.new_{sort_snake}_number += 1;
-            {sort}::from(id as u32)
+        #[allow(unused_variables)]
+        fn apply_func_defs(&mut self, model: &mut Model) {{
+            {func_defs}
         }}
     "}
 }
 
-fn write_query_loop_headers<'a>(
-    out: &mut impl Write,
-    query: impl IntoIterator<Item = &'a QueryAtom>,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    for atom in query.into_iter() {
-        use QueryAtom::*;
-        match atom {
-            Equal(lhs, rhs) => {
-                write!(out, "if tm{} == tm{} {{\n", lhs.0, rhs.0)?;
+fn display_var(var: FlatVar) -> impl Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let var = var.0;
+        write!(f, "tm{var}")?;
+        Ok(())
+    })
+}
+
+fn display_type<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let ident = eqlog
+        .iter_semantic_type()
+        .find_map(|(ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
+        .expect("semantic_type should be surjective");
+    identifiers.get(&ident).unwrap().as_str()
+}
+
+fn display_if_stmt_header<'a>(
+    stmt: &'a FlatIfStmt,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        match stmt {
+            FlatIfStmt::Equal(eq_stmt) => {
+                let FlatStmtEqual { lhs, rhs } = eq_stmt;
+
+                let typ = display_type(*analysis.var_types.get(lhs).unwrap(), eqlog, identifiers);
+
+                let lhs = display_var(*lhs);
+                let rhs = display_var(*rhs);
+
+                writedoc! {f, "
+                    if (self.are_equal_{typ}({lhs}, {rhs})) {{
+                "}?;
             }
-            Relation {
-                relation,
-                diagonals,
-                in_projections,
-                out_projections,
-                only_dirty,
-                quantifier,
-            } => {
-                assert_eq!(
-                    *quantifier,
-                    Quantifier::All,
-                    "Only Quantifier::All is implemented"
-                );
-                let arity_len = iter_relation_arities(eqlog, identifiers)
-                    .find(|(rel, _)| rel == relation)
-                    .unwrap()
-                    .1
-                    .len();
+            FlatIfStmt::Relation(rel_stmt) => {
+                let FlatIfStmtRelation {
+                    rel,
+                    args,
+                    only_dirty,
+                } = rel_stmt;
+                let RelationInfo {
+                    diagonals,
+                    in_projections,
+                    out_projections,
+                    quantifier: _,
+                } = analysis
+                    .if_stmt_rel_infos
+                    .get(&ByAddress(rel_stmt))
+                    .unwrap();
+                let arity_len = args.len();
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
                     projections: in_projections.keys().copied().collect(),
                     only_dirty: *only_dirty,
                 };
+                let relation = format!("{}", rel.display(eqlog, identifiers));
                 let relation_camel = relation.to_case(UpperCamel);
-                write!(out, "#[allow(unused_variables)]\n")?;
-                write!(out, "for {relation_camel}(")?;
+                write!(f, "#[allow(unused_variables)]\n")?;
+                write!(f, "for {relation_camel}(")?;
                 for i in 0..arity_len {
-                    if let Some(tm) = out_projections.get(&i) {
-                        if let Some(diag) = diagonals.iter().find(|diag| diag.contains(&i)) {
-                            if *diag.iter().next().unwrap() == i {
-                                write!(out, "tm{}", tm.0)?;
-                            } else {
-                                write!(out, "_")?;
-                            }
-                        } else {
-                            write!(out, "tm{}", tm.0)?;
-                        }
+                    if let Some(var) = out_projections.get(&i) {
+                        write!(f, "tm{}", var.0)?;
                     } else {
-                        write!(out, "_")?;
+                        write!(f, "_")?;
                     }
-                    write!(out, ", ")?;
+                    write!(f, ", ")?;
                 }
-                write!(out, ") in self.")?;
-                let iter_name = IterName(relation, &query_spec);
-                write!(out, "{iter_name}")?;
-                write!(out, "(")?;
+                write!(f, ") in self.")?;
+                let iter_name = IterName(relation.as_str(), &query_spec);
+                write!(f, "{iter_name}")?;
+                write!(f, "(")?;
                 for tm in in_projections.values().copied() {
-                    write!(out, "tm{}, ", tm.0)?;
+                    write!(f, "tm{}, ", tm.0)?;
                 }
-                write!(out, ") {{\n")?;
+                write!(f, ") {{\n")?;
             }
-            Sort {
-                sort,
-                result,
-                only_dirty,
-            } => {
+            FlatIfStmt::Type(type_stmt) => {
+                let FlatIfStmtType { var, only_dirty } = type_stmt;
                 let dirty_str = if *only_dirty { "dirty" } else { "all" };
-                let result = result.0;
-                let sort_snake = sort.to_case(Snake);
-                writedoc! {out, "
+                let typ = format!(
+                    "{}",
+                    display_type(*analysis.var_types.get(var).unwrap(), eqlog, identifiers)
+                );
+                let typ_snake = typ.to_case(Snake);
+                let var = display_var(*var);
+                writedoc! {f, "
                     #[allow(unused_variables)]
-                    for tm{result} in self.{sort_snake}_{dirty_str}.iter().copied() {{
+                    for {var} in self.{typ_snake}_{dirty_str}.iter().copied() {{
                 "}?;
             }
-        }
-    }
-    Ok(())
+        };
+
+        Ok(())
+    })
 }
 
-fn write_query_loop_footers(out: &mut impl Write, query_len: usize) -> io::Result<()> {
-    for _ in 0..query_len {
-        write!(out, "}}\n")?;
-    }
-    Ok(())
-}
+fn display_surj_then<'a>(
+    stmt: &'a FlatSurjThenStmt,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        match stmt {
+            FlatSurjThenStmt::Equal(eq_stmt) => {
+                let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
-fn display_rule_name<'a>(axiom_index: usize, query_action: &'a QueryAction) -> impl 'a + Display {
-    match &query_action.name {
-        Some(name) => name.to_string(),
-        None => format!("{axiom_index}"),
-    }
-}
+                let typ = *analysis.var_types.get(lhs).unwrap();
+                let typ_snake = format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
-fn write_query_and_record_fn(
-    out: &mut impl Write,
-    query_action: &QueryAction,
-    axiom_index: usize,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let name = display_rule_name(axiom_index, query_action);
-    writedoc! {out, "
-        fn query_and_record_{name}(&self, delta: &mut ModelDelta) {{
-    "}?;
+                let lhs = display_var(*lhs);
+                let rhs = display_var(*rhs);
 
-    for query in query_action.queries.iter() {
-        if query.is_empty() {
-            writedoc! {out, "
-                if self.empty_join_is_dirty {{
-                    self.record_action_{axiom_index}(delta);
-                }}
-            "}?;
-            continue;
-        }
-
-        write_query_loop_headers(out, query, eqlog, identifiers)?;
-        let action_args = query_action
-            .action_inputs
-            .iter()
-            .format_with(", ", |tm, f| {
-                let tm = tm.0;
-                f(&format_args!("tm{tm}"))
-            });
-        write!(
-            out,
-            "self.record_action_{axiom_index}(delta, {action_args});"
-        )?;
-        write_query_loop_footers(out, query.len())?;
-    }
-
-    writedoc! {out, "
-        }}
-    "}
-}
-
-fn write_action_atom(
-    out: &mut impl Write,
-    atom: &ActionAtom,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    use ActionAtom::*;
-    match atom {
-        InsertTuple {
-            relation,
-            in_projections,
-            out_projections,
-        } => {
-            let relation_snake = relation.to_case(Snake);
-            let relation_camel = relation.to_case(UpperCamel);
-            let arity = get_arity(relation, eqlog, identifiers).unwrap();
-
-            let query_spec = QuerySpec {
-                projections: in_projections.keys().copied().collect(),
-                diagonals: BTreeSet::new(),
-                only_dirty: false,
-            };
-            let iter_name = IterName(relation, &query_spec);
-
-            let in_proj_args = in_projections.values().format_with(", ", |tm, f| {
-                let tm = tm.0;
-                f(&format_args!("tm{tm}"))
-            });
-            let out_proj_args0 = out_projections.values().format_with("", |tm, f| {
-                let tm = tm.0;
-                f(&format_args!("tm{tm}, "))
-            });
-            let out_proj_args1 = out_proj_args0.clone();
-            let out_proj_args2 = out_proj_args0.clone();
-            let tuple_pattern_args = (0..arity.len()).format_with(", ", |index, f| {
-                if let Some(tm) = out_projections.get(&index) {
-                    let tm = tm.0;
-                    f(&format_args!("tm{tm}"))
-                } else {
-                    f(&format_args!("_"))
-                }
-            });
-            let new_out_proj_args = out_projections.iter().format_with("\n", |(index, tm), f| {
-                let tm = tm.0;
-                let sort_snake = arity[*index].to_case(Snake);
-                f(&format_args!("let tm{tm} = delta.new_{sort_snake}(self);"))
-            });
-            let full_tuple_args = (0..arity.len()).format_with(",", |index, f| {
-                let tm = if let Some(tm) = in_projections.get(&index) {
-                    tm.0
-                } else {
-                    out_projections.get(&index).unwrap().0
+                writedoc! {f, "
+                    delta.new_{typ_snake}_equalities.push(({lhs}, {rhs}));
+                "}?;
+            }
+            FlatSurjThenStmt::Relation(rel_stmt) => {
+                let FlatSurjThenStmtRelation { rel, args } = rel_stmt;
+                let relation_camel =
+                    format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
+                let relation_snake = format!("{}", rel.display(eqlog, identifiers)).to_case(Snake);
+                let args0 = args
+                    .iter()
+                    .copied()
+                    .map(|arg| display_var(arg))
+                    .format(", ");
+                let args1 = args
+                    .iter()
+                    .copied()
+                    .map(|arg| display_var(arg))
+                    .format(", ");
+                let query_spec = QuerySpec {
+                    projections: (0..args.len()).collect(),
+                    diagonals: BTreeSet::new(),
+                    only_dirty: false,
                 };
-                f(&format_args!("tm{tm}"))
-            });
-            writedoc! {out, "
-                let existing_row = self.{iter_name}({in_proj_args}).next();
-                #[allow(unused_variables)]
-                let ({out_proj_args0}) = match existing_row {{
-                    Some({relation_camel}({tuple_pattern_args})) => ({out_proj_args1}),
-                    None => {{
-                        {new_out_proj_args}
-                        delta.new_{relation_snake}.push({relation_camel}({full_tuple_args}));
-                        ({out_proj_args2})
-                    }},
-                }};
-            "}
-        }
-        Equate { sort, lhs, rhs } => {
-            let lhs = lhs.0;
-            let rhs = rhs.0;
-            let sort_snake = sort.to_case(Snake);
-            writedoc! {out, "
-                if tm{lhs} != tm{rhs} {{
-                    delta.new_{sort_snake}_equalities.push((tm{lhs}, tm{rhs}));
-                }}
-            "}
-        }
-    }
+                let iter_name = IterName(relation_camel.as_str(), &query_spec);
+                writedoc! {f, "
+                    let exists_already = self.{iter_name}({args0}).next().is_some();
+                    if !exists_already {{
+                    delta.new_{relation_snake}.push({relation_camel}({args1}));
+                    }}
+                "}?;
+            }
+        };
+
+        Ok(())
+    })
 }
 
-fn write_record_action_fn(
-    out: &mut impl Write,
-    sorts: &BTreeMap<FlatTerm, String>,
-    action_inputs: &BTreeSet<FlatTerm>,
-    action: &[ActionAtom],
-    axiom_index: usize,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let args = action_inputs.iter().format_with("", |tm, f| {
-        let sort = sorts.get(tm).unwrap();
-        let tm = tm.0;
-        f(&format_args!("tm{tm}: {sort}, "))
-    });
+fn display_non_surj_then<'a>(
+    stmt: &'a FlatNonSurjThenStmt,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let FlatNonSurjThenStmt {
+            func,
+            func_args,
+            result,
+        } = stmt;
+        let rel = Rel::Func(*func);
+        let relation_camel = format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
+        let relation_snake = format!("{}", rel.display(eqlog, identifiers)).to_case(Snake);
 
-    writedoc! {out, "
-        fn record_action_{axiom_index}(&self, delta: &mut ModelDelta, {args}) {{
-    "}?;
-    for atom in action.iter() {
-        write_action_atom(out, atom, eqlog, identifiers)?;
-    }
-    writedoc! {out, "
-        }}
-    "}
+        let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
+        let iter_name = IterName(relation_camel.as_str(), &eval_func_spec);
+
+        let in_args0 = func_args.iter().copied().map(display_var).format(", ");
+        let in_args1 = func_args.iter().copied().map(display_var).format(", ");
+
+        let out_arg_wildcards = repeat("_, ").take(func_args.len()).format("");
+        let result = display_var(*result);
+
+        writedoc! {f, "
+            let {result} = match self.{iter_name}({in_args0}).next() {{
+                Some({relation_camel}({out_arg_wildcards} res)) => res,
+                None => {{ 
+                    delta.new_{relation_snake}_def.push({relation_camel}Args({in_args1}));
+                    break;
+                }},
+            }};
+        "}?;
+        Ok(())
+    })
+}
+
+fn display_fork<'a>(
+    fork: &'a FlatForkStmt,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    fork.blocks
+        .iter()
+        .map(move |stmts| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                for _ in [()] {{
+                    {stmts}
+                }}
+            "}
+            })
+        })
+        .format("\n")
+}
+
+fn display_stmts<'a>(
+    stmts: &'a [FlatStmt],
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let (head, tail) = match stmts {
+            [] => {
+                if let Some(continuation_index) = analysis.fork_continuations.get(&ByAddress(stmts))
+                {
+                    let rule_name = analysis.rule_name;
+                    let continuation_name: String = format!("{rule_name}_{continuation_index}");
+                    let args: &BTreeSet<FlatVar> = analysis
+                        .fixed_vars
+                        .get(&ByAddress(
+                            analysis.fork_suffixes[*continuation_index].suffix,
+                        ))
+                        .unwrap();
+                    let args = args.iter().copied().map(display_var).format(", ");
+                    writedoc! {f, "
+                        self.{continuation_name}(delta, {args});
+                    "}?;
+                }
+                return Ok(());
+            }
+            [head, tail @ ..] => (head, tail),
+        };
+
+        match head {
+            FlatStmt::If(if_stmt) => {
+                let if_header = display_if_stmt_header(if_stmt, analysis, eqlog, identifiers);
+                let if_footer = "}";
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {if_header}
+                    {tail}
+                    {if_footer}
+                "}?;
+            }
+            FlatStmt::SurjThen(surj_then) => {
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {surj_then}
+                    {tail}
+                "}?;
+            }
+            FlatStmt::NonSurjThen(non_surj_then) => {
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
+                writedoc! {f, "
+                    {non_surj_then}
+                    {tail}
+                "}?;
+            }
+            FlatStmt::Fork(fork) => {
+                // We're not writing out `tail` here; those statements are written to a different
+                // function that acts as continuation.
+                let fork = display_fork(fork, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {fork}
+                "}?;
+            }
+        };
+        Ok(())
+    })
+}
+
+fn display_stmts_fn<'a>(
+    name: String,
+    stmts: &'a [FlatStmt],
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let var_args: &BTreeSet<FlatVar> = analysis.fixed_vars.get(&ByAddress(stmts)).unwrap();
+    let var_args = var_args
+        .iter()
+        .copied()
+        .map(move |var| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let var_name = display_var(var);
+                let typ = *analysis.var_types.get(&var).unwrap();
+                let type_name = display_type(typ, eqlog, identifiers);
+                write!(f, "{var_name}: {type_name}")
+            })
+        })
+        .format(", ");
+
+    let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
+
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn {name}(&self, delta: &mut ModelDelta, {var_args}) {{
+            for _ in [()] {{
+            {stmts}
+            }}
+            }}
+        "}
+    })
+}
+
+fn display_rule_fns<'a>(
+    rule: &'a FlatRule,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let name = rule.name.as_str();
+
+        let rule_fn = display_stmts_fn(
+            name.to_string(),
+            rule.stmts.as_slice(),
+            analysis,
+            eqlog,
+            identifiers,
+        );
+        let continuation_fns = analysis
+            .fork_suffixes
+            .iter()
+            .enumerate()
+            .map(|(i, fork_suffix)| {
+                let ForkSuffix {
+                    fork_stmt: _,
+                    suffix,
+                } = fork_suffix;
+                let name = format!("{name}_{i}");
+                display_stmts_fn(name, suffix, analysis, eqlog, identifiers)
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            {rule_fn}
+            {continuation_fns}
+        "}
+    })
 }
 
 fn write_drop_dirt_fn(
@@ -1487,100 +1609,16 @@ fn write_drop_dirt_fn(
     "}
 }
 
-fn write_retire_dirt_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!("self.{relation_snake}.retire_dirt();"))
-        });
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-            let mut {sort_snake}_dirty_tmp = BTreeSet::new();
-            std::mem::swap(&mut {sort_snake}_dirty_tmp, &mut self.{sort_snake}_dirty);
-            self.{sort_snake}_dirty_prev.push({sort_snake}_dirty_tmp);
-        "})
-    });
-    writedoc! {out, "
-        fn retire_dirt(&mut self) {{
-            self.empty_join_is_dirty = false;
-
-        {relations}
-
-        {sorts}
-        }}
-    "}
-}
-
-fn write_recall_previous_dirt(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, arity), f| {
-            let relation_snake = relation.to_case(Snake);
-            let sorts: BTreeSet<&str> = arity.iter().copied().collect();
-            let args = sorts.into_iter().format_with(", ", |sort, f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!("&mut self.{sort_snake}_equalities"))
-            });
-            f(&format_args!(
-                "self.{relation_snake}.recall_previous_dirt({args});"
-            ))
-        });
-
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-                let mut {sort_snake}_dirty_prev_tmp = Vec::new();
-                std::mem::swap(&mut {sort_snake}_dirty_prev_tmp, &mut self.{sort_snake}_dirty_prev);
-                self.{sort_snake}_dirty =
-                    {sort_snake}_dirty_prev_tmp
-                    .into_iter()
-                    .flatten()
-                    .filter(|el| self.{sort_snake}_equalities.root(*el) == *el)
-                    .collect();
-            "})
-    });
-    writedoc! {out, "
-        fn recall_previous_dirt(&mut self) {{
-            debug_assert!(!self.is_dirty());
-
-            {relations}
-
-            {sorts}
-
-            self.empty_join_is_dirty = self.empty_join_is_dirty_prev;
-            self.empty_join_is_dirty_prev = false;
-        }}
-    "}
-}
-
-fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> io::Result<()> {
-    let is_surjective_axiom = |index: &usize| query_actions[*index].is_surjective();
-
-    let surjective_axioms = query_actions
+fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<()> {
+    let rules = rules
         .iter()
-        .enumerate()
-        .filter(|(i, _)| is_surjective_axiom(i))
-        .format_with("\n", |(i, qa), f| {
-            let name = display_rule_name(i, qa);
-            f(&format_args!("self.query_and_record_{name}(&mut delta);"))
-        });
-
-    let non_surjective_axioms = query_actions
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !is_surjective_axiom(i))
-        .format_with("\n", |(i, qa), f| {
-            let name = display_rule_name(i, qa);
-            f(&format_args!("self.query_and_record_{name}(&mut delta);"))
-        });
+        .map(|rule| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let name = rule.name.as_str();
+                write!(f, "self.{name}(&mut delta);")
+            })
+        })
+        .format("\n");
 
     writedoc! {out, "
         /// Closes the model under all axioms until `condition` is satisfied.
@@ -1590,44 +1628,37 @@ fn write_close_until_fn(out: &mut impl Write, query_actions: &[QueryAction]) -> 
         #[allow(dead_code)]
         pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
         {{
-            let mut delta_opt = None;
-            std::mem::swap(&mut delta_opt, &mut self.delta);
-            let mut delta = delta_opt.unwrap();
+            let mut delta = ModelDelta::new();
 
-            delta.apply(self);
+            self.canonicalize();
             if condition(self) {{
-                self.delta = Some(delta);
                 return true;
             }}
 
             while self.is_dirty() {{
                 loop {{
-        {surjective_axioms}
-            
-                    self.retire_dirt();
-                    delta.apply(self);
+        {rules}
+
+                    self.drop_dirt();
+                    delta.apply_surjective(self);
+                    self.canonicalize();
 
                     if condition(self) {{
-                        self.delta = Some(delta);
                         return true;
                     }}
+
                     if !self.is_dirty() {{
                         break;
                     }}
                 }}
 
-                self.recall_previous_dirt();
-        {non_surjective_axioms}
-                self.drop_dirt();
-                delta.apply(self);
+                delta.apply_non_surjective (self);
                 if condition(self) {{
-                    self.delta = Some(delta);
                     return true;
                 }}
             }}
 
-            self.delta = Some(delta);
-            return false;
+            false
         }}
     "}
 }
@@ -1656,9 +1687,9 @@ fn write_new_fn(
         let sort_snake = sort.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
-        write!(out, "{sort_snake}_dirty_prev: Vec::new(),\n")?;
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
+        write!(out, "{sort_snake}_uprooted: Vec::new(),\n")?;
     }
     for (relation, _) in iter_relation_arities(eqlog, identifiers) {
         let relation_snake = relation.to_case(Snake);
@@ -1666,62 +1697,65 @@ fn write_new_fn(
         write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
-    write!(out, "empty_join_is_dirty_prev: true,\n")?;
-    write!(out, "delta: Some(Box::new(ModelDelta::new())),\n")?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
     Ok(())
 }
 
-fn write_define_fn(out: &mut impl Write, name: &str, arity: &[&str]) -> io::Result<()> {
-    assert!(
-        arity.len() >= 1,
-        "Arity of function should have at least return type"
-    );
-    let arg_types = &arity[0..arity.len() - 1];
-    let result_type = arity.last().unwrap();
+fn write_define_fn(
+    out: &mut impl Write,
+    func: Func,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let func_snake = display_func_snake(func, eqlog, identifiers);
 
-    let function_snake = name.to_case(Snake);
+    let domain = type_list_vec(eqlog.domain(func).expect("should be total"), eqlog);
+    let codomain = eqlog.codomain(func).expect("should be total");
 
-    let fn_args = arg_types
+    let codomain_camel =
+        format!("{}", display_type(codomain, eqlog, identifiers)).to_case(UpperCamel);
+    let codomain_snake = codomain_camel.to_case(Snake);
+
+    let func_arg_vars: Vec<FlatVar> = (0..domain.len()).map(FlatVar).collect();
+    let result_var = FlatVar(domain.len());
+
+    let fn_args = func_arg_vars
         .iter()
-        .enumerate()
-        .format_with(", ", |(i, typ), f| f(&format_args!("mut arg{i}: {typ}")));
+        .copied()
+        .zip(domain.iter().copied())
+        .map(|(var, var_typ)| {
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let type_camel =
+                    format!("{}", display_type(var_typ, eqlog, identifiers)).to_case(UpperCamel);
+                let var = display_var(var);
+                write!(f, "{var}: {type_camel}")
+            })
+        })
+        .format(", ");
 
-    let query = QuerySpec {
-        projections: (0..arg_types.len()).collect(),
-        diagonals: BTreeSet::new(),
-        only_dirty: false,
-    };
-    let iter = IterName(&name, &query);
-    let iter_args = (0..arg_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-
-    let cod_index = arg_types.len();
-
-    let cod_snake = result_type.to_case(Snake);
-
-    let insert_dom_args = (0..arg_types.len()).format_with("", |i, f| f(&format_args!("arg{i}, ")));
-
-    let canonicalize = arg_types
+    let args0 = func_arg_vars.iter().copied().map(display_var).format(", ");
+    let args1 = args0.clone();
+    let rel_args = func_arg_vars
         .iter()
-        .enumerate()
-        .format_with("\n", |(i, arg_type), f| {
-            let sort_snake = arg_type.to_case(Snake);
-            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
-        });
+        .copied()
+        .chain(once(result_var))
+        .map(display_var)
+        .format(", ");
+    let result_var = display_var(result_var);
 
-    let args = iter_args.clone();
     writedoc! {out, "
-        /// Enforces that `{name}({args})` is defined, adjoining a new element if necessary.
+        /// Enforces that `{func_snake}({args0})` is defined, adjoining a new element if necessary.
         #[allow(dead_code)]
-        pub fn define_{function_snake}(&mut self, {fn_args}) -> {result_type} {{
-            {canonicalize}
-            if let Some(t) = self.{iter}({iter_args}).next() {{
-                return t.{cod_index};
+        pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
+            match self.{func_snake}({args1}) {{
+                Some(result) => result,
+                None => {{
+                    let {result_var} = self.new_{codomain_snake}();
+                    self.insert_{func_snake}({rel_args});
+                    {result_var}
+                }}
             }}
-            let result = self.new_{cod_snake}();
-            self.insert_{function_snake}({insert_dom_args}result);
-            result
         }}
     "}
 }
@@ -1748,8 +1782,6 @@ fn write_theory_struct(
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
-    write!(out, "empty_join_is_dirty_prev: bool,\n")?;
-    write!(out, "delta: Option<Box<ModelDelta>>,\n")?;
     write!(out, "}}\n")?;
     write!(out, "type Model = {name};")?;
     Ok(())
@@ -1758,7 +1790,8 @@ fn write_theory_struct(
 fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
-    query_actions: &[QueryAction],
+    rules: &[FlatRule],
+    analyses: &[FlatRuleAnalysis],
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
@@ -1768,23 +1801,27 @@ fn write_theory_impl(
     write!(out, "\n")?;
 
     write_close_fn(out)?;
-    write_close_until_fn(out, query_actions)?;
+    write_close_until_fn(out, rules)?;
 
     for type_name in iter_types(eqlog, identifiers) {
-        write_new_element(out, type_name)?;
-        write_equate_elements(out, type_name)?;
         write_iter_sort_fn(out, type_name)?;
         write_root_fn(out, type_name)?;
         write_are_equal_fn(out, type_name)?;
         write!(out, "\n")?;
     }
+    for typ in eqlog.iter_type() {
+        write_new_element(out, typ, eqlog, identifiers)?;
+        write_equate_elements(out, typ, eqlog, identifiers)?;
+    }
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
         write_pub_function_eval_fn(out, func_name, &arity)?;
-        write_define_fn(out, func_name, &arity)?;
         write_pub_iter_fn(out, func_name, &arity, true)?;
         write_pub_insert_relation(out, func_name, &arity, true)?;
         write!(out, "\n")?;
+    }
+    for func in eqlog.iter_func() {
+        write_define_fn(out, func, eqlog, identifiers)?;
     }
 
     for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
@@ -1796,25 +1833,21 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
 
+    write_canonicalize_fn(out, eqlog, identifiers)?;
     write_is_dirty_fn(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
-    for (i, query_action) in query_actions.iter().enumerate() {
-        write_record_action_fn(
-            out,
-            &query_action.sorts,
-            &query_action.action_inputs,
-            &query_action.action,
-            i,
-            eqlog,
-            identifiers,
-        )?;
-        write_query_and_record_fn(out, query_action, i, eqlog, identifiers)?;
+    assert_eq!(
+        rules.len(),
+        analyses.len(),
+        "There should be precisely one analysis for each rule"
+    );
+    for (rule, analysis) in rules.iter().zip(analyses) {
+        let rule_fn = display_rule_fns(rule, analysis, eqlog, identifiers);
+        writeln!(out, "{rule_fn}")?;
     }
 
     write_drop_dirt_fn(out, eqlog, identifiers)?;
-    write_retire_dirt_fn(out, eqlog, identifiers)?;
-    write_recall_previous_dirt(out, eqlog, identifiers)?;
 
     write!(out, "}}\n")?;
     Ok(())
@@ -1864,7 +1897,8 @@ pub fn write_module(
     name: &str,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-    query_actions: &[QueryAction],
+    rules: &[FlatRule],
+    analyses: &[FlatRuleAnalysis],
     index_selection: &IndexSelection,
 ) -> io::Result<()> {
     write_imports(out)?;
@@ -1884,6 +1918,11 @@ pub fn write_module(
         write_table_impl(out, rel, &arity, index)?;
         write_table_display_impl(out, rel)?;
     }
+    for (func, arity) in iter_func_arities(eqlog, identifiers) {
+        let dom = &arity[0..arity.len() - 1];
+        write_func_args_struct(out, func, dom)?;
+    }
+
     write!(out, "\n")?;
 
     write_model_delta_struct(out, eqlog, identifiers)?;
@@ -1892,7 +1931,7 @@ pub fn write_module(
     write_model_delta_impl(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
-    write_theory_impl(out, name, query_actions, eqlog, identifiers)?;
+    write_theory_impl(out, name, rules, analyses, eqlog, identifiers)?;
     write_theory_display_impl(out, name, eqlog, identifiers)?;
 
     Ok(())

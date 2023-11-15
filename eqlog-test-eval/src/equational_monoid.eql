@@ -2,13 +2,13 @@ type M;
 func e() -> M;
 func mul(M, M) -> M;
 
-rule {
+rule right_identity {
     if t_0 = x;
     if t_1 = e();
     if to = x;
     then mul(t_0, t_1) = to;
 }
-rule {
+rule left_identity {
     if t_0 = e();
     if t_1 = x;
     if to = x;

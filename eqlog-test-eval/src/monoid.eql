@@ -4,23 +4,23 @@ func e() -> M;
 // The multiplication operation.
 func mul(M, M) -> M;
 
-rule {
+rule e_total {
     then e()!;
 }
-rule {
+rule mul_total {
     if x: M;
     if y: M;
     then mul(x, y)!;
 }
-rule {
+rule right_identity {
     if y = mul(x, e());
     then x = y;
 }
-rule {
+rule left_identity {
     if y = mul(e(), x);
     then x = y;
 }
-rule {
+rule associativity {
     if d = mul(mul(a, b), c);
     if e = mul(a, mul(b, c));
     then d = e;

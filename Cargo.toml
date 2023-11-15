@@ -40,6 +40,3 @@ debug = false
 [profile.release.build-override]
 opt-level = 3
 debug = false
-
-[profile.release]
-debug = true

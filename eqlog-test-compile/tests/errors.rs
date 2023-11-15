@@ -196,6 +196,11 @@ fn surjectivity_violation_nested_application() {
 }
 
 #[test]
+fn surjectivity_violation_in_then_defined() {
+    test_case(Path::new("surjectivity-violation-in-then-defined"));
+}
+
+#[test]
 fn then_defined_not_variable() {
     test_case(Path::new("then-defined-not-variable"));
 }

@@ -1,9 +1,13 @@
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    iter::{once, repeat},
+};
+
+use super::ast::*;
+use super::var_info::*;
 use crate::eqlog_util::*;
-use crate::llam::*;
 use eqlog_eqlog::*;
 use maplit::btreeset;
-use std::collections::{BTreeMap, BTreeSet};
-use std::iter::{once, repeat};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct QuerySpec {
@@ -13,6 +17,7 @@ pub struct QuerySpec {
 }
 
 impl QuerySpec {
+    /// The [QuerySpec] to query for all tuples in a relation.
     pub fn all() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
@@ -20,11 +25,39 @@ impl QuerySpec {
             only_dirty: false,
         }
     }
+    /// The [QuerySpec] to query for all dirty tuples in a relation.
     pub fn all_dirty() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
             diagonals: BTreeSet::new(),
             only_dirty: true,
+        }
+    }
+    /// The [QuerySpec] to query for one specific tuple in a relation.
+    pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
+        let arity_len = match rel {
+            Rel::Pred(p) => {
+                type_list_vec(eqlog.arity(p).expect("arity should be total"), eqlog).len()
+            }
+            Rel::Func(f) => {
+                let dom_len = type_list_vec(eqlog.domain(f).expect("should be total"), eqlog).len();
+                dom_len + 1
+            }
+        };
+        QuerySpec {
+            projections: (0..arity_len).collect(),
+            diagonals: BTreeSet::new(),
+            only_dirty: false,
+        }
+    }
+    /// The [QuerySpec] for evaluating a function.
+    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
+        let domain = eqlog.domain(func).expect("domain should be total");
+        let dom_len = type_list_vec(domain, eqlog).len();
+        QuerySpec {
+            projections: (0..dom_len).collect(),
+            diagonals: BTreeSet::new(),
+            only_dirty: false,
         }
     }
 
@@ -37,7 +70,7 @@ impl QuerySpec {
     }
 }
 
-fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
+pub fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
     let mut specs: Vec<QuerySpec> = indices.into_iter().collect();
     specs.sort_by_key(|index| index.projections.len());
 
@@ -101,66 +134,53 @@ impl IndexSpec {
 // Maps relation name and query spec to an index for the relation that can serve the query.
 pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, IndexSpec>>;
 
-pub fn select_indices<'a, QA, AA>(
-    query_atoms: QA,
-    action_atoms: AA,
+pub fn select_indices<'a>(
+    if_stmt_rel_infos: &BTreeSet<(&'a FlatIfStmtRelation, &'a RelationInfo)>,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> IndexSelection
-where
-    QA: IntoIterator<Item = &'a QueryAtom>,
-    AA: IntoIterator<Item = &'a ActionAtom>,
-{
-    // Maps relations to a set of collected query specs. We always need a query for all (dirty)
-    // tuples.
-    let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> =
-        iter_relation_arities(eqlog, identifiers)
-            .map(|(rel, _)| {
-                (
-                    rel.to_string(),
-                    btreeset! {QuerySpec::all(), QuerySpec::all_dirty()},
-                )
-            })
-            .collect();
+) -> IndexSelection {
+    // Every relation needs a QuerySpec for all tuples, and a QuerySpec for one specific tuple.
+    // TODO: Can't we do without the QuerySpec for all dirty tuples though?
+    let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> = eqlog
+        .iter_func()
+        .map(Rel::Func)
+        .chain(eqlog.iter_pred().map(Rel::Pred))
+        .map(|rel| {
+            let min_spec_set =
+                btreeset! {QuerySpec::all(), QuerySpec::one(rel, eqlog), QuerySpec::all_dirty()};
+            let rel = format!("{}", rel.display(eqlog, identifiers));
+            (rel, min_spec_set)
+        })
+        .collect();
 
-    // Add indices for queries.
-    for query_atom in query_atoms.into_iter() {
-        use QueryAtom::*;
-        match query_atom {
-            Relation {
-                relation,
-                diagonals,
-                in_projections,
-                only_dirty,
-                ..
-            } => {
-                query_specs.get_mut(relation).unwrap().insert(QuerySpec {
-                    diagonals: diagonals.clone(),
-                    projections: in_projections.keys().copied().collect(),
-                    only_dirty: *only_dirty,
-                });
-            }
-            Sort { .. } | Equal(_, _) => (),
-        }
+    // Every func needs in addition a QuerySpec for the arguments to the functino to generate
+    // the public eval function and for non surjective then statements.
+    for func in eqlog.iter_func() {
+        let rel = format!("{}", Rel::Func(func).display(eqlog, identifiers));
+        let spec = QuerySpec::eval_func(func, eqlog);
+        query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
     }
 
-    // Add indices for actions.
-    for action_atom in action_atoms.into_iter() {
-        use ActionAtom::*;
-        match action_atom {
-            InsertTuple {
-                relation,
-                in_projections,
-                ..
-            } => {
-                query_specs.get_mut(relation).unwrap().insert(QuerySpec {
-                    diagonals: BTreeSet::new(),
-                    projections: in_projections.keys().copied().collect(),
-                    only_dirty: false,
-                });
-            }
-            Equate { .. } => (),
-        }
+    // Every relation if stmt needs a QuerySpec.
+    for (if_stmt_rel, info) in if_stmt_rel_infos {
+        let FlatIfStmtRelation {
+            rel,
+            args: _,
+            only_dirty,
+        } = if_stmt_rel;
+        let rel = format!("{}", rel.display(eqlog, identifiers));
+        let RelationInfo {
+            diagonals,
+            in_projections,
+            out_projections: _,
+            quantifier: _,
+        } = info;
+        let spec = QuerySpec {
+            diagonals: diagonals.clone(),
+            projections: in_projections.keys().copied().collect(),
+            only_dirty: *only_dirty,
+        };
+        query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
     }
 
     query_specs

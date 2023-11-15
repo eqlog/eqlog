@@ -1,0 +1,7 @@
+type A;
+func foo() -> A;
+func bar(A) -> A;
+
+rule nested_not_defined {
+    then bar(foo())!;
+}

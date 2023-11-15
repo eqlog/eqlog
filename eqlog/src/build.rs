@@ -1,18 +1,17 @@
-use crate::eqlog_util::*;
 use crate::error::*;
-use crate::flat_to_llam::*;
+use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::grammar_util::*;
-use crate::index_selection::*;
-use crate::llam::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
+use by_address::ByAddress;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::eprintdoc;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -171,25 +170,38 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     })?;
     assert!(!eqlog.absurd());
 
-    let mut query_actions: Vec<QueryAction> = Vec::new();
-    query_actions.extend(
-        iter_func_arities(&eqlog, &identifiers)
-            .map(|(func, arity)| functionality(func, arity.as_slice())),
-    );
-    let rules: Vec<RuleDeclNode> = eqlog.iter_rule_decl_node().collect();
-    let rule_flattenings: Vec<SequentFlattening> = rules
-        .into_iter()
-        .map(|rule| flatten(rule, &eqlog, &identifiers))
+    let mut flat_rules: Vec<FlatRule> = eqlog
+        .iter_func()
+        .map(|func| functionality_v2(func, &eqlog))
         .collect();
-    query_actions.extend(rule_flattenings.into_iter().map(|flattening| {
-        lower_sequent_seminaive(&flattening.name, &flattening.sequent, &flattening.sorts)
+    let functionality_rule_num = flat_rules.len();
+    flat_rules.extend(eqlog.iter_rule_decl_node().map(|rule| {
+        let mut flat_rule = flatten(rule, &eqlog, &identifiers);
+        // Necessary here for explicit rules, but not for implicit functionality rules, since the
+        // latter are already ordered reasonably.
+        sort_if_stmts(&mut flat_rule);
+        flat_rule
     }));
-    let query_atoms = query_actions
+
+    let (flat_functionality_rules, flat_explicit_rules) =
+        flat_rules.split_at(functionality_rule_num);
+    let flat_analyses: Vec<FlatRuleAnalysis> = flat_functionality_rules
         .iter()
-        .map(|qa| qa.queries.iter().flatten())
-        .flatten();
-    let action_atoms = query_actions.iter().map(|qa| qa.action.iter()).flatten();
-    let index_selection = select_indices(query_atoms, action_atoms, &eqlog, &identifiers);
+        .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::No))
+        .chain(
+            flat_explicit_rules
+                .iter()
+                .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::Yes)),
+        )
+        .collect();
+
+    let if_stmt_rel_infos: BTreeSet<(&FlatIfStmtRelation, &RelationInfo)> = flat_analyses
+        .iter()
+        .flat_map(|analysis| analysis.if_stmt_rel_infos.iter())
+        .map(|(ByAddress(if_stmt_rel), info)| (*if_stmt_rel, info))
+        .collect();
+    let index_selection = select_indices(&if_stmt_rel_infos, &eqlog, &identifiers);
+
     let theory_name = in_file
         .file_stem()
         .unwrap()
@@ -205,7 +217,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         &theory_name,
         &eqlog,
         &identifiers,
-        &query_actions,
+        flat_rules.as_slice(),
+        flat_analyses.as_slice(),
         &index_selection,
     )?;
     fs::write(&out_file, &result)?;

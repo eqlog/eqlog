@@ -1,350 +1,476 @@
 use crate::eqlog_util::*;
-use crate::flat_ast::*;
+use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
-use maplit::btreeset;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::iter::successors;
 
-pub struct SequentFlattening {
-    pub name: Option<String>,
-    pub sequent: FlatSequent,
-    pub sorts: BTreeMap<FlatTerm, String>,
+fn iter_grouped_morphisms<'a>(
+    rule: RuleDeclNode,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = Morphism> {
+    successors(eqlog.rule_first_grouped_morphism(rule), |prev| {
+        eqlog.next_grouped_morphism(*prev)
+    })
 }
 
-/// A chain with at most one morphism (i.e. two objects).
+/// Assign compatible [FlatTerm]s to the [El]s of in a chain of morphisms. The first morphism must
+/// have empty domain.
 ///
-/// This is useful for the time being since general chains are not supported yet.
-enum RestrictedChain {
-    Empty {
-        #[allow(unused)]
-        chain: Chain,
-    },
-    Singleton {
-        #[allow(unused)]
-        chain: Chain,
-        structure: Structure,
-    },
-    Morphism {
-        #[allow(unused)]
-        chain: Chain,
-        domain: Structure,
-        morphism: Morphism,
-        #[allow(unused)]
-        codomain: Structure,
-    },
-}
-
-impl RestrictedChain {
-    fn from_chain(chain: Chain, eqlog: &Eqlog) -> Self {
-        if eqlog
-            .iter_nil_chain()
-            .find(|ch| eqlog.are_equal_chain(*ch, chain))
-            .is_some()
-        {
-            return RestrictedChain::Empty { chain };
-        }
-
-        let tail = eqlog.chain_tail(chain).unwrap();
-        let structure = eqlog.chain_head_structure(chain).unwrap();
-
-        if eqlog
-            .iter_nil_chain()
-            .find(|ch| eqlog.are_equal_chain(*ch, tail))
-            .is_some()
-        {
-            return RestrictedChain::Singleton { chain, structure };
-        }
-
-        let domain = structure;
-        let morphism = eqlog.chain_head_transition(chain).unwrap();
-        let codomain = eqlog.chain_head_structure(tail).unwrap();
-
-        RestrictedChain::Morphism {
-            chain,
-            domain,
-            morphism,
-            codomain,
-        }
-    }
-}
-
-fn get_flat_term_or_create(el: El, flat_names: &mut BTreeMap<El, BTreeSet<FlatTerm>>) -> FlatTerm {
-    let len = flat_names
-        .iter()
-        .map(|(_, flat_terms)| flat_terms.len())
-        .sum();
-    let names = flat_names.entry(el).or_insert(btreeset! {FlatTerm(len)});
-    *names.iter().next().unwrap()
-}
-
-fn flatten_delta(
-    morphism: Morphism,
-    mut flat_names: BTreeMap<El, BTreeSet<FlatTerm>>,
+/// The assigne [FlatTerm]s are compatible with morphisms in the sense that if f : X -> Y is a
+/// morphism in the chain and y is in the range of f, then the [FlatTerm] assigned to y is one of
+/// the [FlatTerm]s assigned to a preimage of y.
+fn assign_el_vars(
+    chain: impl IntoIterator<Item = Morphism>,
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> (BTreeMap<El, BTreeSet<FlatTerm>>, Vec<FlatAtom>) {
-    let codomain = eqlog.cod(morphism).unwrap();
-    let mut atoms: Vec<FlatAtom> = Vec::new();
+) -> BTreeMap<El, FlatVar> {
+    let mut el_terms = BTreeMap::new();
+    let mut unused_flat_terms = (0..).into_iter().map(FlatVar);
 
-    for (el0, el1) in iter_in_ker(morphism, eqlog) {
-        if !eqlog.are_equal_el(el0, el1) {
-            let tm0 = get_flat_term_or_create(el0, &mut flat_names);
-            let tm1 = get_flat_term_or_create(el1, &mut flat_names);
-            atoms.push(FlatAtom::Equal(tm0, tm1));
+    let mut is_first = true;
+    for transition in chain {
+        if is_first {
+            let dom = eqlog.dom(transition).expect("dom should be total");
+            assert!(
+                iter_els(dom, eqlog).next().is_none(),
+                "the first domain should be empty"
+            );
+            is_first = false;
         }
-    }
 
-    flat_names = {
-        let mut new_flat_names = BTreeMap::new();
-        for (el, tms) in flat_names.into_iter() {
-            let img_el = eqlog.map_el(morphism, el).unwrap();
-            for tm in tms {
-                new_flat_names
-                    .entry(img_el)
-                    .or_insert(BTreeSet::new())
-                    .insert(tm);
+        for (m, preimage, image) in eqlog.iter_map_el() {
+            if !eqlog.are_equal_morphism(m, transition) {
+                continue;
+            }
+
+            if let Some(tm) = el_terms.get(&preimage) {
+                el_terms.insert(image, *tm);
             }
         }
-        new_flat_names
-    };
 
-    for (pred, els) in iter_pred_app(codomain, eqlog) {
-        if !eqlog.pred_tuple_in_img(morphism, pred, els) {
-            let el_terms: Vec<FlatTerm> = el_list_vec(els, eqlog)
-                .into_iter()
-                .map(|el| get_flat_term_or_create(el, &mut flat_names))
-                .collect();
-            let pred_ident = eqlog
-                .iter_semantic_pred()
-                .find_map(|(ident, prd)| eqlog.are_equal_pred(prd, pred).then_some(ident))
-                .unwrap();
-            let pred_name: String = identifiers.get(&pred_ident).unwrap().to_string();
-            atoms.push(FlatAtom::Relation(pred_name, el_terms));
+        let cod = eqlog.cod(transition).expect("cod should be total");
+        for el in iter_els(cod, eqlog) {
+            el_terms
+                .entry(el)
+                .or_insert_with(|| unused_flat_terms.next().unwrap());
         }
     }
 
-    for (func, args, result) in iter_func_app(codomain, eqlog) {
-        if !eqlog.func_app_in_img(morphism, func, args) {
-            let arg_terms: Vec<FlatTerm> = el_list_vec(args, eqlog)
-                .into_iter()
-                .map(|el| get_flat_term_or_create(el, &mut flat_names))
-                .collect();
-            let result_term = get_flat_term_or_create(result, &mut flat_names);
-
-            let mut tuple = arg_terms;
-            tuple.push(result_term);
-
-            let func_ident = eqlog
-                .iter_semantic_func()
-                .find_map(|(ident, fnc)| eqlog.are_equal_func(fnc, func).then_some(ident))
-                .unwrap();
-            let func_name: String = identifiers.get(&func_ident).unwrap().to_string();
-            atoms.push(FlatAtom::Relation(func_name, tuple));
-        }
-    }
-
-    for el in iter_els(codomain, eqlog) {
-        if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
-            let tm = get_flat_term_or_create(el, &mut flat_names);
-
-            let typ = el_type(el, eqlog).unwrap();
-            let type_ident = eqlog
-                .iter_semantic_type()
-                .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))
-                .unwrap();
-            let type_name: String = identifiers.get(&type_ident).unwrap().to_string();
-            atoms.push(FlatAtom::Unconstrained(tm, type_name));
-        }
-    }
-
-    (flat_names, atoms)
+    el_terms
 }
 
-fn sort_map(
-    flat_names: &BTreeMap<El, BTreeSet<FlatTerm>>,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> BTreeMap<FlatTerm, String> {
-    flat_names
+fn make_var_type_map(el_vars: &BTreeMap<El, FlatVar>, eqlog: &Eqlog) -> BTreeMap<FlatVar, Type> {
+    el_vars
         .iter()
-        .map(|(el, tms)| {
+        .map(|(el, var)| {
             let typ = el_type(*el, eqlog).unwrap();
-            let type_ident = eqlog
-                .iter_semantic_type()
-                .find_map(|(ident, tp)| eqlog.are_equal_type(tp, typ).then_some(ident))
-                .unwrap();
-            let type_name: &str = identifiers.get(&type_ident).unwrap().as_str();
-
-            tms.iter().copied().map(|tm| (tm, type_name.to_string()))
+            (*var, typ)
         })
-        .flatten()
         .collect()
 }
 
-/// Sort atoms so that each atom corresponds to an epimorphic delta.
+/// Emits an if block which matches the delta given by `morphism` with arbitrary (not necessarily
+/// fresh) data.
 ///
-/// This is necessary so that we add subterms before terms.
-/// Consider this eqlog/PHL then atom:
-/// ```eqlog
-/// then foo(bar())!;
-/// ```
-///
-/// This might correspond to the following flat/RHL atoms:
-/// ```eqlog
-/// then bar(tm0);
-/// then foo(tm0, tm1);
-/// ```
-/// but it might also correspond to
-/// ```eqlog
-/// then foo(tm0, tm1);
-/// then bar(tm0);
-/// ```
-///
-/// The second version is bad, since here we're introducing the new flat term `tm0` not as last
-/// argument, so we want the first one.
-///
-/// This function reorders the provided atoms so that we always introduce new flat terms only as
-/// last arguments. This must be possible; otherwise the function panics.
-fn sort_then_atoms(
-    mut atoms: Vec<FlatAtom>,
-    premise_flat_terms: BTreeSet<FlatTerm>,
+/// The output block assumes that data in the domain of the morphism has already been matched.
+fn flatten_if_arbitrary(
+    morphism: Morphism,
+    el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> Vec<FlatAtom> {
-    let mut result = Vec::new();
-    let mut added_flat_terms = premise_flat_terms;
-    while !atoms.is_empty() {
-        let before_len = atoms.len();
-        atoms = atoms
-            .into_iter()
-            .filter_map(|atom| {
-                let should_add = match &atom {
-                    FlatAtom::Equal(lhs, rhs) => {
-                        added_flat_terms.contains(lhs) && added_flat_terms.contains(rhs)
-                    }
-                    FlatAtom::Relation(rel, args) => {
-                        let rel_ident = *identifiers
-                            .iter()
-                            .find_map(|(i, s)| (s == rel).then_some(i))
-                            .unwrap();
-                        let is_func = eqlog.semantic_func(rel_ident).is_some();
-                        let is_pred = eqlog.semantic_pred(rel_ident).is_some();
-                        assert!(
-                            is_func ^ is_pred,
-                            "rel should be either function or relation"
-                        );
-                        let last_arg_is_ok = is_func
-                            || match args.last() {
-                                Some(last_arg) => added_flat_terms.contains(last_arg),
-                                None => true,
-                            };
+) -> Vec<FlatStmt> {
+    let mut stmts = Vec::new();
 
-                        last_arg_is_ok
-                            && args[0..args.len().saturating_sub(1)]
-                                .iter()
-                                .all(|arg| added_flat_terms.contains(arg))
-                    }
-                    FlatAtom::Unconstrained(_, _) => true,
-                };
-
-                if should_add {
-                    match &atom {
-                        FlatAtom::Equal(lhs, rhs) => {
-                            added_flat_terms.insert(*lhs);
-                            added_flat_terms.insert(*rhs);
-                        }
-                        FlatAtom::Relation(_, args) => {
-                            added_flat_terms.extend(args);
-                        }
-                        FlatAtom::Unconstrained(tm, _) => {
-                            added_flat_terms.insert(*tm);
-                        }
-                    }
-                    result.push(atom);
-                    None
-                } else {
-                    Some(atom)
-                }
-            })
-            .collect();
-        assert!(atoms.len() < before_len);
+    for (el0, el1) in iter_in_ker(morphism, eqlog) {
+        if !eqlog.are_equal_el(el0, el1) {
+            let lhs = *el_vars.get(&el0).unwrap();
+            let rhs = *el_vars.get(&el1).unwrap();
+            stmts.push(FlatStmt::If(FlatIfStmt::Equal(FlatStmtEqual { lhs, rhs })));
+        }
     }
 
-    result
+    let cod = eqlog.cod(morphism).expect("cod should be total");
+
+    for (pred, els) in iter_pred_app(cod, eqlog) {
+        if !eqlog.pred_tuple_in_img(morphism, pred, els) {
+            let args: Vec<FlatVar> = el_list_vec(els, eqlog)
+                .into_iter()
+                .map(|el| *el_vars.get(&el).unwrap())
+                .collect();
+            let rel = Rel::Pred(pred);
+            let only_dirty = false;
+            stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                rel,
+                args,
+                only_dirty,
+            })));
+        }
+    }
+
+    for (func, args, result) in iter_func_app(cod, eqlog) {
+        if !eqlog.func_app_in_img(morphism, func, args) {
+            let func_args: Vec<FlatVar> = el_list_vec(args, eqlog)
+                .into_iter()
+                .map(|el| *el_vars.get(&el).unwrap())
+                .collect();
+            let result = *el_vars.get(&result).unwrap();
+
+            let args = {
+                let mut a = func_args;
+                a.push(result);
+                a
+            };
+
+            let rel = Rel::Func(func);
+            let only_dirty = false;
+            stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                rel,
+                args,
+                only_dirty,
+            })));
+        }
+    }
+
+    for el in iter_els(cod, eqlog) {
+        if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
+            let var = *el_vars.get(&el).unwrap();
+            let only_dirty = false;
+            stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
+                var,
+                only_dirty,
+            })));
+        }
+    }
+
+    stmts
+}
+
+/// Generates flat if blocks which together match the delta given by `morphism` with fresh data.
+///
+/// In contrast to [flatten_if_arbitrary], the output blocks assume that *no* data has been matched
+/// so far.
+fn flatten_if_fresh(
+    morphism: Morphism,
+    el_vars: &BTreeMap<El, FlatVar>,
+    eqlog: &Eqlog,
+) -> Vec<Vec<FlatStmt>> {
+    let mut fresh_rel_tuples: Vec<(Rel, Vec<FlatVar>)> = Vec::new();
+    let mut arbitrary_rel_tuples: Vec<(Rel, Vec<FlatVar>)> = Vec::new();
+
+    let mut fresh_type_els: Vec<FlatVar> = Vec::new();
+    let mut arbitrary_type_els: Vec<FlatVar> = Vec::new();
+
+    let cod = eqlog.cod(morphism).expect("cod should be total");
+
+    for (pred, els) in iter_pred_app(cod, eqlog) {
+        let args: Vec<FlatVar> = el_list_vec(els, eqlog)
+            .into_iter()
+            .map(|el| *el_vars.get(&el).unwrap())
+            .collect();
+        let rel = Rel::Pred(pred);
+
+        if eqlog.pred_tuple_in_img(morphism, pred, els) {
+            arbitrary_rel_tuples.push((rel, args));
+        } else {
+            fresh_rel_tuples.push((rel, args));
+        }
+    }
+
+    for (func, args, result) in iter_func_app(cod, eqlog) {
+        let in_img = eqlog.func_app_in_img(morphism, func, args);
+        let func_args: Vec<FlatVar> = el_list_vec(args, eqlog)
+            .into_iter()
+            .map(|el| *el_vars.get(&el).unwrap())
+            .collect();
+        let result = *el_vars.get(&result).unwrap();
+
+        let args = {
+            let mut a = func_args;
+            a.push(result);
+            a
+        };
+        let rel = Rel::Func(func);
+
+        if in_img {
+            arbitrary_rel_tuples.push((rel, args));
+        } else {
+            fresh_rel_tuples.push((rel, args));
+        }
+    }
+
+    for el in iter_els(cod, eqlog).filter(|el| !eqlog.constrained_el(*el)) {
+        let in_img = eqlog.el_in_img(morphism, el);
+        let var = *el_vars.get(&el).unwrap();
+        if in_img {
+            arbitrary_type_els.push(var);
+        } else {
+            fresh_type_els.push(var);
+        }
+    }
+
+    let mut blocks = Vec::new();
+
+    for fresh_rel_index in 0..fresh_rel_tuples.len() {
+        let mut block = Vec::new();
+
+        for (i, (rel, args)) in fresh_rel_tuples
+            .iter()
+            .chain(arbitrary_rel_tuples.iter())
+            .cloned()
+            .enumerate()
+        {
+            let only_dirty = i == fresh_rel_index;
+            block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                rel,
+                args,
+                only_dirty,
+            })));
+        }
+
+        for var in fresh_type_els
+            .iter()
+            .chain(arbitrary_type_els.iter())
+            .copied()
+        {
+            let only_dirty = false;
+            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
+                var,
+                only_dirty,
+            })));
+        }
+
+        blocks.push(block);
+    }
+
+    for fresh_type_el_index in 0..fresh_type_els.len() {
+        let mut block = Vec::new();
+
+        for (rel, args) in fresh_rel_tuples
+            .iter()
+            .chain(arbitrary_rel_tuples.iter())
+            .cloned()
+        {
+            let only_dirty = false;
+            block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                rel,
+                args,
+                only_dirty,
+            })));
+        }
+
+        for (i, var) in fresh_type_els
+            .iter()
+            .chain(arbitrary_type_els.iter())
+            .copied()
+            .enumerate()
+        {
+            let only_dirty = i == fresh_type_el_index;
+            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
+                var,
+                only_dirty,
+            })));
+        }
+
+        blocks.push(block);
+    }
+
+    blocks
+}
+
+/// Emits a then block corresponding to the lift against a `morphism`.
+///
+/// The provided `morphism` must be surjective.
+fn flatten_surj_then(
+    morphism: Morphism,
+    el_vars: &BTreeMap<El, FlatVar>,
+    eqlog: &Eqlog,
+) -> Vec<FlatStmt> {
+    let mut stmts = Vec::new();
+
+    for (el0, el1) in iter_in_ker(morphism, eqlog) {
+        if !eqlog.are_equal_el(el0, el1) {
+            let lhs = *el_vars.get(&el0).unwrap();
+            let rhs = *el_vars.get(&el1).unwrap();
+            stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Equal(FlatStmtEqual {
+                lhs,
+                rhs,
+            })));
+        }
+    }
+
+    let cod = eqlog.cod(morphism).expect("cod should be total");
+
+    for (pred, els) in iter_pred_app(cod, eqlog) {
+        if !eqlog.pred_tuple_in_img(morphism, pred, els) {
+            let args: Vec<FlatVar> = el_list_vec(els, eqlog)
+                .into_iter()
+                .map(|el| *el_vars.get(&el).unwrap())
+                .collect();
+            let rel = Rel::Pred(pred);
+            stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
+                FlatSurjThenStmtRelation { rel, args },
+            )));
+        }
+    }
+
+    for (func, args, result) in iter_func_app(cod, eqlog) {
+        if !eqlog.func_app_in_img(morphism, func, args) {
+            let func_args: Vec<FlatVar> = el_list_vec(args, eqlog)
+                .into_iter()
+                .map(|el| *el_vars.get(&el).unwrap())
+                .collect();
+            let result = *el_vars.get(&result).unwrap();
+
+            let args = {
+                let mut a = func_args;
+                a.push(result);
+                a
+            };
+
+            let rel = Rel::Func(func);
+            stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
+                FlatSurjThenStmtRelation { rel, args },
+            )));
+        }
+    }
+
+    assert!(
+        !iter_els(cod, eqlog)
+            .find(|el| !eqlog.el_in_img(morphism, *el))
+            .is_some(),
+        "morphism should be surjective"
+    );
+
+    stmts
+}
+
+/// Emits a non-surjective then statement corresponding to a lift against the provided `morphism`
+/// if necessary.
+///
+/// The provided `morphism` must be given by at most a a single new term (or the identity), i.e. a
+/// pushout along making a function defined on a single argument tuple.
+fn flatten_non_surj_then(
+    morphism: Morphism,
+    el_vars: &BTreeMap<El, FlatVar>,
+    eqlog: &Eqlog,
+) -> Option<FlatNonSurjThenStmt> {
+    let cod = eqlog.cod(morphism).expect("cod should be total");
+    let cod_els: BTreeSet<El> = iter_els(cod, eqlog).collect();
+    let img_els: BTreeSet<El> = eqlog
+        .iter_map_el()
+        .filter_map(|(morphism0, _, image)| {
+            if eqlog.are_equal_morphism(morphism0, morphism) {
+                Some(image)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut new_els = cod_els.difference(&img_els).copied();
+    let new_el: Option<El> = new_els.next();
+    assert!(
+        new_els.next().is_none(),
+        "There should be at most one new element in the codomain"
+    );
+
+    let new_el = match new_el {
+        Some(new_el) => new_el,
+        None => {
+            return None;
+        }
+    };
+
+    let (func, func_arg_els) = eqlog
+        .iter_func_app()
+        .find_map(|(func, args, result)| {
+            if eqlog.are_equal_el(result, new_el) {
+                Some((func, el_list_vec(args, eqlog)))
+            } else {
+                None
+            }
+        })
+        .expect("new element should be the result of func_app");
+    assert!(
+        func_arg_els
+            .iter()
+            .copied()
+            .all(|arg| img_els.contains(&arg)),
+        "Arguments to obtain new element should be in image"
+    );
+
+    let func_args = func_arg_els
+        .into_iter()
+        .map(|el| *el_vars.get(&el).unwrap())
+        .collect();
+    let result = *el_vars.get(&new_el).unwrap();
+    Some(FlatNonSurjThenStmt {
+        func,
+        func_args,
+        result,
+    })
 }
 
 pub fn flatten(
     rule: RuleDeclNode,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> SequentFlattening {
-    let chain = eqlog.grouped_rule_chain(rule).unwrap();
-    let restricted_chain = RestrictedChain::from_chain(chain, eqlog);
-    let name = eqlog
-        .rule_name(rule)
-        .map(|ident| identifiers.get(&ident).unwrap().to_string());
-
-    let flattening = match restricted_chain {
-        RestrictedChain::Empty { chain: _ } => {
-            let sequent = FlatSequent {
-                premise: Vec::new(),
-                conclusion: Vec::new(),
-            };
-            let sorts = BTreeMap::new();
-            SequentFlattening {
-                name,
-                sequent,
-                sorts,
-            }
-        }
-        RestrictedChain::Singleton {
-            chain: _,
-            structure,
-        } => {
-            let premise: Vec<FlatAtom> = Vec::new();
-            let initiality_morphism = eqlog.initiality_morphism(structure).unwrap();
-            let (flat_names, mut conclusion) =
-                flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
-            let premise_terms = BTreeSet::new();
-            conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
-            let sequent = FlatSequent {
-                premise,
-                conclusion,
-            };
-            let sorts = sort_map(&flat_names, eqlog, identifiers);
-            SequentFlattening {
-                name,
-                sequent,
-                sorts,
-            }
-        }
-        RestrictedChain::Morphism {
-            chain: _,
-            domain,
-            morphism,
-            codomain: _,
-        } => {
-            let initiality_morphism = eqlog.initiality_morphism(domain).unwrap();
-            let (flat_names, premise) =
-                flatten_delta(initiality_morphism, BTreeMap::new(), eqlog, identifiers);
-            let premise_terms: BTreeSet<FlatTerm> =
-                flat_names.values().flatten().copied().collect();
-            let (flat_names, mut conclusion) =
-                flatten_delta(morphism, flat_names, eqlog, identifiers);
-            conclusion = sort_then_atoms(conclusion, premise_terms, eqlog, identifiers);
-            let sequent = FlatSequent {
-                premise,
-                conclusion,
-            };
-            let sorts = sort_map(&flat_names, eqlog, identifiers);
-            SequentFlattening {
-                name,
-                sequent,
-                sorts,
-            }
-        }
+) -> FlatRule {
+    let name = match eqlog.rule_name(rule) {
+        Some(ident) => identifiers.get(&ident).unwrap().to_string(),
+        None => format!("anonymous_rule_{}", rule.0),
     };
+    let el_vars = assign_el_vars(iter_grouped_morphisms(rule, eqlog), eqlog);
 
-    #[cfg(debug_assertions)]
-    flattening.sequent.check();
-    flattening
+    let mut stmts: Vec<FlatStmt> = Vec::new();
+
+    for morphism in iter_grouped_morphisms(rule, eqlog) {
+        if eqlog.if_morphism(morphism) {
+            let mut fork_blocks = Vec::new();
+            if !stmts.is_empty() {
+                let mut first_block = stmts;
+                first_block.extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
+                fork_blocks.push(first_block);
+            }
+            fork_blocks.extend(flatten_if_fresh(morphism, &el_vars, eqlog));
+            stmts = vec![FlatStmt::Fork(FlatForkStmt {
+                blocks: fork_blocks,
+            })];
+        } else if eqlog.surj_then_morphism(morphism) {
+            stmts.extend(flatten_surj_then(morphism, &el_vars, eqlog));
+        } else if eqlog.non_surj_then_morphism(morphism) {
+            let non_surj_then_stmt = match flatten_non_surj_then(morphism, &el_vars, eqlog) {
+                Some(non_surj_then_stmt) => non_surj_then_stmt,
+                None => {
+                    // In this case, `morphism` is an isomorphism, so nothing needs to be done.
+                    continue;
+                }
+            };
+
+            stmts.push(FlatStmt::NonSurjThen(non_surj_then_stmt));
+
+            let if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog);
+            assert_eq!(
+                if_blocks.len(),
+                1,
+                "A non surjective then should only require one block to match"
+            );
+            let if_block = if_blocks.into_iter().next().unwrap();
+
+            let fork_blocks = vec![stmts, if_block];
+            stmts = vec![FlatStmt::Fork(FlatForkStmt {
+                blocks: fork_blocks,
+            })];
+        } else {
+            panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
+        }
+    }
+
+    let var_types = make_var_type_map(&el_vars, eqlog);
+
+    ensure_unique_empty_slice_addresses(&mut stmts);
+    FlatRule {
+        name,
+        stmts,
+        var_types,
+    }
 }

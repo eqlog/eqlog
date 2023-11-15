@@ -28,6 +28,7 @@ convert_case = ">= 0"
 indoc = ">= 0"
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
+by_address = ">= 0"
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }

@@ -1,4 +1,4 @@
-// src-digest: DB4176DD9223BD4D209CDA32BCC87A9720B19360FBC685B2EAE2538AF27CC459
+// src-digest: 94E594F7473FFAA4C1BD50917319D6F33F3A72E130F266A2F37A060B77C651FE
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -509,24 +509,6 @@ impl From<u32> for Morphism {
     }
 }
 impl fmt::Display for Morphism {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-#[allow(dead_code)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct Chain(pub u32);
-impl Into<u32> for Chain {
-    fn into(self) -> u32 {
-        self.0
-    }
-}
-impl From<u32> for Chain {
-    fn from(x: u32) -> Self {
-        Chain(x)
-    }
-}
-impl fmt::Display for Chain {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -5917,6 +5899,21 @@ impl ConsStmtListNodeTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: StmtListNode,
+        arg1: StmtNode,
+    ) -> impl '_ + Iterator<Item = ConsStmtListNode> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1, u32::MIN);
+        let max = (arg0, arg1, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
     fn iter_all_1(&self, arg1: StmtNode) -> impl '_ + Iterator<Item = ConsStmtListNode> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
@@ -10037,6 +10034,435 @@ impl fmt::Display for FuncArgNumShouldMatchTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct IfMorphism(pub Morphism);
+#[derive(Clone, Hash, Debug)]
+struct IfMorphismTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
+
+    element_index_morphism: BTreeMap<Morphism, Vec<IfMorphism>>,
+}
+impl IfMorphismTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
+            element_index_morphism: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: IfMorphism) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_morphism.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: IfMorphism) -> bool {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: IfMorphism) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: IfMorphism) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> IfMorphism {
+        IfMorphism(Morphism::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = IfMorphism> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = IfMorphism> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = IfMorphism> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_morphism(
+        &mut self,
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = IfMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, morphism_equalities: &mut Unification<Morphism>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
+
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == morphism_equalities.root(tuple.0) {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for IfMorphismTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("if_morphism"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct SurjThenMorphism(pub Morphism);
+#[derive(Clone, Hash, Debug)]
+struct SurjThenMorphismTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
+
+    element_index_morphism: BTreeMap<Morphism, Vec<SurjThenMorphism>>,
+}
+impl SurjThenMorphismTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
+            element_index_morphism: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: SurjThenMorphism) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_morphism.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: SurjThenMorphism) -> bool {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: SurjThenMorphism) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: SurjThenMorphism) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> SurjThenMorphism {
+        SurjThenMorphism(Morphism::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = SurjThenMorphism> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = SurjThenMorphism> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = SurjThenMorphism> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_morphism(
+        &mut self,
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = SurjThenMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, morphism_equalities: &mut Unification<Morphism>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
+
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == morphism_equalities.root(tuple.0) {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for SurjThenMorphismTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("surj_then_morphism"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct NonSurjThenMorphism(pub Morphism);
+#[derive(Clone, Hash, Debug)]
+struct NonSurjThenMorphismTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
+
+    element_index_morphism: BTreeMap<Morphism, Vec<NonSurjThenMorphism>>,
+}
+impl NonSurjThenMorphismTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
+            element_index_morphism: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: NonSurjThenMorphism) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_morphism.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: NonSurjThenMorphism) -> bool {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: NonSurjThenMorphism) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: NonSurjThenMorphism) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> NonSurjThenMorphism {
+        NonSurjThenMorphism(Morphism::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = NonSurjThenMorphism> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = NonSurjThenMorphism> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = NonSurjThenMorphism> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_morphism(
+        &mut self,
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = NonSurjThenMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, morphism_equalities: &mut Unification<Morphism>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
+
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == morphism_equalities.root(tuple.0) {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for NonSurjThenMorphismTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("non_surj_then_morphism"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct VarBeforeTerm(pub TermNode, pub VirtIdent);
 #[derive(Clone, Hash, Debug)]
 struct VarBeforeTermTable {
@@ -12975,432 +13401,6 @@ impl fmt::Display for ShouldBeSurjectiveTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct TermSurjectiveExempted(pub TermNode);
-#[derive(Clone, Hash, Debug)]
-struct TermSurjectiveExemptedTable {
-    index_all_0: BTreeSet<(u32,)>,
-    index_dirty_0: BTreeSet<(u32,)>,
-
-    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
-
-    element_index_term_node: BTreeMap<TermNode, Vec<TermSurjectiveExempted>>,
-}
-impl TermSurjectiveExemptedTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 3;
-    fn new() -> Self {
-        Self {
-            index_all_0: BTreeSet::new(),
-            index_dirty_0: BTreeSet::new(),
-            index_dirty_0_prev: Vec::new(),
-            element_index_term_node: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: TermSurjectiveExempted) -> bool {
-        if self.index_all_0.insert(Self::permute_0(t)) {
-            self.index_dirty_0.insert(Self::permute_0(t));
-
-            match self.element_index_term_node.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_term_node.insert(t.0, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: TermSurjectiveExempted) -> bool {
-        if self.index_dirty_0.insert(Self::permute_0(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: TermSurjectiveExempted) -> bool {
-        self.index_all_0.contains(&Self::permute_0(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
-        self.index_dirty_0_prev.push(tmp_dirty_0);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0(t: TermSurjectiveExempted) -> (u32,) {
-        (t.0.into(),)
-    }
-    #[allow(unused)]
-    fn permute_inverse_0(t: (u32,)) -> TermSurjectiveExempted {
-        TermSurjectiveExempted(TermNode::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = TermSurjectiveExempted> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = TermSurjectiveExempted> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_dirty_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: TermNode) -> impl '_ + Iterator<Item = TermSurjectiveExempted> {
-        let arg0 = arg0.0;
-        let min = (arg0,);
-        let max = (arg0,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_term_node(
-        &mut self,
-        tm: TermNode,
-    ) -> impl '_ + Iterator<Item = TermSurjectiveExempted> {
-        let ts = match self.element_index_term_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0.remove(&Self::permute_0(*t)) {
-                self.index_dirty_0.remove(&Self::permute_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, term_node_equalities: &mut Unification<TermNode>) {
-        let mut tmp_dirty_0_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
-
-        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0(tuple);
-            if true && tuple.0 == term_node_equalities.root(tuple.0) {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for TermSurjectiveExemptedTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("term_surjective_exempted"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct TermsSurjectiveExempted(pub TermListNode);
-#[derive(Clone, Hash, Debug)]
-struct TermsSurjectiveExemptedTable {
-    index_all_0: BTreeSet<(u32,)>,
-    index_dirty_0: BTreeSet<(u32,)>,
-
-    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
-
-    element_index_term_list_node: BTreeMap<TermListNode, Vec<TermsSurjectiveExempted>>,
-}
-impl TermsSurjectiveExemptedTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 3;
-    fn new() -> Self {
-        Self {
-            index_all_0: BTreeSet::new(),
-            index_dirty_0: BTreeSet::new(),
-            index_dirty_0_prev: Vec::new(),
-            element_index_term_list_node: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: TermsSurjectiveExempted) -> bool {
-        if self.index_all_0.insert(Self::permute_0(t)) {
-            self.index_dirty_0.insert(Self::permute_0(t));
-
-            match self.element_index_term_list_node.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_term_list_node.insert(t.0, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: TermsSurjectiveExempted) -> bool {
-        if self.index_dirty_0.insert(Self::permute_0(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: TermsSurjectiveExempted) -> bool {
-        self.index_all_0.contains(&Self::permute_0(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
-        self.index_dirty_0_prev.push(tmp_dirty_0);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0(t: TermsSurjectiveExempted) -> (u32,) {
-        (t.0.into(),)
-    }
-    #[allow(unused)]
-    fn permute_inverse_0(t: (u32,)) -> TermsSurjectiveExempted {
-        TermsSurjectiveExempted(TermListNode::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = TermsSurjectiveExempted> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = TermsSurjectiveExempted> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_dirty_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: TermListNode) -> impl '_ + Iterator<Item = TermsSurjectiveExempted> {
-        let arg0 = arg0.0;
-        let min = (arg0,);
-        let max = (arg0,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_term_list_node(
-        &mut self,
-        tm: TermListNode,
-    ) -> impl '_ + Iterator<Item = TermsSurjectiveExempted> {
-        let ts = match self.element_index_term_list_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0.remove(&Self::permute_0(*t)) {
-                self.index_dirty_0.remove(&Self::permute_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, term_list_node_equalities: &mut Unification<TermListNode>) {
-        let mut tmp_dirty_0_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
-
-        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0(tuple);
-            if true && tuple.0 == term_list_node_equalities.root(tuple.0) {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for TermsSurjectiveExemptedTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("terms_surjective_exempted"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ElSurjectiveExempted(pub El);
-#[derive(Clone, Hash, Debug)]
-struct ElSurjectiveExemptedTable {
-    index_all_0: BTreeSet<(u32,)>,
-    index_dirty_0: BTreeSet<(u32,)>,
-
-    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
-
-    element_index_el: BTreeMap<El, Vec<ElSurjectiveExempted>>,
-}
-impl ElSurjectiveExemptedTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 3;
-    fn new() -> Self {
-        Self {
-            index_all_0: BTreeSet::new(),
-            index_dirty_0: BTreeSet::new(),
-            index_dirty_0_prev: Vec::new(),
-            element_index_el: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: ElSurjectiveExempted) -> bool {
-        if self.index_all_0.insert(Self::permute_0(t)) {
-            self.index_dirty_0.insert(Self::permute_0(t));
-
-            match self.element_index_el.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_el.insert(t.0, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: ElSurjectiveExempted) -> bool {
-        if self.index_dirty_0.insert(Self::permute_0(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: ElSurjectiveExempted) -> bool {
-        self.index_all_0.contains(&Self::permute_0(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
-        self.index_dirty_0_prev.push(tmp_dirty_0);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0(t: ElSurjectiveExempted) -> (u32,) {
-        (t.0.into(),)
-    }
-    #[allow(unused)]
-    fn permute_inverse_0(t: (u32,)) -> ElSurjectiveExempted {
-        ElSurjectiveExempted(El::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = ElSurjectiveExempted> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ElSurjectiveExempted> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_dirty_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: El) -> impl '_ + Iterator<Item = ElSurjectiveExempted> {
-        let arg0 = arg0.0;
-        let min = (arg0,);
-        let max = (arg0,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_el(&mut self, tm: El) -> impl '_ + Iterator<Item = ElSurjectiveExempted> {
-        let ts = match self.element_index_el.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0.remove(&Self::permute_0(*t)) {
-                self.index_dirty_0.remove(&Self::permute_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, el_equalities: &mut Unification<El>) {
-        let mut tmp_dirty_0_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
-
-        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0(tuple);
-            if true && tuple.0 == el_equalities.root(tuple.0) {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for ElSurjectiveExemptedTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("el_surjective_exempted"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ElShouldBeSurjectiveOk(pub El);
 #[derive(Clone, Hash, Debug)]
 struct ElShouldBeSurjectiveOkTable {
@@ -13674,6 +13674,149 @@ impl fmt::Display for ElIsSurjectiveOkTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("el_is_surjective_ok"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ElIsSurjectiveExempted(pub El);
+#[derive(Clone, Hash, Debug)]
+struct ElIsSurjectiveExemptedTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
+
+    element_index_el: BTreeMap<El, Vec<ElIsSurjectiveExempted>>,
+}
+impl ElIsSurjectiveExemptedTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
+            element_index_el: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ElIsSurjectiveExempted) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_el.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: ElIsSurjectiveExempted) -> bool {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ElIsSurjectiveExempted) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: ElIsSurjectiveExempted) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> ElIsSurjectiveExempted {
+        ElIsSurjectiveExempted(El::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: El) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_el(
+        &mut self,
+        tm: El,
+    ) -> impl '_ + Iterator<Item = ElIsSurjectiveExempted> {
+        let ts = match self.element_index_el.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, el_equalities: &mut Unification<El>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
+
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == el_equalities.root(tuple.0) {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for ElIsSurjectiveExemptedTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("el_is_surjective_exempted"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -22583,1036 +22726,6 @@ impl fmt::Display for MapElsTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct InitialStructure(pub Structure);
-#[derive(Clone, Hash, Debug)]
-struct InitialStructureTable {
-    index_all_0: BTreeSet<(u32,)>,
-    index_dirty_0: BTreeSet<(u32,)>,
-
-    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
-
-    element_index_structure: BTreeMap<Structure, Vec<InitialStructure>>,
-}
-impl InitialStructureTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 3;
-    fn new() -> Self {
-        Self {
-            index_all_0: BTreeSet::new(),
-            index_dirty_0: BTreeSet::new(),
-            index_dirty_0_prev: Vec::new(),
-            element_index_structure: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: InitialStructure) -> bool {
-        if self.index_all_0.insert(Self::permute_0(t)) {
-            self.index_dirty_0.insert(Self::permute_0(t));
-
-            match self.element_index_structure.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_structure.insert(t.0, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: InitialStructure) -> bool {
-        if self.index_dirty_0.insert(Self::permute_0(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: InitialStructure) -> bool {
-        self.index_all_0.contains(&Self::permute_0(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
-        self.index_dirty_0_prev.push(tmp_dirty_0);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0(t: InitialStructure) -> (u32,) {
-        (t.0.into(),)
-    }
-    #[allow(unused)]
-    fn permute_inverse_0(t: (u32,)) -> InitialStructure {
-        InitialStructure(Structure::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = InitialStructure> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = InitialStructure> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_dirty_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Structure) -> impl '_ + Iterator<Item = InitialStructure> {
-        let arg0 = arg0.0;
-        let min = (arg0,);
-        let max = (arg0,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_structure(
-        &mut self,
-        tm: Structure,
-    ) -> impl '_ + Iterator<Item = InitialStructure> {
-        let ts = match self.element_index_structure.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0.remove(&Self::permute_0(*t)) {
-                self.index_dirty_0.remove(&Self::permute_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, structure_equalities: &mut Unification<Structure>) {
-        let mut tmp_dirty_0_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
-
-        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0(tuple);
-            if true && tuple.0 == structure_equalities.root(tuple.0) {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for InitialStructureTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("initial_structure"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct InitialityMorphism(pub Structure, pub Morphism);
-#[derive(Clone, Hash, Debug)]
-struct InitialityMorphismTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
-
-    element_index_morphism: BTreeMap<Morphism, Vec<InitialityMorphism>>,
-    element_index_structure: BTreeMap<Structure, Vec<InitialityMorphism>>,
-}
-impl InitialityMorphismTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 6;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
-            element_index_morphism: BTreeMap::new(),
-            element_index_structure: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: InitialityMorphism) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-
-            match self.element_index_structure.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_structure.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_morphism.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_morphism.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: InitialityMorphism) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: InitialityMorphism) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: InitialityMorphism) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> InitialityMorphism {
-        InitialityMorphism(Structure::from(t.0), Morphism::from(t.1))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = InitialityMorphism> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = InitialityMorphism> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Structure) -> impl '_ + Iterator<Item = InitialityMorphism> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: Structure,
-        arg1: Morphism,
-    ) -> impl '_ + Iterator<Item = InitialityMorphism> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_morphism(
-        &mut self,
-        tm: Morphism,
-    ) -> impl '_ + Iterator<Item = InitialityMorphism> {
-        let ts = match self.element_index_morphism.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_structure(
-        &mut self,
-        tm: Structure,
-    ) -> impl '_ + Iterator<Item = InitialityMorphism> {
-        let ts = match self.element_index_structure.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        morphism_equalities: &mut Unification<Morphism>,
-        structure_equalities: &mut Unification<Structure>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == structure_equalities.root(tuple.0)
-                && tuple.1 == morphism_equalities.root(tuple.1)
-            {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for InitialityMorphismTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("initiality_morphism"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct NilChain(pub Chain);
-#[derive(Clone, Hash, Debug)]
-struct NilChainTable {
-    index_all_0: BTreeSet<(u32,)>,
-    index_dirty_0: BTreeSet<(u32,)>,
-
-    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
-
-    element_index_chain: BTreeMap<Chain, Vec<NilChain>>,
-}
-impl NilChainTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 3;
-    fn new() -> Self {
-        Self {
-            index_all_0: BTreeSet::new(),
-            index_dirty_0: BTreeSet::new(),
-            index_dirty_0_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: NilChain) -> bool {
-        if self.index_all_0.insert(Self::permute_0(t)) {
-            self.index_dirty_0.insert(Self::permute_0(t));
-
-            match self.element_index_chain.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_chain.insert(t.0, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: NilChain) -> bool {
-        if self.index_dirty_0.insert(Self::permute_0(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: NilChain) -> bool {
-        self.index_all_0.contains(&Self::permute_0(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
-        self.index_dirty_0_prev.push(tmp_dirty_0);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0(t: NilChain) -> (u32,) {
-        (t.0.into(),)
-    }
-    #[allow(unused)]
-    fn permute_inverse_0(t: (u32,)) -> NilChain {
-        NilChain(Chain::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = NilChain> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = NilChain> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_dirty_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Chain) -> impl '_ + Iterator<Item = NilChain> {
-        let arg0 = arg0.0;
-        let min = (arg0,);
-        let max = (arg0,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_chain(&mut self, tm: Chain) -> impl '_ + Iterator<Item = NilChain> {
-        let ts = match self.element_index_chain.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0.remove(&Self::permute_0(*t)) {
-                self.index_dirty_0.remove(&Self::permute_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, chain_equalities: &mut Unification<Chain>) {
-        let mut tmp_dirty_0_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
-
-        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0(tuple);
-            if true && tuple.0 == chain_equalities.root(tuple.0) {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for NilChainTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("nil_chain"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ChainTail(pub Chain, pub Chain);
-#[derive(Clone, Hash, Debug)]
-struct ChainTailTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-    index_all_1_0: BTreeSet<(u32, u32)>,
-
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
-
-    element_index_chain: BTreeMap<Chain, Vec<ChainTail>>,
-}
-impl ChainTailTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 8;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_all_1_0: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: ChainTail) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-            self.index_all_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_chain.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_chain.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_chain.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_chain.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: ChainTail) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: ChainTail) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: ChainTail) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> ChainTail {
-        ChainTail(Chain::from(t.0), Chain::from(t.1))
-    }
-    #[allow(unused)]
-    fn permute_1_0(t: ChainTail) -> (u32, u32) {
-        (t.1.into(), t.0.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> ChainTail {
-        ChainTail(Chain::from(t.1), Chain::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = ChainTail> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ChainTail> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Chain) -> impl '_ + Iterator<Item = ChainTail> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Chain, arg1: Chain) -> impl '_ + Iterator<Item = ChainTail> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: Chain) -> impl '_ + Iterator<Item = ChainTail> {
-        let arg1 = arg1.0;
-        let min = (arg1, u32::MIN);
-        let max = (arg1, u32::MAX);
-        self.index_all_1_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_chain(&mut self, tm: Chain) -> impl '_ + Iterator<Item = ChainTail> {
-        let ts = match self.element_index_chain.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                self.index_all_1_0.remove(&Self::permute_1_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, chain_equalities: &mut Unification<Chain>) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == chain_equalities.root(tuple.0)
-                && tuple.1 == chain_equalities.root(tuple.1)
-            {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for ChainTailTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("chain_tail"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ChainHeadStructure(pub Chain, pub Structure);
-#[derive(Clone, Hash, Debug)]
-struct ChainHeadStructureTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
-
-    element_index_chain: BTreeMap<Chain, Vec<ChainHeadStructure>>,
-    element_index_structure: BTreeMap<Structure, Vec<ChainHeadStructure>>,
-}
-impl ChainHeadStructureTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 6;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-            element_index_structure: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: ChainHeadStructure) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-
-            match self.element_index_chain.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_chain.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_structure.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_structure.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: ChainHeadStructure) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: ChainHeadStructure) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: ChainHeadStructure) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> ChainHeadStructure {
-        ChainHeadStructure(Chain::from(t.0), Structure::from(t.1))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = ChainHeadStructure> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ChainHeadStructure> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Chain) -> impl '_ + Iterator<Item = ChainHeadStructure> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: Chain,
-        arg1: Structure,
-    ) -> impl '_ + Iterator<Item = ChainHeadStructure> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_chain(
-        &mut self,
-        tm: Chain,
-    ) -> impl '_ + Iterator<Item = ChainHeadStructure> {
-        let ts = match self.element_index_chain.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_structure(
-        &mut self,
-        tm: Structure,
-    ) -> impl '_ + Iterator<Item = ChainHeadStructure> {
-        let ts = match self.element_index_structure.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        chain_equalities: &mut Unification<Chain>,
-        structure_equalities: &mut Unification<Structure>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == chain_equalities.root(tuple.0)
-                && tuple.1 == structure_equalities.root(tuple.1)
-            {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for ChainHeadStructureTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("chain_head_structure"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ChainHeadTransition(pub Chain, pub Morphism);
-#[derive(Clone, Hash, Debug)]
-struct ChainHeadTransitionTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
-
-    element_index_chain: BTreeMap<Chain, Vec<ChainHeadTransition>>,
-    element_index_morphism: BTreeMap<Morphism, Vec<ChainHeadTransition>>,
-}
-impl ChainHeadTransitionTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 6;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-            element_index_morphism: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: ChainHeadTransition) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-
-            match self.element_index_chain.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_chain.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_morphism.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_morphism.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: ChainHeadTransition) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: ChainHeadTransition) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: ChainHeadTransition) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> ChainHeadTransition {
-        ChainHeadTransition(Chain::from(t.0), Morphism::from(t.1))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = ChainHeadTransition> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ChainHeadTransition> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Chain) -> impl '_ + Iterator<Item = ChainHeadTransition> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_chain(
-        &mut self,
-        tm: Chain,
-    ) -> impl '_ + Iterator<Item = ChainHeadTransition> {
-        let ts = match self.element_index_chain.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_morphism(
-        &mut self,
-        tm: Morphism,
-    ) -> impl '_ + Iterator<Item = ChainHeadTransition> {
-        let ts = match self.element_index_morphism.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        chain_equalities: &mut Unification<Chain>,
-        morphism_equalities: &mut Unification<Morphism>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == chain_equalities.root(tuple.0)
-                && tuple.1 == morphism_equalities.root(tuple.1)
-            {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for ChainHeadTransitionTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("chain_head_transition"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct TypeSymbol(pub SymbolKind);
 #[derive(Clone, Hash, Debug)]
 struct TypeSymbolTable {
@@ -24796,194 +23909,19 @@ impl fmt::Display for TermListLenTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChain(pub RuleDeclNode, pub Chain);
+struct StmtMorphism(pub StmtNode, pub Morphism);
 #[derive(Clone, Hash, Debug)]
-struct RuleChainTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
-
-    element_index_chain: BTreeMap<Chain, Vec<RuleChain>>,
-    element_index_rule_decl_node: BTreeMap<RuleDeclNode, Vec<RuleChain>>,
-}
-impl RuleChainTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 6;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-            element_index_rule_decl_node: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChain) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-
-            match self.element_index_rule_decl_node.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_rule_decl_node.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_chain.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_chain.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: RuleChain) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: RuleChain) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: RuleChain) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChain {
-        RuleChain(RuleDeclNode::from(t.0), Chain::from(t.1))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChain> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChain> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: RuleDeclNode) -> impl '_ + Iterator<Item = RuleChain> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_chain(&mut self, tm: Chain) -> impl '_ + Iterator<Item = RuleChain> {
-        let ts = match self.element_index_chain.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_rule_decl_node(
-        &mut self,
-        tm: RuleDeclNode,
-    ) -> impl '_ + Iterator<Item = RuleChain> {
-        let ts = match self.element_index_rule_decl_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        chain_equalities: &mut Unification<Chain>,
-        rule_decl_node_equalities: &mut Unification<RuleDeclNode>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == rule_decl_node_equalities.root(tuple.0)
-                && tuple.1 == chain_equalities.root(tuple.1)
-            {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for RuleChainTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("rule_chain"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct StmtListChain(pub StmtListNode, pub Chain);
-#[derive(Clone, Hash, Debug)]
-struct StmtListChainTable {
+struct StmtMorphismTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_chain: BTreeMap<Chain, Vec<StmtListChain>>,
-    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<StmtListChain>>,
+    element_index_morphism: BTreeMap<Morphism, Vec<StmtMorphism>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<StmtMorphism>>,
 }
-impl StmtListChainTable {
+impl StmtMorphismTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -24992,27 +23930,27 @@ impl StmtListChainTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-            element_index_stmt_list_node: BTreeMap::new(),
+            element_index_morphism: BTreeMap::new(),
+            element_index_stmt_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: StmtListChain) -> bool {
+    fn insert(&mut self, t: StmtMorphism) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
 
-            match self.element_index_stmt_list_node.get_mut(&t.0) {
+            match self.element_index_stmt_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_stmt_list_node.insert(t.0, vec![t]);
+                    self.element_index_stmt_node.insert(t.0, vec![t]);
                 }
             };
 
-            match self.element_index_chain.get_mut(&t.1) {
+            match self.element_index_morphism.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_chain.insert(t.1, vec![t]);
+                    self.element_index_morphism.insert(t.1, vec![t]);
                 }
             };
 
@@ -25021,7 +23959,7 @@ impl StmtListChainTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: StmtListChain) -> bool {
+    fn insert_dirt(&mut self, t: StmtMorphism) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -25029,7 +23967,7 @@ impl StmtListChainTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: StmtListChain) -> bool {
+    fn contains(&self, t: StmtMorphism) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -25044,23 +23982,23 @@ impl StmtListChainTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: StmtListChain) -> (u32, u32) {
+    fn permute_0_1(t: StmtMorphism) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> StmtListChain {
-        StmtListChain(StmtListNode::from(t.0), Chain::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> StmtMorphism {
+        StmtMorphism(StmtNode::from(t.0), Morphism::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: StmtListChain) -> (u32, u32) {
+    fn permute_1_0(t: StmtMorphism) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> StmtListChain {
-        StmtListChain(StmtListNode::from(t.1), Chain::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> StmtMorphism {
+        StmtMorphism(StmtNode::from(t.1), Morphism::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = StmtListChain> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = StmtMorphism> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -25069,7 +24007,7 @@ impl StmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = StmtListChain> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = StmtMorphism> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -25078,7 +24016,7 @@ impl StmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtListNode) -> impl '_ + Iterator<Item = StmtListChain> {
+    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = StmtMorphism> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -25088,7 +24026,7 @@ impl StmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: Chain) -> impl '_ + Iterator<Item = StmtListChain> {
+    fn iter_all_1(&self, arg1: Morphism) -> impl '_ + Iterator<Item = StmtMorphism> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -25098,8 +24036,11 @@ impl StmtListChainTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_chain(&mut self, tm: Chain) -> impl '_ + Iterator<Item = StmtListChain> {
-        let ts = match self.element_index_chain.remove(&tm) {
+    fn drain_with_element_morphism(
+        &mut self,
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = StmtMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -25115,11 +24056,11 @@ impl StmtListChainTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_stmt_list_node(
+    fn drain_with_element_stmt_node(
         &mut self,
-        tm: StmtListNode,
-    ) -> impl '_ + Iterator<Item = StmtListChain> {
-        let ts = match self.element_index_stmt_list_node.remove(&tm) {
+        tm: StmtNode,
+    ) -> impl '_ + Iterator<Item = StmtMorphism> {
+        let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -25136,8 +24077,8 @@ impl StmtListChainTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        chain_equalities: &mut Unification<Chain>,
-        stmt_list_node_equalities: &mut Unification<StmtListNode>,
+        morphism_equalities: &mut Unification<Morphism>,
+        stmt_node_equalities: &mut Unification<StmtNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
@@ -25146,19 +24087,19 @@ impl StmtListChainTable {
             #[allow(unused_mut)]
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
-                && tuple.0 == stmt_list_node_equalities.root(tuple.0)
-                && tuple.1 == chain_equalities.root(tuple.1)
+                && tuple.0 == stmt_node_equalities.root(tuple.0)
+                && tuple.1 == morphism_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for StmtListChainTable {
+impl fmt::Display for StmtMorphismTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("stmt_list_chain"))
+            .with(Header("stmt_morphism"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26855,45 +25796,48 @@ impl fmt::Display for WildcardVirtIdentTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct GroupedRuleChain(pub RuleDeclNode, pub Chain);
+struct GroupedStmtMorphism(pub StmtNode, pub Morphism);
 #[derive(Clone, Hash, Debug)]
-struct GroupedRuleChainTable {
+struct GroupedStmtMorphismTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_chain: BTreeMap<Chain, Vec<GroupedRuleChain>>,
-    element_index_rule_decl_node: BTreeMap<RuleDeclNode, Vec<GroupedRuleChain>>,
+    element_index_morphism: BTreeMap<Morphism, Vec<GroupedStmtMorphism>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<GroupedStmtMorphism>>,
 }
-impl GroupedRuleChainTable {
+impl GroupedStmtMorphismTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-            element_index_rule_decl_node: BTreeMap::new(),
+            element_index_morphism: BTreeMap::new(),
+            element_index_stmt_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: GroupedRuleChain) -> bool {
+    fn insert(&mut self, t: GroupedStmtMorphism) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
-            match self.element_index_rule_decl_node.get_mut(&t.0) {
+            match self.element_index_stmt_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_decl_node.insert(t.0, vec![t]);
+                    self.element_index_stmt_node.insert(t.0, vec![t]);
                 }
             };
 
-            match self.element_index_chain.get_mut(&t.1) {
+            match self.element_index_morphism.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_chain.insert(t.1, vec![t]);
+                    self.element_index_morphism.insert(t.1, vec![t]);
                 }
             };
 
@@ -26902,7 +25846,7 @@ impl GroupedRuleChainTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: GroupedRuleChain) -> bool {
+    fn insert_dirt(&mut self, t: GroupedStmtMorphism) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -26910,7 +25854,7 @@ impl GroupedRuleChainTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: GroupedRuleChain) -> bool {
+    fn contains(&self, t: GroupedStmtMorphism) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -26925,15 +25869,23 @@ impl GroupedRuleChainTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: GroupedRuleChain) -> (u32, u32) {
+    fn permute_0_1(t: GroupedStmtMorphism) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> GroupedRuleChain {
-        GroupedRuleChain(RuleDeclNode::from(t.0), Chain::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> GroupedStmtMorphism {
+        GroupedStmtMorphism(StmtNode::from(t.0), Morphism::from(t.1))
+    }
+    #[allow(unused)]
+    fn permute_1_0(t: GroupedStmtMorphism) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> GroupedStmtMorphism {
+        GroupedStmtMorphism(StmtNode::from(t.1), Morphism::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = GroupedRuleChain> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = GroupedStmtMorphism> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -26942,7 +25894,7 @@ impl GroupedRuleChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = GroupedRuleChain> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = GroupedStmtMorphism> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -26951,7 +25903,200 @@ impl GroupedRuleChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: RuleDeclNode) -> impl '_ + Iterator<Item = GroupedRuleChain> {
+    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = GroupedStmtMorphism> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN);
+        let max = (arg0, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Morphism) -> impl '_ + Iterator<Item = GroupedStmtMorphism> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_morphism(
+        &mut self,
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = GroupedStmtMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_node(
+        &mut self,
+        tm: StmtNode,
+    ) -> impl '_ + Iterator<Item = GroupedStmtMorphism> {
+        let ts = match self.element_index_stmt_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(
+        &mut self,
+        morphism_equalities: &mut Unification<Morphism>,
+        stmt_node_equalities: &mut Unification<StmtNode>,
+    ) {
+        let mut tmp_dirty_0_1_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
+
+        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1(tuple);
+            if true
+                && tuple.0 == stmt_node_equalities.root(tuple.0)
+                && tuple.1 == morphism_equalities.root(tuple.1)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for GroupedStmtMorphismTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("grouped_stmt_morphism"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct RuleFirstGroupedMorphism(pub RuleDeclNode, pub Morphism);
+#[derive(Clone, Hash, Debug)]
+struct RuleFirstGroupedMorphismTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+
+    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+
+    element_index_morphism: BTreeMap<Morphism, Vec<RuleFirstGroupedMorphism>>,
+    element_index_rule_decl_node: BTreeMap<RuleDeclNode, Vec<RuleFirstGroupedMorphism>>,
+}
+impl RuleFirstGroupedMorphismTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            index_dirty_0_1_prev: Vec::new(),
+            element_index_morphism: BTreeMap::new(),
+            element_index_rule_decl_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: RuleFirstGroupedMorphism) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_rule_decl_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_rule_decl_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_morphism.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_morphism.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: RuleFirstGroupedMorphism) -> bool {
+        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: RuleFirstGroupedMorphism) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
+        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: RuleFirstGroupedMorphism) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleFirstGroupedMorphism {
+        RuleFirstGroupedMorphism(RuleDeclNode::from(t.0), Morphism::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleFirstGroupedMorphism> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleFirstGroupedMorphism> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(
+        &self,
+        arg0: RuleDeclNode,
+    ) -> impl '_ + Iterator<Item = RuleFirstGroupedMorphism> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -26964,8 +26109,8 @@ impl GroupedRuleChainTable {
     fn iter_all_0_1(
         &self,
         arg0: RuleDeclNode,
-        arg1: Chain,
-    ) -> impl '_ + Iterator<Item = GroupedRuleChain> {
+        arg1: Morphism,
+    ) -> impl '_ + Iterator<Item = RuleFirstGroupedMorphism> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -26976,11 +26121,11 @@ impl GroupedRuleChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn drain_with_element_chain(
+    fn drain_with_element_morphism(
         &mut self,
-        tm: Chain,
-    ) -> impl '_ + Iterator<Item = GroupedRuleChain> {
-        let ts = match self.element_index_chain.remove(&tm) {
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = RuleFirstGroupedMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -26998,7 +26143,7 @@ impl GroupedRuleChainTable {
     fn drain_with_element_rule_decl_node(
         &mut self,
         tm: RuleDeclNode,
-    ) -> impl '_ + Iterator<Item = GroupedRuleChain> {
+    ) -> impl '_ + Iterator<Item = RuleFirstGroupedMorphism> {
         let ts = match self.element_index_rule_decl_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -27015,7 +26160,7 @@ impl GroupedRuleChainTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        chain_equalities: &mut Unification<Chain>,
+        morphism_equalities: &mut Unification<Morphism>,
         rule_decl_node_equalities: &mut Unification<RuleDeclNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -27026,18 +26171,18 @@ impl GroupedRuleChainTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == rule_decl_node_equalities.root(tuple.0)
-                && tuple.1 == chain_equalities.root(tuple.1)
+                && tuple.1 == morphism_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for GroupedRuleChainTable {
+impl fmt::Display for RuleFirstGroupedMorphismTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("grouped_rule_chain"))
+            .with(Header("rule_first_grouped_morphism"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -27048,45 +26193,46 @@ impl fmt::Display for GroupedRuleChainTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct GroupedStmtListChain(pub StmtListNode, pub Chain);
+struct NextGroupedMorphism(pub Morphism, pub Morphism);
 #[derive(Clone, Hash, Debug)]
-struct GroupedStmtListChainTable {
+struct NextGroupedMorphismTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_chain: BTreeMap<Chain, Vec<GroupedStmtListChain>>,
-    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<GroupedStmtListChain>>,
+    element_index_morphism: BTreeMap<Morphism, Vec<NextGroupedMorphism>>,
 }
-impl GroupedStmtListChainTable {
+impl NextGroupedMorphismTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_chain: BTreeMap::new(),
-            element_index_stmt_list_node: BTreeMap::new(),
+            element_index_morphism: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: GroupedStmtListChain) -> bool {
+    fn insert(&mut self, t: NextGroupedMorphism) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
-            match self.element_index_stmt_list_node.get_mut(&t.0) {
+            match self.element_index_morphism.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_stmt_list_node.insert(t.0, vec![t]);
+                    self.element_index_morphism.insert(t.0, vec![t]);
                 }
             };
 
-            match self.element_index_chain.get_mut(&t.1) {
+            match self.element_index_morphism.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_chain.insert(t.1, vec![t]);
+                    self.element_index_morphism.insert(t.1, vec![t]);
                 }
             };
 
@@ -27095,7 +26241,7 @@ impl GroupedStmtListChainTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: GroupedStmtListChain) -> bool {
+    fn insert_dirt(&mut self, t: NextGroupedMorphism) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -27103,7 +26249,7 @@ impl GroupedStmtListChainTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: GroupedStmtListChain) -> bool {
+    fn contains(&self, t: NextGroupedMorphism) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -27118,15 +26264,23 @@ impl GroupedStmtListChainTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: GroupedStmtListChain) -> (u32, u32) {
+    fn permute_0_1(t: NextGroupedMorphism) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> GroupedStmtListChain {
-        GroupedStmtListChain(StmtListNode::from(t.0), Chain::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> NextGroupedMorphism {
+        NextGroupedMorphism(Morphism::from(t.0), Morphism::from(t.1))
+    }
+    #[allow(unused)]
+    fn permute_1_0(t: NextGroupedMorphism) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> NextGroupedMorphism {
+        NextGroupedMorphism(Morphism::from(t.1), Morphism::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = GroupedStmtListChain> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = NextGroupedMorphism> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -27135,7 +26289,7 @@ impl GroupedStmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = GroupedStmtListChain> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = NextGroupedMorphism> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -27144,7 +26298,7 @@ impl GroupedStmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtListNode) -> impl '_ + Iterator<Item = GroupedStmtListChain> {
+    fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = NextGroupedMorphism> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -27156,9 +26310,9 @@ impl GroupedStmtListChainTable {
     #[allow(dead_code)]
     fn iter_all_0_1(
         &self,
-        arg0: StmtListNode,
-        arg1: Chain,
-    ) -> impl '_ + Iterator<Item = GroupedStmtListChain> {
+        arg0: Morphism,
+        arg1: Morphism,
+    ) -> impl '_ + Iterator<Item = NextGroupedMorphism> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -27169,30 +26323,21 @@ impl GroupedStmtListChainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn drain_with_element_chain(
-        &mut self,
-        tm: Chain,
-    ) -> impl '_ + Iterator<Item = GroupedStmtListChain> {
-        let ts = match self.element_index_chain.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
+    fn iter_all_1(&self, arg1: Morphism) -> impl '_ + Iterator<Item = NextGroupedMorphism> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_stmt_list_node(
+    fn drain_with_element_morphism(
         &mut self,
-        tm: StmtListNode,
-    ) -> impl '_ + Iterator<Item = GroupedStmtListChain> {
-        let ts = match self.element_index_stmt_list_node.remove(&tm) {
+        tm: Morphism,
+    ) -> impl '_ + Iterator<Item = NextGroupedMorphism> {
+        let ts = match self.element_index_morphism.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -27200,17 +26345,14 @@ impl GroupedStmtListChainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
             }
         })
     }
-    fn recall_previous_dirt(
-        &mut self,
-        chain_equalities: &mut Unification<Chain>,
-        stmt_list_node_equalities: &mut Unification<StmtListNode>,
-    ) {
+    fn recall_previous_dirt(&mut self, morphism_equalities: &mut Unification<Morphism>) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
 
@@ -27218,19 +26360,19 @@ impl GroupedStmtListChainTable {
             #[allow(unused_mut)]
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
-                && tuple.0 == stmt_list_node_equalities.root(tuple.0)
-                && tuple.1 == chain_equalities.root(tuple.1)
+                && tuple.0 == morphism_equalities.root(tuple.0)
+                && tuple.1 == morphism_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for GroupedStmtListChainTable {
+impl fmt::Display for NextGroupedMorphismTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("grouped_stmt_list_chain"))
+            .with(Header("next_grouped_morphism"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -27291,6 +26433,9 @@ struct ModelDelta {
     new_should_be_symbol: Vec<ShouldBeSymbol>,
     new_pred_arg_num_should_match: Vec<PredArgNumShouldMatch>,
     new_func_arg_num_should_match: Vec<FuncArgNumShouldMatch>,
+    new_if_morphism: Vec<IfMorphism>,
+    new_surj_then_morphism: Vec<SurjThenMorphism>,
+    new_non_surj_then_morphism: Vec<NonSurjThenMorphism>,
     new_var_before_term: Vec<VarBeforeTerm>,
     new_var_before_terms: Vec<VarBeforeTerms>,
     new_var_before_opt_term: Vec<VarBeforeOptTerm>,
@@ -27307,11 +26452,9 @@ struct ModelDelta {
     new_term_should_be_epic_ok: Vec<TermShouldBeEpicOk>,
     new_terms_should_be_epic_ok: Vec<TermsShouldBeEpicOk>,
     new_should_be_surjective: Vec<ShouldBeSurjective>,
-    new_term_surjective_exempted: Vec<TermSurjectiveExempted>,
-    new_terms_surjective_exempted: Vec<TermsSurjectiveExempted>,
-    new_el_surjective_exempted: Vec<ElSurjectiveExempted>,
     new_el_should_be_surjective_ok: Vec<ElShouldBeSurjectiveOk>,
     new_el_is_surjective_ok: Vec<ElIsSurjectiveOk>,
+    new_el_is_surjective_exempted: Vec<ElIsSurjectiveExempted>,
     new_var_term_in_rule: Vec<VarTermInRule>,
     new_if_after_then: Vec<IfAfterThen>,
     new_real_virt_ident: Vec<RealVirtIdent>,
@@ -27358,12 +26501,6 @@ struct ModelDelta {
     new_cod: Vec<Cod>,
     new_map_el: Vec<MapEl>,
     new_map_els: Vec<MapEls>,
-    new_initial_structure: Vec<InitialStructure>,
-    new_initiality_morphism: Vec<InitialityMorphism>,
-    new_nil_chain: Vec<NilChain>,
-    new_chain_tail: Vec<ChainTail>,
-    new_chain_head_structure: Vec<ChainHeadStructure>,
-    new_chain_head_transition: Vec<ChainHeadTransition>,
     new_type_symbol: Vec<TypeSymbol>,
     new_pred_symbol: Vec<PredSymbol>,
     new_func_symbol: Vec<FuncSymbol>,
@@ -27372,8 +26509,7 @@ struct ModelDelta {
     new_succ: Vec<Succ>,
     new_type_list_len: Vec<TypeListLen>,
     new_term_list_len: Vec<TermListLen>,
-    new_rule_chain: Vec<RuleChain>,
-    new_stmt_list_chain: Vec<StmtListChain>,
+    new_stmt_morphism: Vec<StmtMorphism>,
     new_stmt_structure: Vec<StmtStructure>,
     new_if_atom_structure: Vec<IfAtomStructure>,
     new_then_atom_structure: Vec<ThenAtomStructure>,
@@ -27383,8 +26519,9 @@ struct ModelDelta {
     new_semantic_el: Vec<SemanticEl>,
     new_semantic_els: Vec<SemanticEls>,
     new_wildcard_virt_ident: Vec<WildcardVirtIdent>,
-    new_grouped_rule_chain: Vec<GroupedRuleChain>,
-    new_grouped_stmt_list_chain: Vec<GroupedStmtListChain>,
+    new_grouped_stmt_morphism: Vec<GroupedStmtMorphism>,
+    new_rule_first_grouped_morphism: Vec<RuleFirstGroupedMorphism>,
+    new_next_grouped_morphism: Vec<NextGroupedMorphism>,
     new_ident_equalities: Vec<(Ident, Ident)>,
     new_virt_ident_equalities: Vec<(VirtIdent, VirtIdent)>,
     new_type_decl_node_equalities: Vec<(TypeDeclNode, TypeDeclNode)>,
@@ -27413,7 +26550,6 @@ struct ModelDelta {
     new_el_equalities: Vec<(El, El)>,
     new_el_list_equalities: Vec<(ElList, ElList)>,
     new_morphism_equalities: Vec<(Morphism, Morphism)>,
-    new_chain_equalities: Vec<(Chain, Chain)>,
     new_symbol_kind_equalities: Vec<(SymbolKind, SymbolKind)>,
     new_nat_equalities: Vec<(Nat, Nat)>,
     new_ident_number: usize,
@@ -27444,7 +26580,6 @@ struct ModelDelta {
     new_el_number: usize,
     new_el_list_number: usize,
     new_morphism_number: usize,
-    new_chain_number: usize,
     new_symbol_kind_number: usize,
     new_nat_number: usize,
 }
@@ -27619,12 +26754,6 @@ pub struct Eqlog {
     morphism_dirty_prev: Vec<BTreeSet<Morphism>>,
     morphism_weights: Vec<usize>,
 
-    chain_equalities: Unification<Chain>,
-    chain_all: BTreeSet<Chain>,
-    chain_dirty: BTreeSet<Chain>,
-    chain_dirty_prev: Vec<BTreeSet<Chain>>,
-    chain_weights: Vec<usize>,
-
     symbol_kind_equalities: Unification<SymbolKind>,
     symbol_kind_all: BTreeSet<SymbolKind>,
     symbol_kind_dirty: BTreeSet<SymbolKind>,
@@ -27685,6 +26814,9 @@ pub struct Eqlog {
     should_be_symbol: ShouldBeSymbolTable,
     pred_arg_num_should_match: PredArgNumShouldMatchTable,
     func_arg_num_should_match: FuncArgNumShouldMatchTable,
+    if_morphism: IfMorphismTable,
+    surj_then_morphism: SurjThenMorphismTable,
+    non_surj_then_morphism: NonSurjThenMorphismTable,
     var_before_term: VarBeforeTermTable,
     var_before_terms: VarBeforeTermsTable,
     var_before_opt_term: VarBeforeOptTermTable,
@@ -27701,11 +26833,9 @@ pub struct Eqlog {
     term_should_be_epic_ok: TermShouldBeEpicOkTable,
     terms_should_be_epic_ok: TermsShouldBeEpicOkTable,
     should_be_surjective: ShouldBeSurjectiveTable,
-    term_surjective_exempted: TermSurjectiveExemptedTable,
-    terms_surjective_exempted: TermsSurjectiveExemptedTable,
-    el_surjective_exempted: ElSurjectiveExemptedTable,
     el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,
     el_is_surjective_ok: ElIsSurjectiveOkTable,
+    el_is_surjective_exempted: ElIsSurjectiveExemptedTable,
     var_term_in_rule: VarTermInRuleTable,
     if_after_then: IfAfterThenTable,
     real_virt_ident: RealVirtIdentTable,
@@ -27752,12 +26882,6 @@ pub struct Eqlog {
     cod: CodTable,
     map_el: MapElTable,
     map_els: MapElsTable,
-    initial_structure: InitialStructureTable,
-    initiality_morphism: InitialityMorphismTable,
-    nil_chain: NilChainTable,
-    chain_tail: ChainTailTable,
-    chain_head_structure: ChainHeadStructureTable,
-    chain_head_transition: ChainHeadTransitionTable,
     type_symbol: TypeSymbolTable,
     pred_symbol: PredSymbolTable,
     func_symbol: FuncSymbolTable,
@@ -27766,8 +26890,7 @@ pub struct Eqlog {
     succ: SuccTable,
     type_list_len: TypeListLenTable,
     term_list_len: TermListLenTable,
-    rule_chain: RuleChainTable,
-    stmt_list_chain: StmtListChainTable,
+    stmt_morphism: StmtMorphismTable,
     stmt_structure: StmtStructureTable,
     if_atom_structure: IfAtomStructureTable,
     then_atom_structure: ThenAtomStructureTable,
@@ -27777,8 +26900,9 @@ pub struct Eqlog {
     semantic_el: SemanticElTable,
     semantic_els: SemanticElsTable,
     wildcard_virt_ident: WildcardVirtIdentTable,
-    grouped_rule_chain: GroupedRuleChainTable,
-    grouped_stmt_list_chain: GroupedStmtListChainTable,
+    grouped_stmt_morphism: GroupedStmtMorphismTable,
+    rule_first_grouped_morphism: RuleFirstGroupedMorphismTable,
+    next_grouped_morphism: NextGroupedMorphismTable,
     empty_join_is_dirty: bool,
     empty_join_is_dirty_prev: bool,
     delta: Option<Box<ModelDelta>>,
@@ -27835,6 +26959,9 @@ impl ModelDelta {
             new_should_be_symbol: Vec::new(),
             new_pred_arg_num_should_match: Vec::new(),
             new_func_arg_num_should_match: Vec::new(),
+            new_if_morphism: Vec::new(),
+            new_surj_then_morphism: Vec::new(),
+            new_non_surj_then_morphism: Vec::new(),
             new_var_before_term: Vec::new(),
             new_var_before_terms: Vec::new(),
             new_var_before_opt_term: Vec::new(),
@@ -27851,11 +26978,9 @@ impl ModelDelta {
             new_term_should_be_epic_ok: Vec::new(),
             new_terms_should_be_epic_ok: Vec::new(),
             new_should_be_surjective: Vec::new(),
-            new_term_surjective_exempted: Vec::new(),
-            new_terms_surjective_exempted: Vec::new(),
-            new_el_surjective_exempted: Vec::new(),
             new_el_should_be_surjective_ok: Vec::new(),
             new_el_is_surjective_ok: Vec::new(),
+            new_el_is_surjective_exempted: Vec::new(),
             new_var_term_in_rule: Vec::new(),
             new_if_after_then: Vec::new(),
             new_real_virt_ident: Vec::new(),
@@ -27902,12 +27027,6 @@ impl ModelDelta {
             new_cod: Vec::new(),
             new_map_el: Vec::new(),
             new_map_els: Vec::new(),
-            new_initial_structure: Vec::new(),
-            new_initiality_morphism: Vec::new(),
-            new_nil_chain: Vec::new(),
-            new_chain_tail: Vec::new(),
-            new_chain_head_structure: Vec::new(),
-            new_chain_head_transition: Vec::new(),
             new_type_symbol: Vec::new(),
             new_pred_symbol: Vec::new(),
             new_func_symbol: Vec::new(),
@@ -27916,8 +27035,7 @@ impl ModelDelta {
             new_succ: Vec::new(),
             new_type_list_len: Vec::new(),
             new_term_list_len: Vec::new(),
-            new_rule_chain: Vec::new(),
-            new_stmt_list_chain: Vec::new(),
+            new_stmt_morphism: Vec::new(),
             new_stmt_structure: Vec::new(),
             new_if_atom_structure: Vec::new(),
             new_then_atom_structure: Vec::new(),
@@ -27927,8 +27045,9 @@ impl ModelDelta {
             new_semantic_el: Vec::new(),
             new_semantic_els: Vec::new(),
             new_wildcard_virt_ident: Vec::new(),
-            new_grouped_rule_chain: Vec::new(),
-            new_grouped_stmt_list_chain: Vec::new(),
+            new_grouped_stmt_morphism: Vec::new(),
+            new_rule_first_grouped_morphism: Vec::new(),
+            new_next_grouped_morphism: Vec::new(),
             new_ident_equalities: Vec::new(),
             new_virt_ident_equalities: Vec::new(),
             new_type_decl_node_equalities: Vec::new(),
@@ -27957,7 +27076,6 @@ impl ModelDelta {
             new_el_equalities: Vec::new(),
             new_el_list_equalities: Vec::new(),
             new_morphism_equalities: Vec::new(),
-            new_chain_equalities: Vec::new(),
             new_symbol_kind_equalities: Vec::new(),
             new_nat_equalities: Vec::new(),
             new_ident_number: 0,
@@ -27988,7 +27106,6 @@ impl ModelDelta {
             new_el_number: 0,
             new_el_list_number: 0,
             new_morphism_number: 0,
-            new_chain_number: 0,
             new_symbol_kind_number: 0,
             new_nat_number: 0,
         }
@@ -28435,19 +27552,6 @@ impl ModelDelta {
         model.morphism_weights.resize(new_morphism_number, 0);
 
         self.new_morphism_number = 0;
-
-        let old_chain_number = model.chain_equalities.len();
-        let new_chain_number = old_chain_number + self.new_chain_number;
-        model.chain_equalities.increase_size_to(new_chain_number);
-        for i in old_chain_number..new_chain_number {
-            let el = Chain::from(i as u32);
-            model.chain_dirty.insert(el);
-            model.chain_all.insert(el);
-        }
-
-        model.chain_weights.resize(new_chain_number, 0);
-
-        self.new_chain_number = 0;
 
         let old_symbol_kind_number = model.symbol_kind_equalities.len();
         let new_symbol_kind_number = old_symbol_kind_number + self.new_symbol_kind_number;
@@ -29732,16 +28836,6 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_term_surjective_exempted.extend(
-                model
-                    .term_surjective_exempted
-                    .drain_with_element_term_node(child)
-                    .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= TermSurjectiveExemptedTable::WEIGHT;
-                    }),
-            );
-
             self.new_var_term_in_rule.extend(
                 model
                     .var_term_in_rule
@@ -29988,19 +29082,6 @@ impl ModelDelta {
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
                         *weight0 -= TermsShouldBeEpicOkTable::WEIGHT;
-                    }),
-            );
-
-            self.new_terms_surjective_exempted.extend(
-                model
-                    .terms_surjective_exempted
-                    .drain_with_element_term_list_node(child)
-                    .inspect(|t| {
-                        let weight0 = model
-                            .term_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= TermsSurjectiveExemptedTable::WEIGHT;
                     }),
             );
 
@@ -30726,6 +29807,19 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_stmt_morphism.extend(
+                model
+                    .stmt_morphism
+                    .drain_with_element_stmt_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= StmtMorphismTable::WEIGHT;
+
+                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
+                        *weight1 -= StmtMorphismTable::WEIGHT;
+                    }),
+            );
+
             self.new_stmt_structure.extend(
                 model
                     .stmt_structure
@@ -30736,6 +29830,19 @@ impl ModelDelta {
 
                         let weight1 = model.structure_weights.get_mut(t.1 .0 as usize).unwrap();
                         *weight1 -= StmtStructureTable::WEIGHT;
+                    }),
+            );
+
+            self.new_grouped_stmt_morphism.extend(
+                model
+                    .grouped_stmt_morphism
+                    .drain_with_element_stmt_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= GroupedStmtMorphismTable::WEIGHT;
+
+                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
+                        *weight1 -= GroupedStmtMorphismTable::WEIGHT;
                     }),
             );
         }
@@ -30863,38 +29970,6 @@ impl ModelDelta {
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
                         *weight1 -= RuleChildStmtListTable::WEIGHT;
-                    }),
-            );
-
-            self.new_stmt_list_chain.extend(
-                model
-                    .stmt_list_chain
-                    .drain_with_element_stmt_list_node(child)
-                    .inspect(|t| {
-                        let weight0 = model
-                            .stmt_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= StmtListChainTable::WEIGHT;
-
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= StmtListChainTable::WEIGHT;
-                    }),
-            );
-
-            self.new_grouped_stmt_list_chain.extend(
-                model
-                    .grouped_stmt_list_chain
-                    .drain_with_element_stmt_list_node(child)
-                    .inspect(|t| {
-                        let weight0 = model
-                            .stmt_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= GroupedStmtListChainTable::WEIGHT;
-
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= GroupedStmtListChainTable::WEIGHT;
                     }),
             );
         }
@@ -31025,35 +30100,19 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_chain.extend(
+            self.new_rule_first_grouped_morphism.extend(
                 model
-                    .rule_chain
+                    .rule_first_grouped_morphism
                     .drain_with_element_rule_decl_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .rule_decl_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChainTable::WEIGHT;
+                        *weight0 -= RuleFirstGroupedMorphismTable::WEIGHT;
 
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= RuleChainTable::WEIGHT;
-                    }),
-            );
-
-            self.new_grouped_rule_chain.extend(
-                model
-                    .grouped_rule_chain
-                    .drain_with_element_rule_decl_node(child)
-                    .inspect(|t| {
-                        let weight0 = model
-                            .rule_decl_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= GroupedRuleChainTable::WEIGHT;
-
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= GroupedRuleChainTable::WEIGHT;
+                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
+                        *weight1 -= RuleFirstGroupedMorphismTable::WEIGHT;
                     }),
             );
         }
@@ -32221,42 +31280,6 @@ impl ModelDelta {
                     *weight1 -= CodTable::WEIGHT;
                 }));
 
-            self.new_initial_structure.extend(
-                model
-                    .initial_structure
-                    .drain_with_element_structure(child)
-                    .inspect(|t| {
-                        let weight0 = model.structure_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= InitialStructureTable::WEIGHT;
-                    }),
-            );
-
-            self.new_initiality_morphism.extend(
-                model
-                    .initiality_morphism
-                    .drain_with_element_structure(child)
-                    .inspect(|t| {
-                        let weight0 = model.structure_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= InitialityMorphismTable::WEIGHT;
-
-                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= InitialityMorphismTable::WEIGHT;
-                    }),
-            );
-
-            self.new_chain_head_structure.extend(
-                model
-                    .chain_head_structure
-                    .drain_with_element_structure(child)
-                    .inspect(|t| {
-                        let weight0 = model.chain_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ChainHeadStructureTable::WEIGHT;
-
-                        let weight1 = model.structure_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= ChainHeadStructureTable::WEIGHT;
-                    }),
-            );
-
             self.new_stmt_structure.extend(
                 model
                     .stmt_structure
@@ -32404,16 +31427,6 @@ impl ModelDelta {
                     *weight1 -= ElInImgTable::WEIGHT;
                 }));
 
-            self.new_el_surjective_exempted.extend(
-                model
-                    .el_surjective_exempted
-                    .drain_with_element_el(child)
-                    .inspect(|t| {
-                        let weight0 = model.el_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ElSurjectiveExemptedTable::WEIGHT;
-                    }),
-            );
-
             self.new_el_should_be_surjective_ok.extend(
                 model
                     .el_should_be_surjective_ok
@@ -32431,6 +31444,16 @@ impl ModelDelta {
                     .inspect(|t| {
                         let weight0 = model.el_weights.get_mut(t.0 .0 as usize).unwrap();
                         *weight0 -= ElIsSurjectiveOkTable::WEIGHT;
+                    }),
+            );
+
+            self.new_el_is_surjective_exempted.extend(
+                model
+                    .el_is_surjective_exempted
+                    .drain_with_element_el(child)
+                    .inspect(|t| {
+                        let weight0 = model.el_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= ElIsSurjectiveExemptedTable::WEIGHT;
                     }),
             );
 
@@ -32773,6 +31796,36 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_if_morphism.extend(
+                model
+                    .if_morphism
+                    .drain_with_element_morphism(child)
+                    .inspect(|t| {
+                        let weight0 = model.morphism_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= IfMorphismTable::WEIGHT;
+                    }),
+            );
+
+            self.new_surj_then_morphism.extend(
+                model
+                    .surj_then_morphism
+                    .drain_with_element_morphism(child)
+                    .inspect(|t| {
+                        let weight0 = model.morphism_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= SurjThenMorphismTable::WEIGHT;
+                    }),
+            );
+
+            self.new_non_surj_then_morphism.extend(
+                model
+                    .non_surj_then_morphism
+                    .drain_with_element_morphism(child)
+                    .inspect(|t| {
+                        let weight0 = model.morphism_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= NonSurjThenMorphismTable::WEIGHT;
+                    }),
+            );
+
             self.new_should_be_surjective.extend(
                 model
                     .should_be_surjective
@@ -32834,165 +31887,58 @@ impl ModelDelta {
                         }),
                 );
 
-            self.new_initiality_morphism.extend(
+            self.new_stmt_morphism.extend(
                 model
-                    .initiality_morphism
+                    .stmt_morphism
                     .drain_with_element_morphism(child)
                     .inspect(|t| {
-                        let weight0 = model.structure_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= InitialityMorphismTable::WEIGHT;
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= StmtMorphismTable::WEIGHT;
 
                         let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= InitialityMorphismTable::WEIGHT;
+                        *weight1 -= StmtMorphismTable::WEIGHT;
                     }),
             );
 
-            self.new_chain_head_transition.extend(
+            self.new_grouped_stmt_morphism.extend(
                 model
-                    .chain_head_transition
+                    .grouped_stmt_morphism
                     .drain_with_element_morphism(child)
                     .inspect(|t| {
-                        let weight0 = model.chain_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ChainHeadTransitionTable::WEIGHT;
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= GroupedStmtMorphismTable::WEIGHT;
 
                         let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= ChainHeadTransitionTable::WEIGHT;
-                    }),
-            );
-        }
-
-        for (mut lhs, mut rhs) in self.new_chain_equalities.drain(..) {
-            lhs = model.chain_equalities.root(lhs);
-            rhs = model.chain_equalities.root(rhs);
-            if lhs == rhs {
-                continue;
-            }
-
-            let lhs_weight = model.chain_weights[lhs.0 as usize];
-            let rhs_weight = model.chain_weights[rhs.0 as usize];
-            let (root, child) = if lhs_weight >= rhs_weight {
-                (lhs, rhs)
-            } else {
-                (rhs, lhs)
-            };
-
-            model.chain_equalities.union_roots_into(child, root);
-            model.chain_all.remove(&child);
-            model.chain_dirty.remove(&child);
-
-            self.new_nil_chain
-                .extend(
-                    model
-                        .nil_chain
-                        .drain_with_element_chain(child)
-                        .inspect(|t| {
-                            let weight0 = model.chain_weights.get_mut(t.0 .0 as usize).unwrap();
-                            *weight0 -= NilChainTable::WEIGHT;
-                        }),
-                );
-
-            self.new_chain_tail
-                .extend(
-                    model
-                        .chain_tail
-                        .drain_with_element_chain(child)
-                        .inspect(|t| {
-                            let weight0 = model.chain_weights.get_mut(t.0 .0 as usize).unwrap();
-                            *weight0 -= ChainTailTable::WEIGHT;
-
-                            let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                            *weight1 -= ChainTailTable::WEIGHT;
-                        }),
-                );
-
-            self.new_chain_head_structure.extend(
-                model
-                    .chain_head_structure
-                    .drain_with_element_chain(child)
-                    .inspect(|t| {
-                        let weight0 = model.chain_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ChainHeadStructureTable::WEIGHT;
-
-                        let weight1 = model.structure_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= ChainHeadStructureTable::WEIGHT;
+                        *weight1 -= GroupedStmtMorphismTable::WEIGHT;
                     }),
             );
 
-            self.new_chain_head_transition.extend(
+            self.new_rule_first_grouped_morphism.extend(
                 model
-                    .chain_head_transition
-                    .drain_with_element_chain(child)
-                    .inspect(|t| {
-                        let weight0 = model.chain_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ChainHeadTransitionTable::WEIGHT;
-
-                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= ChainHeadTransitionTable::WEIGHT;
-                    }),
-            );
-
-            self.new_rule_chain
-                .extend(
-                    model
-                        .rule_chain
-                        .drain_with_element_chain(child)
-                        .inspect(|t| {
-                            let weight0 = model
-                                .rule_decl_node_weights
-                                .get_mut(t.0 .0 as usize)
-                                .unwrap();
-                            *weight0 -= RuleChainTable::WEIGHT;
-
-                            let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                            *weight1 -= RuleChainTable::WEIGHT;
-                        }),
-                );
-
-            self.new_stmt_list_chain.extend(
-                model
-                    .stmt_list_chain
-                    .drain_with_element_chain(child)
-                    .inspect(|t| {
-                        let weight0 = model
-                            .stmt_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= StmtListChainTable::WEIGHT;
-
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= StmtListChainTable::WEIGHT;
-                    }),
-            );
-
-            self.new_grouped_rule_chain.extend(
-                model
-                    .grouped_rule_chain
-                    .drain_with_element_chain(child)
+                    .rule_first_grouped_morphism
+                    .drain_with_element_morphism(child)
                     .inspect(|t| {
                         let weight0 = model
                             .rule_decl_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= GroupedRuleChainTable::WEIGHT;
+                        *weight0 -= RuleFirstGroupedMorphismTable::WEIGHT;
 
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= GroupedRuleChainTable::WEIGHT;
+                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
+                        *weight1 -= RuleFirstGroupedMorphismTable::WEIGHT;
                     }),
             );
 
-            self.new_grouped_stmt_list_chain.extend(
+            self.new_next_grouped_morphism.extend(
                 model
-                    .grouped_stmt_list_chain
-                    .drain_with_element_chain(child)
+                    .next_grouped_morphism
+                    .drain_with_element_morphism(child)
                     .inspect(|t| {
-                        let weight0 = model
-                            .stmt_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= GroupedStmtListChainTable::WEIGHT;
+                        let weight0 = model.morphism_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= NextGroupedMorphismTable::WEIGHT;
 
-                        let weight1 = model.chain_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= GroupedStmtListChainTable::WEIGHT;
+                        let weight1 = model.morphism_weights.get_mut(t.1 .0 as usize).unwrap();
+                        *weight1 -= NextGroupedMorphismTable::WEIGHT;
                     }),
             );
         }
@@ -33691,6 +32637,30 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
+        for mut t in self.new_if_morphism.drain(..) {
+            t.0 = model.morphism_equalities.root(t.0);
+            if model.if_morphism.insert(t) {
+                model.morphism_weights[t.0 .0 as usize] += IfMorphismTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_surj_then_morphism.drain(..) {
+            t.0 = model.morphism_equalities.root(t.0);
+            if model.surj_then_morphism.insert(t) {
+                model.morphism_weights[t.0 .0 as usize] += SurjThenMorphismTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_non_surj_then_morphism.drain(..) {
+            t.0 = model.morphism_equalities.root(t.0);
+            if model.non_surj_then_morphism.insert(t) {
+                model.morphism_weights[t.0 .0 as usize] += NonSurjThenMorphismTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
         for mut t in self.new_var_before_term.drain(..) {
             t.0 = model.term_node_equalities.root(t.0);
             t.1 = model.virt_ident_equalities.root(t.1);
@@ -33845,31 +32815,6 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_term_surjective_exempted.drain(..) {
-            t.0 = model.term_node_equalities.root(t.0);
-            if model.term_surjective_exempted.insert(t) {
-                model.term_node_weights[t.0 .0 as usize] += TermSurjectiveExemptedTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_terms_surjective_exempted.drain(..) {
-            t.0 = model.term_list_node_equalities.root(t.0);
-            if model.terms_surjective_exempted.insert(t) {
-                model.term_list_node_weights[t.0 .0 as usize] +=
-                    TermsSurjectiveExemptedTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_el_surjective_exempted.drain(..) {
-            t.0 = model.el_equalities.root(t.0);
-            if model.el_surjective_exempted.insert(t) {
-                model.el_weights[t.0 .0 as usize] += ElSurjectiveExemptedTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
         for mut t in self.new_el_should_be_surjective_ok.drain(..) {
             t.0 = model.el_equalities.root(t.0);
             if model.el_should_be_surjective_ok.insert(t) {
@@ -33882,6 +32827,14 @@ impl ModelDelta {
             t.0 = model.el_equalities.root(t.0);
             if model.el_is_surjective_ok.insert(t) {
                 model.el_weights[t.0 .0 as usize] += ElIsSurjectiveOkTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_el_is_surjective_exempted.drain(..) {
+            t.0 = model.el_equalities.root(t.0);
+            if model.el_is_surjective_exempted.insert(t) {
+                model.el_weights[t.0 .0 as usize] += ElIsSurjectiveExemptedTable::WEIGHT;
             }
         }
 
@@ -34357,62 +33310,6 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_initial_structure.drain(..) {
-            t.0 = model.structure_equalities.root(t.0);
-            if model.initial_structure.insert(t) {
-                model.structure_weights[t.0 .0 as usize] += InitialStructureTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_initiality_morphism.drain(..) {
-            t.0 = model.structure_equalities.root(t.0);
-            t.1 = model.morphism_equalities.root(t.1);
-            if model.initiality_morphism.insert(t) {
-                model.structure_weights[t.0 .0 as usize] += InitialityMorphismTable::WEIGHT;
-                model.morphism_weights[t.1 .0 as usize] += InitialityMorphismTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_nil_chain.drain(..) {
-            t.0 = model.chain_equalities.root(t.0);
-            if model.nil_chain.insert(t) {
-                model.chain_weights[t.0 .0 as usize] += NilChainTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_chain_tail.drain(..) {
-            t.0 = model.chain_equalities.root(t.0);
-            t.1 = model.chain_equalities.root(t.1);
-            if model.chain_tail.insert(t) {
-                model.chain_weights[t.0 .0 as usize] += ChainTailTable::WEIGHT;
-                model.chain_weights[t.1 .0 as usize] += ChainTailTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_chain_head_structure.drain(..) {
-            t.0 = model.chain_equalities.root(t.0);
-            t.1 = model.structure_equalities.root(t.1);
-            if model.chain_head_structure.insert(t) {
-                model.chain_weights[t.0 .0 as usize] += ChainHeadStructureTable::WEIGHT;
-                model.structure_weights[t.1 .0 as usize] += ChainHeadStructureTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_chain_head_transition.drain(..) {
-            t.0 = model.chain_equalities.root(t.0);
-            t.1 = model.morphism_equalities.root(t.1);
-            if model.chain_head_transition.insert(t) {
-                model.chain_weights[t.0 .0 as usize] += ChainHeadTransitionTable::WEIGHT;
-                model.morphism_weights[t.1 .0 as usize] += ChainHeadTransitionTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
         for mut t in self.new_type_symbol.drain(..) {
             t.0 = model.symbol_kind_equalities.root(t.0);
             if model.type_symbol.insert(t) {
@@ -34483,22 +33380,12 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_chain.drain(..) {
-            t.0 = model.rule_decl_node_equalities.root(t.0);
-            t.1 = model.chain_equalities.root(t.1);
-            if model.rule_chain.insert(t) {
-                model.rule_decl_node_weights[t.0 .0 as usize] += RuleChainTable::WEIGHT;
-                model.chain_weights[t.1 .0 as usize] += RuleChainTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
-        for mut t in self.new_stmt_list_chain.drain(..) {
-            t.0 = model.stmt_list_node_equalities.root(t.0);
-            t.1 = model.chain_equalities.root(t.1);
-            if model.stmt_list_chain.insert(t) {
-                model.stmt_list_node_weights[t.0 .0 as usize] += StmtListChainTable::WEIGHT;
-                model.chain_weights[t.1 .0 as usize] += StmtListChainTable::WEIGHT;
+        for mut t in self.new_stmt_morphism.drain(..) {
+            t.0 = model.stmt_node_equalities.root(t.0);
+            t.1 = model.morphism_equalities.root(t.1);
+            if model.stmt_morphism.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += StmtMorphismTable::WEIGHT;
+                model.morphism_weights[t.1 .0 as usize] += StmtMorphismTable::WEIGHT;
             }
         }
 
@@ -34593,22 +33480,33 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_grouped_rule_chain.drain(..) {
-            t.0 = model.rule_decl_node_equalities.root(t.0);
-            t.1 = model.chain_equalities.root(t.1);
-            if model.grouped_rule_chain.insert(t) {
-                model.rule_decl_node_weights[t.0 .0 as usize] += GroupedRuleChainTable::WEIGHT;
-                model.chain_weights[t.1 .0 as usize] += GroupedRuleChainTable::WEIGHT;
+        for mut t in self.new_grouped_stmt_morphism.drain(..) {
+            t.0 = model.stmt_node_equalities.root(t.0);
+            t.1 = model.morphism_equalities.root(t.1);
+            if model.grouped_stmt_morphism.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += GroupedStmtMorphismTable::WEIGHT;
+                model.morphism_weights[t.1 .0 as usize] += GroupedStmtMorphismTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_grouped_stmt_list_chain.drain(..) {
-            t.0 = model.stmt_list_node_equalities.root(t.0);
-            t.1 = model.chain_equalities.root(t.1);
-            if model.grouped_stmt_list_chain.insert(t) {
-                model.stmt_list_node_weights[t.0 .0 as usize] += GroupedStmtListChainTable::WEIGHT;
-                model.chain_weights[t.1 .0 as usize] += GroupedStmtListChainTable::WEIGHT;
+        for mut t in self.new_rule_first_grouped_morphism.drain(..) {
+            t.0 = model.rule_decl_node_equalities.root(t.0);
+            t.1 = model.morphism_equalities.root(t.1);
+            if model.rule_first_grouped_morphism.insert(t) {
+                model.rule_decl_node_weights[t.0 .0 as usize] +=
+                    RuleFirstGroupedMorphismTable::WEIGHT;
+                model.morphism_weights[t.1 .0 as usize] += RuleFirstGroupedMorphismTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_next_grouped_morphism.drain(..) {
+            t.0 = model.morphism_equalities.root(t.0);
+            t.1 = model.morphism_equalities.root(t.1);
+            if model.next_grouped_morphism.insert(t) {
+                model.morphism_weights[t.0 .0 as usize] += NextGroupedMorphismTable::WEIGHT;
+                model.morphism_weights[t.1 .0 as usize] += NextGroupedMorphismTable::WEIGHT;
             }
         }
     }
@@ -34810,13 +33708,6 @@ impl ModelDelta {
         Morphism::from(id as u32)
     }
     #[allow(dead_code)]
-    fn new_chain(&mut self, model: &Model) -> Chain {
-        let id: usize = model.chain_equalities.len() + self.new_chain_number;
-        assert!(id <= (u32::MAX as usize));
-        self.new_chain_number += 1;
-        Chain::from(id as u32)
-    }
-    #[allow(dead_code)]
     fn new_symbol_kind(&mut self, model: &Model) -> SymbolKind {
         let id: usize = model.symbol_kind_equalities.len() + self.new_symbol_kind_number;
         assert!(id <= (u32::MAX as usize));
@@ -34977,11 +33868,6 @@ impl Eqlog {
             morphism_dirty_prev: Vec::new(),
             morphism_weights: Vec::new(),
             morphism_all: BTreeSet::new(),
-            chain_equalities: Unification::new(),
-            chain_dirty: BTreeSet::new(),
-            chain_dirty_prev: Vec::new(),
-            chain_weights: Vec::new(),
-            chain_all: BTreeSet::new(),
             symbol_kind_equalities: Unification::new(),
             symbol_kind_dirty: BTreeSet::new(),
             symbol_kind_dirty_prev: Vec::new(),
@@ -35040,6 +33926,9 @@ impl Eqlog {
             should_be_symbol: ShouldBeSymbolTable::new(),
             pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),
             func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),
+            if_morphism: IfMorphismTable::new(),
+            surj_then_morphism: SurjThenMorphismTable::new(),
+            non_surj_then_morphism: NonSurjThenMorphismTable::new(),
             var_before_term: VarBeforeTermTable::new(),
             var_before_terms: VarBeforeTermsTable::new(),
             var_before_opt_term: VarBeforeOptTermTable::new(),
@@ -35056,11 +33945,9 @@ impl Eqlog {
             term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),
             terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),
             should_be_surjective: ShouldBeSurjectiveTable::new(),
-            term_surjective_exempted: TermSurjectiveExemptedTable::new(),
-            terms_surjective_exempted: TermsSurjectiveExemptedTable::new(),
-            el_surjective_exempted: ElSurjectiveExemptedTable::new(),
             el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),
             el_is_surjective_ok: ElIsSurjectiveOkTable::new(),
+            el_is_surjective_exempted: ElIsSurjectiveExemptedTable::new(),
             var_term_in_rule: VarTermInRuleTable::new(),
             if_after_then: IfAfterThenTable::new(),
             real_virt_ident: RealVirtIdentTable::new(),
@@ -35107,12 +33994,6 @@ impl Eqlog {
             cod: CodTable::new(),
             map_el: MapElTable::new(),
             map_els: MapElsTable::new(),
-            initial_structure: InitialStructureTable::new(),
-            initiality_morphism: InitialityMorphismTable::new(),
-            nil_chain: NilChainTable::new(),
-            chain_tail: ChainTailTable::new(),
-            chain_head_structure: ChainHeadStructureTable::new(),
-            chain_head_transition: ChainHeadTransitionTable::new(),
             type_symbol: TypeSymbolTable::new(),
             pred_symbol: PredSymbolTable::new(),
             func_symbol: FuncSymbolTable::new(),
@@ -35121,8 +34002,7 @@ impl Eqlog {
             succ: SuccTable::new(),
             type_list_len: TypeListLenTable::new(),
             term_list_len: TermListLenTable::new(),
-            rule_chain: RuleChainTable::new(),
-            stmt_list_chain: StmtListChainTable::new(),
+            stmt_morphism: StmtMorphismTable::new(),
             stmt_structure: StmtStructureTable::new(),
             if_atom_structure: IfAtomStructureTable::new(),
             then_atom_structure: ThenAtomStructureTable::new(),
@@ -35132,8 +34012,9 @@ impl Eqlog {
             semantic_el: SemanticElTable::new(),
             semantic_els: SemanticElsTable::new(),
             wildcard_virt_ident: WildcardVirtIdentTable::new(),
-            grouped_rule_chain: GroupedRuleChainTable::new(),
-            grouped_stmt_list_chain: GroupedStmtListChainTable::new(),
+            grouped_stmt_morphism: GroupedStmtMorphismTable::new(),
+            rule_first_grouped_morphism: RuleFirstGroupedMorphismTable::new(),
+            next_grouped_morphism: NextGroupedMorphismTable::new(),
             empty_join_is_dirty: true,
             empty_join_is_dirty_prev: true,
             delta: Some(Box::new(ModelDelta::new())),
@@ -35208,12 +34089,6 @@ impl Eqlog {
                 self.query_and_record_functionality_cod(&mut delta);
                 self.query_and_record_functionality_map_el(&mut delta);
                 self.query_and_record_functionality_map_els(&mut delta);
-                self.query_and_record_functionality_initial_structure(&mut delta);
-                self.query_and_record_functionality_initiality_morphism(&mut delta);
-                self.query_and_record_functionality_nil_chain(&mut delta);
-                self.query_and_record_functionality_chain_tail(&mut delta);
-                self.query_and_record_functionality_chain_head_structure(&mut delta);
-                self.query_and_record_functionality_chain_head_transition(&mut delta);
                 self.query_and_record_functionality_type_symbol(&mut delta);
                 self.query_and_record_functionality_pred_symbol(&mut delta);
                 self.query_and_record_functionality_func_symbol(&mut delta);
@@ -35222,8 +34097,7 @@ impl Eqlog {
                 self.query_and_record_functionality_succ(&mut delta);
                 self.query_and_record_functionality_type_list_len(&mut delta);
                 self.query_and_record_functionality_term_list_len(&mut delta);
-                self.query_and_record_functionality_rule_chain(&mut delta);
-                self.query_and_record_functionality_stmt_list_chain(&mut delta);
+                self.query_and_record_functionality_stmt_morphism(&mut delta);
                 self.query_and_record_functionality_stmt_structure(&mut delta);
                 self.query_and_record_functionality_if_atom_structure(&mut delta);
                 self.query_and_record_functionality_then_atom_structure(&mut delta);
@@ -35233,8 +34107,9 @@ impl Eqlog {
                 self.query_and_record_functionality_semantic_el(&mut delta);
                 self.query_and_record_functionality_semantic_els(&mut delta);
                 self.query_and_record_functionality_wildcard_virt_ident(&mut delta);
-                self.query_and_record_functionality_grouped_rule_chain(&mut delta);
-                self.query_and_record_functionality_grouped_stmt_list_chain(&mut delta);
+                self.query_and_record_functionality_grouped_stmt_morphism(&mut delta);
+                self.query_and_record_functionality_rule_first_grouped_morphism(&mut delta);
+                self.query_and_record_functionality_next_grouped_morphism(&mut delta);
                 self.query_and_record_rule_child_rule_decl(&mut delta);
                 self.query_and_record_rule_child_stmts_cons(&mut delta);
                 self.query_and_record_rule_child_stmt_if(&mut delta);
@@ -35277,9 +34152,6 @@ impl Eqlog {
                 self.query_and_record_el_in_img_rule(&mut delta);
                 self.query_and_record_pred_tuple_in_img_rule(&mut delta);
                 self.query_and_record_func_app_in_img_rule(&mut delta);
-                self.query_and_record_dom_cod_initiality_morphism(&mut delta);
-                self.query_and_record_initiality_uniqueness(&mut delta);
-                self.query_and_record_chain_transition_signature(&mut delta);
                 self.query_and_record_type_decl_defines_symbol(&mut delta);
                 self.query_and_record_pred_decl_defines_symbol(&mut delta);
                 self.query_and_record_func_decl_defines_symbol(&mut delta);
@@ -35297,9 +34169,12 @@ impl Eqlog {
                 self.query_and_record_pred_if_atom_arg_num_should_match(&mut delta);
                 self.query_and_record_pred_then_atom_arg_num_should_match(&mut delta);
                 self.query_and_record_app_term_arg_num_should_match(&mut delta);
-                self.query_and_record_stmt_list_chain_nil(&mut delta);
-                self.query_and_record_stmt_list_chain_cons(&mut delta);
-                self.query_and_record_stmt_structure_chain(&mut delta);
+                self.query_and_record_stmt_morphism_dom_cod(&mut delta);
+                self.query_and_record_if_stmt_morphism(&mut delta);
+                self.query_and_record_then_equal_stmt_morphism(&mut delta);
+                self.query_and_record_then_pred_stmt_morphism(&mut delta);
+                self.query_and_record_then_defined_stmt_morphism(&mut delta);
+                self.query_and_record_stmt_structure_morphism(&mut delta);
                 self.query_and_record_if_stmt_structure(&mut delta);
                 self.query_and_record_then_stmt_structure(&mut delta);
                 self.query_and_record_equal_if_atom_structure(&mut delta);
@@ -35325,13 +34200,20 @@ impl Eqlog {
                 self.query_and_record_equal_then_atom_semantics(&mut delta);
                 self.query_and_record_defined_then_atom_semantics(&mut delta);
                 self.query_and_record_pred_then_atom_semantics(&mut delta);
-                self.query_and_record_grouped_rule_stmt_list_chain(&mut delta);
-                self.query_and_record_grouped_stmt_list_chain_nil(&mut delta);
-                self.query_and_record_grouped_chain_if_if(&mut delta);
-                self.query_and_record_stmt_list_chain_then_then(&mut delta);
-                self.query_and_record_stmt_list_chain_singleton(&mut delta);
-                self.query_and_record_grouped_chain_if_then(&mut delta);
-                self.query_and_record_grouped_chain_then_if(&mut delta);
+                self.query_and_record_rule_stmt_first_grouped(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_if(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_surj_then(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_non_surj_then(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_first_in_rule(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_singleton(&mut delta);
+                self.query_and_record_next_grouped_dom_cod(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_if_if(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_if_surj_then(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_if_non_surj_then(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_surj_then_if(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_surj_then_surj_then(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_surj_then_non_surj_then(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_non_surj(&mut delta);
                 self.query_and_record_var_before_stmts_cons(&mut delta);
                 self.query_and_record_var_before_stmt_if(&mut delta);
                 self.query_and_record_var_before_stmt_then(&mut delta);
@@ -35369,15 +34251,11 @@ impl Eqlog {
                 self.query_and_record_then_atom_epic_ok_equal(&mut delta);
                 self.query_and_record_then_atom_epic_ok_defined(&mut delta);
                 self.query_and_record_then_atom_epic_ok_pred(&mut delta);
-                self.query_and_record_then_stmt_surjective(&mut delta);
-                self.query_and_record_cons_head_tail_terms_surjective_exempted(&mut delta);
-                self.query_and_record_head_tail_cons_terms_surjective_exempted(&mut delta);
-                self.query_and_record_subterms_surjective_exempted(&mut delta);
-                self.query_and_record_defined_atom_surjective_exempted(&mut delta);
-                self.query_and_record_semantic_el_exempted(&mut delta);
+                self.query_and_record_surj_then_should_be_surjective(&mut delta);
+                self.query_and_record_non_surj_then_should_be_surjective(&mut delta);
                 self.query_and_record_surjective_codomain_should_be_ok(&mut delta);
-                self.query_and_record_surjective_exempted_el_is_ok(&mut delta);
                 self.query_and_record_surjective_img_el_is_ok(&mut delta);
+                self.query_and_record_surjective_exempted_then_defined_term(&mut delta);
                 self.query_and_record_var_term_in_rule_child(&mut delta);
                 self.query_and_record_after_then_should_be_if(&mut delta);
 
@@ -35409,23 +34287,19 @@ impl Eqlog {
             self.query_and_record_semantic_decl_func(&mut delta);
             self.query_and_record_nil_el_types(&mut delta);
             self.query_and_record_cons_el_types(&mut delta);
+            self.query_and_record_dom_total(&mut delta);
+            self.query_and_record_cod_total(&mut delta);
             self.query_and_record_map_el_defined(&mut delta);
             self.query_and_record_map_els_defined(&mut delta);
             self.query_and_record_map_cons_els(&mut delta);
-            self.query_and_record_initial_structure_total(&mut delta);
-            self.query_and_record_initiality_morphism_total(&mut delta);
-            self.query_and_record_chain_head_structure_defined(&mut delta);
-            self.query_and_record_chain_head_transition_defined(&mut delta);
-            self.query_and_record_138(&mut delta);
+            self.query_and_record_127(&mut delta);
             self.query_and_record_type_list_len_total(&mut delta);
             self.query_and_record_term_list_len_total(&mut delta);
-            self.query_and_record_rule_chain_total(&mut delta);
-            self.query_and_record_rule_stmt_list_chain(&mut delta);
-            self.query_and_record_stmt_list_chain_total(&mut delta);
+            self.query_and_record_stmt_morphism_total(&mut delta);
             self.query_and_record_semantic_el_total(&mut delta);
             self.query_and_record_semantic_els_total(&mut delta);
             self.query_and_record_wildcard_virt_ident_defined(&mut delta);
-            self.query_and_record_grouped_stmt_list_chain_total(&mut delta);
+            self.query_and_record_grouped_stmt_morphism_total(&mut delta);
             self.drop_dirt();
             delta.apply(self);
             if condition(self) {
@@ -36611,48 +35485,6 @@ impl Eqlog {
     #[allow(dead_code)]
     pub fn are_equal_morphism(&self, lhs: Morphism, rhs: Morphism) -> bool {
         self.root_morphism(lhs) == self.root_morphism(rhs)
-    }
-
-    /// Adjoins a new element of sort `Chain`.
-    #[allow(dead_code)]
-    pub fn new_chain(&mut self) -> Chain {
-        let mut delta_opt = None;
-        std::mem::swap(&mut delta_opt, &mut self.delta);
-        let mut delta = delta_opt.unwrap();
-
-        let el = delta.new_chain(self);
-
-        self.delta = Some(delta);
-        el
-    }
-    /// Enforces the equality `lhs = rhs`.
-    #[allow(dead_code)]
-    pub fn equate_chain(&mut self, lhs: Chain, rhs: Chain) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_chain_equalities
-            .push((lhs, rhs));
-    }
-    /// Returns and iterator over elements of sort `Chain`.
-    /// The iterator yields canonical representatives only.
-    #[allow(dead_code)]
-    pub fn iter_chain(&self) -> impl '_ + Iterator<Item = Chain> {
-        self.chain_all.iter().copied()
-    }
-    /// Returns the canonical representative of the equivalence class of `el`.
-    #[allow(dead_code)]
-    pub fn root_chain(&self, el: Chain) -> Chain {
-        if el.0 as usize >= self.chain_equalities.len() {
-            el
-        } else {
-            self.chain_equalities.root_const(el)
-        }
-    }
-    /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
-    #[allow(dead_code)]
-    pub fn are_equal_chain(&self, lhs: Chain, rhs: Chain) -> bool {
-        self.root_chain(lhs) == self.root_chain(rhs)
     }
 
     /// Adjoins a new element of sort `SymbolKind`.
@@ -38314,221 +37146,6 @@ impl Eqlog {
             .push(MapEls(arg0, arg1, result));
     }
 
-    /// Evaluates `initial_structure()`.
-    #[allow(dead_code)]
-    pub fn initial_structure(&self) -> Option<Structure> {
-        self.initial_structure.iter_all().next().map(|t| t.0)
-    }
-    /// Enforces that `initial_structure()` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_initial_structure(&mut self) -> Structure {
-        if let Some(t) = self.initial_structure.iter_all().next() {
-            return t.0;
-        }
-        let result = self.new_structure();
-        self.insert_initial_structure(result);
-        result
-    }
-    /// Returns an iterator over `initial_structure` constants.
-    /// The iterator may yield more than one element if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_initial_structure(&self) -> impl '_ + Iterator<Item = Structure> {
-        self.initial_structure.iter_all().map(|t| t.0)
-    }
-    /// Makes the equation `initial_structure() = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_initial_structure(&mut self, result: Structure) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_initial_structure
-            .push(InitialStructure(result));
-    }
-
-    /// Evaluates `initiality_morphism(arg0)`.
-    #[allow(dead_code)]
-    pub fn initiality_morphism(&self, mut arg0: Structure) -> Option<Morphism> {
-        arg0 = self.root_structure(arg0);
-        self.initiality_morphism
-            .iter_all_0(arg0)
-            .next()
-            .map(|t| t.1)
-    }
-    /// Enforces that `initiality_morphism(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_initiality_morphism(&mut self, mut arg0: Structure) -> Morphism {
-        arg0 = self.root_structure(arg0);
-        if let Some(t) = self.initiality_morphism.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_morphism();
-        self.insert_initiality_morphism(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `initiality_morphism` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_initiality_morphism(&self) -> impl '_ + Iterator<Item = (Structure, Morphism)> {
-        self.initiality_morphism.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `initiality_morphism(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_initiality_morphism(&mut self, arg0: Structure, result: Morphism) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_initiality_morphism
-            .push(InitialityMorphism(arg0, result));
-    }
-
-    /// Evaluates `nil_chain()`.
-    #[allow(dead_code)]
-    pub fn nil_chain(&self) -> Option<Chain> {
-        self.nil_chain.iter_all().next().map(|t| t.0)
-    }
-    /// Enforces that `nil_chain()` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_nil_chain(&mut self) -> Chain {
-        if let Some(t) = self.nil_chain.iter_all().next() {
-            return t.0;
-        }
-        let result = self.new_chain();
-        self.insert_nil_chain(result);
-        result
-    }
-    /// Returns an iterator over `nil_chain` constants.
-    /// The iterator may yield more than one element if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_nil_chain(&self) -> impl '_ + Iterator<Item = Chain> {
-        self.nil_chain.iter_all().map(|t| t.0)
-    }
-    /// Makes the equation `nil_chain() = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_nil_chain(&mut self, result: Chain) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_nil_chain
-            .push(NilChain(result));
-    }
-
-    /// Evaluates `chain_tail(arg0)`.
-    #[allow(dead_code)]
-    pub fn chain_tail(&self, mut arg0: Chain) -> Option<Chain> {
-        arg0 = self.root_chain(arg0);
-        self.chain_tail.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Enforces that `chain_tail(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_chain_tail(&mut self, mut arg0: Chain) -> Chain {
-        arg0 = self.root_chain(arg0);
-        if let Some(t) = self.chain_tail.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_chain();
-        self.insert_chain_tail(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `chain_tail` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_chain_tail(&self) -> impl '_ + Iterator<Item = (Chain, Chain)> {
-        self.chain_tail.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `chain_tail(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_chain_tail(&mut self, arg0: Chain, result: Chain) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_chain_tail
-            .push(ChainTail(arg0, result));
-    }
-
-    /// Evaluates `chain_head_structure(arg0)`.
-    #[allow(dead_code)]
-    pub fn chain_head_structure(&self, mut arg0: Chain) -> Option<Structure> {
-        arg0 = self.root_chain(arg0);
-        self.chain_head_structure
-            .iter_all_0(arg0)
-            .next()
-            .map(|t| t.1)
-    }
-    /// Enforces that `chain_head_structure(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_chain_head_structure(&mut self, mut arg0: Chain) -> Structure {
-        arg0 = self.root_chain(arg0);
-        if let Some(t) = self.chain_head_structure.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_structure();
-        self.insert_chain_head_structure(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `chain_head_structure` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_chain_head_structure(&self) -> impl '_ + Iterator<Item = (Chain, Structure)> {
-        self.chain_head_structure.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `chain_head_structure(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_chain_head_structure(&mut self, arg0: Chain, result: Structure) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_chain_head_structure
-            .push(ChainHeadStructure(arg0, result));
-    }
-
-    /// Evaluates `chain_head_transition(arg0)`.
-    #[allow(dead_code)]
-    pub fn chain_head_transition(&self, mut arg0: Chain) -> Option<Morphism> {
-        arg0 = self.root_chain(arg0);
-        self.chain_head_transition
-            .iter_all_0(arg0)
-            .next()
-            .map(|t| t.1)
-    }
-    /// Enforces that `chain_head_transition(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_chain_head_transition(&mut self, mut arg0: Chain) -> Morphism {
-        arg0 = self.root_chain(arg0);
-        if let Some(t) = self.chain_head_transition.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_morphism();
-        self.insert_chain_head_transition(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `chain_head_transition` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_chain_head_transition(&self) -> impl '_ + Iterator<Item = (Chain, Morphism)> {
-        self.chain_head_transition.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `chain_head_transition(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_chain_head_transition(&mut self, arg0: Chain, result: Morphism) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_chain_head_transition
-            .push(ChainHeadTransition(arg0, result));
-    }
-
     /// Evaluates `type_symbol()`.
     #[allow(dead_code)]
     pub fn type_symbol(&self) -> Option<SymbolKind> {
@@ -38795,74 +37412,39 @@ impl Eqlog {
             .push(TermListLen(arg0, result));
     }
 
-    /// Evaluates `rule_chain(arg0)`.
+    /// Evaluates `stmt_morphism(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_chain(&self, mut arg0: RuleDeclNode) -> Option<Chain> {
-        arg0 = self.root_rule_decl_node(arg0);
-        self.rule_chain.iter_all_0(arg0).next().map(|t| t.1)
+    pub fn stmt_morphism(&self, mut arg0: StmtNode) -> Option<Morphism> {
+        arg0 = self.root_stmt_node(arg0);
+        self.stmt_morphism.iter_all_0(arg0).next().map(|t| t.1)
     }
-    /// Enforces that `rule_chain(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `stmt_morphism(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_chain(&mut self, mut arg0: RuleDeclNode) -> Chain {
-        arg0 = self.root_rule_decl_node(arg0);
-        if let Some(t) = self.rule_chain.iter_all_0(arg0).next() {
+    pub fn define_stmt_morphism(&mut self, mut arg0: StmtNode) -> Morphism {
+        arg0 = self.root_stmt_node(arg0);
+        if let Some(t) = self.stmt_morphism.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_chain();
-        self.insert_rule_chain(arg0, result);
+        let result = self.new_morphism();
+        self.insert_stmt_morphism(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_chain` function.
+    /// Returns an iterator over tuples in the graph of the `stmt_morphism` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_chain(&self) -> impl '_ + Iterator<Item = (RuleDeclNode, Chain)> {
-        self.rule_chain.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_stmt_morphism(&self) -> impl '_ + Iterator<Item = (StmtNode, Morphism)> {
+        self.stmt_morphism.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_chain(arg0) = result` hold.
+    /// Makes the equation `stmt_morphism(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_chain(&mut self, arg0: RuleDeclNode, result: Chain) {
+    pub fn insert_stmt_morphism(&mut self, arg0: StmtNode, result: Morphism) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_chain
-            .push(RuleChain(arg0, result));
-    }
-
-    /// Evaluates `stmt_list_chain(arg0)`.
-    #[allow(dead_code)]
-    pub fn stmt_list_chain(&self, mut arg0: StmtListNode) -> Option<Chain> {
-        arg0 = self.root_stmt_list_node(arg0);
-        self.stmt_list_chain.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Enforces that `stmt_list_chain(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_stmt_list_chain(&mut self, mut arg0: StmtListNode) -> Chain {
-        arg0 = self.root_stmt_list_node(arg0);
-        if let Some(t) = self.stmt_list_chain.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_chain();
-        self.insert_stmt_list_chain(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `stmt_list_chain` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_stmt_list_chain(&self) -> impl '_ + Iterator<Item = (StmtListNode, Chain)> {
-        self.stmt_list_chain.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `stmt_list_chain(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_stmt_list_chain(&mut self, arg0: StmtListNode, result: Chain) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_stmt_list_chain
-            .push(StmtListChain(arg0, result));
+            .new_stmt_morphism
+            .push(StmtMorphism(arg0, result));
     }
 
     /// Evaluates `stmt_structure(arg0)`.
@@ -39186,77 +37768,122 @@ impl Eqlog {
             .push(WildcardVirtIdent(arg0, result));
     }
 
-    /// Evaluates `grouped_rule_chain(arg0)`.
+    /// Evaluates `grouped_stmt_morphism(arg0)`.
     #[allow(dead_code)]
-    pub fn grouped_rule_chain(&self, mut arg0: RuleDeclNode) -> Option<Chain> {
-        arg0 = self.root_rule_decl_node(arg0);
-        self.grouped_rule_chain.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Enforces that `grouped_rule_chain(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_grouped_rule_chain(&mut self, mut arg0: RuleDeclNode) -> Chain {
-        arg0 = self.root_rule_decl_node(arg0);
-        if let Some(t) = self.grouped_rule_chain.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_chain();
-        self.insert_grouped_rule_chain(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `grouped_rule_chain` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_grouped_rule_chain(&self) -> impl '_ + Iterator<Item = (RuleDeclNode, Chain)> {
-        self.grouped_rule_chain.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `grouped_rule_chain(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_grouped_rule_chain(&mut self, arg0: RuleDeclNode, result: Chain) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_grouped_rule_chain
-            .push(GroupedRuleChain(arg0, result));
-    }
-
-    /// Evaluates `grouped_stmt_list_chain(arg0)`.
-    #[allow(dead_code)]
-    pub fn grouped_stmt_list_chain(&self, mut arg0: StmtListNode) -> Option<Chain> {
-        arg0 = self.root_stmt_list_node(arg0);
-        self.grouped_stmt_list_chain
+    pub fn grouped_stmt_morphism(&self, mut arg0: StmtNode) -> Option<Morphism> {
+        arg0 = self.root_stmt_node(arg0);
+        self.grouped_stmt_morphism
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `grouped_stmt_list_chain(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `grouped_stmt_morphism(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_grouped_stmt_list_chain(&mut self, mut arg0: StmtListNode) -> Chain {
-        arg0 = self.root_stmt_list_node(arg0);
-        if let Some(t) = self.grouped_stmt_list_chain.iter_all_0(arg0).next() {
+    pub fn define_grouped_stmt_morphism(&mut self, mut arg0: StmtNode) -> Morphism {
+        arg0 = self.root_stmt_node(arg0);
+        if let Some(t) = self.grouped_stmt_morphism.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_chain();
-        self.insert_grouped_stmt_list_chain(arg0, result);
+        let result = self.new_morphism();
+        self.insert_grouped_stmt_morphism(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `grouped_stmt_list_chain` function.
+    /// Returns an iterator over tuples in the graph of the `grouped_stmt_morphism` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_grouped_stmt_list_chain(&self) -> impl '_ + Iterator<Item = (StmtListNode, Chain)> {
-        self.grouped_stmt_list_chain.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_grouped_stmt_morphism(&self) -> impl '_ + Iterator<Item = (StmtNode, Morphism)> {
+        self.grouped_stmt_morphism.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `grouped_stmt_list_chain(arg0) = result` hold.
+    /// Makes the equation `grouped_stmt_morphism(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_grouped_stmt_list_chain(&mut self, arg0: StmtListNode, result: Chain) {
+    pub fn insert_grouped_stmt_morphism(&mut self, arg0: StmtNode, result: Morphism) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_grouped_stmt_list_chain
-            .push(GroupedStmtListChain(arg0, result));
+            .new_grouped_stmt_morphism
+            .push(GroupedStmtMorphism(arg0, result));
+    }
+
+    /// Evaluates `rule_first_grouped_morphism(arg0)`.
+    #[allow(dead_code)]
+    pub fn rule_first_grouped_morphism(&self, mut arg0: RuleDeclNode) -> Option<Morphism> {
+        arg0 = self.root_rule_decl_node(arg0);
+        self.rule_first_grouped_morphism
+            .iter_all_0(arg0)
+            .next()
+            .map(|t| t.1)
+    }
+    /// Enforces that `rule_first_grouped_morphism(arg0)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_rule_first_grouped_morphism(&mut self, mut arg0: RuleDeclNode) -> Morphism {
+        arg0 = self.root_rule_decl_node(arg0);
+        if let Some(t) = self.rule_first_grouped_morphism.iter_all_0(arg0).next() {
+            return t.1;
+        }
+        let result = self.new_morphism();
+        self.insert_rule_first_grouped_morphism(arg0, result);
+        result
+    }
+    /// Returns an iterator over tuples in the graph of the `rule_first_grouped_morphism` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_rule_first_grouped_morphism(
+        &self,
+    ) -> impl '_ + Iterator<Item = (RuleDeclNode, Morphism)> {
+        self.rule_first_grouped_morphism
+            .iter_all()
+            .map(|t| (t.0, t.1))
+    }
+    /// Makes the equation `rule_first_grouped_morphism(arg0) = result` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_rule_first_grouped_morphism(&mut self, arg0: RuleDeclNode, result: Morphism) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_rule_first_grouped_morphism
+            .push(RuleFirstGroupedMorphism(arg0, result));
+    }
+
+    /// Evaluates `next_grouped_morphism(arg0)`.
+    #[allow(dead_code)]
+    pub fn next_grouped_morphism(&self, mut arg0: Morphism) -> Option<Morphism> {
+        arg0 = self.root_morphism(arg0);
+        self.next_grouped_morphism
+            .iter_all_0(arg0)
+            .next()
+            .map(|t| t.1)
+    }
+    /// Enforces that `next_grouped_morphism(arg0)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_next_grouped_morphism(&mut self, mut arg0: Morphism) -> Morphism {
+        arg0 = self.root_morphism(arg0);
+        if let Some(t) = self.next_grouped_morphism.iter_all_0(arg0).next() {
+            return t.1;
+        }
+        let result = self.new_morphism();
+        self.insert_next_grouped_morphism(arg0, result);
+        result
+    }
+    /// Returns an iterator over tuples in the graph of the `next_grouped_morphism` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_next_grouped_morphism(&self) -> impl '_ + Iterator<Item = (Morphism, Morphism)> {
+        self.next_grouped_morphism.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes the equation `next_grouped_morphism(arg0) = result` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_next_grouped_morphism(&mut self, arg0: Morphism, result: Morphism) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_next_grouped_morphism
+            .push(NextGroupedMorphism(arg0, result));
     }
 
     /// Returns `true` if `absurd()` holds.
@@ -40573,6 +39200,76 @@ impl Eqlog {
             .push(FuncArgNumShouldMatch(arg0, arg1, arg2));
     }
 
+    /// Returns `true` if `if_morphism(arg0)` holds.
+    #[allow(dead_code)]
+    pub fn if_morphism(&self, mut arg0: Morphism) -> bool {
+        arg0 = self.root_morphism(arg0);
+        self.if_morphism.contains(IfMorphism(arg0))
+    }
+    /// Returns an iterator over elements satisfying the `if_morphism` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_if_morphism(&self) -> impl '_ + Iterator<Item = Morphism> {
+        self.if_morphism.iter_all().map(|t| t.0)
+    }
+    /// Makes `if_morphism(arg0)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_if_morphism(&mut self, arg0: Morphism) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_if_morphism
+            .push(IfMorphism(arg0));
+    }
+
+    /// Returns `true` if `surj_then_morphism(arg0)` holds.
+    #[allow(dead_code)]
+    pub fn surj_then_morphism(&self, mut arg0: Morphism) -> bool {
+        arg0 = self.root_morphism(arg0);
+        self.surj_then_morphism.contains(SurjThenMorphism(arg0))
+    }
+    /// Returns an iterator over elements satisfying the `surj_then_morphism` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_surj_then_morphism(&self) -> impl '_ + Iterator<Item = Morphism> {
+        self.surj_then_morphism.iter_all().map(|t| t.0)
+    }
+    /// Makes `surj_then_morphism(arg0)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_surj_then_morphism(&mut self, arg0: Morphism) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_surj_then_morphism
+            .push(SurjThenMorphism(arg0));
+    }
+
+    /// Returns `true` if `non_surj_then_morphism(arg0)` holds.
+    #[allow(dead_code)]
+    pub fn non_surj_then_morphism(&self, mut arg0: Morphism) -> bool {
+        arg0 = self.root_morphism(arg0);
+        self.non_surj_then_morphism
+            .contains(NonSurjThenMorphism(arg0))
+    }
+    /// Returns an iterator over elements satisfying the `non_surj_then_morphism` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_non_surj_then_morphism(&self) -> impl '_ + Iterator<Item = Morphism> {
+        self.non_surj_then_morphism.iter_all().map(|t| t.0)
+    }
+    /// Makes `non_surj_then_morphism(arg0)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_non_surj_then_morphism(&mut self, arg0: Morphism) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_non_surj_then_morphism
+            .push(NonSurjThenMorphism(arg0));
+    }
+
     /// Returns `true` if `var_before_term(arg0, arg1)` holds.
     #[allow(dead_code)]
     pub fn var_before_term(&self, mut arg0: TermNode, mut arg1: VirtIdent) -> bool {
@@ -40961,78 +39658,6 @@ impl Eqlog {
             .push(ShouldBeSurjective(arg0));
     }
 
-    /// Returns `true` if `term_surjective_exempted(arg0)` holds.
-    #[allow(dead_code)]
-    pub fn term_surjective_exempted(&self, mut arg0: TermNode) -> bool {
-        arg0 = self.root_term_node(arg0);
-        self.term_surjective_exempted
-            .contains(TermSurjectiveExempted(arg0))
-    }
-    /// Returns an iterator over elements satisfying the `term_surjective_exempted` predicate.
-
-    #[allow(dead_code)]
-    pub fn iter_term_surjective_exempted(&self) -> impl '_ + Iterator<Item = TermNode> {
-        self.term_surjective_exempted.iter_all().map(|t| t.0)
-    }
-    /// Makes `term_surjective_exempted(arg0)` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_term_surjective_exempted(&mut self, arg0: TermNode) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_term_surjective_exempted
-            .push(TermSurjectiveExempted(arg0));
-    }
-
-    /// Returns `true` if `terms_surjective_exempted(arg0)` holds.
-    #[allow(dead_code)]
-    pub fn terms_surjective_exempted(&self, mut arg0: TermListNode) -> bool {
-        arg0 = self.root_term_list_node(arg0);
-        self.terms_surjective_exempted
-            .contains(TermsSurjectiveExempted(arg0))
-    }
-    /// Returns an iterator over elements satisfying the `terms_surjective_exempted` predicate.
-
-    #[allow(dead_code)]
-    pub fn iter_terms_surjective_exempted(&self) -> impl '_ + Iterator<Item = TermListNode> {
-        self.terms_surjective_exempted.iter_all().map(|t| t.0)
-    }
-    /// Makes `terms_surjective_exempted(arg0)` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_terms_surjective_exempted(&mut self, arg0: TermListNode) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_terms_surjective_exempted
-            .push(TermsSurjectiveExempted(arg0));
-    }
-
-    /// Returns `true` if `el_surjective_exempted(arg0)` holds.
-    #[allow(dead_code)]
-    pub fn el_surjective_exempted(&self, mut arg0: El) -> bool {
-        arg0 = self.root_el(arg0);
-        self.el_surjective_exempted
-            .contains(ElSurjectiveExempted(arg0))
-    }
-    /// Returns an iterator over elements satisfying the `el_surjective_exempted` predicate.
-
-    #[allow(dead_code)]
-    pub fn iter_el_surjective_exempted(&self) -> impl '_ + Iterator<Item = El> {
-        self.el_surjective_exempted.iter_all().map(|t| t.0)
-    }
-    /// Makes `el_surjective_exempted(arg0)` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_el_surjective_exempted(&mut self, arg0: El) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_el_surjective_exempted
-            .push(ElSurjectiveExempted(arg0));
-    }
-
     /// Returns `true` if `el_should_be_surjective_ok(arg0)` holds.
     #[allow(dead_code)]
     pub fn el_should_be_surjective_ok(&self, mut arg0: El) -> bool {
@@ -41078,6 +39703,30 @@ impl Eqlog {
             .unwrap()
             .new_el_is_surjective_ok
             .push(ElIsSurjectiveOk(arg0));
+    }
+
+    /// Returns `true` if `el_is_surjective_exempted(arg0)` holds.
+    #[allow(dead_code)]
+    pub fn el_is_surjective_exempted(&self, mut arg0: El) -> bool {
+        arg0 = self.root_el(arg0);
+        self.el_is_surjective_exempted
+            .contains(ElIsSurjectiveExempted(arg0))
+    }
+    /// Returns an iterator over elements satisfying the `el_is_surjective_exempted` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_el_is_surjective_exempted(&self) -> impl '_ + Iterator<Item = El> {
+        self.el_is_surjective_exempted.iter_all().map(|t| t.0)
+    }
+    /// Makes `el_is_surjective_exempted(arg0)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_el_is_surjective_exempted(&mut self, arg0: El) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_el_is_surjective_exempted
+            .push(ElIsSurjectiveExempted(arg0));
     }
 
     /// Returns `true` if `var_term_in_rule(arg0, arg1, arg2)` holds.
@@ -41186,6 +39835,9 @@ impl Eqlog {
             || self.should_be_symbol.is_dirty()
             || self.pred_arg_num_should_match.is_dirty()
             || self.func_arg_num_should_match.is_dirty()
+            || self.if_morphism.is_dirty()
+            || self.surj_then_morphism.is_dirty()
+            || self.non_surj_then_morphism.is_dirty()
             || self.var_before_term.is_dirty()
             || self.var_before_terms.is_dirty()
             || self.var_before_opt_term.is_dirty()
@@ -41202,11 +39854,9 @@ impl Eqlog {
             || self.term_should_be_epic_ok.is_dirty()
             || self.terms_should_be_epic_ok.is_dirty()
             || self.should_be_surjective.is_dirty()
-            || self.term_surjective_exempted.is_dirty()
-            || self.terms_surjective_exempted.is_dirty()
-            || self.el_surjective_exempted.is_dirty()
             || self.el_should_be_surjective_ok.is_dirty()
             || self.el_is_surjective_ok.is_dirty()
+            || self.el_is_surjective_exempted.is_dirty()
             || self.var_term_in_rule.is_dirty()
             || self.if_after_then.is_dirty()
             || self.real_virt_ident.is_dirty()
@@ -41253,12 +39903,6 @@ impl Eqlog {
             || self.cod.is_dirty()
             || self.map_el.is_dirty()
             || self.map_els.is_dirty()
-            || self.initial_structure.is_dirty()
-            || self.initiality_morphism.is_dirty()
-            || self.nil_chain.is_dirty()
-            || self.chain_tail.is_dirty()
-            || self.chain_head_structure.is_dirty()
-            || self.chain_head_transition.is_dirty()
             || self.type_symbol.is_dirty()
             || self.pred_symbol.is_dirty()
             || self.func_symbol.is_dirty()
@@ -41267,8 +39911,7 @@ impl Eqlog {
             || self.succ.is_dirty()
             || self.type_list_len.is_dirty()
             || self.term_list_len.is_dirty()
-            || self.rule_chain.is_dirty()
-            || self.stmt_list_chain.is_dirty()
+            || self.stmt_morphism.is_dirty()
             || self.stmt_structure.is_dirty()
             || self.if_atom_structure.is_dirty()
             || self.then_atom_structure.is_dirty()
@@ -41278,8 +39921,9 @@ impl Eqlog {
             || self.semantic_el.is_dirty()
             || self.semantic_els.is_dirty()
             || self.wildcard_virt_ident.is_dirty()
-            || self.grouped_rule_chain.is_dirty()
-            || self.grouped_stmt_list_chain.is_dirty()
+            || self.grouped_stmt_morphism.is_dirty()
+            || self.rule_first_grouped_morphism.is_dirty()
+            || self.next_grouped_morphism.is_dirty()
             || !self.ident_dirty.is_empty()
             || !self.virt_ident_dirty.is_empty()
             || !self.type_decl_node_dirty.is_empty()
@@ -41308,7 +39952,6 @@ impl Eqlog {
             || !self.el_dirty.is_empty()
             || !self.el_list_dirty.is_empty()
             || !self.morphism_dirty.is_empty()
-            || !self.chain_dirty.is_empty()
             || !self.symbol_kind_dirty.is_empty()
             || !self.nat_dirty.is_empty()
     }
@@ -41929,91 +40572,7 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_44(&self, delta: &mut ModelDelta, tm0: Structure, tm1: Structure) {
-        if tm0 != tm1 {
-            delta.new_structure_equalities.push((tm0, tm1));
-        }
-    }
-    fn query_and_record_functionality_initial_structure(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for InitialStructure(tm0) in self.initial_structure.iter_all() {
-            #[allow(unused_variables)]
-            for InitialStructure(tm1) in self.initial_structure.iter_all() {
-                self.record_action_44(delta, tm0, tm1);
-            }
-        }
-    }
-    fn record_action_45(&self, delta: &mut ModelDelta, tm1: Morphism, tm2: Morphism) {
-        if tm1 != tm2 {
-            delta.new_morphism_equalities.push((tm1, tm2));
-        }
-    }
-    fn query_and_record_functionality_initiality_morphism(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for InitialityMorphism(tm0, tm1) in self.initiality_morphism.iter_all() {
-            #[allow(unused_variables)]
-            for InitialityMorphism(_, tm2) in self.initiality_morphism.iter_all_0(tm0) {
-                self.record_action_45(delta, tm1, tm2);
-            }
-        }
-    }
-    fn record_action_46(&self, delta: &mut ModelDelta, tm0: Chain, tm1: Chain) {
-        if tm0 != tm1 {
-            delta.new_chain_equalities.push((tm0, tm1));
-        }
-    }
-    fn query_and_record_functionality_nil_chain(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for NilChain(tm0) in self.nil_chain.iter_all() {
-            #[allow(unused_variables)]
-            for NilChain(tm1) in self.nil_chain.iter_all() {
-                self.record_action_46(delta, tm0, tm1);
-            }
-        }
-    }
-    fn record_action_47(&self, delta: &mut ModelDelta, tm1: Chain, tm2: Chain) {
-        if tm1 != tm2 {
-            delta.new_chain_equalities.push((tm1, tm2));
-        }
-    }
-    fn query_and_record_functionality_chain_tail(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ChainTail(tm0, tm1) in self.chain_tail.iter_all() {
-            #[allow(unused_variables)]
-            for ChainTail(_, tm2) in self.chain_tail.iter_all_0(tm0) {
-                self.record_action_47(delta, tm1, tm2);
-            }
-        }
-    }
-    fn record_action_48(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
-        if tm1 != tm2 {
-            delta.new_structure_equalities.push((tm1, tm2));
-        }
-    }
-    fn query_and_record_functionality_chain_head_structure(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ChainHeadStructure(tm0, tm1) in self.chain_head_structure.iter_all() {
-            #[allow(unused_variables)]
-            for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm0) {
-                self.record_action_48(delta, tm1, tm2);
-            }
-        }
-    }
-    fn record_action_49(&self, delta: &mut ModelDelta, tm1: Morphism, tm2: Morphism) {
-        if tm1 != tm2 {
-            delta.new_morphism_equalities.push((tm1, tm2));
-        }
-    }
-    fn query_and_record_functionality_chain_head_transition(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ChainHeadTransition(tm0, tm1) in self.chain_head_transition.iter_all() {
-            #[allow(unused_variables)]
-            for ChainHeadTransition(_, tm2) in self.chain_head_transition.iter_all_0(tm0) {
-                self.record_action_49(delta, tm1, tm2);
-            }
-        }
-    }
-    fn record_action_50(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn record_action_44(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         if tm0 != tm1 {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
@@ -42023,11 +40582,11 @@ impl Eqlog {
         for TypeSymbol(tm0) in self.type_symbol.iter_all() {
             #[allow(unused_variables)]
             for TypeSymbol(tm1) in self.type_symbol.iter_all() {
-                self.record_action_50(delta, tm0, tm1);
+                self.record_action_44(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_51(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn record_action_45(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         if tm0 != tm1 {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
@@ -42037,11 +40596,11 @@ impl Eqlog {
         for PredSymbol(tm0) in self.pred_symbol.iter_all() {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                self.record_action_51(delta, tm0, tm1);
+                self.record_action_45(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_52(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn record_action_46(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         if tm0 != tm1 {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
@@ -42051,11 +40610,11 @@ impl Eqlog {
         for FuncSymbol(tm0) in self.func_symbol.iter_all() {
             #[allow(unused_variables)]
             for FuncSymbol(tm1) in self.func_symbol.iter_all() {
-                self.record_action_52(delta, tm0, tm1);
+                self.record_action_46(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_53(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn record_action_47(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         if tm0 != tm1 {
             delta.new_symbol_kind_equalities.push((tm0, tm1));
         }
@@ -42065,11 +40624,11 @@ impl Eqlog {
         for RuleSymbol(tm0) in self.rule_symbol.iter_all() {
             #[allow(unused_variables)]
             for RuleSymbol(tm1) in self.rule_symbol.iter_all() {
-                self.record_action_53(delta, tm0, tm1);
+                self.record_action_47(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_54(&self, delta: &mut ModelDelta, tm0: Nat, tm1: Nat) {
+    fn record_action_48(&self, delta: &mut ModelDelta, tm0: Nat, tm1: Nat) {
         if tm0 != tm1 {
             delta.new_nat_equalities.push((tm0, tm1));
         }
@@ -42079,11 +40638,11 @@ impl Eqlog {
         for Zero(tm0) in self.zero.iter_all() {
             #[allow(unused_variables)]
             for Zero(tm1) in self.zero.iter_all() {
-                self.record_action_54(delta, tm0, tm1);
+                self.record_action_48(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_55(&self, delta: &mut ModelDelta, tm1: Nat, tm2: Nat) {
+    fn record_action_49(&self, delta: &mut ModelDelta, tm1: Nat, tm2: Nat) {
         if tm1 != tm2 {
             delta.new_nat_equalities.push((tm1, tm2));
         }
@@ -42093,11 +40652,11 @@ impl Eqlog {
         for Succ(tm0, tm1) in self.succ.iter_all() {
             #[allow(unused_variables)]
             for Succ(_, tm2) in self.succ.iter_all_0(tm0) {
-                self.record_action_55(delta, tm1, tm2);
+                self.record_action_49(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_56(&self, delta: &mut ModelDelta, tm1: Nat, tm2: Nat) {
+    fn record_action_50(&self, delta: &mut ModelDelta, tm1: Nat, tm2: Nat) {
         if tm1 != tm2 {
             delta.new_nat_equalities.push((tm1, tm2));
         }
@@ -42107,11 +40666,11 @@ impl Eqlog {
         for TypeListLen(tm0, tm1) in self.type_list_len.iter_all() {
             #[allow(unused_variables)]
             for TypeListLen(_, tm2) in self.type_list_len.iter_all_0(tm0) {
-                self.record_action_56(delta, tm1, tm2);
+                self.record_action_50(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_57(&self, delta: &mut ModelDelta, tm1: Nat, tm2: Nat) {
+    fn record_action_51(&self, delta: &mut ModelDelta, tm1: Nat, tm2: Nat) {
         if tm1 != tm2 {
             delta.new_nat_equalities.push((tm1, tm2));
         }
@@ -42121,39 +40680,25 @@ impl Eqlog {
         for TermListLen(tm0, tm1) in self.term_list_len.iter_all() {
             #[allow(unused_variables)]
             for TermListLen(_, tm2) in self.term_list_len.iter_all_0(tm0) {
-                self.record_action_57(delta, tm1, tm2);
+                self.record_action_51(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_58(&self, delta: &mut ModelDelta, tm1: Chain, tm2: Chain) {
+    fn record_action_52(&self, delta: &mut ModelDelta, tm1: Morphism, tm2: Morphism) {
         if tm1 != tm2 {
-            delta.new_chain_equalities.push((tm1, tm2));
+            delta.new_morphism_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_chain(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_stmt_morphism(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChain(tm0, tm1) in self.rule_chain.iter_all() {
+        for StmtMorphism(tm0, tm1) in self.stmt_morphism.iter_all() {
             #[allow(unused_variables)]
-            for RuleChain(_, tm2) in self.rule_chain.iter_all_0(tm0) {
-                self.record_action_58(delta, tm1, tm2);
+            for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
+                self.record_action_52(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_59(&self, delta: &mut ModelDelta, tm1: Chain, tm2: Chain) {
-        if tm1 != tm2 {
-            delta.new_chain_equalities.push((tm1, tm2));
-        }
-    }
-    fn query_and_record_functionality_stmt_list_chain(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for StmtListChain(tm0, tm1) in self.stmt_list_chain.iter_all() {
-            #[allow(unused_variables)]
-            for StmtListChain(_, tm2) in self.stmt_list_chain.iter_all_0(tm0) {
-                self.record_action_59(delta, tm1, tm2);
-            }
-        }
-    }
-    fn record_action_60(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
+    fn record_action_53(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
         if tm1 != tm2 {
             delta.new_structure_equalities.push((tm1, tm2));
         }
@@ -42163,11 +40708,11 @@ impl Eqlog {
         for StmtStructure(tm0, tm1) in self.stmt_structure.iter_all() {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.record_action_60(delta, tm1, tm2);
+                self.record_action_53(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_61(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
+    fn record_action_54(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
         if tm1 != tm2 {
             delta.new_structure_equalities.push((tm1, tm2));
         }
@@ -42177,11 +40722,11 @@ impl Eqlog {
         for IfAtomStructure(tm0, tm1) in self.if_atom_structure.iter_all() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm2) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_61(delta, tm1, tm2);
+                self.record_action_54(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_62(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
+    fn record_action_55(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
         if tm1 != tm2 {
             delta.new_structure_equalities.push((tm1, tm2));
         }
@@ -42191,11 +40736,11 @@ impl Eqlog {
         for ThenAtomStructure(tm0, tm1) in self.then_atom_structure.iter_all() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm2) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_62(delta, tm1, tm2);
+                self.record_action_55(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_63(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
+    fn record_action_56(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
         if tm1 != tm2 {
             delta.new_structure_equalities.push((tm1, tm2));
         }
@@ -42205,11 +40750,11 @@ impl Eqlog {
         for TermStructure(tm0, tm1) in self.term_structure.iter_all() {
             #[allow(unused_variables)]
             for TermStructure(_, tm2) in self.term_structure.iter_all_0(tm0) {
-                self.record_action_63(delta, tm1, tm2);
+                self.record_action_56(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_64(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
+    fn record_action_57(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
         if tm1 != tm2 {
             delta.new_structure_equalities.push((tm1, tm2));
         }
@@ -42219,11 +40764,11 @@ impl Eqlog {
         for TermsStructure(tm0, tm1) in self.terms_structure.iter_all() {
             #[allow(unused_variables)]
             for TermsStructure(_, tm2) in self.terms_structure.iter_all_0(tm0) {
-                self.record_action_64(delta, tm1, tm2);
+                self.record_action_57(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_65(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
+    fn record_action_58(&self, delta: &mut ModelDelta, tm1: Structure, tm2: Structure) {
         if tm1 != tm2 {
             delta.new_structure_equalities.push((tm1, tm2));
         }
@@ -42233,11 +40778,11 @@ impl Eqlog {
         for OptTermStructure(tm0, tm1) in self.opt_term_structure.iter_all() {
             #[allow(unused_variables)]
             for OptTermStructure(_, tm2) in self.opt_term_structure.iter_all_0(tm0) {
-                self.record_action_65(delta, tm1, tm2);
+                self.record_action_58(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_66(&self, delta: &mut ModelDelta, tm1: El, tm2: El) {
+    fn record_action_59(&self, delta: &mut ModelDelta, tm1: El, tm2: El) {
         if tm1 != tm2 {
             delta.new_el_equalities.push((tm1, tm2));
         }
@@ -42247,11 +40792,11 @@ impl Eqlog {
         for SemanticEl(tm0, tm1) in self.semantic_el.iter_all() {
             #[allow(unused_variables)]
             for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
-                self.record_action_66(delta, tm1, tm2);
+                self.record_action_59(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_67(&self, delta: &mut ModelDelta, tm1: ElList, tm2: ElList) {
+    fn record_action_60(&self, delta: &mut ModelDelta, tm1: ElList, tm2: ElList) {
         if tm1 != tm2 {
             delta.new_el_list_equalities.push((tm1, tm2));
         }
@@ -42261,11 +40806,11 @@ impl Eqlog {
         for SemanticEls(tm0, tm1) in self.semantic_els.iter_all() {
             #[allow(unused_variables)]
             for SemanticEls(_, tm2) in self.semantic_els.iter_all_0(tm0) {
-                self.record_action_67(delta, tm1, tm2);
+                self.record_action_60(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_68(&self, delta: &mut ModelDelta, tm1: VirtIdent, tm2: VirtIdent) {
+    fn record_action_61(&self, delta: &mut ModelDelta, tm1: VirtIdent, tm2: VirtIdent) {
         if tm1 != tm2 {
             delta.new_virt_ident_equalities.push((tm1, tm2));
         }
@@ -42275,39 +40820,54 @@ impl Eqlog {
         for WildcardVirtIdent(tm0, tm1) in self.wildcard_virt_ident.iter_all() {
             #[allow(unused_variables)]
             for WildcardVirtIdent(_, tm2) in self.wildcard_virt_ident.iter_all_0(tm0) {
-                self.record_action_68(delta, tm1, tm2);
+                self.record_action_61(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_69(&self, delta: &mut ModelDelta, tm1: Chain, tm2: Chain) {
+    fn record_action_62(&self, delta: &mut ModelDelta, tm1: Morphism, tm2: Morphism) {
         if tm1 != tm2 {
-            delta.new_chain_equalities.push((tm1, tm2));
+            delta.new_morphism_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_grouped_rule_chain(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_grouped_stmt_morphism(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for GroupedRuleChain(tm0, tm1) in self.grouped_rule_chain.iter_all() {
+        for GroupedStmtMorphism(tm0, tm1) in self.grouped_stmt_morphism.iter_all() {
             #[allow(unused_variables)]
-            for GroupedRuleChain(_, tm2) in self.grouped_rule_chain.iter_all_0(tm0) {
-                self.record_action_69(delta, tm1, tm2);
+            for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+                self.record_action_62(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_70(&self, delta: &mut ModelDelta, tm1: Chain, tm2: Chain) {
+    fn record_action_63(&self, delta: &mut ModelDelta, tm1: Morphism, tm2: Morphism) {
         if tm1 != tm2 {
-            delta.new_chain_equalities.push((tm1, tm2));
+            delta.new_morphism_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_grouped_stmt_list_chain(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_first_grouped_morphism(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm0, tm1) in self.grouped_stmt_list_chain.iter_all() {
+        for RuleFirstGroupedMorphism(tm0, tm1) in self.rule_first_grouped_morphism.iter_all() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm2) in self.grouped_stmt_list_chain.iter_all_0(tm0) {
-                self.record_action_70(delta, tm1, tm2);
+            for RuleFirstGroupedMorphism(_, tm2) in self.rule_first_grouped_morphism.iter_all_0(tm0)
+            {
+                self.record_action_63(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_71(&self, delta: &mut ModelDelta, tm0: Ident) {
+    fn record_action_64(&self, delta: &mut ModelDelta, tm1: Morphism, tm2: Morphism) {
+        if tm1 != tm2 {
+            delta.new_morphism_equalities.push((tm1, tm2));
+        }
+    }
+    fn query_and_record_functionality_next_grouped_morphism(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for NextGroupedMorphism(tm0, tm1) in self.next_grouped_morphism.iter_all() {
+            #[allow(unused_variables)]
+            for NextGroupedMorphism(_, tm2) in self.next_grouped_morphism.iter_all_0(tm0) {
+                self.record_action_64(delta, tm1, tm2);
+            }
+        }
+    }
+    fn record_action_65(&self, delta: &mut ModelDelta, tm0: Ident) {
         let existing_row = self.real_virt_ident.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42322,10 +40882,10 @@ impl Eqlog {
     fn query_and_record_real_virt_ident_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.ident_dirty.iter().copied() {
-            self.record_action_71(delta, tm0);
+            self.record_action_65(delta, tm0);
         }
     }
-    fn record_action_72(&self, delta: &mut ModelDelta, tm0: TermNode) {
+    fn record_action_66(&self, delta: &mut ModelDelta, tm0: TermNode) {
         let existing_row = self.rule_child_term.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42340,10 +40900,10 @@ impl Eqlog {
     fn query_and_record_rule_child_term_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_node_dirty.iter().copied() {
-            self.record_action_72(delta, tm0);
+            self.record_action_66(delta, tm0);
         }
     }
-    fn record_action_73(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+    fn record_action_67(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         let existing_row = self.rule_child_term_list.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42360,10 +40920,10 @@ impl Eqlog {
     fn query_and_record_rule_child_term_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
-            self.record_action_73(delta, tm0);
+            self.record_action_67(delta, tm0);
         }
     }
-    fn record_action_74(&self, delta: &mut ModelDelta, tm0: OptTermNode) {
+    fn record_action_68(&self, delta: &mut ModelDelta, tm0: OptTermNode) {
         let existing_row = self.rule_child_opt_term.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42380,10 +40940,10 @@ impl Eqlog {
     fn query_and_record_rule_child_opt_term_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.opt_term_node_dirty.iter().copied() {
-            self.record_action_74(delta, tm0);
+            self.record_action_68(delta, tm0);
         }
     }
-    fn record_action_75(&self, delta: &mut ModelDelta, tm0: IfAtomNode) {
+    fn record_action_69(&self, delta: &mut ModelDelta, tm0: IfAtomNode) {
         let existing_row = self.rule_child_if_atom.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42398,10 +40958,10 @@ impl Eqlog {
     fn query_and_record_rule_child_if_atom_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.if_atom_node_dirty.iter().copied() {
-            self.record_action_75(delta, tm0);
+            self.record_action_69(delta, tm0);
         }
     }
-    fn record_action_76(&self, delta: &mut ModelDelta, tm0: ThenAtomNode) {
+    fn record_action_70(&self, delta: &mut ModelDelta, tm0: ThenAtomNode) {
         let existing_row = self.rule_child_then_atom.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42418,10 +40978,10 @@ impl Eqlog {
     fn query_and_record_rule_child_then_atom_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.then_atom_node_dirty.iter().copied() {
-            self.record_action_76(delta, tm0);
+            self.record_action_70(delta, tm0);
         }
     }
-    fn record_action_77(&self, delta: &mut ModelDelta, tm0: StmtNode) {
+    fn record_action_71(&self, delta: &mut ModelDelta, tm0: StmtNode) {
         let existing_row = self.rule_child_stmt.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42436,10 +40996,10 @@ impl Eqlog {
     fn query_and_record_rule_child_stmt_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_node_dirty.iter().copied() {
-            self.record_action_77(delta, tm0);
+            self.record_action_71(delta, tm0);
         }
     }
-    fn record_action_78(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
+    fn record_action_72(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
         let existing_row = self.rule_child_stmt_list.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -42456,10 +41016,10 @@ impl Eqlog {
     fn query_and_record_rule_child_stmt_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_list_node_dirty.iter().copied() {
-            self.record_action_78(delta, tm0);
+            self.record_action_72(delta, tm0);
         }
     }
-    fn record_action_79(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm2: RuleChildNode) {
+    fn record_action_73(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm2: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm2, tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -42475,18 +41035,18 @@ impl Eqlog {
         for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
             for RuleChildStmtList(_, tm2) in self.rule_child_stmt_list.iter_all_0(tm1) {
-                self.record_action_79(delta, tm0, tm2);
+                self.record_action_73(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for RuleChildStmtList(tm1, tm2) in self.rule_child_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
             for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
-                self.record_action_79(delta, tm0, tm2);
+                self.record_action_73(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_80(
+    fn record_action_74(
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
@@ -42523,7 +41083,7 @@ impl Eqlog {
                     for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_80(delta, tm4, tm5, tm6);
+                            self.record_action_74(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42539,7 +41099,7 @@ impl Eqlog {
                     for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
-                            self.record_action_80(delta, tm4, tm5, tm6);
+                            self.record_action_74(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42555,7 +41115,7 @@ impl Eqlog {
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
                         for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
-                            self.record_action_80(delta, tm4, tm5, tm6);
+                            self.record_action_74(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42571,7 +41131,7 @@ impl Eqlog {
                     for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_80(delta, tm4, tm5, tm6);
+                            self.record_action_74(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42587,14 +41147,14 @@ impl Eqlog {
                     for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
-                            self.record_action_80(delta, tm4, tm5, tm6);
+                            self.record_action_74(delta, tm4, tm5, tm6);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_81(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
+    fn record_action_75(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -42614,7 +41174,7 @@ impl Eqlog {
                 for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_81(delta, tm3, tm4);
+                        self.record_action_75(delta, tm3, tm4);
                     }
                 }
             }
@@ -42627,7 +41187,7 @@ impl Eqlog {
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
-                        self.record_action_81(delta, tm3, tm4);
+                        self.record_action_75(delta, tm3, tm4);
                     }
                 }
             }
@@ -42640,7 +41200,7 @@ impl Eqlog {
                 for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_81(delta, tm3, tm4);
+                        self.record_action_75(delta, tm3, tm4);
                     }
                 }
             }
@@ -42653,13 +41213,13 @@ impl Eqlog {
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
-                        self.record_action_81(delta, tm3, tm4);
+                        self.record_action_75(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_82(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
+    fn record_action_76(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -42679,7 +41239,7 @@ impl Eqlog {
                 for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_82(delta, tm3, tm4);
+                        self.record_action_76(delta, tm3, tm4);
                     }
                 }
             }
@@ -42692,7 +41252,7 @@ impl Eqlog {
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
-                        self.record_action_82(delta, tm3, tm4);
+                        self.record_action_76(delta, tm3, tm4);
                     }
                 }
             }
@@ -42705,7 +41265,7 @@ impl Eqlog {
                 for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_82(delta, tm3, tm4);
+                        self.record_action_76(delta, tm3, tm4);
                     }
                 }
             }
@@ -42718,13 +41278,13 @@ impl Eqlog {
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
-                        self.record_action_82(delta, tm3, tm4);
+                        self.record_action_76(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_83(
+    fn record_action_77(
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
@@ -42761,7 +41321,7 @@ impl Eqlog {
                     for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_83(delta, tm4, tm5, tm6);
+                            self.record_action_77(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42777,7 +41337,7 @@ impl Eqlog {
                     for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
-                            self.record_action_83(delta, tm4, tm5, tm6);
+                            self.record_action_77(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42793,7 +41353,7 @@ impl Eqlog {
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
-                            self.record_action_83(delta, tm4, tm5, tm6);
+                            self.record_action_77(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42809,7 +41369,7 @@ impl Eqlog {
                     for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_83(delta, tm4, tm5, tm6);
+                            self.record_action_77(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -42825,14 +41385,14 @@ impl Eqlog {
                     for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
-                            self.record_action_83(delta, tm4, tm5, tm6);
+                            self.record_action_77(delta, tm4, tm5, tm6);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_84(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
+    fn record_action_78(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -42852,7 +41412,7 @@ impl Eqlog {
                 for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_84(delta, tm3, tm4);
+                        self.record_action_78(delta, tm3, tm4);
                     }
                 }
             }
@@ -42865,7 +41425,7 @@ impl Eqlog {
                 for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
-                        self.record_action_84(delta, tm3, tm4);
+                        self.record_action_78(delta, tm3, tm4);
                     }
                 }
             }
@@ -42878,7 +41438,7 @@ impl Eqlog {
                 for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_84(delta, tm3, tm4);
+                        self.record_action_78(delta, tm3, tm4);
                     }
                 }
             }
@@ -42891,13 +41451,13 @@ impl Eqlog {
                 for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
-                        self.record_action_84(delta, tm3, tm4);
+                        self.record_action_78(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_85(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
+    fn record_action_79(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -42917,7 +41477,7 @@ impl Eqlog {
                 for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_85(delta, tm4, tm5);
+                        self.record_action_79(delta, tm4, tm5);
                     }
                 }
             }
@@ -42930,7 +41490,7 @@ impl Eqlog {
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_85(delta, tm4, tm5);
+                        self.record_action_79(delta, tm4, tm5);
                     }
                 }
             }
@@ -42943,7 +41503,7 @@ impl Eqlog {
                 for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_85(delta, tm4, tm5);
+                        self.record_action_79(delta, tm4, tm5);
                     }
                 }
             }
@@ -42956,13 +41516,13 @@ impl Eqlog {
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_85(delta, tm4, tm5);
+                        self.record_action_79(delta, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_86(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
+    fn record_action_80(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -42982,7 +41542,7 @@ impl Eqlog {
                 for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_86(delta, tm4, tm5);
+                        self.record_action_80(delta, tm4, tm5);
                     }
                 }
             }
@@ -42995,7 +41555,7 @@ impl Eqlog {
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
-                        self.record_action_86(delta, tm4, tm5);
+                        self.record_action_80(delta, tm4, tm5);
                     }
                 }
             }
@@ -43008,7 +41568,7 @@ impl Eqlog {
                 for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_86(delta, tm4, tm5);
+                        self.record_action_80(delta, tm4, tm5);
                     }
                 }
             }
@@ -43021,13 +41581,13 @@ impl Eqlog {
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
-                        self.record_action_86(delta, tm4, tm5);
+                        self.record_action_80(delta, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_87(
+    fn record_action_81(
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
@@ -43064,7 +41624,7 @@ impl Eqlog {
                     for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_87(delta, tm4, tm5, tm6);
+                            self.record_action_81(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43080,7 +41640,7 @@ impl Eqlog {
                     for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
-                            self.record_action_87(delta, tm4, tm5, tm6);
+                            self.record_action_81(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43096,7 +41656,7 @@ impl Eqlog {
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
-                            self.record_action_87(delta, tm4, tm5, tm6);
+                            self.record_action_81(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43112,7 +41672,7 @@ impl Eqlog {
                     for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_87(delta, tm4, tm5, tm6);
+                            self.record_action_81(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43128,14 +41688,14 @@ impl Eqlog {
                     for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
-                            self.record_action_87(delta, tm4, tm5, tm6);
+                            self.record_action_81(delta, tm4, tm5, tm6);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_88(
+    fn record_action_82(
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
@@ -43172,7 +41732,7 @@ impl Eqlog {
                     for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_88(delta, tm4, tm5, tm6);
+                            self.record_action_82(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43189,7 +41749,7 @@ impl Eqlog {
                     for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
-                            self.record_action_88(delta, tm4, tm5, tm6);
+                            self.record_action_82(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43205,7 +41765,7 @@ impl Eqlog {
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
                         for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
-                            self.record_action_88(delta, tm4, tm5, tm6);
+                            self.record_action_82(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43221,7 +41781,7 @@ impl Eqlog {
                     for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_88(delta, tm4, tm5, tm6);
+                            self.record_action_82(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43238,14 +41798,14 @@ impl Eqlog {
                     for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
-                            self.record_action_88(delta, tm4, tm5, tm6);
+                            self.record_action_82(delta, tm4, tm5, tm6);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_89(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
+    fn record_action_83(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43265,7 +41825,7 @@ impl Eqlog {
                 for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_89(delta, tm4, tm5);
+                        self.record_action_83(delta, tm4, tm5);
                     }
                 }
             }
@@ -43278,7 +41838,7 @@ impl Eqlog {
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_89(delta, tm4, tm5);
+                        self.record_action_83(delta, tm4, tm5);
                     }
                 }
             }
@@ -43291,7 +41851,7 @@ impl Eqlog {
                 for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_89(delta, tm4, tm5);
+                        self.record_action_83(delta, tm4, tm5);
                     }
                 }
             }
@@ -43304,13 +41864,13 @@ impl Eqlog {
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_89(delta, tm4, tm5);
+                        self.record_action_83(delta, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_90(
+    fn record_action_84(
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
@@ -43347,7 +41907,7 @@ impl Eqlog {
                     for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_90(delta, tm4, tm5, tm6);
+                            self.record_action_84(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43363,7 +41923,7 @@ impl Eqlog {
                     for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
-                            self.record_action_90(delta, tm4, tm5, tm6);
+                            self.record_action_84(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43379,7 +41939,7 @@ impl Eqlog {
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                         #[allow(unused_variables)]
                         for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
-                            self.record_action_90(delta, tm4, tm5, tm6);
+                            self.record_action_84(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43395,7 +41955,7 @@ impl Eqlog {
                     for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                            self.record_action_90(delta, tm4, tm5, tm6);
+                            self.record_action_84(delta, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -43411,14 +41971,14 @@ impl Eqlog {
                     for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
-                            self.record_action_90(delta, tm4, tm5, tm6);
+                            self.record_action_84(delta, tm4, tm5, tm6);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_91(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
+    fn record_action_85(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43438,7 +41998,7 @@ impl Eqlog {
                 for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_91(delta, tm3, tm4);
+                        self.record_action_85(delta, tm3, tm4);
                     }
                 }
             }
@@ -43451,7 +42011,7 @@ impl Eqlog {
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
-                        self.record_action_91(delta, tm3, tm4);
+                        self.record_action_85(delta, tm3, tm4);
                     }
                 }
             }
@@ -43464,7 +42024,7 @@ impl Eqlog {
                 for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                        self.record_action_91(delta, tm3, tm4);
+                        self.record_action_85(delta, tm3, tm4);
                     }
                 }
             }
@@ -43477,13 +42037,13 @@ impl Eqlog {
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
-                        self.record_action_91(delta, tm3, tm4);
+                        self.record_action_85(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_92(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
+    fn record_action_86(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
         let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43503,7 +42063,7 @@ impl Eqlog {
                 for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_92(delta, tm4, tm5);
+                        self.record_action_86(delta, tm4, tm5);
                     }
                 }
             }
@@ -43516,7 +42076,7 @@ impl Eqlog {
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_92(delta, tm4, tm5);
+                        self.record_action_86(delta, tm4, tm5);
                     }
                 }
             }
@@ -43529,7 +42089,7 @@ impl Eqlog {
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
-                        self.record_action_92(delta, tm4, tm5);
+                        self.record_action_86(delta, tm4, tm5);
                     }
                 }
             }
@@ -43542,13 +42102,13 @@ impl Eqlog {
                 for RuleChildTerm(_, tm3) in self.rule_child_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        self.record_action_92(delta, tm4, tm5);
+                        self.record_action_86(delta, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_93(&self, delta: &mut ModelDelta) {
+    fn record_action_87(&self, delta: &mut ModelDelta) {
         let existing_row = self.absurd.iter_all().next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43564,18 +42124,18 @@ impl Eqlog {
         for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTypeList(tm1, tm2, _) in self.cons_type_list.iter_all_2(tm0) {
-                self.record_action_93(delta);
+                self.record_action_87(delta);
             }
         }
         #[allow(unused_variables)]
         for ConsTypeList(tm1, tm2, tm0) in self.cons_type_list.iter_dirty() {
             #[allow(unused_variables)]
             for NilTypeList(_) in self.nil_type_list.iter_all_0(tm0) {
-                self.record_action_93(delta);
+                self.record_action_87(delta);
             }
         }
     }
-    fn record_action_94(
+    fn record_action_88(
         &self,
         delta: &mut ModelDelta,
         tm0: Type,
@@ -43601,18 +42161,18 @@ impl Eqlog {
         for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTypeList(tm3, tm4, _) in self.cons_type_list.iter_all_2(tm2) {
-                self.record_action_94(delta, tm0, tm1, tm3, tm4);
+                self.record_action_88(delta, tm0, tm1, tm3, tm4);
             }
         }
         #[allow(unused_variables)]
         for ConsTypeList(tm3, tm4, tm2) in self.cons_type_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTypeList(tm0, tm1, _) in self.cons_type_list.iter_all_2(tm2) {
-                self.record_action_94(delta, tm0, tm1, tm3, tm4);
+                self.record_action_88(delta, tm0, tm1, tm3, tm4);
             }
         }
     }
-    fn record_action_95(&self, delta: &mut ModelDelta, tm1: Ident) {
+    fn record_action_89(&self, delta: &mut ModelDelta, tm1: Ident) {
         let existing_row = self.semantic_type.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let (tm2,) = match existing_row {
@@ -43627,10 +42187,10 @@ impl Eqlog {
     fn query_and_record_semantic_decl_type(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TypeDecl(tm0, tm1) in self.type_decl.iter_dirty() {
-            self.record_action_95(delta, tm1);
+            self.record_action_89(delta, tm1);
         }
     }
-    fn record_action_96(&self, delta: &mut ModelDelta, tm0: ArgDeclListNode) {
+    fn record_action_90(&self, delta: &mut ModelDelta, tm0: ArgDeclListNode) {
         let existing_row = self.nil_type_list.iter_all().next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -43656,10 +42216,10 @@ impl Eqlog {
     fn query_and_record_semantic_arg_types_nil(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilArgDeclListNode(tm0) in self.nil_arg_decl_list_node.iter_dirty() {
-            self.record_action_96(delta, tm0);
+            self.record_action_90(delta, tm0);
         }
     }
-    fn record_action_97(
+    fn record_action_91(
         &self,
         delta: &mut ModelDelta,
         tm2: ArgDeclListNode,
@@ -43698,7 +42258,7 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm3) {
-                        self.record_action_97(delta, tm2, tm4, tm5);
+                        self.record_action_91(delta, tm2, tm4, tm5);
                     }
                 }
             }
@@ -43711,7 +42271,7 @@ impl Eqlog {
                 for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
-                        self.record_action_97(delta, tm2, tm4, tm5);
+                        self.record_action_91(delta, tm2, tm4, tm5);
                     }
                 }
             }
@@ -43725,7 +42285,7 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm3) {
-                        self.record_action_97(delta, tm2, tm4, tm5);
+                        self.record_action_91(delta, tm2, tm4, tm5);
                     }
                 }
             }
@@ -43738,13 +42298,13 @@ impl Eqlog {
                 for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm1) {
-                        self.record_action_97(delta, tm2, tm4, tm5);
+                        self.record_action_91(delta, tm2, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_98(&self, delta: &mut ModelDelta, tm1: Ident) {
+    fn record_action_92(&self, delta: &mut ModelDelta, tm1: Ident) {
         let existing_row = self.semantic_pred.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let (tm3,) = match existing_row {
@@ -43759,10 +42319,10 @@ impl Eqlog {
     fn query_and_record_semantic_decl_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_dirty() {
-            self.record_action_98(delta, tm1);
+            self.record_action_92(delta, tm1);
         }
     }
-    fn record_action_99(&self, delta: &mut ModelDelta, tm3: TypeList, tm4: Pred) {
+    fn record_action_93(&self, delta: &mut ModelDelta, tm3: TypeList, tm4: Pred) {
         let existing_row = self.arity.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43780,7 +42340,7 @@ impl Eqlog {
             for SemanticArgTypes(_, tm3) in self.semantic_arg_types.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
-                    self.record_action_99(delta, tm3, tm4);
+                    self.record_action_93(delta, tm3, tm4);
                 }
             }
         }
@@ -43790,7 +42350,7 @@ impl Eqlog {
             for PredDecl(tm0, tm1, _) in self.pred_decl.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
-                    self.record_action_99(delta, tm3, tm4);
+                    self.record_action_93(delta, tm3, tm4);
                 }
             }
         }
@@ -43800,12 +42360,12 @@ impl Eqlog {
             for PredDecl(tm0, _, tm2) in self.pred_decl.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticArgTypes(_, tm3) in self.semantic_arg_types.iter_all_0(tm2) {
-                    self.record_action_99(delta, tm3, tm4);
+                    self.record_action_93(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_100(&self, delta: &mut ModelDelta, tm1: Ident) {
+    fn record_action_94(&self, delta: &mut ModelDelta, tm1: Ident) {
         let existing_row = self.semantic_func.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let (tm4,) = match existing_row {
@@ -43820,10 +42380,10 @@ impl Eqlog {
     fn query_and_record_semantic_decl_func(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_dirty() {
-            self.record_action_100(delta, tm1);
+            self.record_action_94(delta, tm1);
         }
     }
-    fn record_action_101(&self, delta: &mut ModelDelta, tm4: Type, tm5: TypeList, tm6: Func) {
+    fn record_action_95(&self, delta: &mut ModelDelta, tm4: Type, tm5: TypeList, tm6: Func) {
         let existing_row = self.domain.iter_all_0_1(tm6, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43852,7 +42412,7 @@ impl Eqlog {
                 for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
-                        self.record_action_101(delta, tm4, tm5, tm6);
+                        self.record_action_95(delta, tm4, tm5, tm6);
                     }
                 }
             }
@@ -43865,7 +42425,7 @@ impl Eqlog {
                 for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
-                        self.record_action_101(delta, tm4, tm5, tm6);
+                        self.record_action_95(delta, tm4, tm5, tm6);
                     }
                 }
             }
@@ -43878,7 +42438,7 @@ impl Eqlog {
                 for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
-                        self.record_action_101(delta, tm4, tm5, tm6);
+                        self.record_action_95(delta, tm4, tm5, tm6);
                     }
                 }
             }
@@ -43891,20 +42451,13 @@ impl Eqlog {
                 for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
-                        self.record_action_101(delta, tm4, tm5, tm6);
+                        self.record_action_95(delta, tm4, tm5, tm6);
                     }
                 }
             }
         }
     }
-    fn record_action_102(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm1: ElList,
-        tm3: El,
-        tm4: ElList,
-    ) {
+    fn record_action_96(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm3: El, tm4: ElList) {
         if tm0 != tm3 {
             delta.new_el_equalities.push((tm0, tm3));
         }
@@ -43923,18 +42476,18 @@ impl Eqlog {
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsElList(tm3, tm4, _) in self.cons_el_list.iter_all_2(tm2) {
-                self.record_action_102(delta, tm0, tm1, tm3, tm4);
+                self.record_action_96(delta, tm0, tm1, tm3, tm4);
             }
         }
         #[allow(unused_variables)]
         for ConsElList(tm3, tm4, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
-                self.record_action_102(delta, tm0, tm1, tm3, tm4);
+                self.record_action_96(delta, tm0, tm1, tm3, tm4);
             }
         }
     }
-    fn record_action_103(&self, delta: &mut ModelDelta) {
+    fn record_action_97(&self, delta: &mut ModelDelta) {
         let existing_row = self.absurd.iter_all().next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43950,18 +42503,18 @@ impl Eqlog {
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm1) {
-                self.record_action_103(delta);
+                self.record_action_97(delta);
             }
         }
         #[allow(unused_variables)]
         for ConsElList(tm2, tm3, tm1) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
-                self.record_action_103(delta);
+                self.record_action_97(delta);
             }
         }
     }
-    fn record_action_104(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElList) {
+    fn record_action_98(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElList) {
         let existing_row = self.els_structure.iter_all_0_1(tm1, tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -43975,10 +42528,10 @@ impl Eqlog {
     fn query_and_record_nil_els_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
-            self.record_action_104(delta, tm0, tm1);
+            self.record_action_98(delta, tm0, tm1);
         }
     }
-    fn record_action_105(&self, delta: &mut ModelDelta, tm1: ElList, tm2: ElList, tm3: Structure) {
+    fn record_action_99(&self, delta: &mut ModelDelta, tm1: ElList, tm2: ElList, tm3: Structure) {
         let existing_row = self.els_structure.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44003,18 +42556,18 @@ impl Eqlog {
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for ElStructure(_, tm3) in self.el_structure.iter_all_0(tm0) {
-                self.record_action_105(delta, tm1, tm2, tm3);
+                self.record_action_99(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ElStructure(tm0, tm3) in self.el_structure.iter_dirty() {
             #[allow(unused_variables)]
             for ConsElList(_, tm1, tm2) in self.cons_el_list.iter_all_0(tm0) {
-                self.record_action_105(delta, tm1, tm2, tm3);
+                self.record_action_99(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_106(&self, delta: &mut ModelDelta, tm2: El, tm3: Structure) {
+    fn record_action_100(&self, delta: &mut ModelDelta, tm2: El, tm3: Structure) {
         let existing_row = self.el_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44030,18 +42583,18 @@ impl Eqlog {
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
             #[allow(unused_variables)]
             for ElsStructure(_, tm3) in self.els_structure.iter_all_0(tm1) {
-                self.record_action_106(delta, tm2, tm3);
+                self.record_action_100(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ElsStructure(tm1, tm3) in self.els_structure.iter_dirty() {
             #[allow(unused_variables)]
             for FuncApp(tm0, _, tm2) in self.func_app.iter_all_1(tm1) {
-                self.record_action_106(delta, tm2, tm3);
+                self.record_action_100(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_107(&self, delta: &mut ModelDelta, tm0: Structure, tm2: El) {
+    fn record_action_101(&self, delta: &mut ModelDelta, tm0: Structure, tm2: El) {
         let existing_row = self.el_structure.iter_all_0_1(tm2, tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44055,10 +42608,10 @@ impl Eqlog {
     fn query_and_record_var_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
-            self.record_action_107(delta, tm0, tm2);
+            self.record_action_101(delta, tm0, tm2);
         }
     }
-    fn record_action_108(&self, delta: &mut ModelDelta, tm1: ElList) {
+    fn record_action_102(&self, delta: &mut ModelDelta, tm1: ElList) {
         let existing_row = self.nil_type_list.iter_all().next();
         #[allow(unused_variables)]
         let (tm2,) = match existing_row {
@@ -44082,10 +42635,10 @@ impl Eqlog {
     fn query_and_record_nil_el_types(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
-            self.record_action_108(delta, tm1);
+            self.record_action_102(delta, tm1);
         }
     }
-    fn record_action_109(&self, delta: &mut ModelDelta, tm1: Type, tm3: TypeList, tm4: ElList) {
+    fn record_action_103(&self, delta: &mut ModelDelta, tm1: Type, tm3: TypeList, tm4: ElList) {
         let existing_row = self.cons_type_list.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let (tm5,) = match existing_row {
@@ -44113,7 +42666,7 @@ impl Eqlog {
             for ConsElList(_, tm2, tm4) in self.cons_el_list.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ElTypes(_, tm3) in self.el_types.iter_all_0(tm2) {
-                    self.record_action_109(delta, tm1, tm3, tm4);
+                    self.record_action_103(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -44123,7 +42676,7 @@ impl Eqlog {
             for ConsElList(tm0, _, tm4) in self.cons_el_list.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
-                    self.record_action_109(delta, tm1, tm3, tm4);
+                    self.record_action_103(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -44133,12 +42686,12 @@ impl Eqlog {
             for ElTypes(_, tm3) in self.el_types.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
-                    self.record_action_109(delta, tm1, tm3, tm4);
+                    self.record_action_103(delta, tm1, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_110(
+    fn record_action_104(
         &self,
         delta: &mut ModelDelta,
         tm2: Type,
@@ -44172,7 +42725,7 @@ impl Eqlog {
             for ConsTypeList(tm2, tm3, _) in self.cons_type_list.iter_all_2(tm1) {
                 #[allow(unused_variables)]
                 for ConsElList(tm4, tm5, _) in self.cons_el_list.iter_all_2(tm0) {
-                    self.record_action_110(delta, tm2, tm3, tm4, tm5);
+                    self.record_action_104(delta, tm2, tm3, tm4, tm5);
                 }
             }
         }
@@ -44182,7 +42735,7 @@ impl Eqlog {
             for ElTypes(tm0, _) in self.el_types.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for ConsElList(tm4, tm5, _) in self.cons_el_list.iter_all_2(tm0) {
-                    self.record_action_110(delta, tm2, tm3, tm4, tm5);
+                    self.record_action_104(delta, tm2, tm3, tm4, tm5);
                 }
             }
         }
@@ -44192,12 +42745,12 @@ impl Eqlog {
             for ElTypes(_, tm1) in self.el_types.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ConsTypeList(tm2, tm3, _) in self.cons_type_list.iter_all_2(tm1) {
-                    self.record_action_110(delta, tm2, tm3, tm4, tm5);
+                    self.record_action_104(delta, tm2, tm3, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_111(
+    fn record_action_105(
         &self,
         delta: &mut ModelDelta,
         tm1: TypeList,
@@ -44231,7 +42784,7 @@ impl Eqlog {
             for Codomain(_, tm2) in self.codomain.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for FuncApp(_, tm3, tm4) in self.func_app.iter_all_0(tm0) {
-                    self.record_action_111(delta, tm1, tm2, tm3, tm4);
+                    self.record_action_105(delta, tm1, tm2, tm3, tm4);
                 }
             }
         }
@@ -44241,7 +42794,7 @@ impl Eqlog {
             for FuncApp(_, tm3, tm4) in self.func_app.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for Domain(_, tm1) in self.domain.iter_all_0(tm0) {
-                    self.record_action_111(delta, tm1, tm2, tm3, tm4);
+                    self.record_action_105(delta, tm1, tm2, tm3, tm4);
                 }
             }
         }
@@ -44251,12 +42804,12 @@ impl Eqlog {
             for Codomain(_, tm2) in self.codomain.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for Domain(_, tm1) in self.domain.iter_all_0(tm0) {
-                    self.record_action_111(delta, tm1, tm2, tm3, tm4);
+                    self.record_action_105(delta, tm1, tm2, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_112(&self, delta: &mut ModelDelta, tm1: ElList, tm2: TypeList) {
+    fn record_action_106(&self, delta: &mut ModelDelta, tm1: ElList, tm2: TypeList) {
         let existing_row = self.el_types.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44272,18 +42825,18 @@ impl Eqlog {
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             #[allow(unused_variables)]
             for Arity(_, tm2) in self.arity.iter_all_0(tm0) {
-                self.record_action_112(delta, tm1, tm2);
+                self.record_action_106(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for Arity(tm0, tm2) in self.arity.iter_dirty() {
             #[allow(unused_variables)]
             for PredApp(_, tm1) in self.pred_app.iter_all_0(tm0) {
-                self.record_action_112(delta, tm1, tm2);
+                self.record_action_106(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_113(&self, delta: &mut ModelDelta, tm1: ElList, tm2: El) {
+    fn record_action_107(&self, delta: &mut ModelDelta, tm1: ElList, tm2: El) {
         let existing_row = self.constrained_el.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44306,10 +42859,10 @@ impl Eqlog {
     fn query_and_record_func_app_constrained(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
-            self.record_action_113(delta, tm1, tm2);
+            self.record_action_107(delta, tm1, tm2);
         }
     }
-    fn record_action_114(&self, delta: &mut ModelDelta, tm1: ElList) {
+    fn record_action_108(&self, delta: &mut ModelDelta, tm1: ElList) {
         let existing_row = self.constrained_els.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44323,10 +42876,10 @@ impl Eqlog {
     fn query_and_record_pred_app_constrained(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
-            self.record_action_114(delta, tm1);
+            self.record_action_108(delta, tm1);
         }
     }
-    fn record_action_115(&self, delta: &mut ModelDelta, tm1: El, tm2: ElList) {
+    fn record_action_109(&self, delta: &mut ModelDelta, tm1: El, tm2: ElList) {
         let existing_row = self.constrained_el.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44351,18 +42904,54 @@ impl Eqlog {
         for ConstrainedEls(tm0) in self.constrained_els.iter_dirty() {
             #[allow(unused_variables)]
             for ConsElList(tm1, tm2, _) in self.cons_el_list.iter_all_2(tm0) {
-                self.record_action_115(delta, tm1, tm2);
+                self.record_action_109(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for ConsElList(tm1, tm2, tm0) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConstrainedEls(_) in self.constrained_els.iter_all_0(tm0) {
-                self.record_action_115(delta, tm1, tm2);
+                self.record_action_109(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_116(&self, delta: &mut ModelDelta, tm1: Structure, tm3: El) {
+    fn record_action_110(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        let existing_row = self.dom.iter_all_0(tm0).next();
+        #[allow(unused_variables)]
+        let (tm1,) = match existing_row {
+            Some(Dom(_, tm1)) => (tm1,),
+            None => {
+                let tm1 = delta.new_structure(self);
+                delta.new_dom.push(Dom(tm0, tm1));
+                (tm1,)
+            }
+        };
+    }
+    fn query_and_record_dom_total(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for tm0 in self.morphism_dirty.iter().copied() {
+            self.record_action_110(delta, tm0);
+        }
+    }
+    fn record_action_111(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        let existing_row = self.cod.iter_all_0(tm0).next();
+        #[allow(unused_variables)]
+        let (tm1,) = match existing_row {
+            Some(Cod(_, tm1)) => (tm1,),
+            None => {
+                let tm1 = delta.new_structure(self);
+                delta.new_cod.push(Cod(tm0, tm1));
+                (tm1,)
+            }
+        };
+    }
+    fn query_and_record_cod_total(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for tm0 in self.morphism_dirty.iter().copied() {
+            self.record_action_111(delta, tm0);
+        }
+    }
+    fn record_action_112(&self, delta: &mut ModelDelta, tm1: Structure, tm3: El) {
         let existing_row = self.el_structure.iter_all_0_1(tm3, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44378,18 +42967,18 @@ impl Eqlog {
         for Cod(tm0, tm1) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
             for MapEl(_, tm2, tm3) in self.map_el.iter_all_0(tm0) {
-                self.record_action_116(delta, tm1, tm3);
+                self.record_action_112(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEl(tm0, tm2, tm3) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
             for Cod(_, tm1) in self.cod.iter_all_0(tm0) {
-                self.record_action_116(delta, tm1, tm3);
+                self.record_action_112(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_117(&self, delta: &mut ModelDelta, tm1: Structure, tm3: ElList) {
+    fn record_action_113(&self, delta: &mut ModelDelta, tm1: Structure, tm3: ElList) {
         let existing_row = self.els_structure.iter_all_0_1(tm3, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44405,18 +42994,18 @@ impl Eqlog {
         for Cod(tm0, tm1) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
             for MapEls(_, tm2, tm3) in self.map_els.iter_all_0(tm0) {
-                self.record_action_117(delta, tm1, tm3);
+                self.record_action_113(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEls(tm0, tm2, tm3) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
             for Cod(_, tm1) in self.cod.iter_all_0(tm0) {
-                self.record_action_117(delta, tm1, tm3);
+                self.record_action_113(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_118(&self, delta: &mut ModelDelta, tm0: El, tm2: Morphism) {
+    fn record_action_114(&self, delta: &mut ModelDelta, tm0: El, tm2: Morphism) {
         let existing_row = self.map_el.iter_all_0_1(tm2, tm0).next();
         #[allow(unused_variables)]
         let (tm3,) = match existing_row {
@@ -44433,18 +43022,18 @@ impl Eqlog {
         for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
             #[allow(unused_variables)]
             for Dom(tm2, _) in self.dom.iter_all_1(tm1) {
-                self.record_action_118(delta, tm0, tm2);
+                self.record_action_114(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for Dom(tm2, tm1) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
             for ElStructure(tm0, _) in self.el_structure.iter_all_1(tm1) {
-                self.record_action_118(delta, tm0, tm2);
+                self.record_action_114(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_119(&self, delta: &mut ModelDelta, tm0: ElList, tm2: Morphism) {
+    fn record_action_115(&self, delta: &mut ModelDelta, tm0: ElList, tm2: Morphism) {
         let existing_row = self.map_els.iter_all_0_1(tm2, tm0).next();
         #[allow(unused_variables)]
         let (tm3,) = match existing_row {
@@ -44461,18 +43050,18 @@ impl Eqlog {
         for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
             #[allow(unused_variables)]
             for Dom(tm2, _) in self.dom.iter_all_1(tm1) {
-                self.record_action_119(delta, tm0, tm2);
+                self.record_action_115(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for Dom(tm2, tm1) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
             for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm1) {
-                self.record_action_119(delta, tm0, tm2);
+                self.record_action_115(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_120(&self, delta: &mut ModelDelta, tm3: Structure, tm4: ElList) {
+    fn record_action_116(&self, delta: &mut ModelDelta, tm3: Structure, tm4: ElList) {
         let existing_row = self.nil_el_list.iter_all_0_1(tm3, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44490,7 +43079,7 @@ impl Eqlog {
             for MapEls(tm2, _, tm4) in self.map_els.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
-                    self.record_action_120(delta, tm3, tm4);
+                    self.record_action_116(delta, tm3, tm4);
                 }
             }
         }
@@ -44500,7 +43089,7 @@ impl Eqlog {
             for MapEls(_, tm1, tm4) in self.map_els.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
-                    self.record_action_120(delta, tm3, tm4);
+                    self.record_action_116(delta, tm3, tm4);
                 }
             }
         }
@@ -44510,12 +43099,12 @@ impl Eqlog {
             for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
-                    self.record_action_120(delta, tm3, tm4);
+                    self.record_action_116(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_121(
+    fn record_action_117(
         &self,
         delta: &mut ModelDelta,
         tm0: El,
@@ -44558,18 +43147,18 @@ impl Eqlog {
         for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
             #[allow(unused_variables)]
             for MapEls(tm3, _, tm4) in self.map_els.iter_all_1(tm2) {
-                self.record_action_121(delta, tm0, tm1, tm3, tm4);
+                self.record_action_117(delta, tm0, tm1, tm3, tm4);
             }
         }
         #[allow(unused_variables)]
         for MapEls(tm3, tm2, tm4) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
-                self.record_action_121(delta, tm0, tm1, tm3, tm4);
+                self.record_action_117(delta, tm0, tm1, tm3, tm4);
             }
         }
     }
-    fn record_action_122(&self, delta: &mut ModelDelta, tm0: Func, tm4: El, tm5: ElList) {
+    fn record_action_118(&self, delta: &mut ModelDelta, tm0: Func, tm4: El, tm5: ElList) {
         let existing_row = self.func_app.iter_all_0_1_2(tm0, tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44587,7 +43176,7 @@ impl Eqlog {
             for MapEl(tm3, _, tm4) in self.map_el.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for MapEls(_, _, tm5) in self.map_els.iter_all_0_1(tm3, tm1) {
-                    self.record_action_122(delta, tm0, tm4, tm5);
+                    self.record_action_118(delta, tm0, tm4, tm5);
                 }
             }
         }
@@ -44597,7 +43186,7 @@ impl Eqlog {
             for MapEls(_, tm1, tm5) in self.map_els.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for FuncApp(tm0, _, _) in self.func_app.iter_all_1_2(tm1, tm2) {
-                    self.record_action_122(delta, tm0, tm4, tm5);
+                    self.record_action_118(delta, tm0, tm4, tm5);
                 }
             }
         }
@@ -44607,12 +43196,12 @@ impl Eqlog {
             for MapEl(_, tm2, tm4) in self.map_el.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for FuncApp(tm0, _, _) in self.func_app.iter_all_1_2(tm1, tm2) {
-                    self.record_action_122(delta, tm0, tm4, tm5);
+                    self.record_action_118(delta, tm0, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_123(&self, delta: &mut ModelDelta, tm1: VirtIdent, tm4: Structure, tm5: El) {
+    fn record_action_119(&self, delta: &mut ModelDelta, tm1: VirtIdent, tm4: Structure, tm5: El) {
         let existing_row = self.var.iter_all_0_1_2(tm4, tm1, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44630,7 +43219,7 @@ impl Eqlog {
             for MapEl(tm3, _, tm5) in self.map_el.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
-                    self.record_action_123(delta, tm1, tm4, tm5);
+                    self.record_action_119(delta, tm1, tm4, tm5);
                 }
             }
         }
@@ -44640,7 +43229,7 @@ impl Eqlog {
             for MapEl(_, tm2, tm5) in self.map_el.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
-                    self.record_action_123(delta, tm1, tm4, tm5);
+                    self.record_action_119(delta, tm1, tm4, tm5);
                 }
             }
         }
@@ -44650,12 +43239,12 @@ impl Eqlog {
             for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
-                    self.record_action_123(delta, tm1, tm4, tm5);
+                    self.record_action_119(delta, tm1, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_124(&self, delta: &mut ModelDelta, tm0: Pred, tm3: ElList) {
+    fn record_action_120(&self, delta: &mut ModelDelta, tm0: Pred, tm3: ElList) {
         let existing_row = self.pred_app.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44671,18 +43260,18 @@ impl Eqlog {
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             #[allow(unused_variables)]
             for MapEls(tm2, _, tm3) in self.map_els.iter_all_1(tm1) {
-                self.record_action_124(delta, tm0, tm3);
+                self.record_action_120(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEls(tm2, tm1, tm3) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
             for PredApp(tm0, _) in self.pred_app.iter_all_1(tm1) {
-                self.record_action_124(delta, tm0, tm3);
+                self.record_action_120(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_125(&self, delta: &mut ModelDelta, tm1: Type, tm3: El) {
+    fn record_action_121(&self, delta: &mut ModelDelta, tm1: Type, tm3: El) {
         let existing_row = self.el_type.iter_all_0_1(tm3, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44698,18 +43287,18 @@ impl Eqlog {
         for ElType(tm0, tm1) in self.el_type.iter_dirty() {
             #[allow(unused_variables)]
             for MapEl(tm2, _, tm3) in self.map_el.iter_all_1(tm0) {
-                self.record_action_125(delta, tm1, tm3);
+                self.record_action_121(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEl(tm2, tm0, tm3) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
             for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
-                self.record_action_125(delta, tm1, tm3);
+                self.record_action_121(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_126(&self, delta: &mut ModelDelta, tm1: Type, tm3: El) {
+    fn record_action_122(&self, delta: &mut ModelDelta, tm1: Type, tm3: El) {
         let existing_row = self.el_type.iter_all_0_1(tm3, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44725,18 +43314,18 @@ impl Eqlog {
         for ElType(tm0, tm1) in self.el_type.iter_dirty() {
             #[allow(unused_variables)]
             for MapEl(tm2, tm3, _) in self.map_el.iter_all_2(tm0) {
-                self.record_action_126(delta, tm1, tm3);
+                self.record_action_122(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEl(tm2, tm3, tm0) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
             for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
-                self.record_action_126(delta, tm1, tm3);
+                self.record_action_122(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_127(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: El, tm3: El) {
+    fn record_action_123(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: El, tm3: El) {
         let existing_row = self.in_ker.iter_all_0_1_2(tm0, tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44752,18 +43341,18 @@ impl Eqlog {
         for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
             for MapEl(_, tm3, _) in self.map_el.iter_all_0_2(tm0, tm2) {
-                self.record_action_127(delta, tm0, tm1, tm3);
+                self.record_action_123(delta, tm0, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEl(tm0, tm3, tm2) in self.map_el.iter_dirty() {
             #[allow(unused_variables)]
             for MapEl(_, tm1, _) in self.map_el.iter_all_0_2(tm0, tm2) {
-                self.record_action_127(delta, tm0, tm1, tm3);
+                self.record_action_123(delta, tm0, tm1, tm3);
             }
         }
     }
-    fn record_action_128(&self, delta: &mut ModelDelta, tm0: Morphism, tm2: El) {
+    fn record_action_124(&self, delta: &mut ModelDelta, tm0: Morphism, tm2: El) {
         let existing_row = self.el_in_img.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44777,10 +43366,10 @@ impl Eqlog {
     fn query_and_record_el_in_img_rule(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
-            self.record_action_128(delta, tm0, tm2);
+            self.record_action_124(delta, tm0, tm2);
         }
     }
-    fn record_action_129(&self, delta: &mut ModelDelta, tm0: Pred, tm2: Morphism, tm3: ElList) {
+    fn record_action_125(&self, delta: &mut ModelDelta, tm0: Pred, tm2: Morphism, tm3: ElList) {
         let existing_row = self.pred_tuple_in_img.iter_all_0_1_2(tm2, tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44798,18 +43387,18 @@ impl Eqlog {
         for PredApp(tm0, tm1) in self.pred_app.iter_dirty() {
             #[allow(unused_variables)]
             for MapEls(tm2, _, tm3) in self.map_els.iter_all_1(tm1) {
-                self.record_action_129(delta, tm0, tm2, tm3);
+                self.record_action_125(delta, tm0, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for MapEls(tm2, tm1, tm3) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
             for PredApp(tm0, _) in self.pred_app.iter_all_1(tm1) {
-                self.record_action_129(delta, tm0, tm2, tm3);
+                self.record_action_125(delta, tm0, tm2, tm3);
             }
         }
     }
-    fn record_action_130(&self, delta: &mut ModelDelta, tm0: Func, tm3: Morphism, tm4: ElList) {
+    fn record_action_126(&self, delta: &mut ModelDelta, tm0: Func, tm3: Morphism, tm4: ElList) {
         let existing_row = self.func_app_in_img.iter_all_0_1_2(tm3, tm0, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -44825,272 +43414,18 @@ impl Eqlog {
         for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
             #[allow(unused_variables)]
             for MapEls(tm3, _, tm4) in self.map_els.iter_all_1(tm1) {
-                self.record_action_130(delta, tm0, tm3, tm4);
+                self.record_action_126(delta, tm0, tm3, tm4);
             }
         }
         #[allow(unused_variables)]
         for MapEls(tm3, tm1, tm4) in self.map_els.iter_dirty() {
             #[allow(unused_variables)]
             for FuncApp(tm0, _, tm2) in self.func_app.iter_all_1(tm1) {
-                self.record_action_130(delta, tm0, tm3, tm4);
+                self.record_action_126(delta, tm0, tm3, tm4);
             }
         }
     }
-    fn record_action_131(&self, delta: &mut ModelDelta) {
-        let existing_row = self.initial_structure.iter_all().next();
-        #[allow(unused_variables)]
-        let (tm0,) = match existing_row {
-            Some(InitialStructure(tm0)) => (tm0,),
-            None => {
-                let tm0 = delta.new_structure(self);
-                delta.new_initial_structure.push(InitialStructure(tm0));
-                (tm0,)
-            }
-        };
-    }
-    fn query_and_record_initial_structure_total(&self, delta: &mut ModelDelta) {
-        if self.empty_join_is_dirty {
-            self.record_action_131(delta);
-        }
-    }
-    fn record_action_132(&self, delta: &mut ModelDelta, tm0: Structure) {
-        let existing_row = self.initiality_morphism.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let (tm1,) = match existing_row {
-            Some(InitialityMorphism(_, tm1)) => (tm1,),
-            None => {
-                let tm1 = delta.new_morphism(self);
-                delta
-                    .new_initiality_morphism
-                    .push(InitialityMorphism(tm0, tm1));
-                (tm1,)
-            }
-        };
-    }
-    fn query_and_record_initiality_morphism_total(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for tm0 in self.structure_dirty.iter().copied() {
-            self.record_action_132(delta, tm0);
-        }
-    }
-    fn record_action_133(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: Structure,
-        tm1: Structure,
-        tm2: Morphism,
-    ) {
-        let existing_row = self.dom.iter_all_0_1(tm2, tm0).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(Dom(_, _)) => (),
-            None => {
-                delta.new_dom.push(Dom(tm2, tm0));
-                ()
-            }
-        };
-        let existing_row = self.cod.iter_all_0_1(tm2, tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(Cod(_, _)) => (),
-            None => {
-                delta.new_cod.push(Cod(tm2, tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_dom_cod_initiality_morphism(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for InitialStructure(tm0) in self.initial_structure.iter_dirty() {
-            #[allow(unused_variables)]
-            for InitialityMorphism(tm1, tm2) in self.initiality_morphism.iter_all() {
-                self.record_action_133(delta, tm0, tm1, tm2);
-            }
-        }
-        #[allow(unused_variables)]
-        for InitialityMorphism(tm1, tm2) in self.initiality_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for InitialStructure(tm0) in self.initial_structure.iter_all() {
-                self.record_action_133(delta, tm0, tm1, tm2);
-            }
-        }
-    }
-    fn record_action_134(&self, delta: &mut ModelDelta, tm0: Morphism, tm2: Structure) {
-        let existing_row = self.initiality_morphism.iter_all_0_1(tm2, tm0).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(InitialityMorphism(_, _)) => (),
-            None => {
-                delta
-                    .new_initiality_morphism
-                    .push(InitialityMorphism(tm2, tm0));
-                ()
-            }
-        };
-    }
-    fn query_and_record_initiality_uniqueness(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for Dom(tm0, tm1) in self.dom.iter_dirty() {
-            #[allow(unused_variables)]
-            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for InitialStructure(_) in self.initial_structure.iter_all_0(tm1) {
-                    self.record_action_134(delta, tm0, tm2);
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Cod(tm0, tm2) in self.cod.iter_dirty() {
-            #[allow(unused_variables)]
-            for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for InitialStructure(_) in self.initial_structure.iter_all_0(tm1) {
-                    self.record_action_134(delta, tm0, tm2);
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for InitialStructure(tm1) in self.initial_structure.iter_dirty() {
-            #[allow(unused_variables)]
-            for Dom(tm0, _) in self.dom.iter_all_1(tm1) {
-                #[allow(unused_variables)]
-                for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
-                    self.record_action_134(delta, tm0, tm2);
-                }
-            }
-        }
-    }
-    fn record_action_135(&self, delta: &mut ModelDelta, tm0: Chain) {
-        let existing_row = self.chain_head_structure.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let (tm2,) = match existing_row {
-            Some(ChainHeadStructure(_, tm2)) => (tm2,),
-            None => {
-                let tm2 = delta.new_structure(self);
-                delta
-                    .new_chain_head_structure
-                    .push(ChainHeadStructure(tm0, tm2));
-                (tm2,)
-            }
-        };
-    }
-    fn query_and_record_chain_head_structure_defined(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ChainTail(tm0, tm1) in self.chain_tail.iter_dirty() {
-            self.record_action_135(delta, tm0);
-        }
-    }
-    fn record_action_136(&self, delta: &mut ModelDelta, tm0: Chain) {
-        let existing_row = self.chain_head_transition.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let (tm3,) = match existing_row {
-            Some(ChainHeadTransition(_, tm3)) => (tm3,),
-            None => {
-                let tm3 = delta.new_morphism(self);
-                delta
-                    .new_chain_head_transition
-                    .push(ChainHeadTransition(tm0, tm3));
-                (tm3,)
-            }
-        };
-    }
-    fn query_and_record_chain_head_transition_defined(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ChainTail(tm0, tm1) in self.chain_tail.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainTail(_, tm2) in self.chain_tail.iter_all_0(tm1) {
-                self.record_action_136(delta, tm0);
-            }
-        }
-        #[allow(unused_variables)]
-        for ChainTail(tm1, tm2) in self.chain_tail.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainTail(tm0, _) in self.chain_tail.iter_all_1(tm1) {
-                self.record_action_136(delta, tm0);
-            }
-        }
-    }
-    fn record_action_137(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: Structure,
-        tm3: Structure,
-        tm4: Morphism,
-    ) {
-        let existing_row = self.dom.iter_all_0_1(tm4, tm3).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(Dom(_, _)) => (),
-            None => {
-                delta.new_dom.push(Dom(tm4, tm3));
-                ()
-            }
-        };
-        let existing_row = self.cod.iter_all_0_1(tm4, tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(Cod(_, _)) => (),
-            None => {
-                delta.new_cod.push(Cod(tm4, tm2));
-                ()
-            }
-        };
-    }
-    fn query_and_record_chain_transition_signature(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ChainTail(tm0, tm1) in self.chain_tail.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
-                    #[allow(unused_variables)]
-                    for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
-                        self.record_action_137(delta, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ChainHeadStructure(tm1, tm2) in self.chain_head_structure.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainTail(tm0, _) in self.chain_tail.iter_all_1(tm1) {
-                #[allow(unused_variables)]
-                for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
-                    #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
-                        self.record_action_137(delta, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ChainHeadStructure(tm0, tm3) in self.chain_head_structure.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainHeadTransition(_, tm4) in self.chain_head_transition.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ChainTail(_, tm1) in self.chain_tail.iter_all_0(tm0) {
-                    #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
-                        self.record_action_137(delta, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ChainHeadTransition(tm0, tm4) in self.chain_head_transition.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainHeadStructure(_, tm3) in self.chain_head_structure.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ChainTail(_, tm1) in self.chain_tail.iter_all_0(tm0) {
-                    #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm2) in self.chain_head_structure.iter_all_0(tm1) {
-                        self.record_action_137(delta, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-    }
-    fn record_action_138(&self, delta: &mut ModelDelta) {
+    fn record_action_127(&self, delta: &mut ModelDelta) {
         let existing_row = self.type_symbol.iter_all().next();
         #[allow(unused_variables)]
         let (tm0,) = match existing_row {
@@ -45132,12 +43467,12 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_138(&self, delta: &mut ModelDelta) {
+    fn query_and_record_127(&self, delta: &mut ModelDelta) {
         if self.empty_join_is_dirty {
-            self.record_action_138(delta);
+            self.record_action_127(delta);
         }
     }
-    fn record_action_139(&self, delta: &mut ModelDelta, tm1: Ident, tm2: Loc, tm3: SymbolKind) {
+    fn record_action_128(&self, delta: &mut ModelDelta, tm1: Ident, tm2: Loc, tm3: SymbolKind) {
         let existing_row = self.defined_symbol.iter_all_0_1_2(tm1, tm3, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45155,7 +43490,7 @@ impl Eqlog {
             for TypeDeclNodeLoc(_, tm2) in self.type_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                    self.record_action_139(delta, tm1, tm2, tm3);
+                    self.record_action_128(delta, tm1, tm2, tm3);
                 }
             }
         }
@@ -45165,7 +43500,7 @@ impl Eqlog {
             for TypeDecl(_, tm1) in self.type_decl.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                    self.record_action_139(delta, tm1, tm2, tm3);
+                    self.record_action_128(delta, tm1, tm2, tm3);
                 }
             }
         }
@@ -45175,12 +43510,12 @@ impl Eqlog {
             for TypeDeclNodeLoc(tm0, tm2) in self.type_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for TypeDecl(_, tm1) in self.type_decl.iter_all_0(tm0) {
-                    self.record_action_139(delta, tm1, tm2, tm3);
+                    self.record_action_128(delta, tm1, tm2, tm3);
                 }
             }
         }
     }
-    fn record_action_140(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
+    fn record_action_129(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
         let existing_row = self.defined_symbol.iter_all_0_1_2(tm1, tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45198,7 +43533,7 @@ impl Eqlog {
             for PredDeclNodeLoc(_, tm3) in self.pred_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for PredSymbol(tm4) in self.pred_symbol.iter_all() {
-                    self.record_action_140(delta, tm1, tm3, tm4);
+                    self.record_action_129(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45208,7 +43543,7 @@ impl Eqlog {
             for PredDecl(_, tm1, tm2) in self.pred_decl.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for PredSymbol(tm4) in self.pred_symbol.iter_all() {
-                    self.record_action_140(delta, tm1, tm3, tm4);
+                    self.record_action_129(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45218,12 +43553,12 @@ impl Eqlog {
             for PredDeclNodeLoc(tm0, tm3) in self.pred_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for PredDecl(_, tm1, tm2) in self.pred_decl.iter_all_0(tm0) {
-                    self.record_action_140(delta, tm1, tm3, tm4);
+                    self.record_action_129(delta, tm1, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_141(&self, delta: &mut ModelDelta, tm1: Ident, tm4: Loc, tm5: SymbolKind) {
+    fn record_action_130(&self, delta: &mut ModelDelta, tm1: Ident, tm4: Loc, tm5: SymbolKind) {
         let existing_row = self.defined_symbol.iter_all_0_1_2(tm1, tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45241,7 +43576,7 @@ impl Eqlog {
             for FuncDeclNodeLoc(_, tm4) in self.func_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for FuncSymbol(tm5) in self.func_symbol.iter_all() {
-                    self.record_action_141(delta, tm1, tm4, tm5);
+                    self.record_action_130(delta, tm1, tm4, tm5);
                 }
             }
         }
@@ -45251,7 +43586,7 @@ impl Eqlog {
             for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for FuncSymbol(tm5) in self.func_symbol.iter_all() {
-                    self.record_action_141(delta, tm1, tm4, tm5);
+                    self.record_action_130(delta, tm1, tm4, tm5);
                 }
             }
         }
@@ -45261,12 +43596,12 @@ impl Eqlog {
             for FuncDeclNodeLoc(tm0, tm4) in self.func_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
-                    self.record_action_141(delta, tm1, tm4, tm5);
+                    self.record_action_130(delta, tm1, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_142(&self, delta: &mut ModelDelta, tm2: Ident, tm3: Loc, tm4: SymbolKind) {
+    fn record_action_131(&self, delta: &mut ModelDelta, tm2: Ident, tm3: Loc, tm4: SymbolKind) {
         let existing_row = self.defined_symbol.iter_all_0_1_2(tm2, tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45286,7 +43621,7 @@ impl Eqlog {
                 for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
-                        self.record_action_142(delta, tm2, tm3, tm4);
+                        self.record_action_131(delta, tm2, tm3, tm4);
                     }
                 }
             }
@@ -45299,7 +43634,7 @@ impl Eqlog {
                 for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
-                        self.record_action_142(delta, tm2, tm3, tm4);
+                        self.record_action_131(delta, tm2, tm3, tm4);
                     }
                 }
             }
@@ -45312,7 +43647,7 @@ impl Eqlog {
                 for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
-                        self.record_action_142(delta, tm2, tm3, tm4);
+                        self.record_action_131(delta, tm2, tm3, tm4);
                     }
                 }
             }
@@ -45325,13 +43660,13 @@ impl Eqlog {
                 for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                        self.record_action_142(delta, tm2, tm3, tm4);
+                        self.record_action_131(delta, tm2, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_143(&self, delta: &mut ModelDelta, tm1: Ident, tm2: Loc, tm3: SymbolKind) {
+    fn record_action_132(&self, delta: &mut ModelDelta, tm1: Ident, tm2: Loc, tm3: SymbolKind) {
         let existing_row = self.should_be_symbol.iter_all_0_1_2(tm1, tm3, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45351,7 +43686,7 @@ impl Eqlog {
             for ArgDeclNodeLoc(_, tm2) in self.arg_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                    self.record_action_143(delta, tm1, tm2, tm3);
+                    self.record_action_132(delta, tm1, tm2, tm3);
                 }
             }
         }
@@ -45361,7 +43696,7 @@ impl Eqlog {
             for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                    self.record_action_143(delta, tm1, tm2, tm3);
+                    self.record_action_132(delta, tm1, tm2, tm3);
                 }
             }
         }
@@ -45371,12 +43706,12 @@ impl Eqlog {
             for ArgDeclNodeLoc(tm0, tm2) in self.arg_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
-                    self.record_action_143(delta, tm1, tm2, tm3);
+                    self.record_action_132(delta, tm1, tm2, tm3);
                 }
             }
         }
     }
-    fn record_action_144(&self, delta: &mut ModelDelta, tm3: Ident, tm4: Loc, tm5: SymbolKind) {
+    fn record_action_133(&self, delta: &mut ModelDelta, tm3: Ident, tm4: Loc, tm5: SymbolKind) {
         let existing_row = self.should_be_symbol.iter_all_0_1_2(tm3, tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45396,7 +43731,7 @@ impl Eqlog {
             for FuncDeclNodeLoc(_, tm4) in self.func_decl_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm5) in self.type_symbol.iter_all() {
-                    self.record_action_144(delta, tm3, tm4, tm5);
+                    self.record_action_133(delta, tm3, tm4, tm5);
                 }
             }
         }
@@ -45406,7 +43741,7 @@ impl Eqlog {
             for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm5) in self.type_symbol.iter_all() {
-                    self.record_action_144(delta, tm3, tm4, tm5);
+                    self.record_action_133(delta, tm3, tm4, tm5);
                 }
             }
         }
@@ -45416,12 +43751,12 @@ impl Eqlog {
             for FuncDeclNodeLoc(tm0, tm4) in self.func_decl_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
-                    self.record_action_144(delta, tm3, tm4, tm5);
+                    self.record_action_133(delta, tm3, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_145(&self, delta: &mut ModelDelta, tm2: Ident, tm3: Loc, tm4: SymbolKind) {
+    fn record_action_134(&self, delta: &mut ModelDelta, tm2: Ident, tm3: Loc, tm4: SymbolKind) {
         let existing_row = self.should_be_symbol.iter_all_0_1_2(tm2, tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45441,7 +43776,7 @@ impl Eqlog {
             for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm4) in self.type_symbol.iter_all() {
-                    self.record_action_145(delta, tm2, tm3, tm4);
+                    self.record_action_134(delta, tm2, tm3, tm4);
                 }
             }
         }
@@ -45451,7 +43786,7 @@ impl Eqlog {
             for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm4) in self.type_symbol.iter_all() {
-                    self.record_action_145(delta, tm2, tm3, tm4);
+                    self.record_action_134(delta, tm2, tm3, tm4);
                 }
             }
         }
@@ -45461,12 +43796,12 @@ impl Eqlog {
             for IfAtomNodeLoc(tm0, tm3) in self.if_atom_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                    self.record_action_145(delta, tm2, tm3, tm4);
+                    self.record_action_134(delta, tm2, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_146(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
+    fn record_action_135(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
         let existing_row = self.should_be_symbol.iter_all_0_1_2(tm1, tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45486,7 +43821,7 @@ impl Eqlog {
             for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for PredSymbol(tm4) in self.pred_symbol.iter_all() {
-                    self.record_action_146(delta, tm1, tm3, tm4);
+                    self.record_action_135(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45496,7 +43831,7 @@ impl Eqlog {
             for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for PredSymbol(tm4) in self.pred_symbol.iter_all() {
-                    self.record_action_146(delta, tm1, tm3, tm4);
+                    self.record_action_135(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45506,12 +43841,12 @@ impl Eqlog {
             for IfAtomNodeLoc(tm0, tm3) in self.if_atom_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                    self.record_action_146(delta, tm1, tm3, tm4);
+                    self.record_action_135(delta, tm1, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_147(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
+    fn record_action_136(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
         let existing_row = self.should_be_symbol.iter_all_0_1_2(tm1, tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45531,7 +43866,7 @@ impl Eqlog {
             for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for PredSymbol(tm4) in self.pred_symbol.iter_all() {
-                    self.record_action_147(delta, tm1, tm3, tm4);
+                    self.record_action_136(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45541,7 +43876,7 @@ impl Eqlog {
             for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for PredSymbol(tm4) in self.pred_symbol.iter_all() {
-                    self.record_action_147(delta, tm1, tm3, tm4);
+                    self.record_action_136(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45551,12 +43886,12 @@ impl Eqlog {
             for ThenAtomNodeLoc(tm0, tm3) in self.then_atom_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                    self.record_action_147(delta, tm1, tm3, tm4);
+                    self.record_action_136(delta, tm1, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_148(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
+    fn record_action_137(&self, delta: &mut ModelDelta, tm1: Ident, tm3: Loc, tm4: SymbolKind) {
         let existing_row = self.should_be_symbol.iter_all_0_1_2(tm1, tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45576,7 +43911,7 @@ impl Eqlog {
             for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for FuncSymbol(tm4) in self.func_symbol.iter_all() {
-                    self.record_action_148(delta, tm1, tm3, tm4);
+                    self.record_action_137(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45586,7 +43921,7 @@ impl Eqlog {
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for FuncSymbol(tm4) in self.func_symbol.iter_all() {
-                    self.record_action_148(delta, tm1, tm3, tm4);
+                    self.record_action_137(delta, tm1, tm3, tm4);
                 }
             }
         }
@@ -45596,12 +43931,12 @@ impl Eqlog {
             for TermNodeLoc(tm0, tm3) in self.term_node_loc.iter_all() {
                 #[allow(unused_variables)]
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                    self.record_action_148(delta, tm1, tm3, tm4);
+                    self.record_action_137(delta, tm1, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_149(&self, delta: &mut ModelDelta, tm0: TypeList) {
+    fn record_action_138(&self, delta: &mut ModelDelta, tm0: TypeList) {
         let existing_row = self.type_list_len.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -45616,10 +43951,10 @@ impl Eqlog {
     fn query_and_record_type_list_len_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.type_list_dirty.iter().copied() {
-            self.record_action_149(delta, tm0);
+            self.record_action_138(delta, tm0);
         }
     }
-    fn record_action_150(&self, delta: &mut ModelDelta, tm1: Nat) {
+    fn record_action_139(&self, delta: &mut ModelDelta, tm1: Nat) {
         let existing_row = self.zero.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45635,18 +43970,18 @@ impl Eqlog {
         for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
             #[allow(unused_variables)]
             for TypeListLen(_, tm1) in self.type_list_len.iter_all_0(tm0) {
-                self.record_action_150(delta, tm1);
+                self.record_action_139(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
             #[allow(unused_variables)]
             for NilTypeList(_) in self.nil_type_list.iter_all_0(tm0) {
-                self.record_action_150(delta, tm1);
+                self.record_action_139(delta, tm1);
             }
         }
     }
-    fn record_action_151(&self, delta: &mut ModelDelta, tm3: Nat, tm4: Nat) {
+    fn record_action_140(&self, delta: &mut ModelDelta, tm3: Nat, tm4: Nat) {
         let existing_row = self.succ.iter_all_0_1(tm3, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45664,7 +43999,7 @@ impl Eqlog {
             for TypeListLen(_, tm3) in self.type_list_len.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for TypeListLen(_, tm4) in self.type_list_len.iter_all_0(tm2) {
-                    self.record_action_151(delta, tm3, tm4);
+                    self.record_action_140(delta, tm3, tm4);
                 }
             }
         }
@@ -45674,7 +44009,7 @@ impl Eqlog {
             for ConsTypeList(tm0, _, tm2) in self.cons_type_list.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for TypeListLen(_, tm4) in self.type_list_len.iter_all_0(tm2) {
-                    self.record_action_151(delta, tm3, tm4);
+                    self.record_action_140(delta, tm3, tm4);
                 }
             }
         }
@@ -45684,12 +44019,12 @@ impl Eqlog {
             for ConsTypeList(tm0, tm1, _) in self.cons_type_list.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for TypeListLen(_, tm3) in self.type_list_len.iter_all_0(tm1) {
-                    self.record_action_151(delta, tm3, tm4);
+                    self.record_action_140(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_152(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+    fn record_action_141(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         let existing_row = self.term_list_len.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -45704,10 +44039,10 @@ impl Eqlog {
     fn query_and_record_term_list_len_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
-            self.record_action_152(delta, tm0);
+            self.record_action_141(delta, tm0);
         }
     }
-    fn record_action_153(&self, delta: &mut ModelDelta, tm1: Nat) {
+    fn record_action_142(&self, delta: &mut ModelDelta, tm1: Nat) {
         let existing_row = self.zero.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45723,18 +44058,18 @@ impl Eqlog {
         for NilTermListNode(tm0) in self.nil_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermListLen(_, tm1) in self.term_list_len.iter_all_0(tm0) {
-                self.record_action_153(delta, tm1);
+                self.record_action_142(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
             #[allow(unused_variables)]
             for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                self.record_action_153(delta, tm1);
+                self.record_action_142(delta, tm1);
             }
         }
     }
-    fn record_action_154(&self, delta: &mut ModelDelta, tm3: Nat, tm4: Nat) {
+    fn record_action_143(&self, delta: &mut ModelDelta, tm3: Nat, tm4: Nat) {
         let existing_row = self.succ.iter_all_0_1(tm3, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -45752,7 +44087,7 @@ impl Eqlog {
             for TermListLen(_, tm3) in self.term_list_len.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for TermListLen(_, tm4) in self.term_list_len.iter_all_0(tm0) {
-                    self.record_action_154(delta, tm3, tm4);
+                    self.record_action_143(delta, tm3, tm4);
                 }
             }
         }
@@ -45762,7 +44097,7 @@ impl Eqlog {
             for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for TermListLen(_, tm4) in self.term_list_len.iter_all_0(tm0) {
-                    self.record_action_154(delta, tm3, tm4);
+                    self.record_action_143(delta, tm3, tm4);
                 }
             }
         }
@@ -45772,12 +44107,12 @@ impl Eqlog {
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for TermListLen(_, tm3) in self.term_list_len.iter_all_0(tm2) {
-                    self.record_action_154(delta, tm3, tm4);
+                    self.record_action_143(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_155(&self, delta: &mut ModelDelta, tm3: Loc, tm6: Nat, tm7: Nat) {
+    fn record_action_144(&self, delta: &mut ModelDelta, tm3: Loc, tm6: Nat, tm7: Nat) {
         let existing_row = self
             .pred_arg_num_should_match
             .iter_all_0_1_2(tm7, tm6, tm3)
@@ -45806,7 +44141,7 @@ impl Eqlog {
                         for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_155(delta, tm3, tm6, tm7);
+                                self.record_action_144(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45825,7 +44160,7 @@ impl Eqlog {
                         for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                self.record_action_155(delta, tm3, tm6, tm7);
+                                self.record_action_144(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45844,7 +44179,7 @@ impl Eqlog {
                         for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_155(delta, tm3, tm6, tm7);
+                                self.record_action_144(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45863,7 +44198,7 @@ impl Eqlog {
                         for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_155(delta, tm3, tm6, tm7);
+                                self.record_action_144(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45882,7 +44217,7 @@ impl Eqlog {
                         for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_155(delta, tm3, tm6, tm7);
+                                self.record_action_144(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45901,7 +44236,7 @@ impl Eqlog {
                         for IfAtomNodeLoc(_, tm3) in self.if_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                self.record_action_155(delta, tm3, tm6, tm7);
+                                self.record_action_144(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45909,7 +44244,7 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_156(&self, delta: &mut ModelDelta, tm3: Loc, tm6: Nat, tm7: Nat) {
+    fn record_action_145(&self, delta: &mut ModelDelta, tm3: Loc, tm6: Nat, tm7: Nat) {
         let existing_row = self
             .pred_arg_num_should_match
             .iter_all_0_1_2(tm7, tm6, tm3)
@@ -45938,7 +44273,7 @@ impl Eqlog {
                         for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_156(delta, tm3, tm6, tm7);
+                                self.record_action_145(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45957,7 +44292,7 @@ impl Eqlog {
                         for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                self.record_action_156(delta, tm3, tm6, tm7);
+                                self.record_action_145(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45976,7 +44311,7 @@ impl Eqlog {
                         for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_156(delta, tm3, tm6, tm7);
+                                self.record_action_145(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -45995,7 +44330,7 @@ impl Eqlog {
                         for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_156(delta, tm3, tm6, tm7);
+                                self.record_action_145(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46014,7 +44349,7 @@ impl Eqlog {
                         for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_156(delta, tm3, tm6, tm7);
+                                self.record_action_145(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46033,7 +44368,7 @@ impl Eqlog {
                         for ThenAtomNodeLoc(_, tm3) in self.then_atom_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                self.record_action_156(delta, tm3, tm6, tm7);
+                                self.record_action_145(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46041,7 +44376,7 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_157(&self, delta: &mut ModelDelta, tm3: Loc, tm6: Nat, tm7: Nat) {
+    fn record_action_146(&self, delta: &mut ModelDelta, tm3: Loc, tm6: Nat, tm7: Nat) {
         let existing_row = self
             .func_arg_num_should_match
             .iter_all_0_1_2(tm7, tm6, tm3)
@@ -46070,7 +44405,7 @@ impl Eqlog {
                         for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_157(delta, tm3, tm6, tm7);
+                                self.record_action_146(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46089,7 +44424,7 @@ impl Eqlog {
                         for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                self.record_action_157(delta, tm3, tm6, tm7);
+                                self.record_action_146(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46108,7 +44443,7 @@ impl Eqlog {
                         for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_157(delta, tm3, tm6, tm7);
+                                self.record_action_146(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46127,7 +44462,7 @@ impl Eqlog {
                         for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_157(delta, tm3, tm6, tm7);
+                                self.record_action_146(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46146,7 +44481,7 @@ impl Eqlog {
                         for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TermListLen(_, tm7) in self.term_list_len.iter_all_0(tm2) {
-                                self.record_action_157(delta, tm3, tm6, tm7);
+                                self.record_action_146(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46165,7 +44500,7 @@ impl Eqlog {
                         for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                self.record_action_157(delta, tm3, tm6, tm7);
+                                self.record_action_146(delta, tm3, tm6, tm7);
                             }
                         }
                     }
@@ -46173,220 +44508,336 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_158(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
-        let existing_row = self.rule_chain.iter_all_0(tm0).next();
+    fn record_action_147(&self, delta: &mut ModelDelta, tm0: StmtNode) {
+        let existing_row = self.stmt_morphism.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChain(_, tm1)) => (tm1,),
+            Some(StmtMorphism(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_chain(self);
-                delta.new_rule_chain.push(RuleChain(tm0, tm1));
+                let tm1 = delta.new_morphism(self);
+                delta.new_stmt_morphism.push(StmtMorphism(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_chain_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_morphism_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for tm0 in self.rule_decl_node_dirty.iter().copied() {
-            self.record_action_158(delta, tm0);
+        for tm0 in self.stmt_node_dirty.iter().copied() {
+            self.record_action_147(delta, tm0);
         }
     }
-    fn record_action_159(&self, delta: &mut ModelDelta, tm2: Chain, tm3: Chain) {
-        let existing_row = self.initial_structure.iter_all().next();
-        #[allow(unused_variables)]
-        let (tm4,) = match existing_row {
-            Some(InitialStructure(tm4)) => (tm4,),
-            None => {
-                let tm4 = delta.new_structure(self);
-                delta.new_initial_structure.push(InitialStructure(tm4));
-                (tm4,)
-            }
-        };
-        let existing_row = self.chain_tail.iter_all_0_1(tm2, tm3).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ChainTail(_, _)) => (),
-            None => {
-                delta.new_chain_tail.push(ChainTail(tm2, tm3));
-                ()
-            }
-        };
-        let existing_row = self.chain_head_structure.iter_all_0_1(tm2, tm4).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ChainHeadStructure(_, _)) => (),
-            None => {
-                delta
-                    .new_chain_head_structure
-                    .push(ChainHeadStructure(tm2, tm4));
-                ()
-            }
-        };
-    }
-    fn query_and_record_rule_stmt_list_chain(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
-            #[allow(unused_variables)]
-            for RuleChain(_, tm2) in self.rule_chain.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
-                    self.record_action_159(delta, tm2, tm3);
-                }
-            }
+    fn record_action_148(&self, delta: &mut ModelDelta, tm6: Structure, tm8: Structure) {
+        if tm6 != tm8 {
+            delta.new_structure_equalities.push((tm6, tm8));
         }
-        #[allow(unused_variables)]
-        for RuleChain(tm0, tm2) in self.rule_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
-                    self.record_action_159(delta, tm2, tm3);
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for StmtListChain(tm1, tm3) in self.stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
-                #[allow(unused_variables)]
-                for RuleChain(_, tm2) in self.rule_chain.iter_all_0(tm0) {
-                    self.record_action_159(delta, tm2, tm3);
-                }
-            }
+        if tm8 != tm6 {
+            delta.new_structure_equalities.push((tm8, tm6));
         }
     }
-    fn record_action_160(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
-        let existing_row = self.stmt_list_chain.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let (tm1,) = match existing_row {
-            Some(StmtListChain(_, tm1)) => (tm1,),
-            None => {
-                let tm1 = delta.new_chain(self);
-                delta.new_stmt_list_chain.push(StmtListChain(tm0, tm1));
-                (tm1,)
-            }
-        };
-    }
-    fn query_and_record_stmt_list_chain_total(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for tm0 in self.stmt_list_node_dirty.iter().copied() {
-            self.record_action_160(delta, tm0);
-        }
-    }
-    fn record_action_161(&self, delta: &mut ModelDelta, tm1: Chain) {
-        let existing_row = self.nil_chain.iter_all_0(tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(NilChain(_)) => (),
-            None => {
-                delta.new_nil_chain.push(NilChain(tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_stmt_list_chain_nil(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for StmtListChain(_, tm1) in self.stmt_list_chain.iter_all_0(tm0) {
-                self.record_action_161(delta, tm1);
-            }
-        }
-        #[allow(unused_variables)]
-        for StmtListChain(tm0, tm1) in self.stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_161(delta, tm1);
-            }
-        }
-    }
-    fn record_action_162(&self, delta: &mut ModelDelta, tm3: Chain, tm4: Chain) {
-        let existing_row = self.chain_tail.iter_all_0_1(tm4, tm3).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ChainTail(_, _)) => (),
-            None => {
-                delta.new_chain_tail.push(ChainTail(tm4, tm3));
-                ()
-            }
-        };
-    }
-    fn query_and_record_stmt_list_chain_cons(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_morphism_dom_cod(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm2) {
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm4) in self.stmt_list_chain.iter_all_0(tm0) {
-                    self.record_action_162(delta, tm3, tm4);
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm7) in self.stmt_morphism.iter_all_0(tm4) {
+                            #[allow(unused_variables)]
+                            for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+                                self.record_action_148(delta, tm6, tm8);
+                            }
+                        }
+                    }
                 }
             }
         }
         #[allow(unused_variables)]
-        for StmtListChain(tm2, tm3) in self.stmt_list_chain.iter_dirty() {
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm0, tm1, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
+            for StmtMorphism(_, tm7) in self.stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm4) in self.stmt_list_chain.iter_all_0(tm0) {
-                    self.record_action_162(delta, tm3, tm4);
+                for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                            #[allow(unused_variables)]
+                            for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
+                                self.record_action_148(delta, tm6, tm8);
+                            }
+                        }
+                    }
                 }
             }
         }
         #[allow(unused_variables)]
-        for StmtListChain(tm0, tm4) in self.stmt_list_chain.iter_dirty() {
+        for Dom(tm5, tm6) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm2) {
-                    self.record_action_162(delta, tm3, tm4);
+                for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm7) in self.stmt_morphism.iter_all_0(tm4) {
+                            #[allow(unused_variables)]
+                            for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+                                self.record_action_148(delta, tm6, tm8);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm7, tm8) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm7) {
+                #[allow(unused_variables)]
+                for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                            #[allow(unused_variables)]
+                            for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
+                                self.record_action_148(delta, tm6, tm8);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
+                #[allow(unused_variables)]
+                for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm7) in self.stmt_morphism.iter_all_0(tm4) {
+                            #[allow(unused_variables)]
+                            for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+                                self.record_action_148(delta, tm6, tm8);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm7) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+                #[allow(unused_variables)]
+                for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                            #[allow(unused_variables)]
+                            for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
+                                self.record_action_148(delta, tm6, tm8);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-    fn record_action_163(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: Structure) {
-        let existing_row = self.stmt_structure.iter_all_0_1(tm1, tm4).next();
+    fn record_action_149(&self, delta: &mut ModelDelta, tm2: Morphism) {
+        let existing_row = self.if_morphism.iter_all_0(tm2).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(IfMorphism(_)) => (),
+            None => {
+                delta.new_if_morphism.push(IfMorphism(tm2));
+                ()
+            }
+        };
+    }
+    fn query_and_record_if_stmt_morphism(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
+                self.record_action_149(delta, tm2);
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm0, tm2) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                self.record_action_149(delta, tm2);
+            }
+        }
+    }
+    fn record_action_150(&self, delta: &mut ModelDelta, tm4: Morphism) {
+        let existing_row = self.surj_then_morphism.iter_all_0(tm4).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(SurjThenMorphism(_)) => (),
+            None => {
+                delta.new_surj_then_morphism.push(SurjThenMorphism(tm4));
+                ()
+            }
+        };
+    }
+    fn query_and_record_then_equal_stmt_morphism(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ThenStmtNode(tm3, _) in self.then_stmt_node.iter_all_1(tm0) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
+                    self.record_action_150(delta, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ThenStmtNode(tm3, tm0) in self.then_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
+                    self.record_action_150(delta, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm3, tm4) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for ThenStmtNode(_, tm0) in self.then_stmt_node.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
+                    self.record_action_150(delta, tm4);
+                }
+            }
+        }
+    }
+    fn record_action_151(&self, delta: &mut ModelDelta, tm4: Morphism) {
+        let existing_row = self.surj_then_morphism.iter_all_0(tm4).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(SurjThenMorphism(_)) => (),
+            None => {
+                delta.new_surj_then_morphism.push(SurjThenMorphism(tm4));
+                ()
+            }
+        };
+    }
+    fn query_and_record_then_pred_stmt_morphism(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ThenStmtNode(tm3, _) in self.then_stmt_node.iter_all_1(tm0) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
+                    self.record_action_151(delta, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ThenStmtNode(tm3, tm0) in self.then_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
+                    self.record_action_151(delta, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm3, tm4) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for ThenStmtNode(_, tm0) in self.then_stmt_node.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
+                    self.record_action_151(delta, tm4);
+                }
+            }
+        }
+    }
+    fn record_action_152(&self, delta: &mut ModelDelta, tm4: Morphism) {
+        let existing_row = self.non_surj_then_morphism.iter_all_0(tm4).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NonSurjThenMorphism(_)) => (),
+            None => {
+                delta
+                    .new_non_surj_then_morphism
+                    .push(NonSurjThenMorphism(tm4));
+                ()
+            }
+        };
+    }
+    fn query_and_record_then_defined_stmt_morphism(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ThenStmtNode(tm3, _) in self.then_stmt_node.iter_all_1(tm0) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
+                    self.record_action_152(delta, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ThenStmtNode(tm3, tm0) in self.then_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
+                {
+                    self.record_action_152(delta, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm3, tm4) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for ThenStmtNode(_, tm0) in self.then_stmt_node.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
+                {
+                    self.record_action_152(delta, tm4);
+                }
+            }
+        }
+    }
+    fn record_action_153(&self, delta: &mut ModelDelta, tm1: Structure, tm2: StmtNode) {
+        let existing_row = self.stmt_structure.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(StmtStructure(_, _)) => (),
             None => {
-                delta.new_stmt_structure.push(StmtStructure(tm1, tm4));
+                delta.new_stmt_structure.push(StmtStructure(tm2, tm1));
                 ()
             }
         };
     }
-    fn query_and_record_stmt_structure_chain(&self, delta: &mut ModelDelta) {
+    fn query_and_record_stmt_structure_morphism(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+        for Cod(tm0, tm1) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
-                    self.record_action_163(delta, tm1, tm4);
-                }
+            for StmtMorphism(tm2, _) in self.stmt_morphism.iter_all_1(tm0) {
+                self.record_action_153(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
-        for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_dirty() {
+        for StmtMorphism(tm2, tm0) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(tm0, _) in self.stmt_list_chain.iter_all_1(tm3) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_163(delta, tm1, tm4);
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for StmtListChain(tm0, tm3) in self.stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_163(delta, tm1, tm4);
-                }
+            for Cod(_, tm1) in self.cod.iter_all_0(tm0) {
+                self.record_action_153(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_164(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: Structure) {
+    fn record_action_154(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: Structure) {
         let existing_row = self.if_atom_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46402,18 +44853,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.record_action_164(delta, tm1, tm2);
+                self.record_action_154(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for StmtStructure(tm0, tm2) in self.stmt_structure.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                self.record_action_164(delta, tm1, tm2);
+                self.record_action_154(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_165(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: Structure) {
+    fn record_action_155(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: Structure) {
         let existing_row = self.then_atom_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46431,18 +44882,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.record_action_165(delta, tm1, tm2);
+                self.record_action_155(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for StmtStructure(tm0, tm2) in self.stmt_structure.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                self.record_action_165(delta, tm1, tm2);
+                self.record_action_155(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_166(
+    fn record_action_156(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -46473,18 +44924,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_166(delta, tm1, tm2, tm3);
+                self.record_action_156(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                self.record_action_166(delta, tm1, tm2, tm3);
+                self.record_action_156(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_167(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
+    fn record_action_157(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
         let existing_row = self.term_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46500,18 +44951,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm2) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_167(delta, tm1, tm2);
+                self.record_action_157(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm2) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                self.record_action_167(delta, tm1, tm2);
+                self.record_action_157(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_168(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
+    fn record_action_158(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
         let existing_row = self.terms_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46527,18 +44978,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_168(delta, tm2, tm3);
+                self.record_action_158(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                self.record_action_168(delta, tm2, tm3);
+                self.record_action_158(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_169(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: Structure) {
+    fn record_action_159(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: Structure) {
         let existing_row = self.term_structure.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46554,18 +45005,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_169(delta, tm1, tm3);
+                self.record_action_159(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                self.record_action_169(delta, tm1, tm3);
+                self.record_action_159(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_170(
+    fn record_action_160(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -46596,18 +45047,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_170(delta, tm1, tm2, tm3);
+                self.record_action_160(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                self.record_action_170(delta, tm1, tm2, tm3);
+                self.record_action_160(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_171(
+    fn record_action_161(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -46640,18 +45091,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_171(delta, tm1, tm2, tm3);
+                self.record_action_161(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0) {
-                self.record_action_171(delta, tm1, tm2, tm3);
+                self.record_action_161(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_172(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
+    fn record_action_162(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
         let existing_row = self.terms_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46667,18 +45118,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_172(delta, tm2, tm3);
+                self.record_action_162(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                self.record_action_172(delta, tm2, tm3);
+                self.record_action_162(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_173(
+    fn record_action_163(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -46709,18 +45160,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermsStructure(_, tm3) in self.terms_structure.iter_all_0(tm0) {
-                self.record_action_173(delta, tm1, tm2, tm3);
+                self.record_action_163(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for TermsStructure(tm0, tm3) in self.terms_structure.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_173(delta, tm1, tm2, tm3);
+                self.record_action_163(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_174(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
+    fn record_action_164(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
         let existing_row = self.term_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46736,18 +45187,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for OptTermStructure(_, tm2) in self.opt_term_structure.iter_all_0(tm0) {
-                self.record_action_174(delta, tm1, tm2);
+                self.record_action_164(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for OptTermStructure(tm0, tm2) in self.opt_term_structure.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                self.record_action_174(delta, tm1, tm2);
+                self.record_action_164(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_175(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
+    fn record_action_165(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
         let existing_row = self.terms_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46763,18 +45214,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
-                self.record_action_175(delta, tm2, tm3);
+                self.record_action_165(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for TermStructure(tm0, tm3) in self.term_structure.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_175(delta, tm2, tm3);
+                self.record_action_165(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_176(&self, delta: &mut ModelDelta, tm0: TermNode) {
+    fn record_action_166(&self, delta: &mut ModelDelta, tm0: TermNode) {
         let existing_row = self.semantic_el.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -46789,10 +45240,10 @@ impl Eqlog {
     fn query_and_record_semantic_el_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_node_dirty.iter().copied() {
-            self.record_action_176(delta, tm0);
+            self.record_action_166(delta, tm0);
         }
     }
-    fn record_action_177(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+    fn record_action_167(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         let existing_row = self.semantic_els.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -46807,10 +45258,10 @@ impl Eqlog {
     fn query_and_record_semantic_els_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
-            self.record_action_177(delta, tm0);
+            self.record_action_167(delta, tm0);
         }
     }
-    fn record_action_178(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
+    fn record_action_168(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
         let existing_row = self.nil_el_list.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46828,7 +45279,7 @@ impl Eqlog {
             for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm2) in self.semantic_els.iter_all_0(tm0) {
-                    self.record_action_178(delta, tm1, tm2);
+                    self.record_action_168(delta, tm1, tm2);
                 }
             }
         }
@@ -46838,7 +45289,7 @@ impl Eqlog {
             for SemanticEls(_, tm2) in self.semantic_els.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                    self.record_action_178(delta, tm1, tm2);
+                    self.record_action_168(delta, tm1, tm2);
                 }
             }
         }
@@ -46848,12 +45299,12 @@ impl Eqlog {
             for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                    self.record_action_178(delta, tm1, tm2);
+                    self.record_action_168(delta, tm1, tm2);
                 }
             }
         }
     }
-    fn record_action_179(&self, delta: &mut ModelDelta, tm3: El, tm4: ElList, tm5: ElList) {
+    fn record_action_169(&self, delta: &mut ModelDelta, tm3: El, tm4: ElList, tm5: ElList) {
         let existing_row = self.cons_el_list.iter_all_0_1_2(tm3, tm4, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46873,7 +45324,7 @@ impl Eqlog {
                 for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm0) {
-                        self.record_action_179(delta, tm3, tm4, tm5);
+                        self.record_action_169(delta, tm3, tm4, tm5);
                     }
                 }
             }
@@ -46886,7 +45337,7 @@ impl Eqlog {
                 for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
-                        self.record_action_179(delta, tm3, tm4, tm5);
+                        self.record_action_169(delta, tm3, tm4, tm5);
                     }
                 }
             }
@@ -46899,7 +45350,7 @@ impl Eqlog {
                 for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm0) {
-                        self.record_action_179(delta, tm3, tm4, tm5);
+                        self.record_action_169(delta, tm3, tm4, tm5);
                     }
                 }
             }
@@ -46912,13 +45363,13 @@ impl Eqlog {
                 for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
-                        self.record_action_179(delta, tm3, tm4, tm5);
+                        self.record_action_169(delta, tm3, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_180(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El) {
+    fn record_action_170(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El) {
         let existing_row = self.el_structure.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46934,18 +45385,18 @@ impl Eqlog {
         for TermStructure(tm0, tm1) in self.term_structure.iter_dirty() {
             #[allow(unused_variables)]
             for SemanticEl(_, tm2) in self.semantic_el.iter_all_0(tm0) {
-                self.record_action_180(delta, tm1, tm2);
+                self.record_action_170(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for SemanticEl(tm0, tm2) in self.semantic_el.iter_dirty() {
             #[allow(unused_variables)]
             for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
-                self.record_action_180(delta, tm1, tm2);
+                self.record_action_170(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_181(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
+    fn record_action_171(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
         let existing_row = self.els_structure.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46961,18 +45412,18 @@ impl Eqlog {
         for TermsStructure(tm0, tm1) in self.terms_structure.iter_dirty() {
             #[allow(unused_variables)]
             for SemanticEls(_, tm2) in self.semantic_els.iter_all_0(tm0) {
-                self.record_action_181(delta, tm1, tm2);
+                self.record_action_171(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for SemanticEls(tm0, tm2) in self.semantic_els.iter_dirty() {
             #[allow(unused_variables)]
             for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
-                self.record_action_181(delta, tm1, tm2);
+                self.record_action_171(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_182(&self, delta: &mut ModelDelta, tm3: Func, tm4: El, tm5: ElList) {
+    fn record_action_172(&self, delta: &mut ModelDelta, tm3: Func, tm4: El, tm5: ElList) {
         let existing_row = self.func_app.iter_all_0_1_2(tm3, tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -46992,7 +45443,7 @@ impl Eqlog {
                 for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm2) {
-                        self.record_action_182(delta, tm3, tm4, tm5);
+                        self.record_action_172(delta, tm3, tm4, tm5);
                     }
                 }
             }
@@ -47005,7 +45456,7 @@ impl Eqlog {
                 for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm2) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
-                        self.record_action_182(delta, tm3, tm4, tm5);
+                        self.record_action_172(delta, tm3, tm4, tm5);
                     }
                 }
             }
@@ -47018,7 +45469,7 @@ impl Eqlog {
                 for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, tm5) in self.semantic_els.iter_all_0(tm2) {
-                        self.record_action_182(delta, tm3, tm4, tm5);
+                        self.record_action_172(delta, tm3, tm4, tm5);
                     }
                 }
             }
@@ -47031,13 +45482,13 @@ impl Eqlog {
                 for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
-                        self.record_action_182(delta, tm3, tm4, tm5);
+                        self.record_action_172(delta, tm3, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_183(&self, delta: &mut ModelDelta, tm2: VirtIdent, tm3: Structure, tm4: El) {
+    fn record_action_173(&self, delta: &mut ModelDelta, tm2: VirtIdent, tm3: Structure, tm4: El) {
         let existing_row = self.var.iter_all_0_1_2(tm3, tm2, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -47057,7 +45508,7 @@ impl Eqlog {
                 for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
-                        self.record_action_183(delta, tm2, tm3, tm4);
+                        self.record_action_173(delta, tm2, tm3, tm4);
                     }
                 }
             }
@@ -47070,7 +45521,7 @@ impl Eqlog {
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
-                        self.record_action_183(delta, tm2, tm3, tm4);
+                        self.record_action_173(delta, tm2, tm3, tm4);
                     }
                 }
             }
@@ -47083,7 +45534,7 @@ impl Eqlog {
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
-                        self.record_action_183(delta, tm2, tm3, tm4);
+                        self.record_action_173(delta, tm2, tm3, tm4);
                     }
                 }
             }
@@ -47096,13 +45547,13 @@ impl Eqlog {
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
-                        self.record_action_183(delta, tm2, tm3, tm4);
+                        self.record_action_173(delta, tm2, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_184(&self, delta: &mut ModelDelta, tm0: TermNode) {
+    fn record_action_174(&self, delta: &mut ModelDelta, tm0: TermNode) {
         let existing_row = self.wildcard_virt_ident.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -47119,10 +45570,10 @@ impl Eqlog {
     fn query_and_record_wildcard_virt_ident_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
-            self.record_action_184(delta, tm0);
+            self.record_action_174(delta, tm0);
         }
     }
-    fn record_action_185(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El, tm3: VirtIdent) {
+    fn record_action_175(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El, tm3: VirtIdent) {
         let existing_row = self.var.iter_all_0_1_2(tm1, tm3, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -47142,7 +45593,7 @@ impl Eqlog {
                 for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
-                        self.record_action_185(delta, tm1, tm2, tm3);
+                        self.record_action_175(delta, tm1, tm2, tm3);
                     }
                 }
             }
@@ -47155,7 +45606,7 @@ impl Eqlog {
                 for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                        self.record_action_185(delta, tm1, tm2, tm3);
+                        self.record_action_175(delta, tm1, tm2, tm3);
                     }
                 }
             }
@@ -47168,7 +45619,7 @@ impl Eqlog {
                 for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                        self.record_action_185(delta, tm1, tm2, tm3);
+                        self.record_action_175(delta, tm1, tm2, tm3);
                     }
                 }
             }
@@ -47181,13 +45632,13 @@ impl Eqlog {
                 for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                        self.record_action_185(delta, tm1, tm2, tm3);
+                        self.record_action_175(delta, tm1, tm2, tm3);
                     }
                 }
             }
         }
     }
-    fn record_action_186(&self, delta: &mut ModelDelta, tm3: El, tm4: El) {
+    fn record_action_176(&self, delta: &mut ModelDelta, tm3: El, tm4: El) {
         if tm3 != tm4 {
             delta.new_el_equalities.push((tm3, tm4));
         }
@@ -47202,7 +45653,7 @@ impl Eqlog {
             for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_186(delta, tm3, tm4);
+                    self.record_action_176(delta, tm3, tm4);
                 }
             }
         }
@@ -47212,7 +45663,7 @@ impl Eqlog {
             for EqualIfAtomNode(tm0, tm1, _) in self.equal_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_186(delta, tm3, tm4);
+                    self.record_action_176(delta, tm3, tm4);
                 }
             }
         }
@@ -47222,12 +45673,12 @@ impl Eqlog {
             for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm2) {
-                    self.record_action_186(delta, tm3, tm4);
+                    self.record_action_176(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_187(&self, delta: &mut ModelDelta, tm3: Pred, tm4: ElList) {
+    fn record_action_177(&self, delta: &mut ModelDelta, tm3: Pred, tm4: ElList) {
         let existing_row = self.pred_app.iter_all_0_1(tm3, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -47245,7 +45696,7 @@ impl Eqlog {
             for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_187(delta, tm3, tm4);
+                    self.record_action_177(delta, tm3, tm4);
                 }
             }
         }
@@ -47255,7 +45706,7 @@ impl Eqlog {
             for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_187(delta, tm3, tm4);
+                    self.record_action_177(delta, tm3, tm4);
                 }
             }
         }
@@ -47265,12 +45716,12 @@ impl Eqlog {
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                    self.record_action_187(delta, tm3, tm4);
+                    self.record_action_177(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_188(&self, delta: &mut ModelDelta, tm3: Type, tm4: El) {
+    fn record_action_178(&self, delta: &mut ModelDelta, tm3: Type, tm4: El) {
         let existing_row = self.el_type.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -47288,7 +45739,7 @@ impl Eqlog {
             for SemanticType(_, tm3) in self.semantic_type.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_188(delta, tm3, tm4);
+                    self.record_action_178(delta, tm3, tm4);
                 }
             }
         }
@@ -47298,7 +45749,7 @@ impl Eqlog {
             for VarIfAtomNode(tm0, tm1, _) in self.var_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_188(delta, tm3, tm4);
+                    self.record_action_178(delta, tm3, tm4);
                 }
             }
         }
@@ -47308,12 +45759,12 @@ impl Eqlog {
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticType(_, tm3) in self.semantic_type.iter_all_0(tm2) {
-                    self.record_action_188(delta, tm3, tm4);
+                    self.record_action_178(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_189(&self, delta: &mut ModelDelta, tm3: El, tm4: El) {
+    fn record_action_179(&self, delta: &mut ModelDelta, tm3: El, tm4: El) {
         if tm3 != tm4 {
             delta.new_el_equalities.push((tm3, tm4));
         }
@@ -47328,7 +45779,7 @@ impl Eqlog {
             for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_189(delta, tm3, tm4);
+                    self.record_action_179(delta, tm3, tm4);
                 }
             }
         }
@@ -47338,7 +45789,7 @@ impl Eqlog {
             for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_189(delta, tm3, tm4);
+                    self.record_action_179(delta, tm3, tm4);
                 }
             }
         }
@@ -47348,12 +45799,12 @@ impl Eqlog {
             for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm2) {
-                    self.record_action_189(delta, tm3, tm4);
+                    self.record_action_179(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_190(&self, delta: &mut ModelDelta, tm4: El, tm5: El) {
+    fn record_action_180(&self, delta: &mut ModelDelta, tm4: El, tm5: El) {
         if tm4 != tm5 {
             delta.new_el_equalities.push((tm4, tm5));
         }
@@ -47370,7 +45821,7 @@ impl Eqlog {
                 for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm5) in self.semantic_el.iter_all_0(tm1) {
-                        self.record_action_190(delta, tm4, tm5);
+                        self.record_action_180(delta, tm4, tm5);
                     }
                 }
             }
@@ -47383,7 +45834,7 @@ impl Eqlog {
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm5) in self.semantic_el.iter_all_0(tm1) {
-                        self.record_action_190(delta, tm4, tm5);
+                        self.record_action_180(delta, tm4, tm5);
                     }
                 }
             }
@@ -47396,7 +45847,7 @@ impl Eqlog {
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm5) in self.semantic_el.iter_all_0(tm1) {
-                        self.record_action_190(delta, tm4, tm5);
+                        self.record_action_180(delta, tm4, tm5);
                     }
                 }
             }
@@ -47410,13 +45861,13 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for SemanticEl(_, tm4) in self.semantic_el.iter_all_0(tm3) {
-                        self.record_action_190(delta, tm4, tm5);
+                        self.record_action_180(delta, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_191(&self, delta: &mut ModelDelta, tm3: Pred, tm4: ElList) {
+    fn record_action_181(&self, delta: &mut ModelDelta, tm3: Pred, tm4: ElList) {
         let existing_row = self.pred_app.iter_all_0_1(tm3, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -47434,7 +45885,7 @@ impl Eqlog {
             for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_191(delta, tm3, tm4);
+                    self.record_action_181(delta, tm3, tm4);
                 }
             }
         }
@@ -47444,7 +45895,7 @@ impl Eqlog {
             for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_191(delta, tm3, tm4);
+                    self.record_action_181(delta, tm3, tm4);
                 }
             }
         }
@@ -47454,322 +45905,368 @@ impl Eqlog {
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                    self.record_action_191(delta, tm3, tm4);
+                    self.record_action_181(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_192(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm2: Chain) {
-        let existing_row = self.grouped_rule_chain.iter_all_0_1(tm0, tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(GroupedRuleChain(_, _)) => (),
-            None => {
-                delta
-                    .new_grouped_rule_chain
-                    .push(GroupedRuleChain(tm0, tm2));
-                ()
-            }
-        };
-    }
-    fn query_and_record_grouped_rule_stmt_list_chain(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm2) in self.grouped_stmt_list_chain.iter_all_0(tm1) {
-                self.record_action_192(delta, tm0, tm2);
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtListChain(tm1, tm2) in self.grouped_stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
-                self.record_action_192(delta, tm0, tm2);
-            }
-        }
-    }
-    fn record_action_193(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
-        let existing_row = self.grouped_stmt_list_chain.iter_all_0(tm0).next();
+    fn record_action_182(&self, delta: &mut ModelDelta, tm0: StmtNode) {
+        let existing_row = self.grouped_stmt_morphism.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(GroupedStmtListChain(_, tm1)) => (tm1,),
+            Some(GroupedStmtMorphism(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_chain(self);
+                let tm1 = delta.new_morphism(self);
                 delta
-                    .new_grouped_stmt_list_chain
-                    .push(GroupedStmtListChain(tm0, tm1));
+                    .new_grouped_stmt_morphism
+                    .push(GroupedStmtMorphism(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_grouped_stmt_list_chain_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for tm0 in self.stmt_list_node_dirty.iter().copied() {
-            self.record_action_193(delta, tm0);
+        for tm0 in self.stmt_node_dirty.iter().copied() {
+            self.record_action_182(delta, tm0);
         }
     }
-    fn record_action_194(&self, delta: &mut ModelDelta, tm1: Chain) {
-        let existing_row = self.nil_chain.iter_all_0(tm1).next();
+    fn record_action_183(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: Morphism) {
+        let existing_row = self
+            .rule_first_grouped_morphism
+            .iter_all_0_1(tm3, tm4)
+            .next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(NilChain(_)) => (),
-            None => {
-                delta.new_nil_chain.push(NilChain(tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_grouped_stmt_list_chain_nil(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm1) in self.grouped_stmt_list_chain.iter_all_0(tm0) {
-                self.record_action_194(delta, tm1);
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtListChain(tm0, tm1) in self.grouped_stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_194(delta, tm1);
-            }
-        }
-    }
-    fn record_action_195(&self, delta: &mut ModelDelta, tm4: StmtListNode, tm7: Chain) {
-        let existing_row = self.grouped_stmt_list_chain.iter_all_0_1(tm4, tm7).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(GroupedStmtListChain(_, _)) => (),
+            Some(RuleFirstGroupedMorphism(_, _)) => (),
             None => {
                 delta
-                    .new_grouped_stmt_list_chain
-                    .push(GroupedStmtListChain(tm4, tm7));
+                    .new_rule_first_grouped_morphism
+                    .push(RuleFirstGroupedMorphism(tm3, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_grouped_chain_if_if(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_stmt_first_grouped(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
-                            self.record_action_195(delta, tm4, tm7);
-                        }
-                    }
+                for GroupedStmtMorphism(_, tm4) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    self.record_action_183(delta, tm3, tm4);
                 }
             }
         }
         #[allow(unused_variables)]
-        for IfStmtNode(tm2, tm3) in self.if_stmt_node.iter_dirty() {
+        for RuleDecl(tm3, tm0) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
+            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6)
-                    {
-                        #[allow(unused_variables)]
-                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                            self.record_action_195(delta, tm4, tm7);
-                        }
-                    }
+                for GroupedStmtMorphism(_, tm4) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    self.record_action_183(delta, tm3, tm4);
                 }
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
+        for GroupedStmtMorphism(tm1, tm4) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+            for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                            self.record_action_195(delta, tm4, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                            self.record_action_195(delta, tm4, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtListChain(tm6, tm7) in self.grouped_stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                            self.record_action_195(delta, tm4, tm7);
-                        }
-                    }
+                for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
+                    self.record_action_183(delta, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_196(&self, delta: &mut ModelDelta, tm4: StmtListNode, tm7: Chain) {
-        let existing_row = self.grouped_stmt_list_chain.iter_all_0_1(tm4, tm7).next();
+    fn record_action_184(&self, delta: &mut ModelDelta, tm2: Morphism) {
+        let existing_row = self.if_morphism.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(GroupedStmtListChain(_, _)) => (),
+            Some(IfMorphism(_)) => (),
+            None => {
+                delta.new_if_morphism.push(IfMorphism(tm2));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_if(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for IfMorphism(tm0) in self.if_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm0) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    self.record_action_184(delta, tm2);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm0) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm0) {
+                    self.record_action_184(delta, tm2);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm2) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm0) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm0) {
+                    self.record_action_184(delta, tm2);
+                }
+            }
+        }
+    }
+    fn record_action_185(&self, delta: &mut ModelDelta, tm2: Morphism) {
+        let existing_row = self.surj_then_morphism.iter_all_0(tm2).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(SurjThenMorphism(_)) => (),
+            None => {
+                delta.new_surj_then_morphism.push(SurjThenMorphism(tm2));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_surj_then(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for SurjThenMorphism(tm0) in self.surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm0) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    self.record_action_185(delta, tm2);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm0) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
+                    self.record_action_185(delta, tm2);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm2) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm0) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
+                    self.record_action_185(delta, tm2);
+                }
+            }
+        }
+    }
+    fn record_action_186(&self, delta: &mut ModelDelta, tm2: Morphism) {
+        let existing_row = self.non_surj_then_morphism.iter_all_0(tm2).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NonSurjThenMorphism(_)) => (),
             None => {
                 delta
-                    .new_grouped_stmt_list_chain
-                    .push(GroupedStmtListChain(tm4, tm7));
+                    .new_non_surj_then_morphism
+                    .push(NonSurjThenMorphism(tm2));
                 ()
             }
         };
     }
-    fn query_and_record_stmt_list_chain_then_then(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_non_surj_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
+        for NonSurjThenMorphism(tm0) in self.non_surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
-                    #[allow(unused_variables)]
-                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm7) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
-                        {
-                            self.record_action_196(delta, tm4, tm7);
-                        }
-                    }
+                for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    self.record_action_186(delta, tm2);
                 }
             }
         }
         #[allow(unused_variables)]
-        for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
+        for StmtMorphism(tm1, tm0) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
+            for GroupedStmtMorphism(_, tm2) in self.grouped_stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6)
-                    {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_196(delta, tm4, tm7);
-                        }
-                    }
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
+                    self.record_action_186(delta, tm2);
                 }
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
+        for GroupedStmtMorphism(tm1, tm2) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+            for StmtMorphism(_, tm0) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_196(delta, tm4, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm7) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_196(delta, tm4, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtListChain(tm6, tm7) in self.grouped_stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_196(delta, tm4, tm7);
-                        }
-                    }
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
+                    self.record_action_186(delta, tm2);
                 }
             }
         }
     }
-    fn record_action_197(&self, delta: &mut ModelDelta, tm4: Structure, tm5: Chain, tm6: Chain) {
-        let existing_row = self.chain_tail.iter_all_0_1(tm6, tm5).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ChainTail(_, _)) => (),
-            None => {
-                delta.new_chain_tail.push(ChainTail(tm6, tm5));
-                ()
-            }
-        };
-        let existing_row = self.chain_head_structure.iter_all_0_1(tm6, tm4).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ChainHeadStructure(_, _)) => (),
-            None => {
-                delta
-                    .new_chain_head_structure
-                    .push(ChainHeadStructure(tm6, tm4));
-                ()
-            }
-        };
+    fn record_action_187(&self, delta: &mut ModelDelta, tm5: Structure, tm7: Structure) {
+        if tm5 != tm7 {
+            delta.new_structure_equalities.push((tm5, tm7));
+        }
+        if tm7 != tm5 {
+            delta.new_structure_equalities.push((tm7, tm5));
+        }
     }
-    fn query_and_record_stmt_list_chain_singleton(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_first_in_rule(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm5) in self.grouped_stmt_list_chain.iter_all_0(tm0) {
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
+                    for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3)
+                        for GroupedStmtMorphism(_, tm4) in
+                            self.grouped_stmt_morphism.iter_all_0(tm1)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm6) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm1)
-                            {
-                                self.record_action_197(delta, tm4, tm5, tm6);
+                            for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                                self.record_action_187(delta, tm5, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for RuleDecl(tm3, tm0) in self.rule_decl.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm4) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                            #[allow(unused_variables)]
+                            for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+                                self.record_action_187(delta, tm5, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm4, tm5) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm1, _) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm0, _, tm2) in
+                            self.cons_stmt_list_node.iter_all_1(tm1)
+                        {
+                            #[allow(unused_variables)]
+                            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
+                                self.record_action_187(delta, tm5, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm6, tm7) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm6) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm4) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm0, _, tm2) in
+                            self.cons_stmt_list_node.iter_all_1(tm1)
+                        {
+                            #[allow(unused_variables)]
+                            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
+                                self.record_action_187(delta, tm5, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm6) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm4) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm0, _, tm2) in
+                            self.cons_stmt_list_node.iter_all_1(tm1)
+                        {
+                            #[allow(unused_variables)]
+                            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
+                                self.record_action_187(delta, tm5, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm4) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm0, _, tm2) in
+                            self.cons_stmt_list_node.iter_all_1(tm1)
+                        {
+                            #[allow(unused_variables)]
+                            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
+                                self.record_action_187(delta, tm5, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_188(&self, delta: &mut ModelDelta, tm4: Structure, tm6: Structure) {
+        if tm4 != tm6 {
+            delta.new_structure_equalities.push((tm4, tm6));
+        }
+        if tm6 != tm4 {
+            delta.new_structure_equalities.push((tm6, tm4));
+        }
+    }
+    fn query_and_record_grouped_stmt_morphism_singleton(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm3) in self.stmt_morphism.iter_all_0(tm2) {
+                    #[allow(unused_variables)]
+                    for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, tm5) in
+                            self.grouped_stmt_morphism.iter_all_0(tm2)
+                        {
+                            #[allow(unused_variables)]
+                            for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                                self.record_action_188(delta, tm4, tm6);
                             }
                         }
                     }
@@ -47779,18 +46276,16 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm1, tm2, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm5) in self.grouped_stmt_list_chain.iter_all_0(tm0) {
+            for StmtMorphism(_, tm3) in self.stmt_morphism.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
+                for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
+                    for GroupedStmtMorphism(_, tm5) in self.grouped_stmt_morphism.iter_all_0(tm2) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm6) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm1)
-                        {
+                        for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
                             #[allow(unused_variables)]
                             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                                self.record_action_197(delta, tm4, tm5, tm6);
+                                self.record_action_188(delta, tm4, tm6);
                             }
                         }
                     }
@@ -47798,20 +46293,20 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ChainHeadStructure(tm3, tm4) in self.chain_head_structure.iter_dirty() {
+        for Cod(tm3, tm4) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(tm1, _) in self.stmt_list_chain.iter_all_1(tm3) {
+            for StmtMorphism(tm2, _) in self.stmt_morphism.iter_all_1(tm3) {
                 #[allow(unused_variables)]
-                for GroupedStmtListChain(_, tm6) in self.grouped_stmt_list_chain.iter_all_0(tm1) {
+                for GroupedStmtMorphism(_, tm5) in self.grouped_stmt_morphism.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
+                    for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm5) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm0)
+                        for ConsStmtListNode(tm1, _, tm0) in
+                            self.cons_stmt_list_node.iter_all_1(tm2)
                         {
                             #[allow(unused_variables)]
                             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                                self.record_action_197(delta, tm4, tm5, tm6);
+                                self.record_action_188(delta, tm4, tm6);
                             }
                         }
                     }
@@ -47819,20 +46314,20 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for StmtListChain(tm1, tm3) in self.stmt_list_chain.iter_dirty() {
+        for Cod(tm5, tm6) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm6) in self.grouped_stmt_list_chain.iter_all_0(tm1) {
+            for GroupedStmtMorphism(tm2, _) in self.grouped_stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
+                for StmtMorphism(_, tm3) in self.stmt_morphism.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
+                    for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm5) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm0)
+                        for ConsStmtListNode(tm1, _, tm0) in
+                            self.cons_stmt_list_node.iter_all_1(tm2)
                         {
                             #[allow(unused_variables)]
                             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                                self.record_action_197(delta, tm4, tm5, tm6);
+                                self.record_action_188(delta, tm4, tm6);
                             }
                         }
                     }
@@ -47840,20 +46335,20 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm0, tm5) in self.grouped_stmt_list_chain.iter_dirty() {
+        for StmtMorphism(tm2, tm3) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+            for GroupedStmtMorphism(_, tm5) in self.grouped_stmt_morphism.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
+                for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
+                    for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm6) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm1)
+                        for ConsStmtListNode(tm1, _, tm0) in
+                            self.cons_stmt_list_node.iter_all_1(tm2)
                         {
                             #[allow(unused_variables)]
                             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                                self.record_action_197(delta, tm4, tm5, tm6);
+                                self.record_action_188(delta, tm4, tm6);
                             }
                         }
                     }
@@ -47861,20 +46356,20 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm1, tm6) in self.grouped_stmt_list_chain.iter_dirty() {
+        for GroupedStmtMorphism(tm2, tm5) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(_, tm3) in self.stmt_list_chain.iter_all_0(tm1) {
+            for StmtMorphism(_, tm3) in self.stmt_morphism.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm4) in self.chain_head_structure.iter_all_0(tm3) {
+                for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
+                    for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm5) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm0)
+                        for ConsStmtListNode(tm1, _, tm0) in
+                            self.cons_stmt_list_node.iter_all_1(tm2)
                         {
                             #[allow(unused_variables)]
                             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                                self.record_action_197(delta, tm4, tm5, tm6);
+                                self.record_action_188(delta, tm4, tm6);
                             }
                         }
                     }
@@ -47882,52 +46377,497 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_198(&self, delta: &mut ModelDelta, tm8: Structure, tm9: Chain, tm10: Chain) {
-        let existing_row = self.chain_tail.iter_all_0_1(tm10, tm9).next();
+    fn record_action_189(
+        &self,
+        delta: &mut ModelDelta,
+        tm6: Structure,
+        tm7: Morphism,
+        tm8: Morphism,
+    ) {
+        let existing_row = self.dom.iter_all_0_1(tm7, tm6).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(ChainTail(_, _)) => (),
+            Some(Dom(_, _)) => (),
             None => {
-                delta.new_chain_tail.push(ChainTail(tm10, tm9));
+                delta.new_dom.push(Dom(tm7, tm6));
                 ()
             }
         };
-        let existing_row = self.chain_head_structure.iter_all_0_1(tm10, tm8).next();
+        let existing_row = self.cod.iter_all_0_1(tm8, tm6).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(ChainHeadStructure(_, _)) => (),
+            Some(Cod(_, _)) => (),
+            None => {
+                delta.new_cod.push(Cod(tm8, tm6));
+                ()
+            }
+        };
+    }
+    fn query_and_record_next_grouped_dom_cod(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                    #[allow(unused_variables)]
+                    for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for NextGroupedMorphism(_, _) in
+                                    self.next_grouped_morphism.iter_all_0_1(tm8, tm7)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                        #[allow(unused_variables)]
+                        for NextGroupedMorphism(_, tm7) in
+                            self.next_grouped_morphism.iter_all_0(tm8)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(tm1, _) in
+                                self.grouped_stmt_morphism.iter_all_1(tm7)
+                            {
+                                #[allow(unused_variables)]
+                                for ConsStmtListNode(_, _, tm2) in
+                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm5, tm6) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for NextGroupedMorphism(_, tm7) in self.next_grouped_morphism.iter_all_0(tm8) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(tm1, _) in
+                            self.grouped_stmt_morphism.iter_all_1(tm7)
+                        {
+                            #[allow(unused_variables)]
+                            for ConsStmtListNode(tm3, _, tm0) in
+                                self.cons_stmt_list_node.iter_all_1(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for ConsStmtListNode(_, _, tm2) in
+                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for NextGroupedMorphism(_, tm7) in self.next_grouped_morphism.iter_all_0(tm8) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm1, _) in self.grouped_stmt_morphism.iter_all_1(tm7) {
+                        #[allow(unused_variables)]
+                        for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for ConsStmtListNode(tm3, _, tm0) in
+                                self.cons_stmt_list_node.iter_all_1(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for ConsStmtListNode(_, _, tm2) in
+                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for NextGroupedMorphism(tm8, _) in self.next_grouped_morphism.iter_all_1(tm7) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(tm4, _) in self.grouped_stmt_morphism.iter_all_1(tm8) {
+                    #[allow(unused_variables)]
+                    for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for ConsStmtListNode(tm3, _, tm0) in
+                                self.cons_stmt_list_node.iter_all_1(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for ConsStmtListNode(_, _, tm2) in
+                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm4, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for NextGroupedMorphism(_, tm7) in self.next_grouped_morphism.iter_all_0(tm8) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(tm1, _) in self.grouped_stmt_morphism.iter_all_1(tm7) {
+                    #[allow(unused_variables)]
+                    for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for ConsStmtListNode(tm3, _, tm0) in
+                                self.cons_stmt_list_node.iter_all_1(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for ConsStmtListNode(_, _, tm2) in
+                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for NextGroupedMorphism(tm8, tm7) in self.next_grouped_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm4, _) in self.grouped_stmt_morphism.iter_all_1(tm8) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(tm1, _) in self.grouped_stmt_morphism.iter_all_1(tm7) {
+                    #[allow(unused_variables)]
+                    for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for ConsStmtListNode(tm3, _, tm0) in
+                                self.cons_stmt_list_node.iter_all_1(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for ConsStmtListNode(_, _, tm2) in
+                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                {
+                                    self.record_action_189(delta, tm6, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_190(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        if tm8 != tm7 {
+            delta.new_morphism_equalities.push((tm8, tm7));
+        }
+        if tm7 != tm8 {
+            delta.new_morphism_equalities.push((tm7, tm8));
+        }
+    }
+    fn query_and_record_grouped_stmt_morphism_if_if(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0(tm4)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for IfMorphism(tm5) in self.if_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for IfMorphism(tm6) in self.if_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm6) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm6) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm6) {
+                                        self.record_action_190(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_191(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm8).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
             None => {
                 delta
-                    .new_chain_head_structure
-                    .push(ChainHeadStructure(tm10, tm8));
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm8));
                 ()
             }
         };
     }
-    fn query_and_record_grouped_chain_if_then(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_if_surj_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm0) {
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for GroupedStmtMorphism(_, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm2, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
                                     {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -47937,27 +46877,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm2) {
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm9) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm10) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm6)
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
                                 {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -47967,25 +46908,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm2, tm5) in self.cons_stmt_list_node.iter_dirty() {
+        for IfMorphism(tm5) in self.if_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm10) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm6)
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -47995,26 +46939,26 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm0, tm4) in self.cons_stmt_list_node.iter_dirty() {
+        for SurjThenMorphism(tm6) in self.surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm6) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm10) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm2, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48024,26 +46968,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_dirty() {
+        for StmtMorphism(tm4, tm5) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(tm6, _) in self.stmt_list_chain.iter_all_1(tm7) {
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm0, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm2, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48053,26 +46999,26 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for StmtListChain(tm6, tm7) in self.stmt_list_chain.iter_dirty() {
+        for StmtMorphism(tm1, tm6) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm0, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm2, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48082,26 +47028,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm4, tm9) in self.grouped_stmt_list_chain.iter_dirty() {
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm10) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm2, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48111,26 +47059,26 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm6, tm10) in self.grouped_stmt_list_chain.iter_dirty() {
+        for GroupedStmtMorphism(tm1, tm8) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm0, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm2, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_198(delta, tm8, tm9, tm10);
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_191(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48140,51 +47088,41 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_199(&self, delta: &mut ModelDelta, tm8: Structure, tm9: Chain, tm10: Chain) {
-        let existing_row = self.chain_tail.iter_all_0_1(tm10, tm9).next();
+    fn record_action_192(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm8).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(ChainTail(_, _)) => (),
-            None => {
-                delta.new_chain_tail.push(ChainTail(tm10, tm9));
-                ()
-            }
-        };
-        let existing_row = self.chain_head_structure.iter_all_0_1(tm10, tm8).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ChainHeadStructure(_, _)) => (),
+            Some(NextGroupedMorphism(_, _)) => (),
             None => {
                 delta
-                    .new_chain_head_structure
-                    .push(ChainHeadStructure(tm10, tm8));
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm8));
                 ()
             }
         };
     }
-    fn query_and_record_grouped_chain_then_if(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_if_non_surj_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        for GroupedStmtMorphism(_, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0(tm4)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm9) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtListChain(_, tm10) in
-                                        self.grouped_stmt_list_chain.iter_all_0(tm6)
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
                                     {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48194,28 +47132,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm0, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                 #[allow(unused_variables)]
-                                for GroupedStmtListChain(_, tm10) in
-                                    self.grouped_stmt_list_chain.iter_all_0(tm6)
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
                                 {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48225,25 +47163,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
+        for IfMorphism(tm5) in self.if_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
                         #[allow(unused_variables)]
-                        for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtListChain(_, tm10) in
-                                self.grouped_stmt_list_chain.iter_all_0(tm6)
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48253,26 +47194,26 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
+        for NonSurjThenMorphism(tm6) in self.non_surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm9) in self.grouped_stmt_list_chain.iter_all_0(tm4) {
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm6) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm10) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm0, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48282,26 +47223,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ChainHeadStructure(tm7, tm8) in self.chain_head_structure.iter_dirty() {
+        for StmtMorphism(tm4, tm5) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(tm6, _) in self.stmt_list_chain.iter_all_1(tm7) {
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm0, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48311,26 +47254,26 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for StmtListChain(tm6, tm7) in self.stmt_list_chain.iter_dirty() {
+        for StmtMorphism(tm1, tm6) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtListChain(_, tm10) in self.grouped_stmt_list_chain.iter_all_0(tm6) {
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm0, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48340,26 +47283,28 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm4, tm9) in self.grouped_stmt_list_chain.iter_dirty() {
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm10) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm6)
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm0, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
-                            {
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48369,26 +47314,26 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtListChain(tm6, tm10) in self.grouped_stmt_list_chain.iter_dirty() {
+        for GroupedStmtMorphism(tm1, tm8) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtListChain(_, tm7) in self.stmt_list_chain.iter_all_0(tm6) {
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for ChainHeadStructure(_, tm8) in self.chain_head_structure.iter_all_0(tm7) {
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm2, tm4) in self.cons_stmt_list_node.iter_all_0(tm6) {
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for GroupedStmtListChain(_, tm9) in
-                            self.grouped_stmt_list_chain.iter_all_0(tm4)
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, tm0, tm5) in
-                                self.cons_stmt_list_node.iter_all_0(tm4)
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_199(delta, tm8, tm9, tm10);
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_192(delta, tm7, tm8);
                                     }
                                 }
                             }
@@ -48398,7 +47343,927 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_200(
+    fn record_action_193(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm8).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
+            None => {
+                delta
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm8));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_surj_then_if(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0(tm4)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for IfMorphism(tm5) in self.if_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SurjThenMorphism(tm6) in self.surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm6) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm6) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for IfMorphism(_) in self.if_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_193(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_194(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        if tm8 != tm7 {
+            delta.new_morphism_equalities.push((tm8, tm7));
+        }
+        if tm7 != tm8 {
+            delta.new_morphism_equalities.push((tm7, tm8));
+        }
+    }
+    fn query_and_record_grouped_stmt_morphism_surj_then_surj_then(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0(tm4)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm5)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SurjThenMorphism(tm5) in self.surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SurjThenMorphism(tm6) in self.surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm6) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm6) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm5)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm5)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_194(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_195(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm8).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
+            None => {
+                delta
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm8));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_surj_then_non_surj_then(
+        &self,
+        delta: &mut ModelDelta,
+    ) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0(tm4)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                                    #[allow(unused_variables)]
+                                    for GroupedStmtMorphism(_, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0(tm1)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
+                                    #[allow(unused_variables)]
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SurjThenMorphism(tm5) in self.surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                                    #[allow(unused_variables)]
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for NonSurjThenMorphism(tm6) in self.non_surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm6) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm5)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
+                                    #[allow(unused_variables)]
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm1, tm6) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm5)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for GroupedStmtMorphism(_, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0(tm1)
+                                {
+                                    #[allow(unused_variables)]
+                                    for NonSurjThenMorphism(_) in
+                                        self.non_surj_then_morphism.iter_all_0(tm6)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm6) in self.stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(tm3, tm4, _) in
+                            self.cons_stmt_list_node.iter_all_2(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm5)
+                                    {
+                                        self.record_action_195(delta, tm7, tm8);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_196(&self, delta: &mut ModelDelta, tm6: Morphism, tm7: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm6).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
+            None => {
+                delta
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm6));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_non_surj(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm6) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                    #[allow(unused_variables)]
+                    for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                self.record_action_196(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm6) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                self.record_action_196(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for NonSurjThenMorphism(tm5) in self.non_surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm6) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                self.record_action_196(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for StmtMorphism(tm4, tm5) in self.stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm7) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm6) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                self.record_action_196(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm6) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
+                #[allow(unused_variables)]
+                for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                    #[allow(unused_variables)]
+                    for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0(tm4)
+                            {
+                                self.record_action_196(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for ConsStmtListNode(_, tm1, tm2) in
+                            self.cons_stmt_list_node.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, tm6) in
+                                self.grouped_stmt_morphism.iter_all_0(tm1)
+                            {
+                                self.record_action_196(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_197(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -48429,18 +48294,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmts(_, tm3) in self.var_before_stmts.iter_all_0(tm0) {
-                self.record_action_200(delta, tm1, tm2, tm3);
+                self.record_action_197(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeStmts(tm0, tm3) in self.var_before_stmts.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_200(delta, tm1, tm2, tm3);
+                self.record_action_197(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_201(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: VirtIdent) {
+    fn record_action_198(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_before_if_atom.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48456,18 +48321,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmt(_, tm2) in self.var_before_stmt.iter_all_0(tm0) {
-                self.record_action_201(delta, tm1, tm2);
+                self.record_action_198(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeStmt(tm0, tm2) in self.var_before_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                self.record_action_201(delta, tm1, tm2);
+                self.record_action_198(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_202(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: VirtIdent) {
+    fn record_action_199(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_before_then_atom.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48485,18 +48350,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmt(_, tm2) in self.var_before_stmt.iter_all_0(tm0) {
-                self.record_action_202(delta, tm1, tm2);
+                self.record_action_199(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeStmt(tm0, tm2) in self.var_before_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                self.record_action_202(delta, tm1, tm2);
+                self.record_action_199(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_203(
+    fn record_action_200(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -48527,18 +48392,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_203(delta, tm1, tm2, tm3);
+                self.record_action_200(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                self.record_action_203(delta, tm1, tm2, tm3);
+                self.record_action_200(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_204(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
+    fn record_action_201(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48554,18 +48419,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm2) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_204(delta, tm1, tm2);
+                self.record_action_201(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm2) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                self.record_action_204(delta, tm1, tm2);
+                self.record_action_201(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_205(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_202(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48581,18 +48446,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_205(delta, tm2, tm3);
+                self.record_action_202(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                self.record_action_205(delta, tm2, tm3);
+                self.record_action_202(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_206(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: VirtIdent) {
+    fn record_action_203(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48608,18 +48473,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_206(delta, tm1, tm3);
+                self.record_action_203(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                self.record_action_206(delta, tm1, tm3);
+                self.record_action_203(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_207(
+    fn record_action_204(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -48650,18 +48515,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_207(delta, tm1, tm2, tm3);
+                self.record_action_204(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                self.record_action_207(delta, tm1, tm2, tm3);
+                self.record_action_204(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_208(
+    fn record_action_205(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -48694,18 +48559,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_208(delta, tm1, tm2, tm3);
+                self.record_action_205(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0) {
-                self.record_action_208(delta, tm1, tm2, tm3);
+                self.record_action_205(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_209(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_206(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48721,18 +48586,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_209(delta, tm2, tm3);
+                self.record_action_206(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                self.record_action_209(delta, tm2, tm3);
+                self.record_action_206(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_210(
+    fn record_action_207(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -48763,18 +48628,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeTerms(_, tm3) in self.var_before_terms.iter_all_0(tm0) {
-                self.record_action_210(delta, tm1, tm2, tm3);
+                self.record_action_207(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeTerms(tm0, tm3) in self.var_before_terms.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_210(delta, tm1, tm2, tm3);
+                self.record_action_207(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_211(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
+    fn record_action_208(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48790,18 +48655,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeOptTerm(_, tm2) in self.var_before_opt_term.iter_all_0(tm0) {
-                self.record_action_211(delta, tm1, tm2);
+                self.record_action_208(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeOptTerm(tm0, tm2) in self.var_before_opt_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                self.record_action_211(delta, tm1, tm2);
+                self.record_action_208(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_212(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_209(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48817,18 +48682,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeTerm(_, tm3) in self.var_before_term.iter_all_0(tm0) {
-                self.record_action_212(delta, tm2, tm3);
+                self.record_action_209(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeTerm(tm0, tm3) in self.var_before_term.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_212(delta, tm2, tm3);
+                self.record_action_209(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_213(&self, delta: &mut ModelDelta, tm0: TermNode, tm2: VirtIdent) {
+    fn record_action_210(&self, delta: &mut ModelDelta, tm0: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48844,18 +48709,18 @@ impl Eqlog {
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
-                self.record_action_213(delta, tm0, tm2);
+                self.record_action_210(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for RealVirtIdent(tm1, tm2) in self.real_virt_ident.iter_dirty() {
             #[allow(unused_variables)]
             for VarTermNode(tm0, _) in self.var_term_node.iter_all_1(tm1) {
-                self.record_action_213(delta, tm0, tm2);
+                self.record_action_210(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_214(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
+    fn record_action_211(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48871,18 +48736,18 @@ impl Eqlog {
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for WildcardVirtIdent(_, tm1) in self.wildcard_virt_ident.iter_all_0(tm0) {
-                self.record_action_214(delta, tm0, tm1);
+                self.record_action_211(delta, tm0, tm1);
             }
         }
         #[allow(unused_variables)]
         for WildcardVirtIdent(tm0, tm1) in self.wildcard_virt_ident.iter_dirty() {
             #[allow(unused_variables)]
             for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                self.record_action_214(delta, tm0, tm1);
+                self.record_action_211(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_215(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: VirtIdent) {
+    fn record_action_212(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48898,18 +48763,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_215(delta, tm0, tm3);
+                self.record_action_212(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
-                self.record_action_215(delta, tm0, tm3);
+                self.record_action_212(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_216(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
+    fn record_action_213(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_terms.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48925,18 +48790,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_216(delta, tm0, tm3);
+                self.record_action_213(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
-                self.record_action_216(delta, tm0, tm3);
+                self.record_action_213(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_217(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
+    fn record_action_214(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_terms.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48952,18 +48817,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_217(delta, tm0, tm3);
+                self.record_action_214(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
-                self.record_action_217(delta, tm0, tm3);
+                self.record_action_214(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_218(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm2: VirtIdent) {
+    fn record_action_215(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm2: VirtIdent) {
         let existing_row = self.var_in_opt_term.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -48979,18 +48844,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm2) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_218(delta, tm0, tm2);
+                self.record_action_215(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm2) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(tm0, _) in self.some_term_node.iter_all_1(tm1) {
-                self.record_action_218(delta, tm0, tm2);
+                self.record_action_215(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_219(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_216(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49006,18 +48871,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_219(delta, tm0, tm3);
+                self.record_action_216(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
-                self.record_action_219(delta, tm0, tm3);
+                self.record_action_216(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_220(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_217(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49033,18 +48898,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_220(delta, tm0, tm3);
+                self.record_action_217(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, tm1, _) in self.equal_if_atom_node.iter_all_2(tm2) {
-                self.record_action_220(delta, tm0, tm3);
+                self.record_action_217(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_221(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm2: VirtIdent) {
+    fn record_action_218(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49060,18 +48925,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm2) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_221(delta, tm0, tm2);
+                self.record_action_218(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm2) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(tm0, _) in self.defined_if_atom_node.iter_all_1(tm1) {
-                self.record_action_221(delta, tm0, tm2);
+                self.record_action_218(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_222(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_219(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49087,18 +48952,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_222(delta, tm0, tm3);
+                self.record_action_219(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
-                self.record_action_222(delta, tm0, tm3);
+                self.record_action_219(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_223(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_220(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49114,18 +48979,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_223(delta, tm0, tm3);
+                self.record_action_220(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
-                self.record_action_223(delta, tm0, tm3);
+                self.record_action_220(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_224(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_221(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49141,18 +49006,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_224(delta, tm0, tm3);
+                self.record_action_221(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
-                self.record_action_224(delta, tm0, tm3);
+                self.record_action_221(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_225(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_222(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49168,18 +49033,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_225(delta, tm0, tm3);
+                self.record_action_222(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
-                self.record_action_225(delta, tm0, tm3);
+                self.record_action_222(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_226(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_223(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49195,18 +49060,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInOptTerm(_, tm3) in self.var_in_opt_term.iter_all_0(tm1) {
-                self.record_action_226(delta, tm0, tm3);
+                self.record_action_223(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInOptTerm(tm1, tm3) in self.var_in_opt_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1) {
-                self.record_action_226(delta, tm0, tm3);
+                self.record_action_223(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_227(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_224(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49222,18 +49087,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_227(delta, tm0, tm3);
+                self.record_action_224(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
-                self.record_action_227(delta, tm0, tm3);
+                self.record_action_224(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_228(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_225(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49249,18 +49114,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_228(delta, tm0, tm3);
+                self.record_action_225(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
-                self.record_action_228(delta, tm0, tm3);
+                self.record_action_225(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_229(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_226(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49276,18 +49141,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInIfAtom(_, tm2) in self.var_in_if_atom.iter_all_0(tm1) {
-                self.record_action_229(delta, tm0, tm2);
+                self.record_action_226(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInIfAtom(tm1, tm2) in self.var_in_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(tm0, _) in self.if_stmt_node.iter_all_1(tm1) {
-                self.record_action_229(delta, tm0, tm2);
+                self.record_action_226(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_230(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_227(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49303,18 +49168,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInThenAtom(_, tm2) in self.var_in_then_atom.iter_all_0(tm1) {
-                self.record_action_230(delta, tm0, tm2);
+                self.record_action_227(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInThenAtom(tm1, tm2) in self.var_in_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
-                self.record_action_230(delta, tm0, tm2);
+                self.record_action_227(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_231(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: VirtIdent) {
+    fn record_action_228(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_stmts.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49330,18 +49195,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInStmt(_, tm3) in self.var_in_stmt.iter_all_0(tm1) {
-                self.record_action_231(delta, tm2, tm3);
+                self.record_action_228(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInStmt(tm1, tm3) in self.var_in_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
-                self.record_action_231(delta, tm2, tm3);
+                self.record_action_228(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_232(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
+    fn record_action_229(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49370,18 +49235,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermsShouldBeEpicOk(_) in self.terms_should_be_epic_ok.iter_all_0(tm0) {
-                self.record_action_232(delta, tm1, tm2);
+                self.record_action_229(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for TermsShouldBeEpicOk(tm0) in self.terms_should_be_epic_ok.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_232(delta, tm1, tm2);
+                self.record_action_229(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_233(&self, delta: &mut ModelDelta, tm2: TermListNode) {
+    fn record_action_230(&self, delta: &mut ModelDelta, tm2: TermListNode) {
         let existing_row = self.terms_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49399,18 +49264,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermShouldBeEpicOk(_) in self.term_should_be_epic_ok.iter_all_0(tm0) {
-                self.record_action_233(delta, tm2);
+                self.record_action_230(delta, tm2);
             }
         }
         #[allow(unused_variables)]
         for TermShouldBeEpicOk(tm0) in self.term_should_be_epic_ok.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_233(delta, tm2);
+                self.record_action_230(delta, tm2);
             }
         }
     }
-    fn record_action_234(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
+    fn record_action_231(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49437,10 +49302,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
-            self.record_action_234(delta, tm1, tm2);
+            self.record_action_231(delta, tm1, tm2);
         }
     }
-    fn record_action_235(&self, delta: &mut ModelDelta, tm2: TermNode) {
+    fn record_action_232(&self, delta: &mut ModelDelta, tm2: TermNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49456,10 +49321,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
-            self.record_action_235(delta, tm2);
+            self.record_action_232(delta, tm2);
         }
     }
-    fn record_action_236(&self, delta: &mut ModelDelta, tm2: TermListNode) {
+    fn record_action_233(&self, delta: &mut ModelDelta, tm2: TermListNode) {
         let existing_row = self.terms_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49475,267 +49340,64 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
-            self.record_action_236(delta, tm2);
+            self.record_action_233(delta, tm2);
         }
     }
-    fn record_action_237(&self, delta: &mut ModelDelta, tm7: Morphism) {
-        let existing_row = self.should_be_surjective.iter_all_0(tm7).next();
+    fn record_action_234(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        let existing_row = self.should_be_surjective.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(ShouldBeSurjective(_)) => (),
             None => {
-                delta.new_should_be_surjective.push(ShouldBeSurjective(tm7));
+                delta.new_should_be_surjective.push(ShouldBeSurjective(tm0));
                 ()
             }
         };
     }
-    fn query_and_record_then_stmt_surjective(&self, delta: &mut ModelDelta) {
+    fn query_and_record_surj_then_should_be_surjective(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
+        for SurjThenMorphism(tm0) in self.surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm2, _, tm3) in self.cons_stmt_list_node.iter_all_1(tm0) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(tm4, tm5, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
-                    #[allow(unused_variables)]
-                    for StmtListChain(_, tm6) in self.stmt_list_chain.iter_all_0(tm4) {
-                        #[allow(unused_variables)]
-                        for ChainHeadTransition(_, tm7) in
-                            self.chain_head_transition.iter_all_0(tm6)
-                        {
-                            self.record_action_237(delta, tm7);
-                        }
-                    }
-                }
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm0) {
+                self.record_action_234(delta, tm0);
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm2, tm0, tm3) in self.cons_stmt_list_node.iter_dirty() {
+        for StmtMorphism(tm1, tm0) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm4, tm5, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
-                #[allow(unused_variables)]
-                for StmtListChain(_, tm6) in self.stmt_list_chain.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for ChainHeadTransition(_, tm7) in self.chain_head_transition.iter_all_0(tm6) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_237(delta, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm5, tm2) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for StmtListChain(_, tm6) in self.stmt_list_chain.iter_all_0(tm4) {
-                #[allow(unused_variables)]
-                for ChainHeadTransition(_, tm7) in self.chain_head_transition.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm0, tm3) in self.cons_stmt_list_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_237(delta, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ChainHeadTransition(tm6, tm7) in self.chain_head_transition.iter_dirty() {
-            #[allow(unused_variables)]
-            for StmtListChain(tm4, _) in self.stmt_list_chain.iter_all_1(tm6) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm5, tm2) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm0, tm3) in self.cons_stmt_list_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_237(delta, tm7);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for StmtListChain(tm4, tm6) in self.stmt_list_chain.iter_dirty() {
-            #[allow(unused_variables)]
-            for ChainHeadTransition(_, tm7) in self.chain_head_transition.iter_all_0(tm6) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm5, tm2) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm0, tm3) in self.cons_stmt_list_node.iter_all_0(tm2) {
-                        #[allow(unused_variables)]
-                        for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                            self.record_action_237(delta, tm7);
-                        }
-                    }
-                }
+            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
+                self.record_action_234(delta, tm0);
             }
         }
     }
-    fn record_action_238(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
-        let existing_row = self.term_surjective_exempted.iter_all_0(tm1).next();
+    fn record_action_235(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        let existing_row = self.should_be_surjective.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(TermSurjectiveExempted(_)) => (),
+            Some(ShouldBeSurjective(_)) => (),
             None => {
-                delta
-                    .new_term_surjective_exempted
-                    .push(TermSurjectiveExempted(tm1));
-                ()
-            }
-        };
-        let existing_row = self.terms_surjective_exempted.iter_all_0(tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(TermsSurjectiveExempted(_)) => (),
-            None => {
-                delta
-                    .new_terms_surjective_exempted
-                    .push(TermsSurjectiveExempted(tm2));
+                delta.new_should_be_surjective.push(ShouldBeSurjective(tm0));
                 ()
             }
         };
     }
-    fn query_and_record_cons_head_tail_terms_surjective_exempted(&self, delta: &mut ModelDelta) {
+    fn query_and_record_non_surj_then_should_be_surjective(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
+        for NonSurjThenMorphism(tm0) in self.non_surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for TermsSurjectiveExempted(_) in self.terms_surjective_exempted.iter_all_0(tm0) {
-                self.record_action_238(delta, tm1, tm2);
+            for StmtMorphism(tm1, _) in self.stmt_morphism.iter_all_1(tm0) {
+                self.record_action_235(delta, tm0);
             }
         }
         #[allow(unused_variables)]
-        for TermsSurjectiveExempted(tm0) in self.terms_surjective_exempted.iter_dirty() {
+        for StmtMorphism(tm1, tm0) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_238(delta, tm1, tm2);
+            for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
+                self.record_action_235(delta, tm0);
             }
         }
     }
-    fn record_action_239(&self, delta: &mut ModelDelta, tm0: TermListNode) {
-        let existing_row = self.terms_surjective_exempted.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(TermsSurjectiveExempted(_)) => (),
-            None => {
-                delta
-                    .new_terms_surjective_exempted
-                    .push(TermsSurjectiveExempted(tm0));
-                ()
-            }
-        };
-    }
-    fn query_and_record_head_tail_cons_terms_surjective_exempted(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for TermSurjectiveExempted(_) in self.term_surjective_exempted.iter_all_0(tm1) {
-                #[allow(unused_variables)]
-                for TermsSurjectiveExempted(_) in self.terms_surjective_exempted.iter_all_0(tm2) {
-                    self.record_action_239(delta, tm0);
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for TermSurjectiveExempted(tm1) in self.term_surjective_exempted.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
-                #[allow(unused_variables)]
-                for TermsSurjectiveExempted(_) in self.terms_surjective_exempted.iter_all_0(tm2) {
-                    self.record_action_239(delta, tm0);
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for TermsSurjectiveExempted(tm2) in self.terms_surjective_exempted.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
-                #[allow(unused_variables)]
-                for TermSurjectiveExempted(_) in self.term_surjective_exempted.iter_all_0(tm1) {
-                    self.record_action_239(delta, tm0);
-                }
-            }
-        }
-    }
-    fn record_action_240(&self, delta: &mut ModelDelta, tm2: TermListNode) {
-        let existing_row = self.terms_surjective_exempted.iter_all_0(tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(TermsSurjectiveExempted(_)) => (),
-            None => {
-                delta
-                    .new_terms_surjective_exempted
-                    .push(TermsSurjectiveExempted(tm2));
-                ()
-            }
-        };
-    }
-    fn query_and_record_subterms_surjective_exempted(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for TermSurjectiveExempted(_) in self.term_surjective_exempted.iter_all_0(tm0) {
-                self.record_action_240(delta, tm2);
-            }
-        }
-        #[allow(unused_variables)]
-        for TermSurjectiveExempted(tm0) in self.term_surjective_exempted.iter_dirty() {
-            #[allow(unused_variables)]
-            for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_240(delta, tm2);
-            }
-        }
-    }
-    fn record_action_241(&self, delta: &mut ModelDelta, tm2: TermNode) {
-        let existing_row = self.term_surjective_exempted.iter_all_0(tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(TermSurjectiveExempted(_)) => (),
-            None => {
-                delta
-                    .new_term_surjective_exempted
-                    .push(TermSurjectiveExempted(tm2));
-                ()
-            }
-        };
-    }
-    fn query_and_record_defined_atom_surjective_exempted(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
-            self.record_action_241(delta, tm2);
-        }
-    }
-    fn record_action_242(&self, delta: &mut ModelDelta, tm1: El) {
-        let existing_row = self.el_surjective_exempted.iter_all_0(tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ElSurjectiveExempted(_)) => (),
-            None => {
-                delta
-                    .new_el_surjective_exempted
-                    .push(ElSurjectiveExempted(tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_semantic_el_exempted(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for TermSurjectiveExempted(tm0) in self.term_surjective_exempted.iter_dirty() {
-            #[allow(unused_variables)]
-            for SemanticEl(_, tm1) in self.semantic_el.iter_all_0(tm0) {
-                self.record_action_242(delta, tm1);
-            }
-        }
-        #[allow(unused_variables)]
-        for SemanticEl(tm0, tm1) in self.semantic_el.iter_dirty() {
-            #[allow(unused_variables)]
-            for TermSurjectiveExempted(_) in self.term_surjective_exempted.iter_all_0(tm0) {
-                self.record_action_242(delta, tm1);
-            }
-        }
-    }
-    fn record_action_243(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_236(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_should_be_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49755,7 +49417,7 @@ impl Eqlog {
             for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.record_action_243(delta, tm1);
+                    self.record_action_236(delta, tm1);
                 }
             }
         }
@@ -49765,7 +49427,7 @@ impl Eqlog {
             for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                    self.record_action_243(delta, tm1);
+                    self.record_action_236(delta, tm1);
                 }
             }
         }
@@ -49775,29 +49437,12 @@ impl Eqlog {
             for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                    self.record_action_243(delta, tm1);
+                    self.record_action_236(delta, tm1);
                 }
             }
         }
     }
-    fn record_action_244(&self, delta: &mut ModelDelta, tm0: El) {
-        let existing_row = self.el_is_surjective_ok.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(ElIsSurjectiveOk(_)) => (),
-            None => {
-                delta.new_el_is_surjective_ok.push(ElIsSurjectiveOk(tm0));
-                ()
-            }
-        };
-    }
-    fn query_and_record_surjective_exempted_el_is_ok(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ElSurjectiveExempted(tm0) in self.el_surjective_exempted.iter_dirty() {
-            self.record_action_244(delta, tm0);
-        }
-    }
-    fn record_action_245(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_237(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_is_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49813,18 +49458,47 @@ impl Eqlog {
         for ElInImg(tm0, tm1) in self.el_in_img.iter_dirty() {
             #[allow(unused_variables)]
             for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                self.record_action_245(delta, tm1);
+                self.record_action_237(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for ShouldBeSurjective(tm0) in self.should_be_surjective.iter_dirty() {
             #[allow(unused_variables)]
             for ElInImg(_, tm1) in self.el_in_img.iter_all_0(tm0) {
-                self.record_action_245(delta, tm1);
+                self.record_action_237(delta, tm1);
             }
         }
     }
-    fn record_action_246(
+    fn record_action_238(&self, delta: &mut ModelDelta, tm3: El) {
+        let existing_row = self.el_is_surjective_exempted.iter_all_0(tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(ElIsSurjectiveExempted(_)) => (),
+            None => {
+                delta
+                    .new_el_is_surjective_exempted
+                    .push(ElIsSurjectiveExempted(tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_surjective_exempted_then_defined_term(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticEl(_, tm3) in self.semantic_el.iter_all_0(tm2) {
+                self.record_action_238(delta, tm3);
+            }
+        }
+        #[allow(unused_variables)]
+        for SemanticEl(tm2, tm3) in self.semantic_el.iter_dirty() {
+            #[allow(unused_variables)]
+            for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
+                self.record_action_238(delta, tm3);
+            }
+        }
+    }
+    fn record_action_239(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -49850,7 +49524,7 @@ impl Eqlog {
             for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                    self.record_action_246(delta, tm0, tm1, tm3);
+                    self.record_action_239(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -49860,7 +49534,7 @@ impl Eqlog {
             for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_246(delta, tm0, tm1, tm3);
+                    self.record_action_239(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -49870,12 +49544,12 @@ impl Eqlog {
             for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_246(delta, tm0, tm1, tm3);
+                    self.record_action_239(delta, tm0, tm1, tm3);
                 }
             }
         }
     }
-    fn record_action_247(&self, delta: &mut ModelDelta, tm0: StmtNode) {
+    fn record_action_240(&self, delta: &mut ModelDelta, tm0: StmtNode) {
         let existing_row = self.if_after_then.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49895,7 +49569,7 @@ impl Eqlog {
                 for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
                     for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        self.record_action_247(delta, tm0);
+                        self.record_action_240(delta, tm0);
                     }
                 }
             }
@@ -49908,7 +49582,7 @@ impl Eqlog {
                 for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_247(delta, tm0);
+                        self.record_action_240(delta, tm0);
                     }
                 }
             }
@@ -49921,7 +49595,7 @@ impl Eqlog {
                 for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_247(delta, tm0);
+                        self.record_action_240(delta, tm0);
                     }
                 }
             }
@@ -49934,7 +49608,7 @@ impl Eqlog {
                 for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_247(delta, tm0);
+                        self.record_action_240(delta, tm0);
                     }
                 }
             }
@@ -49991,6 +49665,9 @@ impl Eqlog {
         self.should_be_symbol.drop_dirt();
         self.pred_arg_num_should_match.drop_dirt();
         self.func_arg_num_should_match.drop_dirt();
+        self.if_morphism.drop_dirt();
+        self.surj_then_morphism.drop_dirt();
+        self.non_surj_then_morphism.drop_dirt();
         self.var_before_term.drop_dirt();
         self.var_before_terms.drop_dirt();
         self.var_before_opt_term.drop_dirt();
@@ -50007,11 +49684,9 @@ impl Eqlog {
         self.term_should_be_epic_ok.drop_dirt();
         self.terms_should_be_epic_ok.drop_dirt();
         self.should_be_surjective.drop_dirt();
-        self.term_surjective_exempted.drop_dirt();
-        self.terms_surjective_exempted.drop_dirt();
-        self.el_surjective_exempted.drop_dirt();
         self.el_should_be_surjective_ok.drop_dirt();
         self.el_is_surjective_ok.drop_dirt();
+        self.el_is_surjective_exempted.drop_dirt();
         self.var_term_in_rule.drop_dirt();
         self.if_after_then.drop_dirt();
         self.real_virt_ident.drop_dirt();
@@ -50058,12 +49733,6 @@ impl Eqlog {
         self.cod.drop_dirt();
         self.map_el.drop_dirt();
         self.map_els.drop_dirt();
-        self.initial_structure.drop_dirt();
-        self.initiality_morphism.drop_dirt();
-        self.nil_chain.drop_dirt();
-        self.chain_tail.drop_dirt();
-        self.chain_head_structure.drop_dirt();
-        self.chain_head_transition.drop_dirt();
         self.type_symbol.drop_dirt();
         self.pred_symbol.drop_dirt();
         self.func_symbol.drop_dirt();
@@ -50072,8 +49741,7 @@ impl Eqlog {
         self.succ.drop_dirt();
         self.type_list_len.drop_dirt();
         self.term_list_len.drop_dirt();
-        self.rule_chain.drop_dirt();
-        self.stmt_list_chain.drop_dirt();
+        self.stmt_morphism.drop_dirt();
         self.stmt_structure.drop_dirt();
         self.if_atom_structure.drop_dirt();
         self.then_atom_structure.drop_dirt();
@@ -50083,8 +49751,9 @@ impl Eqlog {
         self.semantic_el.drop_dirt();
         self.semantic_els.drop_dirt();
         self.wildcard_virt_ident.drop_dirt();
-        self.grouped_rule_chain.drop_dirt();
-        self.grouped_stmt_list_chain.drop_dirt();
+        self.grouped_stmt_morphism.drop_dirt();
+        self.rule_first_grouped_morphism.drop_dirt();
+        self.next_grouped_morphism.drop_dirt();
 
         self.ident_dirty.clear();
         self.virt_ident_dirty.clear();
@@ -50114,7 +49783,6 @@ impl Eqlog {
         self.el_dirty.clear();
         self.el_list_dirty.clear();
         self.morphism_dirty.clear();
-        self.chain_dirty.clear();
         self.symbol_kind_dirty.clear();
         self.nat_dirty.clear();
     }
@@ -50169,6 +49837,9 @@ impl Eqlog {
         self.should_be_symbol.retire_dirt();
         self.pred_arg_num_should_match.retire_dirt();
         self.func_arg_num_should_match.retire_dirt();
+        self.if_morphism.retire_dirt();
+        self.surj_then_morphism.retire_dirt();
+        self.non_surj_then_morphism.retire_dirt();
         self.var_before_term.retire_dirt();
         self.var_before_terms.retire_dirt();
         self.var_before_opt_term.retire_dirt();
@@ -50185,11 +49856,9 @@ impl Eqlog {
         self.term_should_be_epic_ok.retire_dirt();
         self.terms_should_be_epic_ok.retire_dirt();
         self.should_be_surjective.retire_dirt();
-        self.term_surjective_exempted.retire_dirt();
-        self.terms_surjective_exempted.retire_dirt();
-        self.el_surjective_exempted.retire_dirt();
         self.el_should_be_surjective_ok.retire_dirt();
         self.el_is_surjective_ok.retire_dirt();
+        self.el_is_surjective_exempted.retire_dirt();
         self.var_term_in_rule.retire_dirt();
         self.if_after_then.retire_dirt();
         self.real_virt_ident.retire_dirt();
@@ -50236,12 +49905,6 @@ impl Eqlog {
         self.cod.retire_dirt();
         self.map_el.retire_dirt();
         self.map_els.retire_dirt();
-        self.initial_structure.retire_dirt();
-        self.initiality_morphism.retire_dirt();
-        self.nil_chain.retire_dirt();
-        self.chain_tail.retire_dirt();
-        self.chain_head_structure.retire_dirt();
-        self.chain_head_transition.retire_dirt();
         self.type_symbol.retire_dirt();
         self.pred_symbol.retire_dirt();
         self.func_symbol.retire_dirt();
@@ -50250,8 +49913,7 @@ impl Eqlog {
         self.succ.retire_dirt();
         self.type_list_len.retire_dirt();
         self.term_list_len.retire_dirt();
-        self.rule_chain.retire_dirt();
-        self.stmt_list_chain.retire_dirt();
+        self.stmt_morphism.retire_dirt();
         self.stmt_structure.retire_dirt();
         self.if_atom_structure.retire_dirt();
         self.then_atom_structure.retire_dirt();
@@ -50261,8 +49923,9 @@ impl Eqlog {
         self.semantic_el.retire_dirt();
         self.semantic_els.retire_dirt();
         self.wildcard_virt_ident.retire_dirt();
-        self.grouped_rule_chain.retire_dirt();
-        self.grouped_stmt_list_chain.retire_dirt();
+        self.grouped_stmt_morphism.retire_dirt();
+        self.rule_first_grouped_morphism.retire_dirt();
+        self.next_grouped_morphism.retire_dirt();
 
         let mut ident_dirty_tmp = BTreeSet::new();
         std::mem::swap(&mut ident_dirty_tmp, &mut self.ident_dirty);
@@ -50415,10 +50078,6 @@ impl Eqlog {
         let mut morphism_dirty_tmp = BTreeSet::new();
         std::mem::swap(&mut morphism_dirty_tmp, &mut self.morphism_dirty);
         self.morphism_dirty_prev.push(morphism_dirty_tmp);
-
-        let mut chain_dirty_tmp = BTreeSet::new();
-        std::mem::swap(&mut chain_dirty_tmp, &mut self.chain_dirty);
-        self.chain_dirty_prev.push(chain_dirty_tmp);
 
         let mut symbol_kind_dirty_tmp = BTreeSet::new();
         std::mem::swap(&mut symbol_kind_dirty_tmp, &mut self.symbol_kind_dirty);
@@ -50599,6 +50258,12 @@ impl Eqlog {
             .recall_previous_dirt(&mut self.loc_equalities, &mut self.nat_equalities);
         self.func_arg_num_should_match
             .recall_previous_dirt(&mut self.loc_equalities, &mut self.nat_equalities);
+        self.if_morphism
+            .recall_previous_dirt(&mut self.morphism_equalities);
+        self.surj_then_morphism
+            .recall_previous_dirt(&mut self.morphism_equalities);
+        self.non_surj_then_morphism
+            .recall_previous_dirt(&mut self.morphism_equalities);
         self.var_before_term.recall_previous_dirt(
             &mut self.term_node_equalities,
             &mut self.virt_ident_equalities,
@@ -50657,15 +50322,11 @@ impl Eqlog {
             .recall_previous_dirt(&mut self.term_list_node_equalities);
         self.should_be_surjective
             .recall_previous_dirt(&mut self.morphism_equalities);
-        self.term_surjective_exempted
-            .recall_previous_dirt(&mut self.term_node_equalities);
-        self.terms_surjective_exempted
-            .recall_previous_dirt(&mut self.term_list_node_equalities);
-        self.el_surjective_exempted
-            .recall_previous_dirt(&mut self.el_equalities);
         self.el_should_be_surjective_ok
             .recall_previous_dirt(&mut self.el_equalities);
         self.el_is_surjective_ok
+            .recall_previous_dirt(&mut self.el_equalities);
+        self.el_is_surjective_exempted
             .recall_previous_dirt(&mut self.el_equalities);
         self.var_term_in_rule.recall_previous_dirt(
             &mut self.ident_equalities,
@@ -50808,20 +50469,6 @@ impl Eqlog {
             .recall_previous_dirt(&mut self.el_equalities, &mut self.morphism_equalities);
         self.map_els
             .recall_previous_dirt(&mut self.el_list_equalities, &mut self.morphism_equalities);
-        self.initial_structure
-            .recall_previous_dirt(&mut self.structure_equalities);
-        self.initiality_morphism.recall_previous_dirt(
-            &mut self.morphism_equalities,
-            &mut self.structure_equalities,
-        );
-        self.nil_chain
-            .recall_previous_dirt(&mut self.chain_equalities);
-        self.chain_tail
-            .recall_previous_dirt(&mut self.chain_equalities);
-        self.chain_head_structure
-            .recall_previous_dirt(&mut self.chain_equalities, &mut self.structure_equalities);
-        self.chain_head_transition
-            .recall_previous_dirt(&mut self.chain_equalities, &mut self.morphism_equalities);
         self.type_symbol
             .recall_previous_dirt(&mut self.symbol_kind_equalities);
         self.pred_symbol
@@ -50838,13 +50485,9 @@ impl Eqlog {
             &mut self.nat_equalities,
             &mut self.term_list_node_equalities,
         );
-        self.rule_chain.recall_previous_dirt(
-            &mut self.chain_equalities,
-            &mut self.rule_decl_node_equalities,
-        );
-        self.stmt_list_chain.recall_previous_dirt(
-            &mut self.chain_equalities,
-            &mut self.stmt_list_node_equalities,
+        self.stmt_morphism.recall_previous_dirt(
+            &mut self.morphism_equalities,
+            &mut self.stmt_node_equalities,
         );
         self.stmt_structure.recall_previous_dirt(
             &mut self.stmt_node_equalities,
@@ -50880,14 +50523,16 @@ impl Eqlog {
             &mut self.term_node_equalities,
             &mut self.virt_ident_equalities,
         );
-        self.grouped_rule_chain.recall_previous_dirt(
-            &mut self.chain_equalities,
+        self.grouped_stmt_morphism.recall_previous_dirt(
+            &mut self.morphism_equalities,
+            &mut self.stmt_node_equalities,
+        );
+        self.rule_first_grouped_morphism.recall_previous_dirt(
+            &mut self.morphism_equalities,
             &mut self.rule_decl_node_equalities,
         );
-        self.grouped_stmt_list_chain.recall_previous_dirt(
-            &mut self.chain_equalities,
-            &mut self.stmt_list_node_equalities,
-        );
+        self.next_grouped_morphism
+            .recall_previous_dirt(&mut self.morphism_equalities);
 
         let mut ident_dirty_prev_tmp = Vec::new();
         std::mem::swap(&mut ident_dirty_prev_tmp, &mut self.ident_dirty_prev);
@@ -51171,14 +50816,6 @@ impl Eqlog {
             .into_iter()
             .flatten()
             .filter(|el| self.morphism_equalities.root(*el) == *el)
-            .collect();
-
-        let mut chain_dirty_prev_tmp = Vec::new();
-        std::mem::swap(&mut chain_dirty_prev_tmp, &mut self.chain_dirty_prev);
-        self.chain_dirty = chain_dirty_prev_tmp
-            .into_iter()
-            .flatten()
-            .filter(|el| self.chain_equalities.root(*el) == *el)
             .collect();
 
         let mut symbol_kind_dirty_prev_tmp = Vec::new();
@@ -51486,16 +51123,6 @@ impl fmt::Display for Eqlog {
                     .header_intersection('┬'),
             )
             .fmt(f)?;
-        self.chain_equalities
-            .class_table()
-            .with(Header("Chain"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)?;
         self.symbol_kind_equalities
             .class_table()
             .with(Header("SymbolKind"))
@@ -51564,6 +51191,9 @@ impl fmt::Display for Eqlog {
         self.should_be_symbol.fmt(f)?;
         self.pred_arg_num_should_match.fmt(f)?;
         self.func_arg_num_should_match.fmt(f)?;
+        self.if_morphism.fmt(f)?;
+        self.surj_then_morphism.fmt(f)?;
+        self.non_surj_then_morphism.fmt(f)?;
         self.var_before_term.fmt(f)?;
         self.var_before_terms.fmt(f)?;
         self.var_before_opt_term.fmt(f)?;
@@ -51580,11 +51210,9 @@ impl fmt::Display for Eqlog {
         self.term_should_be_epic_ok.fmt(f)?;
         self.terms_should_be_epic_ok.fmt(f)?;
         self.should_be_surjective.fmt(f)?;
-        self.term_surjective_exempted.fmt(f)?;
-        self.terms_surjective_exempted.fmt(f)?;
-        self.el_surjective_exempted.fmt(f)?;
         self.el_should_be_surjective_ok.fmt(f)?;
         self.el_is_surjective_ok.fmt(f)?;
+        self.el_is_surjective_exempted.fmt(f)?;
         self.var_term_in_rule.fmt(f)?;
         self.if_after_then.fmt(f)?;
         self.real_virt_ident.fmt(f)?;
@@ -51631,12 +51259,6 @@ impl fmt::Display for Eqlog {
         self.cod.fmt(f)?;
         self.map_el.fmt(f)?;
         self.map_els.fmt(f)?;
-        self.initial_structure.fmt(f)?;
-        self.initiality_morphism.fmt(f)?;
-        self.nil_chain.fmt(f)?;
-        self.chain_tail.fmt(f)?;
-        self.chain_head_structure.fmt(f)?;
-        self.chain_head_transition.fmt(f)?;
         self.type_symbol.fmt(f)?;
         self.pred_symbol.fmt(f)?;
         self.func_symbol.fmt(f)?;
@@ -51645,8 +51267,7 @@ impl fmt::Display for Eqlog {
         self.succ.fmt(f)?;
         self.type_list_len.fmt(f)?;
         self.term_list_len.fmt(f)?;
-        self.rule_chain.fmt(f)?;
-        self.stmt_list_chain.fmt(f)?;
+        self.stmt_morphism.fmt(f)?;
         self.stmt_structure.fmt(f)?;
         self.if_atom_structure.fmt(f)?;
         self.then_atom_structure.fmt(f)?;
@@ -51656,8 +51277,9 @@ impl fmt::Display for Eqlog {
         self.semantic_el.fmt(f)?;
         self.semantic_els.fmt(f)?;
         self.wildcard_virt_ident.fmt(f)?;
-        self.grouped_rule_chain.fmt(f)?;
-        self.grouped_stmt_list_chain.fmt(f)?;
+        self.grouped_stmt_morphism.fmt(f)?;
+        self.rule_first_grouped_morphism.fmt(f)?;
+        self.next_grouped_morphism.fmt(f)?;
         Ok(())
     }
 }

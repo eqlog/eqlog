@@ -4,50 +4,46 @@ func mul(El, El) -> El;
 func id() -> El;
 func inv(El) -> El;
 
-// Totality.
-rule {
+rule mul_total {
     if x: El;
     if y: El;
     then mul(x, y)!;
 }
-rule {
+rule id_total {
     then id()!;
 }
-rule {
+rule inv_total {
     if x: El;
     then inv(x)!;
 }
 
-// Associativity.
-rule {
+rule right_to_left_associativity {
     if t_0 = mul(x, y);
     if t_1 = z;
     if to = mul(x, mul(y, z));
     then mul(t_0, t_1) = to;
 }
-rule {
+rule left_to_right_associativity {
     if t_0 = x;
     if t_1 = mul(y, z);
     if to = mul(mul(x, y), z);
     then mul(t_0, t_1) = to;
 }
 
-// Right identity.
-rule {
+rule right_identity {
     if t_0 = x;
     if t_1 = id();
     if to = x;
     then mul(t_0, t_1) = to;
 }
 
-// Right invertibility.
-rule {
+rule right_inverse_0 {
     if t_0 = x;
     if t_1 = inv(x);
     if to = id();
     then mul(t_0, t_1) = to;
 }
-rule {
+rule right_inverse_1 {
     if to = mul(x, inv(x));
     then id() = to;
 }
