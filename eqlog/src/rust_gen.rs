@@ -93,6 +93,7 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
         {sort_snake}_all: BTreeSet<{sort}>,
         {sort_snake}_dirty: BTreeSet<{sort}>,
         {sort_snake}_weights: Vec<usize>,
+        {sort_snake}_uprooted: Vec<{sort}>,
     "}
 }
 
@@ -479,6 +480,7 @@ fn write_table_drain_with_element(
                     ts.swap_remove(i);
                 }}
             }}
+
             ts
         }}
     "}
@@ -865,6 +867,39 @@ fn write_equate_elements(out: &mut impl Write, sort: &str) -> io::Result<()> {
         #[allow(dead_code)]
         pub fn equate_{sort_snake}(&mut self, lhs: {sort}, rhs: {sort}) {{
             self.delta.as_mut().unwrap().new_{sort_snake}_equalities.push((lhs, rhs));
+        }}
+    "}
+}
+
+fn write_equate_elements_new(
+    out: &mut impl Write,
+    typ: Type,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
+    let type_snake = type_camel.to_case(Snake);
+    writedoc! {out, "
+        /// Enforces the equality `lhs = rhs`.
+        #[allow(dead_code)]
+        pub fn equate_{type_snake}_new(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+            lhs = self.{type_snake}_equalities.root(lhs);
+            rhs = self.{type_snake}_equalities.root(rhs);
+            if lhs == rhs {{
+                continue;
+            }}
+
+            let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
+            let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
+            let (root, child) =
+                if lhs_weight >= rhs_weight {{
+                    (lhs, rhs)
+                }} else {{
+                    (rhs, lhs)
+                }};
+
+            self.{type_snake}_equalities.union_roots_into(child, root);
+            self.{type_snake}_uprooted.push(child);
         }}
     "}
 }
@@ -1693,6 +1728,7 @@ fn write_new_fn(
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
+        write!(out, "{sort_snake}_uprooted: Vec::new(),\n")?;
     }
     for (relation, _) in iter_relation_arities(eqlog, identifiers) {
         let relation_snake = relation.to_case(Snake);
@@ -1817,6 +1853,7 @@ fn write_theory_impl(
     }
     for typ in eqlog.iter_type() {
         write_new_element(out, typ, eqlog, identifiers)?;
+        write_equate_elements_new(out, typ, eqlog, identifiers)?;
     }
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
