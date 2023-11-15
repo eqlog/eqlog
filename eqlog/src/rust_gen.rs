@@ -92,7 +92,6 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
         {sort_snake}_equalities: Unification<{sort}>,
         {sort_snake}_all: BTreeSet<{sort}>,
         {sort_snake}_dirty: BTreeSet<{sort}>,
-        {sort_snake}_dirty_prev: Vec<BTreeSet<{sort}>>,
         {sort_snake}_weights: Vec<usize>,
     "}
 }
@@ -147,10 +146,6 @@ fn write_table_struct(
         ))
     });
 
-    let dirty_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let dirty_index_name = IndexName(dirty_index);
-    let prev_dirty_field = format!("index_{dirty_index_name}_prev: Vec<BTreeSet<{tuple_type}>>,");
-
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
     let relation_camel = relation.to_case(UpperCamel);
     let element_index_fields = sorts.iter().copied().format_with("\n", |sort, f| {
@@ -164,9 +159,6 @@ fn write_table_struct(
         #[derive(Clone, Hash, Debug)]
         struct {relation_camel}Table {{
         {index_fields}
-
-        {prev_dirty_field}
-
         {element_index_fields}
         }}
     "}
@@ -185,10 +177,6 @@ fn write_table_new_fn(
         ))
     });
 
-    let dirty_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let dirty_index_name = IndexName(dirty_index);
-    let prev_dirty_init = format!("index_{dirty_index_name}_prev: Vec::new(),");
-
     let sorts: BTreeSet<&str> = arity.iter().copied().collect();
     let element_index_inits = sorts.iter().copied().format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
@@ -200,7 +188,6 @@ fn write_table_new_fn(
         fn new() -> Self {{
             Self {{
         {index_inits}
-        {prev_dirty_init}
         {element_index_inits}
             }}
         }}
@@ -264,50 +251,6 @@ impl<'a> Display for DiagonalCheck<'a> {
         });
         write!(f, "{all_clauses}")
     }
-}
-
-// TODO: This and write_table_insert_fn are very similar. Refactor?
-fn write_table_insert_dirt_fn(
-    out: &mut impl Write,
-    relation: &str,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let master_index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let master = IndexName(&master_index);
-    let master_order = OrderName(&master_index.order);
-
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let slave_inserts = indices
-        .into_iter()
-        .filter(|index| index.only_dirty && *index != master_index)
-        .format_with("\n", |index, f| {
-            let index_name = IndexName(index);
-            let order = OrderName(&index.order);
-            if index.diagonals.is_empty() {
-                f(&format_args!(
-                    "self.index_{index_name}.insert(Self::permute{order}(t));"
-                ))
-            } else {
-                let check = DiagonalCheck(&index.diagonals);
-                f(&format_args! {"
-                    if {check} {{
-                        self.index_{index_name}.insert(Self::permute{order}(t));
-                    }}
-                "})
-            }
-        });
-
-    let relation_camel = relation.to_case(UpperCamel);
-    writedoc! {out, "
-        fn insert_dirt(&mut self, t: {relation_camel}) -> bool {{
-            if self.index_{master}.insert(Self::permute{master_order}(t)) {{
-        {slave_inserts}
-                true
-            }} else {{
-                false
-            }}
-        }}
-    "}
 }
 
 fn write_table_insert_fn(
@@ -495,31 +438,6 @@ fn write_table_drop_dirt_fn(
     "}
 }
 
-fn write_table_retire_dirt_fn(
-    out: &mut impl Write,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let dirty_master = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let clears = indices
-        .iter()
-        .copied()
-        .filter(|index| index.only_dirty && *index != dirty_master)
-        .format_with("\n", |index, f| {
-            let index_name = IndexName(index);
-            f(&format_args!("    self.index_{index_name}.clear();"))
-        });
-    let dirty_master_name = IndexName(dirty_master);
-    writedoc! {out, "
-        fn retire_dirt(&mut self) {{
-            {clears}
-            let mut tmp_{dirty_master_name} = BTreeSet::new();
-            std::mem::swap(&mut tmp_{dirty_master_name}, &mut self.index_{dirty_master_name});
-            self.index_{dirty_master_name}_prev.push(tmp_{dirty_master_name});
-        }}
-    "}
-}
-
 fn write_table_drain_with_element(
     out: &mut impl Write,
     relation: &str,
@@ -564,50 +482,6 @@ fn write_table_drain_with_element(
     "}
 }
 
-fn write_table_recall_previous_dirt(
-    out: &mut impl Write,
-    arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
-) -> io::Result<()> {
-    let sorts = arity.iter().copied().collect::<BTreeSet<&str>>();
-    let fn_eq_args = sorts.iter().copied().format_with("", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!(
-            "{sort_snake}_equalities: &mut Unification<{sort}>,"
-        ))
-    });
-    let index = index_selection.get(&QuerySpec::all_dirty()).unwrap();
-    let index_name = IndexName(index);
-    let order_name = OrderName(&index.order);
-
-    let is_canonical_checks =
-        arity
-            .iter()
-            .copied()
-            .enumerate()
-            .format_with("", |(index, sort), f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!(
-                    "&& tuple.{index} == {sort_snake}_equalities.root(tuple.{index})"
-                ))
-            });
-
-    writedoc! {out, "
-        fn recall_previous_dirt(&mut self, {fn_eq_args}) {{
-            let mut tmp_{index_name}_prev = Vec::new();
-            std::mem::swap(&mut tmp_{index_name}_prev, &mut self.index_{index_name}_prev);
-
-            for tuple in tmp_{index_name}_prev.into_iter().flatten() {{
-                #[allow(unused_mut)]
-                let mut tuple = Self::permute_inverse{order_name}(tuple);
-                if true {is_canonical_checks} {{
-                    self.insert_dirt(tuple);
-                }}
-            }}
-        }}
-    "}
-}
-
 fn write_table_weight(
     out: &mut impl Write,
     arity: &[&str],
@@ -638,10 +512,8 @@ fn write_table_impl(
     write_table_weight(out, arity, index_selection)?;
     write_table_new_fn(out, arity, index_selection)?;
     write_table_insert_fn(out, relation, arity, index_selection)?;
-    write_table_insert_dirt_fn(out, relation, index_selection)?;
     write_table_contains_fn(out, relation, index_selection)?;
     write_table_drop_dirt_fn(out, index_selection)?;
-    write_table_retire_dirt_fn(out, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
     let index_orders: BTreeSet<&[usize]> =
@@ -656,7 +528,6 @@ fn write_table_impl(
     for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
         write_table_drain_with_element(out, relation, index_selection, sort)?;
     }
-    write_table_recall_previous_dirt(out, arity, index_selection)?;
     writedoc! {out, "
         }}
     "}
@@ -1734,80 +1605,6 @@ fn write_drop_dirt_fn(
     "}
 }
 
-fn write_retire_dirt_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!("self.{relation_snake}.retire_dirt();"))
-        });
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-            let mut {sort_snake}_dirty_tmp = BTreeSet::new();
-            std::mem::swap(&mut {sort_snake}_dirty_tmp, &mut self.{sort_snake}_dirty);
-            self.{sort_snake}_dirty_prev.push({sort_snake}_dirty_tmp);
-        "})
-    });
-    writedoc! {out, "
-        fn retire_dirt(&mut self) {{
-            self.empty_join_is_dirty = false;
-
-        {relations}
-
-        {sorts}
-        }}
-    "}
-}
-
-fn write_recall_previous_dirt(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, arity), f| {
-            let relation_snake = relation.to_case(Snake);
-            let sorts: BTreeSet<&str> = arity.iter().copied().collect();
-            let args = sorts.into_iter().format_with(", ", |sort, f| {
-                let sort_snake = sort.to_case(Snake);
-                f(&format_args!("&mut self.{sort_snake}_equalities"))
-            });
-            f(&format_args!(
-                "self.{relation_snake}.recall_previous_dirt({args});"
-            ))
-        });
-
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&formatdoc! {"
-                let mut {sort_snake}_dirty_prev_tmp = Vec::new();
-                std::mem::swap(&mut {sort_snake}_dirty_prev_tmp, &mut self.{sort_snake}_dirty_prev);
-                self.{sort_snake}_dirty =
-                    {sort_snake}_dirty_prev_tmp
-                    .into_iter()
-                    .flatten()
-                    .filter(|el| self.{sort_snake}_equalities.root(*el) == *el)
-                    .collect();
-            "})
-    });
-    writedoc! {out, "
-        fn recall_previous_dirt(&mut self) {{
-            debug_assert!(!self.is_dirty());
-
-            {relations}
-
-            {sorts}
-
-            self.empty_join_is_dirty = self.empty_join_is_dirty_prev;
-            self.empty_join_is_dirty_prev = false;
-        }}
-    "}
-}
-
 fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<()> {
     let rules = rules
         .iter()
@@ -1841,8 +1638,8 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
             while self.is_dirty() {{
                 loop {{
         {rules}
+                    self.drop_dirt();
             
-                    self.retire_dirt();
                     delta.apply_surjective(self);
 
                     if condition(self) {{
@@ -1854,10 +1651,7 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
                     }}
                 }}
 
-                self.recall_previous_dirt();
-                self.drop_dirt();
                 delta.apply_non_surjective (self);
-                delta.apply_surjective(self);
                 if condition(self) {{
                     self.delta = Some(delta);
                     return true;
@@ -1894,7 +1688,6 @@ fn write_new_fn(
         let sort_snake = sort.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
         write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
-        write!(out, "{sort_snake}_dirty_prev: Vec::new(),\n")?;
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
         write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
     }
@@ -1904,7 +1697,6 @@ fn write_new_fn(
         write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
-    write!(out, "empty_join_is_dirty_prev: true,\n")?;
     write!(out, "delta: Some(Box::new(ModelDelta::new())),\n")?;
     write!(out, "}}\n")?;
     write!(out, "}}\n")?;
@@ -1991,7 +1783,6 @@ fn write_theory_struct(
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
-    write!(out, "empty_join_is_dirty_prev: bool,\n")?;
     write!(out, "delta: Option<Box<ModelDelta>>,\n")?;
     write!(out, "}}\n")?;
     write!(out, "type Model = {name};")?;
@@ -2058,8 +1849,6 @@ fn write_theory_impl(
     }
 
     write_drop_dirt_fn(out, eqlog, identifiers)?;
-    write_retire_dirt_fn(out, eqlog, identifiers)?;
-    write_recall_previous_dirt(out, eqlog, identifiers)?;
 
     write!(out, "}}\n")?;
     Ok(())
