@@ -1258,13 +1258,17 @@ fn display_if_stmt_header<'a>(
             FlatIfStmt::Equal(eq_stmt) => {
                 let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
-                let typ = display_type(*analysis.var_types.get(lhs).unwrap(), eqlog, identifiers);
+                let typ = format!(
+                    "{}",
+                    display_type(*analysis.var_types.get(lhs).unwrap(), eqlog, identifiers)
+                );
+                let type_snake = typ.to_case(Snake);
 
                 let lhs = display_var(*lhs);
                 let rhs = display_var(*rhs);
 
                 writedoc! {f, "
-                    if (self.are_equal_{typ}({lhs}, {rhs})) {{
+                    if self.are_equal_{type_snake}({lhs}, {rhs}) {{
                 "}?;
             }
             FlatIfStmt::Relation(rel_stmt) => {

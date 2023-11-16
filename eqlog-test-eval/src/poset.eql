@@ -1,17 +1,14 @@
 type P;
 pred le(P, P);
 
-rule {
+rule reflexivity {
     if x: P;
     then le(x, x);
 }
-rule {
+rule transitivity_antisymmetry {
     if le(x, y);
     if le(y, z);
     then le(x, z);
-}
-rule {
-    if le(x, y);
-    if le(y, x);
+    if x = z;
     then x = y;
 }
