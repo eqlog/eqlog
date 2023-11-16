@@ -1,9 +1,0 @@
-type Foo;
-
-rule {
-    if x: Foo;
-    if y: Foo;
-    then x = y;
-    if z: Foo;
-    then z = x;
-}

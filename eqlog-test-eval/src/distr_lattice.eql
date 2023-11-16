@@ -19,24 +19,6 @@ rule {
     then x = y;
 }
 
-// Axioms of meets.
-rule {
-    if x: El;
-    if y: El;
-    then meet(x, y)!;
-}
-rule {
-    if meet = meet(x, y);
-    then le(meet, x);
-    then le(meet, y);
-}
-rule {
-    if le(z, x);
-    if le(z, y);
-    if meet = meet(x, y);
-    then le(z, meet);
-}
-
 // Axioms of join.
 rule {
     if x: El;
@@ -53,6 +35,18 @@ rule {
     if le(y, z);
     if join = join(x, y);
     then le(join, z);
+}
+
+// Axioms of meets, combined into a single rule.
+rule {
+    if x: El;
+    if y: El;
+    then m := meet(x, y)!;
+    then le(m, x);
+    then le(m, y);
+    if le(n, x);
+    if le(n, y);
+    then le(n, m);
 }
 
 // Distributivity of joins over meets.

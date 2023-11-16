@@ -1,4 +1,4 @@
-// src-digest: 94E594F7473FFAA4C1BD50917319D6F33F3A72E130F266A2F37A060B77C651FE
+// src-digest: A1A3CD848CCA29AA8E6C93E30CBE4CDBA37C46BF602275ABC7108901A0B2FBDA
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -14043,149 +14043,6 @@ impl fmt::Display for VarTermInRuleTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct IfAfterThen(pub StmtNode);
-#[derive(Clone, Hash, Debug)]
-struct IfAfterThenTable {
-    index_all_0: BTreeSet<(u32,)>,
-    index_dirty_0: BTreeSet<(u32,)>,
-
-    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
-
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<IfAfterThen>>,
-}
-impl IfAfterThenTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 3;
-    fn new() -> Self {
-        Self {
-            index_all_0: BTreeSet::new(),
-            index_dirty_0: BTreeSet::new(),
-            index_dirty_0_prev: Vec::new(),
-            element_index_stmt_node: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: IfAfterThen) -> bool {
-        if self.index_all_0.insert(Self::permute_0(t)) {
-            self.index_dirty_0.insert(Self::permute_0(t));
-
-            match self.element_index_stmt_node.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_stmt_node.insert(t.0, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    fn insert_dirt(&mut self, t: IfAfterThen) -> bool {
-        if self.index_dirty_0.insert(Self::permute_0(t)) {
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: IfAfterThen) -> bool {
-        self.index_all_0.contains(&Self::permute_0(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0.clear();
-    }
-    fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
-        self.index_dirty_0_prev.push(tmp_dirty_0);
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0(t: IfAfterThen) -> (u32,) {
-        (t.0.into(),)
-    }
-    #[allow(unused)]
-    fn permute_inverse_0(t: (u32,)) -> IfAfterThen {
-        IfAfterThen(StmtNode::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = IfAfterThen> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = IfAfterThen> {
-        let min = (u32::MIN,);
-        let max = (u32::MAX,);
-        self.index_dirty_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = IfAfterThen> {
-        let arg0 = arg0.0;
-        let min = (arg0,);
-        let max = (arg0,);
-        self.index_all_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_stmt_node(
-        &mut self,
-        tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = IfAfterThen> {
-        let ts = match self.element_index_stmt_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        ts.into_iter().filter(|t| {
-            if self.index_all_0.remove(&Self::permute_0(*t)) {
-                self.index_dirty_0.remove(&Self::permute_0(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(&mut self, stmt_node_equalities: &mut Unification<StmtNode>) {
-        let mut tmp_dirty_0_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
-
-        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
-            #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0(tuple);
-            if true && tuple.0 == stmt_node_equalities.root(tuple.0) {
-                self.insert_dirt(tuple);
-            }
-        }
-    }
-}
-impl fmt::Display for IfAfterThenTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("if_after_then"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RealVirtIdent(pub Ident, pub VirtIdent);
 #[derive(Clone, Hash, Debug)]
 struct RealVirtIdentTable {
@@ -26456,7 +26313,6 @@ struct ModelDelta {
     new_el_is_surjective_ok: Vec<ElIsSurjectiveOk>,
     new_el_is_surjective_exempted: Vec<ElIsSurjectiveExempted>,
     new_var_term_in_rule: Vec<VarTermInRule>,
-    new_if_after_then: Vec<IfAfterThen>,
     new_real_virt_ident: Vec<RealVirtIdent>,
     new_rule_name: Vec<RuleName>,
     new_type_decl_node_loc: Vec<TypeDeclNodeLoc>,
@@ -26837,7 +26693,6 @@ pub struct Eqlog {
     el_is_surjective_ok: ElIsSurjectiveOkTable,
     el_is_surjective_exempted: ElIsSurjectiveExemptedTable,
     var_term_in_rule: VarTermInRuleTable,
-    if_after_then: IfAfterThenTable,
     real_virt_ident: RealVirtIdentTable,
     rule_name: RuleNameTable,
     type_decl_node_loc: TypeDeclNodeLocTable,
@@ -26982,7 +26837,6 @@ impl ModelDelta {
             new_el_is_surjective_ok: Vec::new(),
             new_el_is_surjective_exempted: Vec::new(),
             new_var_term_in_rule: Vec::new(),
-            new_if_after_then: Vec::new(),
             new_real_virt_ident: Vec::new(),
             new_rule_name: Vec::new(),
             new_type_decl_node_loc: Vec::new(),
@@ -29765,16 +29619,6 @@ impl ModelDelta {
 
                         let weight1 = model.virt_ident_weights.get_mut(t.1 .0 as usize).unwrap();
                         *weight1 -= VarInStmtTable::WEIGHT;
-                    }),
-            );
-
-            self.new_if_after_then.extend(
-                model
-                    .if_after_then
-                    .drain_with_element_stmt_node(child)
-                    .inspect(|t| {
-                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= IfAfterThenTable::WEIGHT;
                     }),
             );
 
@@ -32851,14 +32695,6 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_if_after_then.drain(..) {
-            t.0 = model.stmt_node_equalities.root(t.0);
-            if model.if_after_then.insert(t) {
-                model.stmt_node_weights[t.0 .0 as usize] += IfAfterThenTable::WEIGHT;
-            }
-        }
-
-        #[allow(unused_mut)]
         for mut t in self.new_real_virt_ident.drain(..) {
             t.0 = model.ident_equalities.root(t.0);
             t.1 = model.virt_ident_equalities.root(t.1);
@@ -33949,7 +33785,6 @@ impl Eqlog {
             el_is_surjective_ok: ElIsSurjectiveOkTable::new(),
             el_is_surjective_exempted: ElIsSurjectiveExemptedTable::new(),
             var_term_in_rule: VarTermInRuleTable::new(),
-            if_after_then: IfAfterThenTable::new(),
             real_virt_ident: RealVirtIdentTable::new(),
             rule_name: RuleNameTable::new(),
             type_decl_node_loc: TypeDeclNodeLocTable::new(),
@@ -34257,7 +34092,6 @@ impl Eqlog {
                 self.query_and_record_surjective_img_el_is_ok(&mut delta);
                 self.query_and_record_surjective_exempted_then_defined_term(&mut delta);
                 self.query_and_record_var_term_in_rule_child(&mut delta);
-                self.query_and_record_after_then_should_be_if(&mut delta);
 
                 self.retire_dirt();
                 delta.apply(self);
@@ -39762,29 +39596,6 @@ impl Eqlog {
             .push(VarTermInRule(arg0, arg1, arg2));
     }
 
-    /// Returns `true` if `if_after_then(arg0)` holds.
-    #[allow(dead_code)]
-    pub fn if_after_then(&self, mut arg0: StmtNode) -> bool {
-        arg0 = self.root_stmt_node(arg0);
-        self.if_after_then.contains(IfAfterThen(arg0))
-    }
-    /// Returns an iterator over elements satisfying the `if_after_then` predicate.
-
-    #[allow(dead_code)]
-    pub fn iter_if_after_then(&self) -> impl '_ + Iterator<Item = StmtNode> {
-        self.if_after_then.iter_all().map(|t| t.0)
-    }
-    /// Makes `if_after_then(arg0)` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_if_after_then(&mut self, arg0: StmtNode) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_if_after_then
-            .push(IfAfterThen(arg0));
-    }
-
     fn is_dirty(&self) -> bool {
         self.empty_join_is_dirty
             || self.absurd.is_dirty()
@@ -39858,7 +39669,6 @@ impl Eqlog {
             || self.el_is_surjective_ok.is_dirty()
             || self.el_is_surjective_exempted.is_dirty()
             || self.var_term_in_rule.is_dirty()
-            || self.if_after_then.is_dirty()
             || self.real_virt_ident.is_dirty()
             || self.rule_name.is_dirty()
             || self.type_decl_node_loc.is_dirty()
@@ -49549,71 +49359,6 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_240(&self, delta: &mut ModelDelta, tm0: StmtNode) {
-        let existing_row = self.if_after_then.iter_all_0(tm0).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(IfAfterThen(_)) => (),
-            None => {
-                delta.new_if_after_then.push(IfAfterThen(tm0));
-                ()
-            }
-        };
-    }
-    fn query_and_record_after_then_should_be_if(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(tm4, _, tm5) in self.cons_stmt_list_node.iter_all_1(tm0) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
-                    #[allow(unused_variables)]
-                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                        self.record_action_240(delta, tm0);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_240(delta, tm0);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
-                #[allow(unused_variables)]
-                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_240(delta, tm0);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                #[allow(unused_variables)]
-                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                    #[allow(unused_variables)]
-                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                        self.record_action_240(delta, tm0);
-                    }
-                }
-            }
-        }
-    }
     fn drop_dirt(&mut self) {
         self.empty_join_is_dirty = false;
 
@@ -49688,7 +49433,6 @@ impl Eqlog {
         self.el_is_surjective_ok.drop_dirt();
         self.el_is_surjective_exempted.drop_dirt();
         self.var_term_in_rule.drop_dirt();
-        self.if_after_then.drop_dirt();
         self.real_virt_ident.drop_dirt();
         self.rule_name.drop_dirt();
         self.type_decl_node_loc.drop_dirt();
@@ -49860,7 +49604,6 @@ impl Eqlog {
         self.el_is_surjective_ok.retire_dirt();
         self.el_is_surjective_exempted.retire_dirt();
         self.var_term_in_rule.retire_dirt();
-        self.if_after_then.retire_dirt();
         self.real_virt_ident.retire_dirt();
         self.rule_name.retire_dirt();
         self.type_decl_node_loc.retire_dirt();
@@ -50333,8 +50076,6 @@ impl Eqlog {
             &mut self.rule_decl_node_equalities,
             &mut self.term_node_equalities,
         );
-        self.if_after_then
-            .recall_previous_dirt(&mut self.stmt_node_equalities);
         self.real_virt_ident
             .recall_previous_dirt(&mut self.ident_equalities, &mut self.virt_ident_equalities);
         self.rule_name.recall_previous_dirt(
@@ -51214,7 +50955,6 @@ impl fmt::Display for Eqlog {
         self.el_is_surjective_ok.fmt(f)?;
         self.el_is_surjective_exempted.fmt(f)?;
         self.var_term_in_rule.fmt(f)?;
-        self.if_after_then.fmt(f)?;
         self.real_virt_ident.fmt(f)?;
         self.rule_name.fmt(f)?;
         self.type_decl_node_loc.fmt(f)?;

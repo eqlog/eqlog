@@ -130,17 +130,6 @@ pub fn iter_undetermined_type_errors<'a>(
         })
 }
 
-pub fn iter_if_after_then_errors<'a>(
-    eqlog: &'a Eqlog,
-    locations: &'a BTreeMap<Loc, Location>,
-) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_if_after_then().map(|if_stmt| {
-        let loc = eqlog.stmt_node_loc(if_stmt).unwrap();
-        let location = *locations.get(&loc).unwrap();
-        CompileError::IfAfterThen { location }
-    })
-}
-
 pub fn iter_symbol_declared_twice_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -334,7 +323,6 @@ pub fn check_eqlog(
         .chain(iter_conflicting_type_errors(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
-        .chain(iter_if_after_then_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
         .chain(iter_variable_not_snake_case_errors(
             eqlog,

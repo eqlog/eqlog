@@ -86,9 +86,6 @@ pub enum CompileError {
         first_declaration: Location,
         second_declaration: Location,
     },
-    IfAfterThen {
-        location: Location,
-    },
     UndeterminedTermType {
         location: Location,
     },
@@ -131,7 +128,6 @@ impl CompileError {
             CompileError::SymbolDeclaredTwice {
                 second_declaration, ..
             } => *second_declaration,
-            CompileError::IfAfterThen { location } => *location,
             CompileError::UndeterminedTermType { location } => *location,
             CompileError::ConflictingTermType { location, .. } => *location,
             CompileError::VariableIntroducedInThenStmt { location } => *location,
@@ -344,10 +340,6 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *second_declaration)?;
                 write!(f, "Previously declared here:\n")?;
                 write_loc(f, *first_declaration)?;
-            }
-            IfAfterThen { location } => {
-                write!(f, "if statement after then statement not supported yet\n")?;
-                write_loc(f, *location)?;
             }
             UndeterminedTermType { location } => {
                 write!(f, "sort of term undetermined\n")?;
