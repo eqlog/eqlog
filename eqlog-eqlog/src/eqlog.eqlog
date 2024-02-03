@@ -65,10 +65,15 @@ pred pred_then_atom_node(ThenAtomNode, predicate: Ident, args: TermListNode);
 type StmtNode;
 pred if_stmt_node(StmtNode, IfAtomNode);
 pred then_stmt_node(StmtNode, ThenAtomNode);
+pred fork_stmt_node(StmtNode, blocks: StmtBlockListNode);
 
 type StmtListNode;
 pred nil_stmt_list_node(nil: StmtListNode);
 pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);
+
+type StmtBlockListNode;
+pred singleton_stmt_block_list_node(node: StmtBlockListNode, block: StmtListNode);
+pred cons_stmt_block_list_node(node: StmtBlockListNode, head: StmtListNode, tail: StmtBlockListNode);
 
 type RuleDeclNode;
 pred rule_decl(node: RuleDeclNode, stmts: StmtListNode);

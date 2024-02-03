@@ -66,6 +66,21 @@ pub fn stmt_list_node(nodes: &[StmtNode], eqlog: &mut Eqlog) -> StmtListNode {
     l
 }
 
+pub fn stmt_block_list_node(nodes: &[StmtListNode], eqlog: &mut Eqlog) -> StmtBlockListNode {
+    assert!(!nodes.is_empty());
+    let init = &nodes[..nodes.len() - 1];
+    let last = nodes[nodes.len() - 1];
+
+    let mut l = eqlog.new_stmt_block_list_node();
+    eqlog.insert_singleton_stmt_block_list_node(l, last);
+    for node in init.iter().rev() {
+        let cons = eqlog.new_stmt_block_list_node();
+        eqlog.insert_cons_stmt_block_list_node(cons, *node, l);
+        l = cons;
+    }
+    l
+}
+
 pub fn decl_list_node(nodes: &[DeclNode], eqlog: &mut Eqlog) -> DeclListNode {
     let mut l = eqlog.new_decl_list_node();
     eqlog.insert_nil_decl_list_node(l);

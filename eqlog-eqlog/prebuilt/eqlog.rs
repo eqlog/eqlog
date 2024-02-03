@@ -1,4 +1,4 @@
-// src-digest: A1A3CD848CCA29AA8E6C93E30CBE4CDBA37C46BF602275ABC7108901A0B2FBDA
+// src-digest: BC9B129571DB0F39E8E0D2C0960CD77809DC0F9E9050EB663801E6B8367BBDFE
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -257,6 +257,24 @@ impl From<u32> for StmtListNode {
     }
 }
 impl fmt::Display for StmtListNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+#[allow(dead_code)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct StmtBlockListNode(pub u32);
+impl Into<u32> for StmtBlockListNode {
+    fn into(self) -> u32 {
+        self.0
+    }
+}
+impl From<u32> for StmtBlockListNode {
+    fn from(x: u32) -> Self {
+        StmtBlockListNode(x)
+    }
+}
+impl fmt::Display for StmtBlockListNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -5609,6 +5627,174 @@ impl fmt::Display for ThenStmtNodeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ForkStmtNode(pub StmtNode, pub StmtBlockListNode);
+#[derive(Clone, Hash, Debug)]
+struct ForkStmtNodeTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+
+    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<ForkStmtNode>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<ForkStmtNode>>,
+}
+impl ForkStmtNodeTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            index_dirty_0_1_prev: Vec::new(),
+            element_index_stmt_block_list_node: BTreeMap::new(),
+            element_index_stmt_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ForkStmtNode) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_stmt_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_stmt_block_list_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_block_list_node.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: ForkStmtNode) -> bool {
+        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ForkStmtNode) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
+        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: ForkStmtNode) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> ForkStmtNode {
+        ForkStmtNode(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ForkStmtNode> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ForkStmtNode> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_block_list_node(
+        &mut self,
+        tm: StmtBlockListNode,
+    ) -> impl '_ + Iterator<Item = ForkStmtNode> {
+        let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_node(
+        &mut self,
+        tm: StmtNode,
+    ) -> impl '_ + Iterator<Item = ForkStmtNode> {
+        let ts = match self.element_index_stmt_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(
+        &mut self,
+        stmt_block_list_node_equalities: &mut Unification<StmtBlockListNode>,
+        stmt_node_equalities: &mut Unification<StmtNode>,
+    ) {
+        let mut tmp_dirty_0_1_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
+
+        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1(tuple);
+            if true
+                && tuple.0 == stmt_node_equalities.root(tuple.0)
+                && tuple.1 == stmt_block_list_node_equalities.root(tuple.1)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for ForkStmtNodeTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("fork_stmt_node"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct NilStmtListNode(pub StmtListNode);
 #[derive(Clone, Hash, Debug)]
 struct NilStmtListNodeTable {
@@ -6001,6 +6187,359 @@ impl fmt::Display for ConsStmtListNodeTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("cons_stmt_list_node"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct SingletonStmtBlockListNode(pub StmtBlockListNode, pub StmtListNode);
+#[derive(Clone, Hash, Debug)]
+struct SingletonStmtBlockListNodeTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+
+    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+
+    element_index_stmt_block_list_node:
+        BTreeMap<StmtBlockListNode, Vec<SingletonStmtBlockListNode>>,
+    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<SingletonStmtBlockListNode>>,
+}
+impl SingletonStmtBlockListNodeTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            index_dirty_0_1_prev: Vec::new(),
+            element_index_stmt_block_list_node: BTreeMap::new(),
+            element_index_stmt_list_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: SingletonStmtBlockListNode) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_stmt_block_list_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_block_list_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_stmt_list_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_list_node.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: SingletonStmtBlockListNode) -> bool {
+        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: SingletonStmtBlockListNode) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
+        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: SingletonStmtBlockListNode) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> SingletonStmtBlockListNode {
+        SingletonStmtBlockListNode(StmtBlockListNode::from(t.0), StmtListNode::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = SingletonStmtBlockListNode> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = SingletonStmtBlockListNode> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_block_list_node(
+        &mut self,
+        tm: StmtBlockListNode,
+    ) -> impl '_ + Iterator<Item = SingletonStmtBlockListNode> {
+        let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_list_node(
+        &mut self,
+        tm: StmtListNode,
+    ) -> impl '_ + Iterator<Item = SingletonStmtBlockListNode> {
+        let ts = match self.element_index_stmt_list_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(
+        &mut self,
+        stmt_block_list_node_equalities: &mut Unification<StmtBlockListNode>,
+        stmt_list_node_equalities: &mut Unification<StmtListNode>,
+    ) {
+        let mut tmp_dirty_0_1_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
+
+        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1(tuple);
+            if true
+                && tuple.0 == stmt_block_list_node_equalities.root(tuple.0)
+                && tuple.1 == stmt_list_node_equalities.root(tuple.1)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for SingletonStmtBlockListNodeTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("singleton_stmt_block_list_node"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ConsStmtBlockListNode(
+    pub StmtBlockListNode,
+    pub StmtListNode,
+    pub StmtBlockListNode,
+);
+#[derive(Clone, Hash, Debug)]
+struct ConsStmtBlockListNodeTable {
+    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+
+    index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
+
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<ConsStmtBlockListNode>>,
+    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<ConsStmtBlockListNode>>,
+}
+impl ConsStmtBlockListNodeTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 9;
+    fn new() -> Self {
+        Self {
+            index_all_0_1_2: BTreeSet::new(),
+            index_dirty_0_1_2: BTreeSet::new(),
+            index_dirty_0_1_2_prev: Vec::new(),
+            element_index_stmt_block_list_node: BTreeMap::new(),
+            element_index_stmt_list_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ConsStmtBlockListNode) -> bool {
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
+            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+
+            match self.element_index_stmt_block_list_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_block_list_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_stmt_list_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_list_node.insert(t.1, vec![t]);
+                }
+            };
+
+            match self.element_index_stmt_block_list_node.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_block_list_node.insert(t.2, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: ConsStmtBlockListNode) -> bool {
+        if self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ConsStmtBlockListNode) -> bool {
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1_2.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1_2 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1_2, &mut self.index_dirty_0_1_2);
+        self.index_dirty_0_1_2_prev.push(tmp_dirty_0_1_2);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1_2.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1_2(t: ConsStmtBlockListNode) -> (u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> ConsStmtBlockListNode {
+        ConsStmtBlockListNode(
+            StmtBlockListNode::from(t.0),
+            StmtListNode::from(t.1),
+            StmtBlockListNode::from(t.2),
+        )
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ConsStmtBlockListNode> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ConsStmtBlockListNode> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_block_list_node(
+        &mut self,
+        tm: StmtBlockListNode,
+    ) -> impl '_ + Iterator<Item = ConsStmtBlockListNode> {
+        let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_list_node(
+        &mut self,
+        tm: StmtListNode,
+    ) -> impl '_ + Iterator<Item = ConsStmtBlockListNode> {
+        let ts = match self.element_index_stmt_list_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(
+        &mut self,
+        stmt_block_list_node_equalities: &mut Unification<StmtBlockListNode>,
+        stmt_list_node_equalities: &mut Unification<StmtListNode>,
+    ) {
+        let mut tmp_dirty_0_1_2_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_2_prev, &mut self.index_dirty_0_1_2_prev);
+
+        for tuple in tmp_dirty_0_1_2_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1_2(tuple);
+            if true
+                && tuple.0 == stmt_block_list_node_equalities.root(tuple.0)
+                && tuple.1 == stmt_list_node_equalities.root(tuple.1)
+                && tuple.2 == stmt_block_list_node_equalities.root(tuple.2)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for ConsStmtBlockListNodeTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("cons_stmt_block_list_node"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26266,8 +26805,11 @@ struct ModelDelta {
     new_pred_then_atom_node: Vec<PredThenAtomNode>,
     new_if_stmt_node: Vec<IfStmtNode>,
     new_then_stmt_node: Vec<ThenStmtNode>,
+    new_fork_stmt_node: Vec<ForkStmtNode>,
     new_nil_stmt_list_node: Vec<NilStmtListNode>,
     new_cons_stmt_list_node: Vec<ConsStmtListNode>,
+    new_singleton_stmt_block_list_node: Vec<SingletonStmtBlockListNode>,
+    new_cons_stmt_block_list_node: Vec<ConsStmtBlockListNode>,
     new_rule_decl: Vec<RuleDecl>,
     new_decl_node_type: Vec<DeclNodeType>,
     new_decl_node_pred: Vec<DeclNodePred>,
@@ -26392,6 +26934,7 @@ struct ModelDelta {
     new_then_atom_node_equalities: Vec<(ThenAtomNode, ThenAtomNode)>,
     new_stmt_node_equalities: Vec<(StmtNode, StmtNode)>,
     new_stmt_list_node_equalities: Vec<(StmtListNode, StmtListNode)>,
+    new_stmt_block_list_node_equalities: Vec<(StmtBlockListNode, StmtBlockListNode)>,
     new_rule_decl_node_equalities: Vec<(RuleDeclNode, RuleDeclNode)>,
     new_decl_node_equalities: Vec<(DeclNode, DeclNode)>,
     new_decl_list_node_equalities: Vec<(DeclListNode, DeclListNode)>,
@@ -26422,6 +26965,7 @@ struct ModelDelta {
     new_then_atom_node_number: usize,
     new_stmt_node_number: usize,
     new_stmt_list_node_number: usize,
+    new_stmt_block_list_node_number: usize,
     new_rule_decl_node_number: usize,
     new_decl_node_number: usize,
     new_decl_list_node_number: usize,
@@ -26525,6 +27069,12 @@ pub struct Eqlog {
     stmt_list_node_dirty: BTreeSet<StmtListNode>,
     stmt_list_node_dirty_prev: Vec<BTreeSet<StmtListNode>>,
     stmt_list_node_weights: Vec<usize>,
+
+    stmt_block_list_node_equalities: Unification<StmtBlockListNode>,
+    stmt_block_list_node_all: BTreeSet<StmtBlockListNode>,
+    stmt_block_list_node_dirty: BTreeSet<StmtBlockListNode>,
+    stmt_block_list_node_dirty_prev: Vec<BTreeSet<StmtBlockListNode>>,
+    stmt_block_list_node_weights: Vec<usize>,
 
     rule_decl_node_equalities: Unification<RuleDeclNode>,
     rule_decl_node_all: BTreeSet<RuleDeclNode>,
@@ -26646,8 +27196,11 @@ pub struct Eqlog {
     pred_then_atom_node: PredThenAtomNodeTable,
     if_stmt_node: IfStmtNodeTable,
     then_stmt_node: ThenStmtNodeTable,
+    fork_stmt_node: ForkStmtNodeTable,
     nil_stmt_list_node: NilStmtListNodeTable,
     cons_stmt_list_node: ConsStmtListNodeTable,
+    singleton_stmt_block_list_node: SingletonStmtBlockListNodeTable,
+    cons_stmt_block_list_node: ConsStmtBlockListNodeTable,
     rule_decl: RuleDeclTable,
     decl_node_type: DeclNodeTypeTable,
     decl_node_pred: DeclNodePredTable,
@@ -26790,8 +27343,11 @@ impl ModelDelta {
             new_pred_then_atom_node: Vec::new(),
             new_if_stmt_node: Vec::new(),
             new_then_stmt_node: Vec::new(),
+            new_fork_stmt_node: Vec::new(),
             new_nil_stmt_list_node: Vec::new(),
             new_cons_stmt_list_node: Vec::new(),
+            new_singleton_stmt_block_list_node: Vec::new(),
+            new_cons_stmt_block_list_node: Vec::new(),
             new_rule_decl: Vec::new(),
             new_decl_node_type: Vec::new(),
             new_decl_node_pred: Vec::new(),
@@ -26916,6 +27472,7 @@ impl ModelDelta {
             new_then_atom_node_equalities: Vec::new(),
             new_stmt_node_equalities: Vec::new(),
             new_stmt_list_node_equalities: Vec::new(),
+            new_stmt_block_list_node_equalities: Vec::new(),
             new_rule_decl_node_equalities: Vec::new(),
             new_decl_node_equalities: Vec::new(),
             new_decl_list_node_equalities: Vec::new(),
@@ -26946,6 +27503,7 @@ impl ModelDelta {
             new_then_atom_node_number: 0,
             new_stmt_node_number: 0,
             new_stmt_list_node_number: 0,
+            new_stmt_block_list_node_number: 0,
             new_rule_decl_node_number: 0,
             new_decl_node_number: 0,
             new_decl_list_node_number: 0,
@@ -27199,6 +27757,24 @@ impl ModelDelta {
             .resize(new_stmt_list_node_number, 0);
 
         self.new_stmt_list_node_number = 0;
+
+        let old_stmt_block_list_node_number = model.stmt_block_list_node_equalities.len();
+        let new_stmt_block_list_node_number =
+            old_stmt_block_list_node_number + self.new_stmt_block_list_node_number;
+        model
+            .stmt_block_list_node_equalities
+            .increase_size_to(new_stmt_block_list_node_number);
+        for i in old_stmt_block_list_node_number..new_stmt_block_list_node_number {
+            let el = StmtBlockListNode::from(i as u32);
+            model.stmt_block_list_node_dirty.insert(el);
+            model.stmt_block_list_node_all.insert(el);
+        }
+
+        model
+            .stmt_block_list_node_weights
+            .resize(new_stmt_block_list_node_number, 0);
+
+        self.new_stmt_block_list_node_number = 0;
 
         let old_rule_decl_node_number = model.rule_decl_node_equalities.len();
         let new_rule_decl_node_number = old_rule_decl_node_number + self.new_rule_decl_node_number;
@@ -29574,6 +30150,22 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_fork_stmt_node.extend(
+                model
+                    .fork_stmt_node
+                    .drain_with_element_stmt_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= ForkStmtNodeTable::WEIGHT;
+
+                        let weight1 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= ForkStmtNodeTable::WEIGHT;
+                    }),
+            );
+
             self.new_cons_stmt_list_node.extend(
                 model
                     .cons_stmt_list_node
@@ -29747,6 +30339,50 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_singleton_stmt_block_list_node.extend(
+                model
+                    .singleton_stmt_block_list_node
+                    .drain_with_element_stmt_list_node(child)
+                    .inspect(|t| {
+                        let weight0 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.0 .0 as usize)
+                            .unwrap();
+                        *weight0 -= SingletonStmtBlockListNodeTable::WEIGHT;
+
+                        let weight1 = model
+                            .stmt_list_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= SingletonStmtBlockListNodeTable::WEIGHT;
+                    }),
+            );
+
+            self.new_cons_stmt_block_list_node.extend(
+                model
+                    .cons_stmt_block_list_node
+                    .drain_with_element_stmt_list_node(child)
+                    .inspect(|t| {
+                        let weight0 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.0 .0 as usize)
+                            .unwrap();
+                        *weight0 -= ConsStmtBlockListNodeTable::WEIGHT;
+
+                        let weight1 = model
+                            .stmt_list_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= ConsStmtBlockListNodeTable::WEIGHT;
+
+                        let weight2 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.2 .0 as usize)
+                            .unwrap();
+                        *weight2 -= ConsStmtBlockListNodeTable::WEIGHT;
+                    }),
+            );
+
             self.new_rule_decl.extend(
                 model
                     .rule_decl
@@ -29814,6 +30450,88 @@ impl ModelDelta {
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
                         *weight1 -= RuleChildStmtListTable::WEIGHT;
+                    }),
+            );
+        }
+
+        for (mut lhs, mut rhs) in self.new_stmt_block_list_node_equalities.drain(..) {
+            lhs = model.stmt_block_list_node_equalities.root(lhs);
+            rhs = model.stmt_block_list_node_equalities.root(rhs);
+            if lhs == rhs {
+                continue;
+            }
+
+            let lhs_weight = model.stmt_block_list_node_weights[lhs.0 as usize];
+            let rhs_weight = model.stmt_block_list_node_weights[rhs.0 as usize];
+            let (root, child) = if lhs_weight >= rhs_weight {
+                (lhs, rhs)
+            } else {
+                (rhs, lhs)
+            };
+
+            model
+                .stmt_block_list_node_equalities
+                .union_roots_into(child, root);
+            model.stmt_block_list_node_all.remove(&child);
+            model.stmt_block_list_node_dirty.remove(&child);
+
+            self.new_fork_stmt_node.extend(
+                model
+                    .fork_stmt_node
+                    .drain_with_element_stmt_block_list_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= ForkStmtNodeTable::WEIGHT;
+
+                        let weight1 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= ForkStmtNodeTable::WEIGHT;
+                    }),
+            );
+
+            self.new_singleton_stmt_block_list_node.extend(
+                model
+                    .singleton_stmt_block_list_node
+                    .drain_with_element_stmt_block_list_node(child)
+                    .inspect(|t| {
+                        let weight0 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.0 .0 as usize)
+                            .unwrap();
+                        *weight0 -= SingletonStmtBlockListNodeTable::WEIGHT;
+
+                        let weight1 = model
+                            .stmt_list_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= SingletonStmtBlockListNodeTable::WEIGHT;
+                    }),
+            );
+
+            self.new_cons_stmt_block_list_node.extend(
+                model
+                    .cons_stmt_block_list_node
+                    .drain_with_element_stmt_block_list_node(child)
+                    .inspect(|t| {
+                        let weight0 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.0 .0 as usize)
+                            .unwrap();
+                        *weight0 -= ConsStmtBlockListNodeTable::WEIGHT;
+
+                        let weight1 = model
+                            .stmt_list_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= ConsStmtBlockListNodeTable::WEIGHT;
+
+                        let weight2 = model
+                            .stmt_block_list_node_weights
+                            .get_mut(t.2 .0 as usize)
+                            .unwrap();
+                        *weight2 -= ConsStmtBlockListNodeTable::WEIGHT;
                     }),
             );
         }
@@ -32231,6 +32949,16 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
+        for mut t in self.new_fork_stmt_node.drain(..) {
+            t.0 = model.stmt_node_equalities.root(t.0);
+            t.1 = model.stmt_block_list_node_equalities.root(t.1);
+            if model.fork_stmt_node.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += ForkStmtNodeTable::WEIGHT;
+                model.stmt_block_list_node_weights[t.1 .0 as usize] += ForkStmtNodeTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
         for mut t in self.new_nil_stmt_list_node.drain(..) {
             t.0 = model.stmt_list_node_equalities.root(t.0);
             if model.nil_stmt_list_node.insert(t) {
@@ -32247,6 +32975,32 @@ impl ModelDelta {
                 model.stmt_list_node_weights[t.0 .0 as usize] += ConsStmtListNodeTable::WEIGHT;
                 model.stmt_node_weights[t.1 .0 as usize] += ConsStmtListNodeTable::WEIGHT;
                 model.stmt_list_node_weights[t.2 .0 as usize] += ConsStmtListNodeTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_singleton_stmt_block_list_node.drain(..) {
+            t.0 = model.stmt_block_list_node_equalities.root(t.0);
+            t.1 = model.stmt_list_node_equalities.root(t.1);
+            if model.singleton_stmt_block_list_node.insert(t) {
+                model.stmt_block_list_node_weights[t.0 .0 as usize] +=
+                    SingletonStmtBlockListNodeTable::WEIGHT;
+                model.stmt_list_node_weights[t.1 .0 as usize] +=
+                    SingletonStmtBlockListNodeTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_cons_stmt_block_list_node.drain(..) {
+            t.0 = model.stmt_block_list_node_equalities.root(t.0);
+            t.1 = model.stmt_list_node_equalities.root(t.1);
+            t.2 = model.stmt_block_list_node_equalities.root(t.2);
+            if model.cons_stmt_block_list_node.insert(t) {
+                model.stmt_block_list_node_weights[t.0 .0 as usize] +=
+                    ConsStmtBlockListNodeTable::WEIGHT;
+                model.stmt_list_node_weights[t.1 .0 as usize] += ConsStmtBlockListNodeTable::WEIGHT;
+                model.stmt_block_list_node_weights[t.2 .0 as usize] +=
+                    ConsStmtBlockListNodeTable::WEIGHT;
             }
         }
 
@@ -33446,6 +34200,14 @@ impl ModelDelta {
         StmtListNode::from(id as u32)
     }
     #[allow(dead_code)]
+    fn new_stmt_block_list_node(&mut self, model: &Model) -> StmtBlockListNode {
+        let id: usize =
+            model.stmt_block_list_node_equalities.len() + self.new_stmt_block_list_node_number;
+        assert!(id <= (u32::MAX as usize));
+        self.new_stmt_block_list_node_number += 1;
+        StmtBlockListNode::from(id as u32)
+    }
+    #[allow(dead_code)]
     fn new_rule_decl_node(&mut self, model: &Model) -> RuleDeclNode {
         let id: usize = model.rule_decl_node_equalities.len() + self.new_rule_decl_node_number;
         assert!(id <= (u32::MAX as usize));
@@ -33634,6 +34396,11 @@ impl Eqlog {
             stmt_list_node_dirty_prev: Vec::new(),
             stmt_list_node_weights: Vec::new(),
             stmt_list_node_all: BTreeSet::new(),
+            stmt_block_list_node_equalities: Unification::new(),
+            stmt_block_list_node_dirty: BTreeSet::new(),
+            stmt_block_list_node_dirty_prev: Vec::new(),
+            stmt_block_list_node_weights: Vec::new(),
+            stmt_block_list_node_all: BTreeSet::new(),
             rule_decl_node_equalities: Unification::new(),
             rule_decl_node_dirty: BTreeSet::new(),
             rule_decl_node_dirty_prev: Vec::new(),
@@ -33738,8 +34505,11 @@ impl Eqlog {
             pred_then_atom_node: PredThenAtomNodeTable::new(),
             if_stmt_node: IfStmtNodeTable::new(),
             then_stmt_node: ThenStmtNodeTable::new(),
+            fork_stmt_node: ForkStmtNodeTable::new(),
             nil_stmt_list_node: NilStmtListNodeTable::new(),
             cons_stmt_list_node: ConsStmtListNodeTable::new(),
+            singleton_stmt_block_list_node: SingletonStmtBlockListNodeTable::new(),
+            cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),
             rule_decl: RuleDeclTable::new(),
             decl_node_type: DeclNodeTypeTable::new(),
             decl_node_pred: DeclNodePredTable::new(),
@@ -34731,6 +35501,52 @@ impl Eqlog {
     #[allow(dead_code)]
     pub fn are_equal_stmt_list_node(&self, lhs: StmtListNode, rhs: StmtListNode) -> bool {
         self.root_stmt_list_node(lhs) == self.root_stmt_list_node(rhs)
+    }
+
+    /// Adjoins a new element of sort `StmtBlockListNode`.
+    #[allow(dead_code)]
+    pub fn new_stmt_block_list_node(&mut self) -> StmtBlockListNode {
+        let mut delta_opt = None;
+        std::mem::swap(&mut delta_opt, &mut self.delta);
+        let mut delta = delta_opt.unwrap();
+
+        let el = delta.new_stmt_block_list_node(self);
+
+        self.delta = Some(delta);
+        el
+    }
+    /// Enforces the equality `lhs = rhs`.
+    #[allow(dead_code)]
+    pub fn equate_stmt_block_list_node(&mut self, lhs: StmtBlockListNode, rhs: StmtBlockListNode) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_stmt_block_list_node_equalities
+            .push((lhs, rhs));
+    }
+    /// Returns and iterator over elements of sort `StmtBlockListNode`.
+    /// The iterator yields canonical representatives only.
+    #[allow(dead_code)]
+    pub fn iter_stmt_block_list_node(&self) -> impl '_ + Iterator<Item = StmtBlockListNode> {
+        self.stmt_block_list_node_all.iter().copied()
+    }
+    /// Returns the canonical representative of the equivalence class of `el`.
+    #[allow(dead_code)]
+    pub fn root_stmt_block_list_node(&self, el: StmtBlockListNode) -> StmtBlockListNode {
+        if el.0 as usize >= self.stmt_block_list_node_equalities.len() {
+            el
+        } else {
+            self.stmt_block_list_node_equalities.root_const(el)
+        }
+    }
+    /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
+    #[allow(dead_code)]
+    pub fn are_equal_stmt_block_list_node(
+        &self,
+        lhs: StmtBlockListNode,
+        rhs: StmtBlockListNode,
+    ) -> bool {
+        self.root_stmt_block_list_node(lhs) == self.root_stmt_block_list_node(rhs)
     }
 
     /// Adjoins a new element of sort `RuleDeclNode`.
@@ -38417,6 +39233,30 @@ impl Eqlog {
             .push(ThenStmtNode(arg0, arg1));
     }
 
+    /// Returns `true` if `fork_stmt_node(arg0, arg1)` holds.
+    #[allow(dead_code)]
+    pub fn fork_stmt_node(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
+        arg0 = self.root_stmt_node(arg0);
+        arg1 = self.root_stmt_block_list_node(arg1);
+        self.fork_stmt_node.contains(ForkStmtNode(arg0, arg1))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `fork_stmt_node` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_fork_stmt_node(&self) -> impl '_ + Iterator<Item = (StmtNode, StmtBlockListNode)> {
+        self.fork_stmt_node.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes `fork_stmt_node(arg0, arg1)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_fork_stmt_node(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_fork_stmt_node
+            .push(ForkStmtNode(arg0, arg1));
+    }
+
     /// Returns `true` if `nil_stmt_list_node(arg0)` holds.
     #[allow(dead_code)]
     pub fn nil_stmt_list_node(&self, mut arg0: StmtListNode) -> bool {
@@ -38476,6 +39316,83 @@ impl Eqlog {
             .unwrap()
             .new_cons_stmt_list_node
             .push(ConsStmtListNode(arg0, arg1, arg2));
+    }
+
+    /// Returns `true` if `singleton_stmt_block_list_node(arg0, arg1)` holds.
+    #[allow(dead_code)]
+    pub fn singleton_stmt_block_list_node(
+        &self,
+        mut arg0: StmtBlockListNode,
+        mut arg1: StmtListNode,
+    ) -> bool {
+        arg0 = self.root_stmt_block_list_node(arg0);
+        arg1 = self.root_stmt_list_node(arg1);
+        self.singleton_stmt_block_list_node
+            .contains(SingletonStmtBlockListNode(arg0, arg1))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `singleton_stmt_block_list_node` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_singleton_stmt_block_list_node(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtBlockListNode, StmtListNode)> {
+        self.singleton_stmt_block_list_node
+            .iter_all()
+            .map(|t| (t.0, t.1))
+    }
+    /// Makes `singleton_stmt_block_list_node(arg0, arg1)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_singleton_stmt_block_list_node(
+        &mut self,
+        arg0: StmtBlockListNode,
+        arg1: StmtListNode,
+    ) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_singleton_stmt_block_list_node
+            .push(SingletonStmtBlockListNode(arg0, arg1));
+    }
+
+    /// Returns `true` if `cons_stmt_block_list_node(arg0, arg1, arg2)` holds.
+    #[allow(dead_code)]
+    pub fn cons_stmt_block_list_node(
+        &self,
+        mut arg0: StmtBlockListNode,
+        mut arg1: StmtListNode,
+        mut arg2: StmtBlockListNode,
+    ) -> bool {
+        arg0 = self.root_stmt_block_list_node(arg0);
+        arg1 = self.root_stmt_list_node(arg1);
+        arg2 = self.root_stmt_block_list_node(arg2);
+        self.cons_stmt_block_list_node
+            .contains(ConsStmtBlockListNode(arg0, arg1, arg2))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `cons_stmt_block_list_node` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_cons_stmt_block_list_node(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtBlockListNode, StmtListNode, StmtBlockListNode)> {
+        self.cons_stmt_block_list_node
+            .iter_all()
+            .map(|t| (t.0, t.1, t.2))
+    }
+    /// Makes `cons_stmt_block_list_node(arg0, arg1, arg2)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_cons_stmt_block_list_node(
+        &mut self,
+        arg0: StmtBlockListNode,
+        arg1: StmtListNode,
+        arg2: StmtBlockListNode,
+    ) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_cons_stmt_block_list_node
+            .push(ConsStmtBlockListNode(arg0, arg1, arg2));
     }
 
     /// Returns `true` if `rule_decl(arg0, arg1)` holds.
@@ -39622,8 +40539,11 @@ impl Eqlog {
             || self.pred_then_atom_node.is_dirty()
             || self.if_stmt_node.is_dirty()
             || self.then_stmt_node.is_dirty()
+            || self.fork_stmt_node.is_dirty()
             || self.nil_stmt_list_node.is_dirty()
             || self.cons_stmt_list_node.is_dirty()
+            || self.singleton_stmt_block_list_node.is_dirty()
+            || self.cons_stmt_block_list_node.is_dirty()
             || self.rule_decl.is_dirty()
             || self.decl_node_type.is_dirty()
             || self.decl_node_pred.is_dirty()
@@ -39748,6 +40668,7 @@ impl Eqlog {
             || !self.then_atom_node_dirty.is_empty()
             || !self.stmt_node_dirty.is_empty()
             || !self.stmt_list_node_dirty.is_empty()
+            || !self.stmt_block_list_node_dirty.is_empty()
             || !self.rule_decl_node_dirty.is_empty()
             || !self.decl_node_dirty.is_empty()
             || !self.decl_list_node_dirty.is_empty()
@@ -49386,8 +50307,11 @@ impl Eqlog {
         self.pred_then_atom_node.drop_dirt();
         self.if_stmt_node.drop_dirt();
         self.then_stmt_node.drop_dirt();
+        self.fork_stmt_node.drop_dirt();
         self.nil_stmt_list_node.drop_dirt();
         self.cons_stmt_list_node.drop_dirt();
+        self.singleton_stmt_block_list_node.drop_dirt();
+        self.cons_stmt_block_list_node.drop_dirt();
         self.rule_decl.drop_dirt();
         self.decl_node_type.drop_dirt();
         self.decl_node_pred.drop_dirt();
@@ -49513,6 +50437,7 @@ impl Eqlog {
         self.then_atom_node_dirty.clear();
         self.stmt_node_dirty.clear();
         self.stmt_list_node_dirty.clear();
+        self.stmt_block_list_node_dirty.clear();
         self.rule_decl_node_dirty.clear();
         self.decl_node_dirty.clear();
         self.decl_list_node_dirty.clear();
@@ -49557,8 +50482,11 @@ impl Eqlog {
         self.pred_then_atom_node.retire_dirt();
         self.if_stmt_node.retire_dirt();
         self.then_stmt_node.retire_dirt();
+        self.fork_stmt_node.retire_dirt();
         self.nil_stmt_list_node.retire_dirt();
         self.cons_stmt_list_node.retire_dirt();
+        self.singleton_stmt_block_list_node.retire_dirt();
+        self.cons_stmt_block_list_node.retire_dirt();
         self.rule_decl.retire_dirt();
         self.decl_node_type.retire_dirt();
         self.decl_node_pred.retire_dirt();
@@ -49754,6 +50682,14 @@ impl Eqlog {
         self.stmt_list_node_dirty_prev
             .push(stmt_list_node_dirty_tmp);
 
+        let mut stmt_block_list_node_dirty_tmp = BTreeSet::new();
+        std::mem::swap(
+            &mut stmt_block_list_node_dirty_tmp,
+            &mut self.stmt_block_list_node_dirty,
+        );
+        self.stmt_block_list_node_dirty_prev
+            .push(stmt_block_list_node_dirty_tmp);
+
         let mut rule_decl_node_dirty_tmp = BTreeSet::new();
         std::mem::swap(
             &mut rule_decl_node_dirty_tmp,
@@ -49923,11 +50859,23 @@ impl Eqlog {
             &mut self.stmt_node_equalities,
             &mut self.then_atom_node_equalities,
         );
+        self.fork_stmt_node.recall_previous_dirt(
+            &mut self.stmt_block_list_node_equalities,
+            &mut self.stmt_node_equalities,
+        );
         self.nil_stmt_list_node
             .recall_previous_dirt(&mut self.stmt_list_node_equalities);
         self.cons_stmt_list_node.recall_previous_dirt(
             &mut self.stmt_list_node_equalities,
             &mut self.stmt_node_equalities,
+        );
+        self.singleton_stmt_block_list_node.recall_previous_dirt(
+            &mut self.stmt_block_list_node_equalities,
+            &mut self.stmt_list_node_equalities,
+        );
+        self.cons_stmt_block_list_node.recall_previous_dirt(
+            &mut self.stmt_block_list_node_equalities,
+            &mut self.stmt_list_node_equalities,
         );
         self.rule_decl.recall_previous_dirt(
             &mut self.rule_decl_node_equalities,
@@ -50426,6 +51374,17 @@ impl Eqlog {
             .filter(|el| self.stmt_list_node_equalities.root(*el) == *el)
             .collect();
 
+        let mut stmt_block_list_node_dirty_prev_tmp = Vec::new();
+        std::mem::swap(
+            &mut stmt_block_list_node_dirty_prev_tmp,
+            &mut self.stmt_block_list_node_dirty_prev,
+        );
+        self.stmt_block_list_node_dirty = stmt_block_list_node_dirty_prev_tmp
+            .into_iter()
+            .flatten()
+            .filter(|el| self.stmt_block_list_node_equalities.root(*el) == *el)
+            .collect();
+
         let mut rule_decl_node_dirty_prev_tmp = Vec::new();
         std::mem::swap(
             &mut rule_decl_node_dirty_prev_tmp,
@@ -50724,6 +51683,16 @@ impl fmt::Display for Eqlog {
                     .header_intersection('┬'),
             )
             .fmt(f)?;
+        self.stmt_block_list_node_equalities
+            .class_table()
+            .with(Header("StmtBlockListNode"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)?;
         self.rule_decl_node_equalities
             .class_table()
             .with(Header("RuleDeclNode"))
@@ -50908,8 +51877,11 @@ impl fmt::Display for Eqlog {
         self.pred_then_atom_node.fmt(f)?;
         self.if_stmt_node.fmt(f)?;
         self.then_stmt_node.fmt(f)?;
+        self.fork_stmt_node.fmt(f)?;
         self.nil_stmt_list_node.fmt(f)?;
         self.cons_stmt_list_node.fmt(f)?;
+        self.singleton_stmt_block_list_node.fmt(f)?;
+        self.cons_stmt_block_list_node.fmt(f)?;
         self.rule_decl.fmt(f)?;
         self.decl_node_type.fmt(f)?;
         self.decl_node_pred.fmt(f)?;
