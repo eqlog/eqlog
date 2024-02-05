@@ -713,6 +713,68 @@ rule app_term_arg_num_should_match {
     then func_arg_num_should_match(got_len, expected_len, loc);
 }
 
+// ## Control flow graph
+pred cfg_edge(from: StmtNode, to: StmtNode);
+
+rule cfg_edge_adjacent {
+    if cons_stmt_list_node(_, first , tail);
+    if cons_stmt_list_node(tail, second , _);
+    then cfg_edge(first, second);
+}
+
+// ### Control flow from and into StmtListNodes
+// 
+// If control flows into a list of statements, then it flows into the first statement in that list.
+// If control flows out of a statement list, then it flows out of every suffix of the statement list, and from the last statement in the list.
+// In case of an empty statement list, there's an ordinary cfg edge between every before-statement to every after-statement.
+pred cfg_edge_stmts_stmt(from: StmtListNode, to: StmtNode);
+pred cfg_edge_stmt_stmts(from: StmtNode, to: StmtListNode);
+
+rule cfg_edge_stmts_stmt_cons {
+    if cfg_edge_stmts_stmt(stmts, stmt);
+    if cons_stmt_node_list(stmts, _, tail);
+    then cfg_edge_stmts_stmt(tail, stmt);
+}
+rule cfg_edge_stmts_stmt_singleton {
+    if cfg_edge_stmts_stmt(stmts, stmt);
+    if cons_stmt_node_list(stmts, head, tail);
+    if nil_stmt_node_list(tail);
+    then cfg_edge(head, stmt);
+}
+
+rule cfg_edge_stmt_stmts_cons {
+    if cfg_edge_stmt_stmts(stmt, stmts);
+    if cons_stmt_node_list(stmts, head, _);
+    then cfg_edge(stmt, head);
+}
+rule cfg_edge_stmt_stmts_nil {
+    if cfg_edge_stmt_stmts(stmt, stmts);
+    if nil_stmt_node_list(stmts);
+    if cfg_edge_stmts_stmt(stmts, next_stmt);
+    then cfg_edge(stmt, next_stmt);
+}
+
+// ### Control flow from and into block lists.
+//
+// This is for forks.
+
+pred cfg_edge_fork(from: StmtNode, to: StmtBlockList);
+pred cfg_edge_join(from: StmtBlockList, to: StmtNode);
+
+rule cfg_edge_fork_cons {
+    if cfg_edge_fork(stmt, blocks);
+    if cons_stmt_block_list(blocks, head_block, tail_blocks);
+    then cfg_edge_fork(stmt, tail_blocks);
+    then cfg_edge_stmt_stmts(stmt, head_block);
+}
+
+rule cfg_edge_join_cons {
+    if cfg_edge_join(blocks, stmt);
+    if cons_stmt_block_list(blocks, head_block, tail_blocks);
+    then cfg_edge_join(blocks, stmt);
+    then cfg_edge_stmts_stmt(head_block, stmt);
+}
+
 // ## The morphisms associated to statements.
 //
 // Each statement in a rule corresponds to a morphism of structures. The domain
