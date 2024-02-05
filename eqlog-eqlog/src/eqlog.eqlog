@@ -127,6 +127,7 @@ func rule_child_if_atom(IfAtomNode) -> RuleChildNode;
 func rule_child_then_atom(ThenAtomNode) -> RuleChildNode;
 func rule_child_stmt(StmtNode) -> RuleChildNode;
 func rule_child_stmt_list(StmtListNode) -> RuleChildNode;
+func rule_child_stmt_block_list(StmtBlockListNode) -> RuleChildNode;
 
 rule rule_child_term_total {
     if tm: TermNode;
@@ -156,6 +157,10 @@ rule rule_child_stmt_list_total {
     if stmts: StmtListNode;
     then rule_child_stmt_list(stmts)!;
 }
+rule rule_child_stmt_block_list_total {
+    if blocks: StmtBlockListNode;
+    then rule_child_stmt_block_list(blocks)!;
+}
 
 pred rule_child(RuleChildNode, RuleDeclNode);
 
@@ -174,6 +179,15 @@ rule rule_child_stmts_cons {
     then rule_child(child_tail, rul);
 }
 
+rule rule_child_stmt_blocks_cons {
+    if cons_stmt_block_list_node(block, head, tail);
+    if rule_child(rule_child_stmt_block_list(block), rul);
+    if child_head = rule_child_stmt_list(head);
+    if child_tail = rule_child_stmt_block_list(tail);
+    then rule_child(child_head, rul);
+    then rule_child(child_tail, rul);
+}
+
 rule rule_child_stmt_if {
     if if_stmt_node(stmt, atom);
     if rule_child(rule_child_stmt(stmt), rul);
@@ -185,6 +199,12 @@ rule rule_child_stmt_then {
     if rule_child(rule_child_stmt(stmt), rul);
     if child_atom = rule_child_then_atom(atom);
     then rule_child(child_atom, rul);
+}
+rule rule_child_stmt_fork {
+    if fork_stmt_node(stmt, blocks);
+    if rule_child(rule_child_stmt(stmt), rul);
+    if child_block_list = rule_child_stmt_block_list(blocks);
+    then rule_child(child_block_list, rul);
 }
 
 rule rule_child_if_atom_equal {
