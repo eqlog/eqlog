@@ -7,6 +7,7 @@ members = [
   "eqlog-test-eval",
   "eqlog-test-compile",
 	"v1_to_v2",
+  "examples/inference",
   "eqlog-eqlog",
   "eqlog-eqlog-tree",
   "eqlog-tree",
