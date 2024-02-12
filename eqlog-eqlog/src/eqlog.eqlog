@@ -752,24 +752,24 @@ pred cfg_edge_stmt_stmts(from: StmtNode, to: StmtListNode);
 
 rule cfg_edge_stmts_stmt_cons {
     if cfg_edge_stmts_stmt(stmts, stmt);
-    if cons_stmt_node_list(stmts, _, tail);
+    if cons_stmt_list_node(stmts, _, tail);
     then cfg_edge_stmts_stmt(tail, stmt);
 }
 rule cfg_edge_stmts_stmt_singleton {
     if cfg_edge_stmts_stmt(stmts, stmt);
-    if cons_stmt_node_list(stmts, head, tail);
-    if nil_stmt_node_list(tail);
+    if cons_stmt_list_node(stmts, head, tail);
+    if nil_stmt_list_node(tail);
     then cfg_edge(head, stmt);
 }
 
 rule cfg_edge_stmt_stmts_cons {
     if cfg_edge_stmt_stmts(stmt, stmts);
-    if cons_stmt_node_list(stmts, head, _);
+    if cons_stmt_list_node(stmts, head, _);
     then cfg_edge(stmt, head);
 }
 rule cfg_edge_stmt_stmts_nil {
     if cfg_edge_stmt_stmts(stmt, stmts);
-    if nil_stmt_node_list(stmts);
+    if nil_stmt_list_node(stmts);
     if cfg_edge_stmts_stmt(stmts, next_stmt);
     then cfg_edge(stmt, next_stmt);
 }
@@ -778,20 +778,20 @@ rule cfg_edge_stmt_stmts_nil {
 //
 // This is for forks.
 
-pred cfg_edge_fork(from: StmtNode, to: StmtBlockList);
-pred cfg_edge_join(from: StmtBlockList, to: StmtNode);
+pred cfg_edge_fork(from: StmtNode, to: StmtBlockListNode);
+pred cfg_edge_join(from: StmtBlockListNode, to: StmtNode);
 
 rule cfg_edge_fork_cons {
     if cfg_edge_fork(stmt, blocks);
-    if cons_stmt_block_list(blocks, head_block, tail_blocks);
+    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
     then cfg_edge_fork(stmt, tail_blocks);
     then cfg_edge_stmt_stmts(stmt, head_block);
 }
 
 rule cfg_edge_join_cons {
     if cfg_edge_join(blocks, stmt);
-    if cons_stmt_block_list(blocks, head_block, tail_blocks);
-    then cfg_edge_join(blocks, stmt);
+    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
+    then cfg_edge_join(tail_blocks, stmt);
     then cfg_edge_stmts_stmt(head_block, stmt);
 }
 
