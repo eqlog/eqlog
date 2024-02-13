@@ -9,8 +9,21 @@ fn iter_grouped_morphisms<'a>(
     rule: RuleDeclNode,
     eqlog: &'a Eqlog,
 ) -> impl 'a + Iterator<Item = Morphism> {
-    successors(eqlog.rule_first_grouped_morphism(rule), |prev| {
-        eqlog.next_grouped_morphism(*prev)
+    let first_morphisms: Vec<Morphism> = eqlog
+        .iter_rule_first_grouped_morphism()
+        .filter_map(|(rl, morph)| eqlog.are_equal_rule_decl_node(rl, rule).then_some(morph))
+        .collect();
+    // TODO: Allow more than one first morphism.
+    assert!(first_morphisms.len() <= 1);
+
+    successors(first_morphisms.into_iter().next(), |prev| {
+        let next_morphisms: Vec<Morphism> = eqlog
+            .iter_next_grouped_morphism()
+            .filter_map(|(prev0, next)| eqlog.are_equal_morphism(prev0, *prev).then_some(next))
+            .collect();
+        // TODO: Allow more than one next morphism.
+        assert!(next_morphisms.len() <= 1);
+        next_morphisms.into_iter().next()
     })
 }
 

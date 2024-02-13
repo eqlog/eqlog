@@ -91,7 +91,7 @@ pub fn iter_conflicting_type_errors<'a>(
             }
         })
         .flat_map(move |el| {
-            eqlog.iter_semantic_el().filter_map(move |(tm, e)| {
+            eqlog.iter_semantic_el().filter_map(move |(tm, _, e)| {
                 if !eqlog.are_equal_el(e, el) {
                     return None;
                 }
@@ -118,7 +118,7 @@ pub fn iter_undetermined_type_errors<'a>(
         .into_iter()
         .filter(move |el| !els_with_type.contains(el))
         .flat_map(move |el| {
-            eqlog.iter_semantic_el().filter_map(move |(tm, e)| {
+            eqlog.iter_semantic_el().filter_map(move |(tm, _, e)| {
                 if !eqlog.are_equal_el(e, el) {
                     return None;
                 }
