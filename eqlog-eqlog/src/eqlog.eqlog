@@ -803,18 +803,54 @@ rule cfg_edge_join_cons {
 // that statement. Codomain and domain of subsequent statements match, so their
 // morphisms are composable.
 
-func stmt_morphism(StmtNode) -> Morphism;
-rule stmt_morphism_total {
-    if stmt: StmtNode;
-    then stmt_morphism(stmt)!;
+pred before_stmt_structure(StmtNode, Structure);
+pred stmt_morphism(StmtNode, Morphism);
+
+func before_rule_structure(RuleNode) -> Structure;
+rule before_rule_structure_total {
+    if rn: RuleNode;
+    then before_rule_structure(rn)!;
+}
+rule before_first_rule_stmt {
+    if rule_node(rul, stmts);
+    if cons_stmt_list_node(stmts, first, _);
+    if structure = before_rule_structure(rul);
+    then before_stmt_structure(first, structure);
 }
 
-rule stmt_morphism_dom_cod {
-    if cons_stmt_list_node(_, first , tail);
-    if cons_stmt_list_node(tail, second , _);
-    if cod_first = cod(stmt_morphism(first));
-    if dom_second = dom(stmt_morphism(second));
-    then cod_first = dom_second;
+rule cons_before_stmt_structure {
+    if cons_stmt_list_node(stmts, first, tail);
+    if cons_stmt_list_node(tail, second, _);
+    if stmt_morphism(first, first_morphism);
+    if first_cod = cod(first_morphism);
+    then before_stmt_structure(second, first_cod);
+}
+
+func if_atom_morphism(IfAtomNode, before_structure: Structure) -> Morphism;
+func then_atom_morphism(ThenAtomNode, before_structure: Structure) -> Morphism;
+
+rule if_atom_morphism_dom {
+    if morph_dom = dom(if_atom_morphism(if_atom, before_structure));
+    then morph_dom = before_structure;
+}
+
+rule then_atom_morphism_dom {
+    if morph_dom = dom(then_atom_morphism(then_atom, before_structure));
+    then morph_dom = before_structure;
+}
+
+rule if_stmt_morphism {
+    if if_stmt_node(stmt, atom);
+    if before_stmt_structure(stmt, before_structure);
+    then morph := if_atom_morphism(atom, before_structure)!;
+    then stmt_structure(stmt, morph);
+}
+
+rule then_stmt_morphism {
+    if then_stmt_node(stmt, atom);
+    if before_stmt_structure(stmt, before_structure);
+    then morph := then_atom_morphism(atom, before_structure)!;
+    then stmt_structure(stmt, morph);
 }
 
 pred if_morphism(Morphism);
@@ -823,25 +859,25 @@ pred non_surj_then_morphism(Morphism);
 
 rule if_stmt_morphism {
     if if_stmt_node(stmt, _);
-    if morph = stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
     then if_morphism(morph);
 }
 rule then_equal_stmt_morphism {
     if then_stmt_node(stmt, atom);
     if equal_then_atom_node(atom, _, _);
-    if morph = stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
     then surj_then_morphism(morph);
 }
 rule then_pred_stmt_morphism {
     if then_stmt_node(stmt, atom);
     if pred_then_atom_node(atom, _, _);
-    if morph = stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
     then surj_then_morphism(morph);
 }
 rule then_defined_stmt_morphism {
     if then_stmt_node(stmt, atom);
     if defined_then_atom_node(atom, _, _);
-    if morph = stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
     then non_surj_then_morphism(morph);
 }
 
@@ -852,136 +888,137 @@ rule then_defined_stmt_morphism {
 // stmt_structure, and similarly for subnodes of statements.
 //
 // #### Propagate stmt structure through if and then stmts.
-func stmt_structure(StmtNode) -> Structure;
-func if_atom_structure(IfAtomNode) -> Structure;
-func then_atom_structure(ThenAtomNode) -> Structure;
-func term_structure(TermNode) -> Structure;
-func terms_structure(TermListNode) -> Structure;
-func opt_term_structure(OptTermNode) -> Structure;
+pred stmt_structure(StmtNode, Structure);
+pred if_atom_structure(IfAtomNode, Structure);
+pred then_atom_structure(ThenAtomNode, Structure);
+pred term_structure(TermNode, Structure);
+pred terms_structure(TermListNode, Structure);
+pred opt_term_structure(OptTermNode, Structure);
 
 rule stmt_structure_morphism {
-    if s = cod(stmt_morphism(stmt));
-    then stmt_structure(stmt) = s;
+    if stmt_morphism(stmt, morph);
+    if s = cod(morph);
+    then stmt_structure(stmt, s);
 }
 
 rule if_stmt_structure {
     if if_stmt_node(stmt, atom);
-    if structure = stmt_structure(stmt);
-    then if_atom_structure(atom) = structure;
+    if stmt_structure(stmt, structure);
+    then if_atom_structure(atom, structure);
 }
 rule then_stmt_structure {
     if then_stmt_node(stmt, atom);
-    if structure = stmt_structure(stmt);
-    then then_atom_structure(atom) = structure;
+    if stmt_structure(stmt, structure);
+    then then_atom_structure(atom, structure);
 }
 
 // #### Propagate associated structures through if atoms.
 rule equal_if_atom_structure {
     if equal_if_atom_node(atom, lhs, rhs);
-    if structure = if_atom_structure(atom);
-    then term_structure(lhs) = structure;
-    then term_structure(rhs) = structure;
+    if if_atom_structure(atom, structure);
+    then term_structure(lhs, structure);
+    then term_structure(rhs, structure);
 }
 rule defined_if_atom_structure {
     if defined_if_atom_node(atom, term);
-    if structure = if_atom_structure(atom);
-    then term_structure(term) = structure;
+    if if_atom_structure(atom, structure);
+    then term_structure(term, structure);
 }
 rule pred_if_atom_structure {
     if pred_if_atom_node(atom, _, arg_terms);
-    if structure = if_atom_structure(atom);
-    then terms_structure(arg_terms) = structure;
+    if if_atom_structure(atom, structure);
+    then terms_structure(arg_terms, structure);
 }
 rule var_if_atom_structure {
     if var_if_atom_node(atom, var_term, _);
-    if structure = if_atom_structure(atom);
-    then term_structure(var_term) = structure;
+    if if_atom_structure(atom, structure);
+    then term_structure(var_term, structure);
 }
 
 // #### Propagate associated structures through then atoms.
 rule equal_then_atom_structure {
     if equal_then_atom_node(atom, lhs, rhs);
-    if structure = then_atom_structure(atom);
-    then term_structure(lhs) = structure;
-    then term_structure(rhs) = structure;
+    if then_atom_structure(atom, structure);
+    then term_structure(lhs, structure);
+    then term_structure(rhs, structure);
 }
 rule defined_then_atom_structure {
     if defined_then_atom_node(atom, var_term, term);
-    if structure = then_atom_structure(atom);
-    then opt_term_structure(var_term) = structure;
-    then term_structure(term) = structure;
+    if then_atom_structure(atom, structure);
+    then opt_term_structure(var_term, structure);
+    then term_structure(term, structure);
 }
 rule pred_then_atom_structure {
     if pred_then_atom_node(atom, _, arg_terms);
-    if structure = then_atom_structure(atom);
-    then terms_structure(arg_terms) = structure;
+    if then_atom_structure(atom, structure);
+    then terms_structure(arg_terms, structure);
 }
 
 // #### Propagate associated structures through terms.
 rule cons_term_list_structure {
     if cons_term_list_node(terms, head, tail);
-    if structure = terms_structure(terms);
-    then term_structure(head) = structure;
-    then terms_structure(tail) = structure;
+    if terms_structure(terms, structure);
+    then term_structure(head, structure);
+    then terms_structure(tail, structure);
 }
 
 rule some_opt_term_structure {
     if some_term_node(opt_term, term);
-    if structure = opt_term_structure(opt_term);
-    then term_structure(term) = structure;
+    if opt_term_structure(opt_term, structure);
+    then term_structure(term, structure);
 }
 
 rule app_term_structure {
     if app_term_node(term, _, args);
-    if structure = term_structure(term);
-    then terms_structure(args) = structure;
+    if term_structure(term, structure);
+    then terms_structure(args, structure);
 }
 
 // ### Populate associated structures
 
-func semantic_el(TermNode) -> El;
-rule semantic_el_total {
+func semantic_el(TermNode, Structure) -> El;
+rule semantic_el_defined {
     if el: TermNode;
-    then semantic_el(el)!;
+    if term_structure(el, structure);
+    then semantic_el(el, structure)!;
 }
 
-func semantic_els(TermListNode) -> ElList;
+func semantic_els(TermListNode, Structure) -> ElList;
 rule semantic_els_total {
     if els: TermListNode;
-    then semantic_els(els)!;
+    if terms_structure(els, structure);
+    then semantic_els(els, structure)!;
 }
 
 rule semantic_els_nil {
     if nil_term_list_node(terms);
-    if structure = terms_structure(terms);
-    if sem_els = semantic_els(terms);
+    if terms_structure(terms, structure);
+    if sem_els = semantic_els(terms, structure);
     then sem_els = nil_el_list(structure);
 }
 rule semantic_els_cons {
     if cons_term_list_node(terms, head, tail);
-    if sem_els = semantic_els(terms);
-    if head_sem_el = semantic_el(head);
-    if tail_sem_els = semantic_els(tail);
+    if sem_els = semantic_els(terms, structure);
+    if head_sem_el = semantic_el(head, structure);
+    if tail_sem_els = semantic_els(tail, structuree);
     then sem_els = cons_el_list(head_sem_el, tail_sem_els);
 }
 
 // #### The structures of semantic elements
 rule semantic_el_struct {
-    if el = semantic_el(tm);
-    if structure = term_structure(tm);
+    if el = semantic_el(tm, structure);
     then el_structure(el) = structure;
 }
 rule semantic_els_struct {
-    if els = semantic_els(tms);
-    if structure = terms_structure(tms);
+    if els = semantic_els(tms, structure);
     then els_structure(els) = structure;
 }
 
 // #### Semantics of terms
 rule app_term_semantics {
     if app_term_node(result_term, func_name, arg_terms);
-    if result_el = semantic_el(result_term);
-    if arg_els = semantic_els(arg_terms);
+    if result_el = semantic_el(result_term, structure);
+    if arg_els = semantic_els(arg_terms, structure);
     if function = semantic_func(func_name);
     then result_el = func_app(function, arg_els);
 }
@@ -989,8 +1026,7 @@ rule app_term_semantics {
 rule var_term_semantics {
     if var_term_node(term, name);
     if virt_name = real_virt_ident(name);
-    if el = semantic_el(term);
-    if structure = term_structure(term);
+    if el = semantic_el(term, structure);
     then el = var(structure, virt_name);
 }
 
@@ -1002,50 +1038,49 @@ rule wildcard_virt_ident_defined {
 rule wildcard_term_semantics {
     if wildcard_term_node(term);
     if name = wildcard_virt_ident(term);
-    if el = semantic_el(term);
-    if structure = term_structure(term);
+    if el = semantic_el(term, structure);
     then el = var(structure, name);
 }
 
 // #### Semantics of if atoms
 rule equal_if_atom_semantics {
     if equal_if_atom_node(_, lhs_term, rhs_term);
-    if lhs_el = semantic_el(lhs_term);
-    if rhs_el = semantic_el(rhs_term);
+    if lhs_el = semantic_el(lhs_term, structure);
+    if rhs_el = semantic_el(rhs_term, structure);
     then lhs_el = rhs_el;
 }
 // No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
 rule pred_if_atom_semantics {
     if pred_if_atom_node(_, predicate_name, arg_terms);
     if predicate = semantic_pred(predicate_name);
-    if arg_els = semantic_els(arg_terms);
+    if arg_els = semantic_els(arg_terms, _);
     then pred_app(predicate, arg_els);
 }
 rule var_if_atom_semantics {
     if var_if_atom_node(_, var_term, type_name);
     if typ = semantic_type(type_name);
-    if var_el = semantic_el(var_term);
+    if var_el = semantic_el(var_term, _);
     then el_type(var_el, typ);
 }
 
 // #### Semantics of then atoms
 rule equal_then_atom_semantics {
     if equal_then_atom_node(_, lhs_term, rhs_term);
-    if lhs_el = semantic_el(lhs_term);
-    if rhs_el = semantic_el(rhs_term);
+    if lhs_el = semantic_el(lhs_term, structure);
+    if rhs_el = semantic_el(rhs_term, structure);
     then lhs_el = rhs_el;
 }
 rule defined_then_atom_semantics {
     if defined_then_atom_node(_, opt_var_term, term);
     if some_term_node(opt_var_term, var_term);
-    if var_el = semantic_el(var_term);
-    if el = semantic_el(term);
+    if var_el = semantic_el(var_term, structure);
+    if el = semantic_el(term, structure);
     then var_el = el;
 }
 rule pred_then_atom_semantics {
     if pred_then_atom_node(_, predicate_name, arg_terms);
     if predicate = semantic_pred(predicate_name);
-    if arg_els = semantic_els(arg_terms);
+    if arg_els = semantic_els(arg_terms, _);
     then pred_app(predicate, arg_els);
 }
 
@@ -1053,19 +1088,19 @@ rule pred_then_atom_semantics {
 //
 // Consecutive if statements and surjective then statements have the same
 // grouped morphism.
-func grouped_stmt_morphism(StmtNode) -> Morphism;
-rule grouped_stmt_morphism_total {
-    if stmt: StmtNode;
-    then grouped_stmt_morphism(stmt)!;
+func grouped_stmt_morphism(StmtNode, Morphism) -> Morphism;
+rule grouped_stmt_morphism_defined {
+    if stmt_morphism(stmt, morph);
+    then grouped_stmt_morphism(stmt, morph)!;
 }
 
 // ### The first grouped morphism associated to a rule.
-func rule_first_grouped_morphism(RuleDeclNode) -> Morphism;
+pred rule_first_grouped_morphism(RuleDeclNode, Morphism);
 rule rule_stmt_first_grouped {
     if rule_decl(rul, stmts);
     if cons_stmt_list_node(stmts, first, _);
-    if gsm = grouped_stmt_morphism(first);
-    then rule_first_grouped_morphism(rul) = gsm;
+    if gsm = grouped_stmt_morphism(first, _);
+    then rule_first_grouped_morphism(rul, gsm);
 }
 
 // #### The grouped statement morphism has the same type as the ungrouped one.
@@ -1089,105 +1124,115 @@ rule grouped_stmt_morphism_non_surj_then {
 rule grouped_stmt_morphism_first_in_rule {
     if rule_decl(_, stmts);
     if cons_stmt_list_node(stmts, first, _);
-    if sm_dom = dom(stmt_morphism(first));
-    if gsm_dom = dom(grouped_stmt_morphism(first));
-    then sm_dom = gsm_dom;
+    if gsm = grouped_stmt_morphism(first, morph);
+    if morph_dom = dom(morph);
+    if gsm_dom = dom(gsm);
+    then morph_dom = gsm_dom;
 }
 
-// #### The codomain of a grouped morphism of a singleton statement.
+// #### The codomain of a grouped morphism of the last statement.
 rule grouped_stmt_morphism_singleton {
-    if cons_stmt_list_node(_, first, tail);
+    if cons_stmt_list_node(_, stmt, tail);
     if nil_stmt_list_node(tail);
-    if gsm_cod = cod(grouped_stmt_morphism(first));
-    if sm_cod = cod(stmt_morphism(first));
-    then gsm_cod = sm_cod;
+    if gsm = grouped_stmt_morphism(stmt, morph);
+    if morph_cod = cod(morph);
+    if gsm_cod = cod(gsm);
+    then gsm_cod = gsm;
 }
 
 // #### The next grouped morphism in a statement list
-func next_grouped_morphism(Morphism) -> Morphism;
+pred next_grouped_morphism(Morphism, Morphism);
 rule next_grouped_dom_cod {
     if cons_stmt_list_node(_, first, tail);
     if cons_stmt_list_node(tail, second, _);
-    if first_gsm = grouped_stmt_morphism(first);
-    if second_gsm = grouped_stmt_morphism(second);
-    if next_grouped_morphism(first_gsm) = second_gsm;
+    if first_gsm = grouped_stmt_morphism(first, first_morph);
+    if second_gsm = grouped_stmt_morphism(second, second_morph);
+    if next_grouped_morphism(first_gsm, second_gsm);
     if s = cod(stmt_morphism(first));
     then cod(first_gsm) = s;
     then dom(second_gsm) = s;
 }
 
-// #### Grouping rules for an if morphism followed by a morphism.
+// #### Grouping rules for an if statement followed by an arbitrary statement.
 rule grouped_stmt_morphism_if_if {
     if cons_stmt_list_node(_, first, tail);
-    if if_morphism(stmt_morphism(first));
+    if if_stmt_node(first, _);
     if cons_stmt_list_node(tail, second, _);
-    if if_morphism(stmt_morphism(second));
+    if if_stmt_node(second, _);
 
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+
     then gsm_first = gsm_second;
 }
 rule grouped_stmt_morphism_if_surj_then {
     if cons_stmt_list_node(_, first, tail);
-    if if_morphism(stmt_morphism(first));
+    if if_stmt_node(first, _);
     if cons_stmt_list_node(tail, second, _);
-    if surj_then_morphism(stmt_morphism(second));
+    if then_stmt_node(second, _);
 
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+
     then next_grouped_morphism(gsm_first) = gsm_second;
 }
-rule grouped_stmt_morphism_if_non_surj_then {
+// TODO: Fork statement after if statement.
+
+// #### Grouping rules for a then atom followed by an arbitrary morphism.
+rule grouped_stmt_morphism_then_if {
     if cons_stmt_list_node(_, first, tail);
-    if if_morphism(stmt_morphism(first));
+    if then_stmt_node(first, _);
     if cons_stmt_list_node(tail, second, _);
-    if non_surj_then_morphism(stmt_morphism(second));
+    if if_stmt_node(second, _);
 
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+
     then next_grouped_morphism(gsm_first) = gsm_second;
 }
 
-// #### Grouping rules for a surjective then morphism followed by a morphism.
-rule grouped_stmt_morphism_surj_then_if {
-    if cons_stmt_list_node(_, first, tail);
-    if surj_then_morphism(stmt_morphism(first));
-    if cons_stmt_list_node(tail, second, _);
-    if if_morphism(stmt_morphism(second));
-
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
-    then next_grouped_morphism(gsm_first) = gsm_second;
-}
 rule grouped_stmt_morphism_surj_then_surj_then {
     if cons_stmt_list_node(_, first, tail);
-    if surj_then_morphism(stmt_morphism(first));
     if cons_stmt_list_node(tail, second, _);
-    if surj_then_morphism(stmt_morphism(second));
 
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+
+    if surj_then_morphism(first_morph);
+    if surj_then_morphism(second_morph);
+
     then gsm_first = gsm_second;
 }
 rule grouped_stmt_morphism_surj_then_non_surj_then {
     if cons_stmt_list_node(_, first, tail);
-    if surj_then_morphism(stmt_morphism(first));
     if cons_stmt_list_node(tail, second, _);
-    if non_surj_then_morphism(stmt_morphism(second));
 
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+
+    if surj_then_morphism(first_morph);
+    if non_surj_then_morphism(second_morph);
+
     then next_grouped_morphism(gsm_first) = gsm_second;
 }
 
-// #### Grouping rule for a non-surjective then morphism followed by a morphism.
-rule grouped_stmt_morphism_non_surj {
+// #### Grouping rule for a non-surjective then statement followed by surjective then statement.
+rule grouped_stmt_morphism_non_surj_surj {
     if cons_stmt_list_node(_, first, tail);
-    if non_surj_then_morphism(stmt_morphism(first));
     if cons_stmt_list_node(tail, second, _);
 
-    if gsm_first = grouped_stmt_morphism(first);
-    if gsm_second = grouped_stmt_morphism(second);
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+
+    if non_surj_then_morphism(first_morph);
+    if surj_then_morphism(second_morph);
+
     then next_grouped_morphism(gsm_first) = gsm_second;
 }
 
@@ -1438,12 +1483,12 @@ rule then_atom_epic_ok_pred {
 // Only *ungrouped* surjective then morphisms need surjectivity checking.
 pred should_be_surjective(Morphism);
 rule surj_then_should_be_surjective {
-    if morph = stmt_morphism(_);
+    if stmt_morphism(_, morph);
     if surj_then_morphism(morph);
     then should_be_surjective(morph);
 }
 rule non_surj_then_should_be_surjective {
-    if morph = stmt_morphism(_);
+    if stmt_morphism(_, morph);
     if non_surj_then_morphism(morph);
     then should_be_surjective(morph);
 }
