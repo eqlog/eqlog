@@ -1224,7 +1224,7 @@ rule grouped_stmt_morphism_surj_then_non_surj_then {
     then next_grouped_morphism(gsm_first, gsm_second);
 }
 
-// #### Grouping rule for a non-surjective then statement followed by surjective then statement.
+// #### Grouping rule for a non-surjective then statement followed by an arbitrary statement.
 rule grouped_stmt_morphism_non_surj_surj {
     if cons_stmt_list_node(_, first, tail);
     if cons_stmt_list_node(tail, second, _);
@@ -1234,7 +1234,6 @@ rule grouped_stmt_morphism_non_surj_surj {
     if cod(first_morph) = dom(second_morph);
 
     if non_surj_then_morphism(first_morph);
-    if surj_then_morphism(second_morph);
 
     then next_grouped_morphism(gsm_first, gsm_second);
 }
