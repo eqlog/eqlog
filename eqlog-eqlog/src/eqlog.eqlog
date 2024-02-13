@@ -1105,18 +1105,21 @@ rule rule_stmt_first_grouped {
 
 // #### The grouped statement morphism has the same type as the ungrouped one.
 rule grouped_stmt_morphism_if {
-    if if_morphism(stmt_morphism(stmt));
-    if gsm = grouped_stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
+    if if_morphism(morph);
+    if gsm = grouped_stmt_morphism(stmt, morph);
     then if_morphism(gsm);
 }
 rule grouped_stmt_morphism_surj_then {
-    if surj_then_morphism(stmt_morphism(stmt));
-    if gsm = grouped_stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
+    if surj_then_morphism(morph);
+    if gsm = grouped_stmt_morphism(stmt, morph);
     then surj_then_morphism(gsm);
 }
 rule grouped_stmt_morphism_non_surj_then {
-    if non_surj_then_morphism(stmt_morphism(stmt));
-    if gsm = grouped_stmt_morphism(stmt);
+    if stmt_morphism(stmt, morph);
+    if non_surj_then_morphism(morph);
+    if gsm = grouped_stmt_morphism(stmt, morph);
     then non_surj_then_morphism(gsm);
 }
 
@@ -1148,7 +1151,7 @@ rule next_grouped_dom_cod {
     if first_gsm = grouped_stmt_morphism(first, first_morph);
     if second_gsm = grouped_stmt_morphism(second, second_morph);
     if next_grouped_morphism(first_gsm, second_gsm);
-    if s = cod(stmt_morphism(first));
+    if s = cod(first_morph);
     then cod(first_gsm) = s;
     then dom(second_gsm) = s;
 }
