@@ -735,11 +735,30 @@ rule app_term_arg_num_should_match {
 
 // ## Control flow graph
 pred cfg_edge(from: StmtNode, to: StmtNode);
+pred cfg_linear_first(stmt: StmtNode);
+pred cfg_linear_last(stmt: StmtNode);
+pred cfg_edge_linear(from: StmtNode, to: StmtNode);
 
 rule cfg_edge_adjacent {
     if cons_stmt_list_node(_, first , tail);
     if cons_stmt_list_node(tail, second , _);
     then cfg_edge(first, second);
+    then cfg_edge_linear(first, second);
+}
+rule cfg_linear_first_rule {
+    if rule_decl(_, stmts);
+    if cons_stmt_list_node(stmts, head, _);
+    then cfg_linear_first(head);
+}
+rule cfg_linear_first_block_list {
+    if cons_stmt_block_list_node(_, head_block, _);
+    if cons_stmt_list_node(head_block, head_stmt, _);
+    then cfg_linear_first(head_stmt);
+}
+rule cfg_linear_last_list {
+    if cons_stmt_list_node(_, head, tail);
+    if nil_stmt_list_node(tail);
+    then cfg_linear_last(head);
 }
 
 // ### Control flow from and into StmtListNodes
@@ -1122,24 +1141,21 @@ rule grouped_stmt_morphism_non_surj_then {
     then non_surj_then_morphism(gsm);
 }
 
-// #### The domain of a grouped morphism of the first statement in a rule.
-rule grouped_stmt_morphism_first_in_rule {
-    if rule_decl(_, stmts);
-    if cons_stmt_list_node(stmts, first, _);
-    if gsm = grouped_stmt_morphism(first, morph);
+// #### The domains and codomains of first/last grouped morphisms in a linear cfg sequence
+
+rule grouped_stmt_morphism_first {
+    if cfg_linear_first(stmt);
+    if gsm = grouped_stmt_morphism(stmt, morph);
     if morph_dom = dom(morph);
     if gsm_dom = dom(gsm);
     then morph_dom = gsm_dom;
 }
-
-// #### The codomain of a grouped morphism of the last statement.
-rule grouped_stmt_morphism_singleton {
-    if cons_stmt_list_node(_, stmt, tail);
-    if nil_stmt_list_node(tail);
+rule grouped_stmt_morphism_last {
+    if cfg_linear_last(stmt);
     if gsm = grouped_stmt_morphism(stmt, morph);
     if morph_cod = cod(morph);
     if gsm_cod = cod(gsm);
-    then gsm_cod = morph_cod;
+    then morph_cod = gsm_cod;
 }
 
 // #### The next grouped morphism in a statement list
@@ -1168,7 +1184,7 @@ rule grouped_stmt_morphism_if_if {
 
     then gsm_first = gsm_second;
 }
-rule grouped_stmt_morphism_if_surj_then {
+rule grouped_stmt_morphism_if_then {
     if cons_stmt_list_node(_, first, tail);
     if if_stmt_node(first, _);
     if cons_stmt_list_node(tail, second, _);
