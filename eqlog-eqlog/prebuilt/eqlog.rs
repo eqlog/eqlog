@@ -1,4 +1,4 @@
-// src-digest: 5847C2773F9A49A90B92EE6BF679CEEB21FC14FC8CD89F2D818116BB9EE0A980
+// src-digest: B9E8DA365319AC0995125309F874324F28379D7EB035C0A397A78878A00D9158
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -10879,6 +10879,16 @@ impl CfgEdgeTable {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = CfgEdge> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN);
+        let max = (arg0, u32::MAX);
+        self.index_all_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1)
@@ -48983,69 +48993,47 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_154(&self, delta: &mut ModelDelta, tm1: StmtNode, tm6: Structure) {
-        let existing_row = self.before_stmt_structure.iter_all_0_1(tm1, tm6).next();
+    fn record_action_154(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: Structure) {
+        let existing_row = self.before_stmt_structure.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(BeforeStmtStructure(_, _)) => (),
             None => {
                 delta
                     .new_before_stmt_structure
-                    .push(BeforeStmtStructure(tm1, tm6));
+                    .push(BeforeStmtStructure(tm1, tm3));
                 ()
             }
         };
     }
     fn query_and_record_cons_before_stmt_structure(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+        for CfgEdge(tm0, tm1) in self.cfg_edge.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+            for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
-                    #[allow(unused_variables)]
-                    for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
-                        self.record_action_154(delta, tm1, tm6);
-                    }
+                for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
+                    self.record_action_154(delta, tm1, tm3);
                 }
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+        for StmtMorphism(tm0, tm2) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for StmtMorphism(_, tm5) in self.stmt_morphism.iter_all_0(tm4) {
+            for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
-                    #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                        self.record_action_154(delta, tm1, tm6);
-                    }
+                for CfgEdge(_, tm1) in self.cfg_edge.iter_all_0(tm0) {
+                    self.record_action_154(delta, tm1, tm3);
                 }
             }
         }
         #[allow(unused_variables)]
-        for StmtMorphism(tm4, tm5) in self.stmt_morphism.iter_dirty() {
+        for Cod(tm2, tm3) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(_, tm6) in self.cod.iter_all_0(tm5) {
+            for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
-                    #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                        self.record_action_154(delta, tm1, tm6);
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Cod(tm5, tm6) in self.cod.iter_dirty() {
-            #[allow(unused_variables)]
-            for StmtMorphism(tm4, _) in self.stmt_morphism.iter_all_1(tm5) {
-                #[allow(unused_variables)]
-                for ConsStmtListNode(tm3, _, tm0) in self.cons_stmt_list_node.iter_all_1(tm4) {
-                    #[allow(unused_variables)]
-                    for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                        self.record_action_154(delta, tm1, tm6);
-                    }
+                for CfgEdge(_, tm1) in self.cfg_edge.iter_all_0(tm0) {
+                    self.record_action_154(delta, tm1, tm3);
                 }
             }
         }

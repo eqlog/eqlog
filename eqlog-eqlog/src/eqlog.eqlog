@@ -818,12 +818,11 @@ rule before_first_rule_stmt {
     then before_stmt_structure(first, structure);
 }
 
-rule cons_before_stmt_structure {
-    if cons_stmt_list_node(_, first, tail);
-    if cons_stmt_list_node(tail, second, _);
-    if stmt_morphism(first, first_morphism);
-    if first_cod = cod(first_morphism);
-    then before_stmt_structure(second, first_cod);
+rule cfg_edge_stmt_structure {
+    if cfg_edge(from_stmt, to_stmt);
+    if stmt_morphism(from_stmt, from_morphism);
+    if from_cod = cod(from_morphism);
+    then before_stmt_structure(to_stmt, from_cod);
 }
 
 func if_atom_morphism(IfAtomNode, before_structure: Structure) -> Morphism;
