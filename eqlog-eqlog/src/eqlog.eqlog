@@ -72,7 +72,7 @@ pred nil_stmt_list_node(nil: StmtListNode);
 pred cons_stmt_list_node(node: StmtListNode, head: StmtNode, tail: StmtListNode);
 
 type StmtBlockListNode;
-pred singleton_stmt_block_list_node(node: StmtBlockListNode, block: StmtListNode);
+pred nil_stmt_block_list_node(node: StmtBlockListNode);
 pred cons_stmt_block_list_node(node: StmtBlockListNode, head: StmtListNode, tail: StmtBlockListNode);
 
 type RuleDeclNode;
