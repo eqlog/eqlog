@@ -738,13 +738,23 @@ pred cfg_edge(from: StmtNode, to: StmtNode);
 pred cfg_linear_first(stmt: StmtNode);
 pred cfg_linear_last(stmt: StmtNode);
 pred cfg_edge_linear(from: StmtNode, to: StmtNode);
+pred cfg_edge_nonlinear(from: StmtNode, to: StmtNode);
+
+rule cfg_edge_linear_general {
+    if cfg_edge_linear(from, to);
+    then cfg_edge(from, to);
+}
+rule cfg_edge_nonlinear_general {
+    if cfg_edge_nonlinear(from, to);
+    then cfg_edge(from, to);
+}
 
 rule cfg_edge_adjacent {
     if cons_stmt_list_node(_, first , tail);
     if cons_stmt_list_node(tail, second , _);
-    then cfg_edge(first, second);
     then cfg_edge_linear(first, second);
 }
+
 rule cfg_linear_first_rule {
     if rule_decl(_, stmts);
     if cons_stmt_list_node(stmts, head, _);
@@ -766,52 +776,63 @@ rule cfg_linear_last_list {
 // If control flows into a list of statements, then it flows into the first statement in that list.
 // If control flows out of a statement list, then it flows out of every suffix of the statement list, and from the last statement in the list.
 // In case of an empty statement list, there's an ordinary cfg edge between every before-statement to every after-statement.
-pred cfg_edge_stmts_stmt(from: StmtListNode, to: StmtNode);
-pred cfg_edge_stmt_stmts(from: StmtNode, to: StmtListNode);
+pred cfg_edge_nonlinear_stmts_stmt(from: StmtListNode, to: StmtNode);
+pred cfg_edge_nonlinear_stmt_stmts(from: StmtNode, to: StmtListNode);
 
 rule cfg_edge_stmts_stmt_cons {
-    if cfg_edge_stmts_stmt(stmts, stmt);
+    if cfg_edge_nonlinear_stmts_stmt(stmts, stmt);
     if cons_stmt_list_node(stmts, _, tail);
-    then cfg_edge_stmts_stmt(tail, stmt);
+    then cfg_edge_nonlinear_stmts_stmt(tail, stmt);
 }
 rule cfg_edge_stmts_stmt_singleton {
-    if cfg_edge_stmts_stmt(stmts, stmt);
+    if cfg_edge_nonlinear_stmts_stmt(stmts, stmt);
     if cons_stmt_list_node(stmts, head, tail);
     if nil_stmt_list_node(tail);
-    then cfg_edge(head, stmt);
+    then cfg_edge_nonlinear(head, stmt);
 }
 
 rule cfg_edge_stmt_stmts_cons {
-    if cfg_edge_stmt_stmts(stmt, stmts);
+    if cfg_edge_nonlinear_stmt_stmts(stmt, stmts);
     if cons_stmt_list_node(stmts, head, _);
-    then cfg_edge(stmt, head);
+    then cfg_edge_nonlinear(stmt, head);
 }
 rule cfg_edge_stmt_stmts_nil {
-    if cfg_edge_stmt_stmts(stmt, stmts);
+    if cfg_edge_nonlinear_stmt_stmts(stmt, stmts);
     if nil_stmt_list_node(stmts);
-    if cfg_edge_stmts_stmt(stmts, next_stmt);
-    then cfg_edge(stmt, next_stmt);
+    if cfg_edge_nonlinear_stmts_stmt(stmts, next_stmt);
+    then cfg_edge_nonlinear(stmt, next_stmt);
 }
 
 // ### Control flow from and into block lists.
 //
 // This is for forks.
 
-pred cfg_edge_fork(from: StmtNode, to: StmtBlockListNode);
-pred cfg_edge_join(from: StmtBlockListNode, to: StmtNode);
+pred cfg_edge_nonlinear_fork(from: StmtNode, to: StmtBlockListNode);
+pred cfg_edge_nonlinear_join(from: StmtBlockListNode, to: StmtNode);
 
 rule cfg_edge_fork_cons {
-    if cfg_edge_fork(stmt, blocks);
+    if cfg_edge_nonlinear_fork(stmt, blocks);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_fork(stmt, tail_blocks);
-    then cfg_edge_stmt_stmts(stmt, head_block);
+    then cfg_edge_nonlinear_fork(stmt, tail_blocks);
+    then cfg_edge_nonlinear_stmt_stmts(stmt, head_block);
 }
 
 rule cfg_edge_join_cons {
-    if cfg_edge_join(blocks, stmt);
+    if cfg_edge_nonlinear_join(blocks, stmt);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_join(tail_blocks, stmt);
-    then cfg_edge_stmts_stmt(head_block, stmt);
+    then cfg_edge_nonlinear_join(tail_blocks, stmt);
+    then cfg_edge_nonlinear_stmts_stmt(head_block, stmt);
+}
+
+rule cfg_edge_fork_stmt_into {
+    if fork_stmt_node(fork_stmt, fork_blocks);
+    if cfg_edge(from_stmt, fork_stmt);
+    then cfg_edge_nonlinear_fork(from_stmt, fork_blocks);
+}
+rule cfg_edge_fork_stmt_from {
+    if fork_stmt_node(fork_stmt, fork_blocks);
+    if cfg_edge(fork_stmt, into_stmt);
+    then cfg_edge_nonlinear_join(fork_blocks, into_stmt);
 }
 
 // ## The morphisms associated to statements.
@@ -1141,16 +1162,27 @@ rule grouped_stmt_morphism_non_surj_then {
     then non_surj_then_morphism(gsm);
 }
 
-// #### The domains and codomains of first/last grouped morphisms in a linear cfg sequence
+// #### The next grouped morphism in a statement list
+pred next_grouped_morphism(Morphism, Morphism);
+rule next_grouped_nonlinear_cfg_edge {
+    if cfg_edge_nonlinear(first, second);
+    if first_gsm = grouped_stmt_morphism(first, first_morph);
+    if second_gsm = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
+    then next_grouped_morphism(first_gsm, second_gsm);
+}
 
-rule grouped_stmt_morphism_first {
+// #### The domains and codomains of grouped morphisms
+
+rule grouped_stmt_morphism_first_dom {
     if cfg_linear_first(stmt);
     if gsm = grouped_stmt_morphism(stmt, morph);
     if morph_dom = dom(morph);
     if gsm_dom = dom(gsm);
     then morph_dom = gsm_dom;
 }
-rule grouped_stmt_morphism_last {
+
+rule grouped_stmt_morphism_last_cod {
     if cfg_linear_last(stmt);
     if gsm = grouped_stmt_morphism(stmt, morph);
     if morph_cod = cod(morph);
@@ -1158,11 +1190,8 @@ rule grouped_stmt_morphism_last {
     then morph_cod = gsm_cod;
 }
 
-// #### The next grouped morphism in a statement list
-pred next_grouped_morphism(Morphism, Morphism);
 rule next_grouped_dom_cod {
-    if cons_stmt_list_node(_, first, tail);
-    if cons_stmt_list_node(tail, second, _);
+    if cfg_edge(first, second);
     if first_gsm = grouped_stmt_morphism(first, first_morph);
     if second_gsm = grouped_stmt_morphism(second, _);
     if next_grouped_morphism(first_gsm, second_gsm);
@@ -1173,9 +1202,8 @@ rule next_grouped_dom_cod {
 
 // #### Grouping rules for an if statement followed by an arbitrary statement.
 rule grouped_stmt_morphism_if_if {
-    if cons_stmt_list_node(_, first, tail);
+    if cfg_edge_linear(first, second);
     if if_stmt_node(first, _);
-    if cons_stmt_list_node(tail, second, _);
     if if_stmt_node(second, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
@@ -1185,9 +1213,8 @@ rule grouped_stmt_morphism_if_if {
     then gsm_first = gsm_second;
 }
 rule grouped_stmt_morphism_if_then {
-    if cons_stmt_list_node(_, first, tail);
+    if cfg_edge_linear(first, second);
     if if_stmt_node(first, _);
-    if cons_stmt_list_node(tail, second, _);
     if then_stmt_node(second, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
@@ -1196,13 +1223,11 @@ rule grouped_stmt_morphism_if_then {
 
     then next_grouped_morphism(gsm_first, gsm_second);
 }
-// TODO: Fork statement after if statement.
 
 // #### Grouping rules for a then atom followed by an arbitrary morphism.
 rule grouped_stmt_morphism_then_if {
-    if cons_stmt_list_node(_, first, tail);
+    if cfg_edge_linear(first, second);
     if then_stmt_node(first, _);
-    if cons_stmt_list_node(tail, second, _);
     if if_stmt_node(second, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
@@ -1213,8 +1238,9 @@ rule grouped_stmt_morphism_then_if {
 }
 
 rule grouped_stmt_morphism_surj_then_surj_then {
-    if cons_stmt_list_node(_, first, tail);
-    if cons_stmt_list_node(tail, second, _);
+    if cfg_edge_linear(first, second);
+    if then_stmt_node(first, _);
+    if then_stmt_node(second, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
     if gsm_second = grouped_stmt_morphism(second, second_morph);
@@ -1226,8 +1252,9 @@ rule grouped_stmt_morphism_surj_then_surj_then {
     then gsm_first = gsm_second;
 }
 rule grouped_stmt_morphism_surj_then_non_surj_then {
-    if cons_stmt_list_node(_, first, tail);
-    if cons_stmt_list_node(tail, second, _);
+    if cfg_edge_linear(first, second);
+    if then_stmt_node(first, _);
+    if then_stmt_node(second, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
     if gsm_second = grouped_stmt_morphism(second, second_morph);
@@ -1238,17 +1265,27 @@ rule grouped_stmt_morphism_surj_then_non_surj_then {
 
     then next_grouped_morphism(gsm_first, gsm_second);
 }
-
 // #### Grouping rule for a non-surjective then statement followed by an arbitrary statement.
-rule grouped_stmt_morphism_non_surj_surj {
-    if cons_stmt_list_node(_, first, tail);
-    if cons_stmt_list_node(tail, second, _);
+rule grouped_stmt_morphism_non_surj_then_arbitrary {
+    if cfg_edge_linear(first, second);
+    if then_stmt_node(first, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
     if gsm_second = grouped_stmt_morphism(second, second_morph);
     if cod(first_morph) = dom(second_morph);
 
     if non_surj_then_morphism(first_morph);
+
+    then next_grouped_morphism(gsm_first, gsm_second);
+}
+// #### Grouping rule for a fork statement followed by an arbitrary statement.
+rule grouped_stmt_morphism_fork {
+    if cfg_edge_linear(first, second);
+    if fork_stmt_node(first, _);
+
+    if gsm_first = grouped_stmt_morphism(first, first_morph);
+    if gsm_second = grouped_stmt_morphism(second, second_morph);
+    if cod(first_morph) = dom(second_morph);
 
     then next_grouped_morphism(gsm_first, gsm_second);
 }

@@ -1,4 +1,4 @@
-// src-digest: 5FFD5A89ED9E91466570EC5C382D750EF06319B40C174FA2C6CB2D4450598D5C
+// src-digest: 03B267BBC0AE866F715C2086887BD664B13838D88C544048240F0EBDD9BF89BD
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -6232,21 +6232,6 @@ impl ConsStmtListNodeTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: StmtListNode,
-        arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = ConsStmtListNode> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1, u32::MIN);
-        let max = (arg0, arg1, u32::MAX);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
     fn iter_all_1(&self, arg1: StmtNode) -> impl '_ + Iterator<Item = ConsStmtListNode> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
@@ -10795,6 +10780,7 @@ struct CfgEdge(pub StmtNode, pub StmtNode);
 struct CfgEdgeTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -10802,11 +10788,12 @@ struct CfgEdgeTable {
 }
 impl CfgEdgeTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_stmt_node: BTreeMap::new(),
         }
@@ -10815,6 +10802,7 @@ impl CfgEdgeTable {
     fn insert(&mut self, t: CfgEdge) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_stmt_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -10865,6 +10853,14 @@ impl CfgEdgeTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdge {
         CfgEdge(StmtNode::from(t.0), StmtNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: CfgEdge) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdge {
+        CfgEdge(StmtNode::from(t.1), StmtNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdge> {
         let min = (u32::MIN, u32::MIN);
@@ -10905,6 +10901,16 @@ impl CfgEdgeTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: StmtNode) -> impl '_ + Iterator<Item = CfgEdge> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_stmt_node(&mut self, tm: StmtNode) -> impl '_ + Iterator<Item = CfgEdge> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
@@ -10914,6 +10920,7 @@ impl CfgEdgeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -11242,6 +11249,7 @@ struct CfgEdgeLinear(pub StmtNode, pub StmtNode);
 struct CfgEdgeLinearTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -11249,11 +11257,12 @@ struct CfgEdgeLinearTable {
 }
 impl CfgEdgeLinearTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_stmt_node: BTreeMap::new(),
         }
@@ -11262,6 +11271,7 @@ impl CfgEdgeLinearTable {
     fn insert(&mut self, t: CfgEdgeLinear) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_stmt_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -11312,6 +11322,14 @@ impl CfgEdgeLinearTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeLinear {
         CfgEdgeLinear(StmtNode::from(t.0), StmtNode::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: CfgEdgeLinear) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeLinear {
+        CfgEdgeLinear(StmtNode::from(t.1), StmtNode::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeLinear> {
         let min = (u32::MIN, u32::MIN);
@@ -11326,6 +11344,16 @@ impl CfgEdgeLinearTable {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = CfgEdgeLinear> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN);
+        let max = (arg0, u32::MAX);
+        self.index_all_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1)
@@ -11346,6 +11374,16 @@ impl CfgEdgeLinearTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: StmtNode) -> impl '_ + Iterator<Item = CfgEdgeLinear> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
@@ -11358,6 +11396,7 @@ impl CfgEdgeLinearTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -11395,18 +11434,176 @@ impl fmt::Display for CfgEdgeLinearTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CfgEdgeStmtsStmt(pub StmtListNode, pub StmtNode);
+struct CfgEdgeNonlinear(pub StmtNode, pub StmtNode);
 #[derive(Clone, Hash, Debug)]
-struct CfgEdgeStmtsStmtTable {
+struct CfgEdgeNonlinearTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<CfgEdgeStmtsStmt>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeStmtsStmt>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinear>>,
 }
-impl CfgEdgeStmtsStmtTable {
+impl CfgEdgeNonlinearTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            index_dirty_0_1_prev: Vec::new(),
+            element_index_stmt_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: CfgEdgeNonlinear) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_stmt_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_stmt_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_stmt_node.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: CfgEdgeNonlinear) -> bool {
+        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: CfgEdgeNonlinear) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
+        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: CfgEdgeNonlinear) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinear {
+        CfgEdgeNonlinear(StmtNode::from(t.0), StmtNode::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinear> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinear> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: StmtNode,
+        arg1: StmtNode,
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinear> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1);
+        let max = (arg0, arg1);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_stmt_node(
+        &mut self,
+        tm: StmtNode,
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinear> {
+        let ts = match self.element_index_stmt_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, stmt_node_equalities: &mut Unification<StmtNode>) {
+        let mut tmp_dirty_0_1_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
+
+        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1(tuple);
+            if true
+                && tuple.0 == stmt_node_equalities.root(tuple.0)
+                && tuple.1 == stmt_node_equalities.root(tuple.1)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for CfgEdgeNonlinearTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("cfg_edge_nonlinear"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct CfgEdgeNonlinearStmtsStmt(pub StmtListNode, pub StmtNode);
+#[derive(Clone, Hash, Debug)]
+struct CfgEdgeNonlinearStmtsStmtTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+
+    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+
+    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<CfgEdgeNonlinearStmtsStmt>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinearStmtsStmt>>,
+}
+impl CfgEdgeNonlinearStmtsStmtTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -11419,7 +11616,7 @@ impl CfgEdgeStmtsStmtTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CfgEdgeStmtsStmt) -> bool {
+    fn insert(&mut self, t: CfgEdgeNonlinearStmtsStmt) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -11442,7 +11639,7 @@ impl CfgEdgeStmtsStmtTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CfgEdgeStmtsStmt) -> bool {
+    fn insert_dirt(&mut self, t: CfgEdgeNonlinearStmtsStmt) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -11450,7 +11647,7 @@ impl CfgEdgeStmtsStmtTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CfgEdgeStmtsStmt) -> bool {
+    fn contains(&self, t: CfgEdgeNonlinearStmtsStmt) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -11465,15 +11662,15 @@ impl CfgEdgeStmtsStmtTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CfgEdgeStmtsStmt) -> (u32, u32) {
+    fn permute_0_1(t: CfgEdgeNonlinearStmtsStmt) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeStmtsStmt {
-        CfgEdgeStmtsStmt(StmtListNode::from(t.0), StmtNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinearStmtsStmt {
+        CfgEdgeNonlinearStmtsStmt(StmtListNode::from(t.0), StmtNode::from(t.1))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeStmtsStmt> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtsStmt> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -11482,7 +11679,7 @@ impl CfgEdgeStmtsStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeStmtsStmt> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtsStmt> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -11491,7 +11688,10 @@ impl CfgEdgeStmtsStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtListNode) -> impl '_ + Iterator<Item = CfgEdgeStmtsStmt> {
+    fn iter_all_0(
+        &self,
+        arg0: StmtListNode,
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtsStmt> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -11505,7 +11705,7 @@ impl CfgEdgeStmtsStmtTable {
         &self,
         arg0: StmtListNode,
         arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeStmtsStmt> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtsStmt> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -11519,7 +11719,7 @@ impl CfgEdgeStmtsStmtTable {
     fn drain_with_element_stmt_list_node(
         &mut self,
         tm: StmtListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeStmtsStmt> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtsStmt> {
         let ts = match self.element_index_stmt_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -11538,7 +11738,7 @@ impl CfgEdgeStmtsStmtTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeStmtsStmt> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtsStmt> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -11573,11 +11773,11 @@ impl CfgEdgeStmtsStmtTable {
         }
     }
 }
-impl fmt::Display for CfgEdgeStmtsStmtTable {
+impl fmt::Display for CfgEdgeNonlinearStmtsStmtTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cfg_edge_stmts_stmt"))
+            .with(Header("cfg_edge_nonlinear_stmts_stmt"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -11588,18 +11788,18 @@ impl fmt::Display for CfgEdgeStmtsStmtTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CfgEdgeStmtStmts(pub StmtNode, pub StmtListNode);
+struct CfgEdgeNonlinearStmtStmts(pub StmtNode, pub StmtListNode);
 #[derive(Clone, Hash, Debug)]
-struct CfgEdgeStmtStmtsTable {
+struct CfgEdgeNonlinearStmtStmtsTable {
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<CfgEdgeStmtStmts>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeStmtStmts>>,
+    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<CfgEdgeNonlinearStmtStmts>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinearStmtStmts>>,
 }
-impl CfgEdgeStmtStmtsTable {
+impl CfgEdgeNonlinearStmtStmtsTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -11612,7 +11812,7 @@ impl CfgEdgeStmtStmtsTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CfgEdgeStmtStmts) -> bool {
+    fn insert(&mut self, t: CfgEdgeNonlinearStmtStmts) -> bool {
         if self.index_all_1_0.insert(Self::permute_1_0(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -11635,7 +11835,7 @@ impl CfgEdgeStmtStmtsTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CfgEdgeStmtStmts) -> bool {
+    fn insert_dirt(&mut self, t: CfgEdgeNonlinearStmtStmts) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -11643,7 +11843,7 @@ impl CfgEdgeStmtStmtsTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CfgEdgeStmtStmts) -> bool {
+    fn contains(&self, t: CfgEdgeNonlinearStmtStmts) -> bool {
         self.index_all_1_0.contains(&Self::permute_1_0(t))
     }
     fn drop_dirt(&mut self) {
@@ -11658,23 +11858,23 @@ impl CfgEdgeStmtStmtsTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CfgEdgeStmtStmts) -> (u32, u32) {
+    fn permute_0_1(t: CfgEdgeNonlinearStmtStmts) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeStmtStmts {
-        CfgEdgeStmtStmts(StmtNode::from(t.0), StmtListNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinearStmtStmts {
+        CfgEdgeNonlinearStmtStmts(StmtNode::from(t.0), StmtListNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: CfgEdgeStmtStmts) -> (u32, u32) {
+    fn permute_1_0(t: CfgEdgeNonlinearStmtStmts) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeStmtStmts {
-        CfgEdgeStmtStmts(StmtNode::from(t.1), StmtListNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeNonlinearStmtStmts {
+        CfgEdgeNonlinearStmtStmts(StmtNode::from(t.1), StmtListNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeStmtStmts> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtStmts> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_1_0
@@ -11683,7 +11883,7 @@ impl CfgEdgeStmtStmtsTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeStmtStmts> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtStmts> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -11696,7 +11896,7 @@ impl CfgEdgeStmtStmtsTable {
         &self,
         arg0: StmtNode,
         arg1: StmtListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeStmtStmts> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtStmts> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg1, arg0);
@@ -11707,7 +11907,10 @@ impl CfgEdgeStmtStmtsTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: StmtListNode) -> impl '_ + Iterator<Item = CfgEdgeStmtStmts> {
+    fn iter_all_1(
+        &self,
+        arg1: StmtListNode,
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtStmts> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -11720,7 +11923,7 @@ impl CfgEdgeStmtStmtsTable {
     fn drain_with_element_stmt_list_node(
         &mut self,
         tm: StmtListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeStmtStmts> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtStmts> {
         let ts = match self.element_index_stmt_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -11739,7 +11942,7 @@ impl CfgEdgeStmtStmtsTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeStmtStmts> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearStmtStmts> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -11774,11 +11977,11 @@ impl CfgEdgeStmtStmtsTable {
         }
     }
 }
-impl fmt::Display for CfgEdgeStmtStmtsTable {
+impl fmt::Display for CfgEdgeNonlinearStmtStmtsTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cfg_edge_stmt_stmts"))
+            .with(Header("cfg_edge_nonlinear_stmt_stmts"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -11789,18 +11992,18 @@ impl fmt::Display for CfgEdgeStmtStmtsTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CfgEdgeFork(pub StmtNode, pub StmtBlockListNode);
+struct CfgEdgeNonlinearFork(pub StmtNode, pub StmtBlockListNode);
 #[derive(Clone, Hash, Debug)]
-struct CfgEdgeForkTable {
+struct CfgEdgeNonlinearForkTable {
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeFork>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeFork>>,
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeNonlinearFork>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinearFork>>,
 }
-impl CfgEdgeForkTable {
+impl CfgEdgeNonlinearForkTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -11813,7 +12016,7 @@ impl CfgEdgeForkTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CfgEdgeFork) -> bool {
+    fn insert(&mut self, t: CfgEdgeNonlinearFork) -> bool {
         if self.index_all_1_0.insert(Self::permute_1_0(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -11836,7 +12039,7 @@ impl CfgEdgeForkTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CfgEdgeFork) -> bool {
+    fn insert_dirt(&mut self, t: CfgEdgeNonlinearFork) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -11844,7 +12047,7 @@ impl CfgEdgeForkTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CfgEdgeFork) -> bool {
+    fn contains(&self, t: CfgEdgeNonlinearFork) -> bool {
         self.index_all_1_0.contains(&Self::permute_1_0(t))
     }
     fn drop_dirt(&mut self) {
@@ -11859,23 +12062,23 @@ impl CfgEdgeForkTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CfgEdgeFork) -> (u32, u32) {
+    fn permute_0_1(t: CfgEdgeNonlinearFork) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeFork {
-        CfgEdgeFork(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinearFork {
+        CfgEdgeNonlinearFork(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: CfgEdgeFork) -> (u32, u32) {
+    fn permute_1_0(t: CfgEdgeNonlinearFork) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeFork {
-        CfgEdgeFork(StmtNode::from(t.1), StmtBlockListNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeNonlinearFork {
+        CfgEdgeNonlinearFork(StmtNode::from(t.1), StmtBlockListNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeFork> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_1_0
@@ -11884,7 +12087,7 @@ impl CfgEdgeForkTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeFork> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -11897,7 +12100,7 @@ impl CfgEdgeForkTable {
         &self,
         arg0: StmtNode,
         arg1: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeFork> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg1, arg0);
@@ -11908,7 +12111,10 @@ impl CfgEdgeForkTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: StmtBlockListNode) -> impl '_ + Iterator<Item = CfgEdgeFork> {
+    fn iter_all_1(
+        &self,
+        arg1: StmtBlockListNode,
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -11921,7 +12127,7 @@ impl CfgEdgeForkTable {
     fn drain_with_element_stmt_block_list_node(
         &mut self,
         tm: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeFork> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
         let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -11940,7 +12146,7 @@ impl CfgEdgeForkTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeFork> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -11975,11 +12181,11 @@ impl CfgEdgeForkTable {
         }
     }
 }
-impl fmt::Display for CfgEdgeForkTable {
+impl fmt::Display for CfgEdgeNonlinearForkTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cfg_edge_fork"))
+            .with(Header("cfg_edge_nonlinear_fork"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -11990,18 +12196,18 @@ impl fmt::Display for CfgEdgeForkTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CfgEdgeJoin(pub StmtBlockListNode, pub StmtNode);
+struct CfgEdgeNonlinearJoin(pub StmtBlockListNode, pub StmtNode);
 #[derive(Clone, Hash, Debug)]
-struct CfgEdgeJoinTable {
+struct CfgEdgeNonlinearJoinTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeJoin>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeJoin>>,
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeNonlinearJoin>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinearJoin>>,
 }
-impl CfgEdgeJoinTable {
+impl CfgEdgeNonlinearJoinTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -12014,7 +12220,7 @@ impl CfgEdgeJoinTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CfgEdgeJoin) -> bool {
+    fn insert(&mut self, t: CfgEdgeNonlinearJoin) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -12037,7 +12243,7 @@ impl CfgEdgeJoinTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CfgEdgeJoin) -> bool {
+    fn insert_dirt(&mut self, t: CfgEdgeNonlinearJoin) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -12045,7 +12251,7 @@ impl CfgEdgeJoinTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CfgEdgeJoin) -> bool {
+    fn contains(&self, t: CfgEdgeNonlinearJoin) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -12060,15 +12266,15 @@ impl CfgEdgeJoinTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CfgEdgeJoin) -> (u32, u32) {
+    fn permute_0_1(t: CfgEdgeNonlinearJoin) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeJoin {
-        CfgEdgeJoin(StmtBlockListNode::from(t.0), StmtNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinearJoin {
+        CfgEdgeNonlinearJoin(StmtBlockListNode::from(t.0), StmtNode::from(t.1))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeJoin> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -12077,7 +12283,7 @@ impl CfgEdgeJoinTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeJoin> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -12086,7 +12292,10 @@ impl CfgEdgeJoinTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtBlockListNode) -> impl '_ + Iterator<Item = CfgEdgeJoin> {
+    fn iter_all_0(
+        &self,
+        arg0: StmtBlockListNode,
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -12100,7 +12309,7 @@ impl CfgEdgeJoinTable {
         &self,
         arg0: StmtBlockListNode,
         arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeJoin> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -12114,7 +12323,7 @@ impl CfgEdgeJoinTable {
     fn drain_with_element_stmt_block_list_node(
         &mut self,
         tm: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeJoin> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
         let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -12133,7 +12342,7 @@ impl CfgEdgeJoinTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeJoin> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -12168,11 +12377,11 @@ impl CfgEdgeJoinTable {
         }
     }
 }
-impl fmt::Display for CfgEdgeJoinTable {
+impl fmt::Display for CfgEdgeNonlinearJoinTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cfg_edge_join"))
+            .with(Header("cfg_edge_nonlinear_join"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -29732,10 +29941,11 @@ struct ModelDelta {
     new_cfg_linear_first: Vec<CfgLinearFirst>,
     new_cfg_linear_last: Vec<CfgLinearLast>,
     new_cfg_edge_linear: Vec<CfgEdgeLinear>,
-    new_cfg_edge_stmts_stmt: Vec<CfgEdgeStmtsStmt>,
-    new_cfg_edge_stmt_stmts: Vec<CfgEdgeStmtStmts>,
-    new_cfg_edge_fork: Vec<CfgEdgeFork>,
-    new_cfg_edge_join: Vec<CfgEdgeJoin>,
+    new_cfg_edge_nonlinear: Vec<CfgEdgeNonlinear>,
+    new_cfg_edge_nonlinear_stmts_stmt: Vec<CfgEdgeNonlinearStmtsStmt>,
+    new_cfg_edge_nonlinear_stmt_stmts: Vec<CfgEdgeNonlinearStmtStmts>,
+    new_cfg_edge_nonlinear_fork: Vec<CfgEdgeNonlinearFork>,
+    new_cfg_edge_nonlinear_join: Vec<CfgEdgeNonlinearJoin>,
     new_before_stmt_structure: Vec<BeforeStmtStructure>,
     new_stmt_morphism: Vec<StmtMorphism>,
     new_if_morphism: Vec<IfMorphism>,
@@ -30136,10 +30346,11 @@ pub struct Eqlog {
     cfg_linear_first: CfgLinearFirstTable,
     cfg_linear_last: CfgLinearLastTable,
     cfg_edge_linear: CfgEdgeLinearTable,
-    cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,
-    cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,
-    cfg_edge_fork: CfgEdgeForkTable,
-    cfg_edge_join: CfgEdgeJoinTable,
+    cfg_edge_nonlinear: CfgEdgeNonlinearTable,
+    cfg_edge_nonlinear_stmts_stmt: CfgEdgeNonlinearStmtsStmtTable,
+    cfg_edge_nonlinear_stmt_stmts: CfgEdgeNonlinearStmtStmtsTable,
+    cfg_edge_nonlinear_fork: CfgEdgeNonlinearForkTable,
+    cfg_edge_nonlinear_join: CfgEdgeNonlinearJoinTable,
     before_stmt_structure: BeforeStmtStructureTable,
     stmt_morphism: StmtMorphismTable,
     if_morphism: IfMorphismTable,
@@ -30296,10 +30507,11 @@ impl ModelDelta {
             new_cfg_linear_first: Vec::new(),
             new_cfg_linear_last: Vec::new(),
             new_cfg_edge_linear: Vec::new(),
-            new_cfg_edge_stmts_stmt: Vec::new(),
-            new_cfg_edge_stmt_stmts: Vec::new(),
-            new_cfg_edge_fork: Vec::new(),
-            new_cfg_edge_join: Vec::new(),
+            new_cfg_edge_nonlinear: Vec::new(),
+            new_cfg_edge_nonlinear_stmts_stmt: Vec::new(),
+            new_cfg_edge_nonlinear_stmt_stmts: Vec::new(),
+            new_cfg_edge_nonlinear_fork: Vec::new(),
+            new_cfg_edge_nonlinear_join: Vec::new(),
             new_before_stmt_structure: Vec::new(),
             new_stmt_morphism: Vec::new(),
             new_if_morphism: Vec::new(),
@@ -33211,67 +33423,80 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cfg_edge_stmts_stmt.extend(
+            self.new_cfg_edge_nonlinear.extend(
                 model
-                    .cfg_edge_stmts_stmt
+                    .cfg_edge_nonlinear
+                    .drain_with_element_stmt_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= CfgEdgeNonlinearTable::WEIGHT;
+
+                        let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
+                        *weight1 -= CfgEdgeNonlinearTable::WEIGHT;
+                    }),
+            );
+
+            self.new_cfg_edge_nonlinear_stmts_stmt.extend(
+                model
+                    .cfg_edge_nonlinear_stmts_stmt
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= CfgEdgeStmtsStmtTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearStmtsStmtTable::WEIGHT;
 
                         let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CfgEdgeStmtsStmtTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearStmtsStmtTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_stmt_stmts.extend(
+            self.new_cfg_edge_nonlinear_stmt_stmts.extend(
                 model
-                    .cfg_edge_stmt_stmts
+                    .cfg_edge_nonlinear_stmt_stmts
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CfgEdgeStmtStmtsTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearStmtStmtsTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CfgEdgeStmtStmtsTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearStmtStmtsTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_fork.extend(
+            self.new_cfg_edge_nonlinear_fork.extend(
                 model
-                    .cfg_edge_fork
+                    .cfg_edge_nonlinear_fork
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CfgEdgeForkTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearForkTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CfgEdgeForkTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearForkTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_join.extend(
+            self.new_cfg_edge_nonlinear_join.extend(
                 model
-                    .cfg_edge_join
+                    .cfg_edge_nonlinear_join
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= CfgEdgeJoinTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearJoinTable::WEIGHT;
 
                         let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CfgEdgeJoinTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearJoinTable::WEIGHT;
                     }),
             );
 
@@ -33505,35 +33730,35 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cfg_edge_stmts_stmt.extend(
+            self.new_cfg_edge_nonlinear_stmts_stmt.extend(
                 model
-                    .cfg_edge_stmts_stmt
+                    .cfg_edge_nonlinear_stmts_stmt
                     .drain_with_element_stmt_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= CfgEdgeStmtsStmtTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearStmtsStmtTable::WEIGHT;
 
                         let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CfgEdgeStmtsStmtTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearStmtsStmtTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_stmt_stmts.extend(
+            self.new_cfg_edge_nonlinear_stmt_stmts.extend(
                 model
-                    .cfg_edge_stmt_stmts
+                    .cfg_edge_nonlinear_stmt_stmts
                     .drain_with_element_stmt_list_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CfgEdgeStmtStmtsTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearStmtStmtsTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CfgEdgeStmtStmtsTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearStmtStmtsTable::WEIGHT;
                     }),
             );
 
@@ -33670,35 +33895,35 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cfg_edge_fork.extend(
+            self.new_cfg_edge_nonlinear_fork.extend(
                 model
-                    .cfg_edge_fork
+                    .cfg_edge_nonlinear_fork
                     .drain_with_element_stmt_block_list_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CfgEdgeForkTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearForkTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CfgEdgeForkTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearForkTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_join.extend(
+            self.new_cfg_edge_nonlinear_join.extend(
                 model
-                    .cfg_edge_join
+                    .cfg_edge_nonlinear_join
                     .drain_with_element_stmt_block_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= CfgEdgeJoinTable::WEIGHT;
+                        *weight0 -= CfgEdgeNonlinearJoinTable::WEIGHT;
 
                         let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CfgEdgeJoinTable::WEIGHT;
+                        *weight1 -= CfgEdgeNonlinearJoinTable::WEIGHT;
                     }),
             );
 
@@ -36635,42 +36860,56 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cfg_edge_stmts_stmt.drain(..) {
+        for mut t in self.new_cfg_edge_nonlinear.drain(..) {
+            t.0 = model.stmt_node_equalities.root(t.0);
+            t.1 = model.stmt_node_equalities.root(t.1);
+            if model.cfg_edge_nonlinear.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeNonlinearTable::WEIGHT;
+                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeNonlinearTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_cfg_edge_nonlinear_stmts_stmt.drain(..) {
             t.0 = model.stmt_list_node_equalities.root(t.0);
             t.1 = model.stmt_node_equalities.root(t.1);
-            if model.cfg_edge_stmts_stmt.insert(t) {
-                model.stmt_list_node_weights[t.0 .0 as usize] += CfgEdgeStmtsStmtTable::WEIGHT;
-                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeStmtsStmtTable::WEIGHT;
+            if model.cfg_edge_nonlinear_stmts_stmt.insert(t) {
+                model.stmt_list_node_weights[t.0 .0 as usize] +=
+                    CfgEdgeNonlinearStmtsStmtTable::WEIGHT;
+                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeNonlinearStmtsStmtTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cfg_edge_stmt_stmts.drain(..) {
+        for mut t in self.new_cfg_edge_nonlinear_stmt_stmts.drain(..) {
             t.0 = model.stmt_node_equalities.root(t.0);
             t.1 = model.stmt_list_node_equalities.root(t.1);
-            if model.cfg_edge_stmt_stmts.insert(t) {
-                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeStmtStmtsTable::WEIGHT;
-                model.stmt_list_node_weights[t.1 .0 as usize] += CfgEdgeStmtStmtsTable::WEIGHT;
+            if model.cfg_edge_nonlinear_stmt_stmts.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeNonlinearStmtStmtsTable::WEIGHT;
+                model.stmt_list_node_weights[t.1 .0 as usize] +=
+                    CfgEdgeNonlinearStmtStmtsTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cfg_edge_fork.drain(..) {
+        for mut t in self.new_cfg_edge_nonlinear_fork.drain(..) {
             t.0 = model.stmt_node_equalities.root(t.0);
             t.1 = model.stmt_block_list_node_equalities.root(t.1);
-            if model.cfg_edge_fork.insert(t) {
-                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeForkTable::WEIGHT;
-                model.stmt_block_list_node_weights[t.1 .0 as usize] += CfgEdgeForkTable::WEIGHT;
+            if model.cfg_edge_nonlinear_fork.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeNonlinearForkTable::WEIGHT;
+                model.stmt_block_list_node_weights[t.1 .0 as usize] +=
+                    CfgEdgeNonlinearForkTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cfg_edge_join.drain(..) {
+        for mut t in self.new_cfg_edge_nonlinear_join.drain(..) {
             t.0 = model.stmt_block_list_node_equalities.root(t.0);
             t.1 = model.stmt_node_equalities.root(t.1);
-            if model.cfg_edge_join.insert(t) {
-                model.stmt_block_list_node_weights[t.0 .0 as usize] += CfgEdgeJoinTable::WEIGHT;
-                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeJoinTable::WEIGHT;
+            if model.cfg_edge_nonlinear_join.insert(t) {
+                model.stmt_block_list_node_weights[t.0 .0 as usize] +=
+                    CfgEdgeNonlinearJoinTable::WEIGHT;
+                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeNonlinearJoinTable::WEIGHT;
             }
         }
 
@@ -38038,10 +38277,11 @@ impl Eqlog {
             cfg_linear_first: CfgLinearFirstTable::new(),
             cfg_linear_last: CfgLinearLastTable::new(),
             cfg_edge_linear: CfgEdgeLinearTable::new(),
-            cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),
-            cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),
-            cfg_edge_fork: CfgEdgeForkTable::new(),
-            cfg_edge_join: CfgEdgeJoinTable::new(),
+            cfg_edge_nonlinear: CfgEdgeNonlinearTable::new(),
+            cfg_edge_nonlinear_stmts_stmt: CfgEdgeNonlinearStmtsStmtTable::new(),
+            cfg_edge_nonlinear_stmt_stmts: CfgEdgeNonlinearStmtStmtsTable::new(),
+            cfg_edge_nonlinear_fork: CfgEdgeNonlinearForkTable::new(),
+            cfg_edge_nonlinear_join: CfgEdgeNonlinearJoinTable::new(),
             before_stmt_structure: BeforeStmtStructureTable::new(),
             stmt_morphism: StmtMorphismTable::new(),
             if_morphism: IfMorphismTable::new(),
@@ -38286,6 +38526,8 @@ impl Eqlog {
                 self.query_and_record_pred_if_atom_arg_num_should_match(&mut delta);
                 self.query_and_record_pred_then_atom_arg_num_should_match(&mut delta);
                 self.query_and_record_app_term_arg_num_should_match(&mut delta);
+                self.query_and_record_cfg_edge_linear_general(&mut delta);
+                self.query_and_record_cfg_edge_nonlinear_general(&mut delta);
                 self.query_and_record_cfg_edge_adjacent(&mut delta);
                 self.query_and_record_cfg_linear_first_rule(&mut delta);
                 self.query_and_record_cfg_linear_first_block_list(&mut delta);
@@ -38296,6 +38538,8 @@ impl Eqlog {
                 self.query_and_record_cfg_edge_stmt_stmts_nil(&mut delta);
                 self.query_and_record_cfg_edge_fork_cons(&mut delta);
                 self.query_and_record_cfg_edge_join_cons(&mut delta);
+                self.query_and_record_cfg_edge_fork_stmt_into(&mut delta);
+                self.query_and_record_cfg_edge_fork_stmt_from(&mut delta);
                 self.query_and_record_before_first_rule_stmt(&mut delta);
                 self.query_and_record_cfg_edge_stmt_structure(&mut delta);
                 self.query_and_record_if_atom_morphism_dom(&mut delta);
@@ -38334,15 +38578,17 @@ impl Eqlog {
                 self.query_and_record_grouped_stmt_morphism_if(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_surj_then(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_non_surj_then(&mut delta);
-                self.query_and_record_grouped_stmt_morphism_first(&mut delta);
-                self.query_and_record_grouped_stmt_morphism_last(&mut delta);
+                self.query_and_record_next_grouped_nonlinear_cfg_edge(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_first_dom(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_last_cod(&mut delta);
                 self.query_and_record_next_grouped_dom_cod(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_if_if(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_if_then(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_then_if(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_surj_then_surj_then(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_surj_then_non_surj_then(&mut delta);
-                self.query_and_record_grouped_stmt_morphism_non_surj_surj(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_non_surj_then_arbitrary(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_fork(&mut delta);
                 self.query_and_record_var_before_stmts_cons(&mut delta);
                 self.query_and_record_var_before_stmt_if(&mut delta);
                 self.query_and_record_var_before_stmt_then(&mut delta);
@@ -43465,102 +43711,149 @@ impl Eqlog {
             .push(CfgEdgeLinear(arg0, arg1));
     }
 
-    /// Returns `true` if `cfg_edge_stmts_stmt(arg0, arg1)` holds.
+    /// Returns `true` if `cfg_edge_nonlinear(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn cfg_edge_stmts_stmt(&self, mut arg0: StmtListNode, mut arg1: StmtNode) -> bool {
+    pub fn cfg_edge_nonlinear(&self, mut arg0: StmtNode, mut arg1: StmtNode) -> bool {
+        arg0 = self.root_stmt_node(arg0);
+        arg1 = self.root_stmt_node(arg1);
+        self.cfg_edge_nonlinear
+            .contains(CfgEdgeNonlinear(arg0, arg1))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_cfg_edge_nonlinear(&self) -> impl '_ + Iterator<Item = (StmtNode, StmtNode)> {
+        self.cfg_edge_nonlinear.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes `cfg_edge_nonlinear(arg0, arg1)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_cfg_edge_nonlinear(&mut self, arg0: StmtNode, arg1: StmtNode) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_cfg_edge_nonlinear
+            .push(CfgEdgeNonlinear(arg0, arg1));
+    }
+
+    /// Returns `true` if `cfg_edge_nonlinear_stmts_stmt(arg0, arg1)` holds.
+    #[allow(dead_code)]
+    pub fn cfg_edge_nonlinear_stmts_stmt(
+        &self,
+        mut arg0: StmtListNode,
+        mut arg1: StmtNode,
+    ) -> bool {
         arg0 = self.root_stmt_list_node(arg0);
         arg1 = self.root_stmt_node(arg1);
-        self.cfg_edge_stmts_stmt
-            .contains(CfgEdgeStmtsStmt(arg0, arg1))
+        self.cfg_edge_nonlinear_stmts_stmt
+            .contains(CfgEdgeNonlinearStmtsStmt(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_stmts_stmt` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear_stmts_stmt` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cfg_edge_stmts_stmt(&self) -> impl '_ + Iterator<Item = (StmtListNode, StmtNode)> {
-        self.cfg_edge_stmts_stmt.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_cfg_edge_nonlinear_stmts_stmt(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtListNode, StmtNode)> {
+        self.cfg_edge_nonlinear_stmts_stmt
+            .iter_all()
+            .map(|t| (t.0, t.1))
     }
-    /// Makes `cfg_edge_stmts_stmt(arg0, arg1)` hold.
+    /// Makes `cfg_edge_nonlinear_stmts_stmt(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cfg_edge_stmts_stmt(&mut self, arg0: StmtListNode, arg1: StmtNode) {
+    pub fn insert_cfg_edge_nonlinear_stmts_stmt(&mut self, arg0: StmtListNode, arg1: StmtNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cfg_edge_stmts_stmt
-            .push(CfgEdgeStmtsStmt(arg0, arg1));
+            .new_cfg_edge_nonlinear_stmts_stmt
+            .push(CfgEdgeNonlinearStmtsStmt(arg0, arg1));
     }
 
-    /// Returns `true` if `cfg_edge_stmt_stmts(arg0, arg1)` holds.
+    /// Returns `true` if `cfg_edge_nonlinear_stmt_stmts(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn cfg_edge_stmt_stmts(&self, mut arg0: StmtNode, mut arg1: StmtListNode) -> bool {
+    pub fn cfg_edge_nonlinear_stmt_stmts(
+        &self,
+        mut arg0: StmtNode,
+        mut arg1: StmtListNode,
+    ) -> bool {
         arg0 = self.root_stmt_node(arg0);
         arg1 = self.root_stmt_list_node(arg1);
-        self.cfg_edge_stmt_stmts
-            .contains(CfgEdgeStmtStmts(arg0, arg1))
+        self.cfg_edge_nonlinear_stmt_stmts
+            .contains(CfgEdgeNonlinearStmtStmts(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_stmt_stmts` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear_stmt_stmts` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cfg_edge_stmt_stmts(&self) -> impl '_ + Iterator<Item = (StmtNode, StmtListNode)> {
-        self.cfg_edge_stmt_stmts.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_cfg_edge_nonlinear_stmt_stmts(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtNode, StmtListNode)> {
+        self.cfg_edge_nonlinear_stmt_stmts
+            .iter_all()
+            .map(|t| (t.0, t.1))
     }
-    /// Makes `cfg_edge_stmt_stmts(arg0, arg1)` hold.
+    /// Makes `cfg_edge_nonlinear_stmt_stmts(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cfg_edge_stmt_stmts(&mut self, arg0: StmtNode, arg1: StmtListNode) {
+    pub fn insert_cfg_edge_nonlinear_stmt_stmts(&mut self, arg0: StmtNode, arg1: StmtListNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cfg_edge_stmt_stmts
-            .push(CfgEdgeStmtStmts(arg0, arg1));
+            .new_cfg_edge_nonlinear_stmt_stmts
+            .push(CfgEdgeNonlinearStmtStmts(arg0, arg1));
     }
 
-    /// Returns `true` if `cfg_edge_fork(arg0, arg1)` holds.
+    /// Returns `true` if `cfg_edge_nonlinear_fork(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn cfg_edge_fork(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
+    pub fn cfg_edge_nonlinear_fork(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
         arg0 = self.root_stmt_node(arg0);
         arg1 = self.root_stmt_block_list_node(arg1);
-        self.cfg_edge_fork.contains(CfgEdgeFork(arg0, arg1))
+        self.cfg_edge_nonlinear_fork
+            .contains(CfgEdgeNonlinearFork(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_fork` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear_fork` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cfg_edge_fork(&self) -> impl '_ + Iterator<Item = (StmtNode, StmtBlockListNode)> {
-        self.cfg_edge_fork.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_cfg_edge_nonlinear_fork(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtNode, StmtBlockListNode)> {
+        self.cfg_edge_nonlinear_fork.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes `cfg_edge_fork(arg0, arg1)` hold.
+    /// Makes `cfg_edge_nonlinear_fork(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cfg_edge_fork(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
+    pub fn insert_cfg_edge_nonlinear_fork(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cfg_edge_fork
-            .push(CfgEdgeFork(arg0, arg1));
+            .new_cfg_edge_nonlinear_fork
+            .push(CfgEdgeNonlinearFork(arg0, arg1));
     }
 
-    /// Returns `true` if `cfg_edge_join(arg0, arg1)` holds.
+    /// Returns `true` if `cfg_edge_nonlinear_join(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn cfg_edge_join(&self, mut arg0: StmtBlockListNode, mut arg1: StmtNode) -> bool {
+    pub fn cfg_edge_nonlinear_join(&self, mut arg0: StmtBlockListNode, mut arg1: StmtNode) -> bool {
         arg0 = self.root_stmt_block_list_node(arg0);
         arg1 = self.root_stmt_node(arg1);
-        self.cfg_edge_join.contains(CfgEdgeJoin(arg0, arg1))
+        self.cfg_edge_nonlinear_join
+            .contains(CfgEdgeNonlinearJoin(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_join` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear_join` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cfg_edge_join(&self) -> impl '_ + Iterator<Item = (StmtBlockListNode, StmtNode)> {
-        self.cfg_edge_join.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_cfg_edge_nonlinear_join(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtBlockListNode, StmtNode)> {
+        self.cfg_edge_nonlinear_join.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes `cfg_edge_join(arg0, arg1)` hold.
+    /// Makes `cfg_edge_nonlinear_join(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cfg_edge_join(&mut self, arg0: StmtBlockListNode, arg1: StmtNode) {
+    pub fn insert_cfg_edge_nonlinear_join(&mut self, arg0: StmtBlockListNode, arg1: StmtNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cfg_edge_join
-            .push(CfgEdgeJoin(arg0, arg1));
+            .new_cfg_edge_nonlinear_join
+            .push(CfgEdgeNonlinearJoin(arg0, arg1));
     }
 
     /// Returns `true` if `before_stmt_structure(arg0, arg1)` holds.
@@ -44431,10 +44724,11 @@ impl Eqlog {
             || self.cfg_linear_first.is_dirty()
             || self.cfg_linear_last.is_dirty()
             || self.cfg_edge_linear.is_dirty()
-            || self.cfg_edge_stmts_stmt.is_dirty()
-            || self.cfg_edge_stmt_stmts.is_dirty()
-            || self.cfg_edge_fork.is_dirty()
-            || self.cfg_edge_join.is_dirty()
+            || self.cfg_edge_nonlinear.is_dirty()
+            || self.cfg_edge_nonlinear_stmts_stmt.is_dirty()
+            || self.cfg_edge_nonlinear_stmt_stmts.is_dirty()
+            || self.cfg_edge_nonlinear_fork.is_dirty()
+            || self.cfg_edge_nonlinear_join.is_dirty()
             || self.before_stmt_structure.is_dirty()
             || self.stmt_morphism.is_dirty()
             || self.if_morphism.is_dirty()
@@ -49260,16 +49554,41 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_145(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: StmtNode) {
-        let existing_row = self.cfg_edge.iter_all_0_1(tm4, tm1).next();
+    fn record_action_145(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtNode) {
+        let existing_row = self.cfg_edge.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(CfgEdge(_, _)) => (),
             None => {
-                delta.new_cfg_edge.push(CfgEdge(tm4, tm1));
+                delta.new_cfg_edge.push(CfgEdge(tm0, tm1));
                 ()
             }
         };
+    }
+    fn query_and_record_cfg_edge_linear_general(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for CfgEdgeLinear(tm0, tm1) in self.cfg_edge_linear.iter_dirty() {
+            self.record_action_145(delta, tm0, tm1);
+        }
+    }
+    fn record_action_146(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtNode) {
+        let existing_row = self.cfg_edge.iter_all_0_1(tm0, tm1).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgEdge(_, _)) => (),
+            None => {
+                delta.new_cfg_edge.push(CfgEdge(tm0, tm1));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_edge_nonlinear_general(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for CfgEdgeNonlinear(tm0, tm1) in self.cfg_edge_nonlinear.iter_dirty() {
+            self.record_action_146(delta, tm0, tm1);
+        }
+    }
+    fn record_action_147(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: StmtNode) {
         let existing_row = self.cfg_edge_linear.iter_all_0_1(tm4, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49285,18 +49604,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
-                self.record_action_145(delta, tm1, tm4);
+                self.record_action_147(delta, tm1, tm4);
             }
         }
         #[allow(unused_variables)]
         for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_145(delta, tm1, tm4);
+                self.record_action_147(delta, tm1, tm4);
             }
         }
     }
-    fn record_action_146(&self, delta: &mut ModelDelta, tm1: StmtNode) {
+    fn record_action_148(&self, delta: &mut ModelDelta, tm1: StmtNode) {
         let existing_row = self.cfg_linear_first.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49312,18 +49631,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
-                self.record_action_146(delta, tm1);
+                self.record_action_148(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for RuleDecl(tm3, tm0) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_146(delta, tm1);
+                self.record_action_148(delta, tm1);
             }
         }
     }
-    fn record_action_147(&self, delta: &mut ModelDelta, tm1: StmtNode) {
+    fn record_action_149(&self, delta: &mut ModelDelta, tm1: StmtNode) {
         let existing_row = self.cfg_linear_first.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49340,18 +49659,18 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(tm3, _, tm4) in self.cons_stmt_block_list_node.iter_all_1(tm0)
             {
-                self.record_action_147(delta, tm1);
+                self.record_action_149(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for ConsStmtBlockListNode(tm3, tm0, tm4) in self.cons_stmt_block_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_147(delta, tm1);
+                self.record_action_149(delta, tm1);
             }
         }
     }
-    fn record_action_148(&self, delta: &mut ModelDelta, tm2: StmtNode) {
+    fn record_action_150(&self, delta: &mut ModelDelta, tm2: StmtNode) {
         let existing_row = self.cfg_linear_last.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49367,26 +49686,29 @@ impl Eqlog {
         for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
-                self.record_action_148(delta, tm2);
+                self.record_action_150(delta, tm2);
             }
         }
         #[allow(unused_variables)]
         for ConsStmtListNode(tm1, tm2, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_148(delta, tm2);
+                self.record_action_150(delta, tm2);
             }
         }
     }
-    fn record_action_149(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: StmtNode) {
-        let existing_row = self.cfg_edge_stmts_stmt.iter_all_0_1(tm2, tm3).next();
+    fn record_action_151(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: StmtNode) {
+        let existing_row = self
+            .cfg_edge_nonlinear_stmts_stmt
+            .iter_all_0_1(tm2, tm3)
+            .next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeStmtsStmt(_, _)) => (),
+            Some(CfgEdgeNonlinearStmtsStmt(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_stmts_stmt
-                    .push(CfgEdgeStmtsStmt(tm2, tm3));
+                    .new_cfg_edge_nonlinear_stmts_stmt
+                    .push(CfgEdgeNonlinearStmtsStmt(tm2, tm3));
                 ()
             }
         };
@@ -49395,25 +49717,29 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeStmtsStmt(_, tm3) in self.cfg_edge_stmts_stmt.iter_all_0(tm0) {
-                self.record_action_149(delta, tm2, tm3);
+            for CfgEdgeNonlinearStmtsStmt(_, tm3) in
+                self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm0)
+            {
+                self.record_action_151(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeStmtsStmt(tm0, tm3) in self.cfg_edge_stmts_stmt.iter_dirty() {
+        for CfgEdgeNonlinearStmtsStmt(tm0, tm3) in self.cfg_edge_nonlinear_stmts_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_149(delta, tm2, tm3);
+                self.record_action_151(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_150(&self, delta: &mut ModelDelta, tm2: StmtNode, tm3: StmtNode) {
-        let existing_row = self.cfg_edge.iter_all_0_1(tm2, tm3).next();
+    fn record_action_152(&self, delta: &mut ModelDelta, tm2: StmtNode, tm3: StmtNode) {
+        let existing_row = self.cfg_edge_nonlinear.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdge(_, _)) => (),
+            Some(CfgEdgeNonlinear(_, _)) => (),
             None => {
-                delta.new_cfg_edge.push(CfgEdge(tm2, tm3));
+                delta
+                    .new_cfg_edge_nonlinear
+                    .push(CfgEdgeNonlinear(tm2, tm3));
                 ()
             }
         };
@@ -49424,39 +49750,45 @@ impl Eqlog {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
                 #[allow(unused_variables)]
-                for CfgEdgeStmtsStmt(_, tm3) in self.cfg_edge_stmts_stmt.iter_all_0(tm1) {
-                    self.record_action_150(delta, tm2, tm3);
+                for CfgEdgeNonlinearStmtsStmt(_, tm3) in
+                    self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm1)
+                {
+                    self.record_action_152(delta, tm2, tm3);
                 }
             }
         }
         #[allow(unused_variables)]
         for ConsStmtListNode(tm1, tm2, tm0) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeStmtsStmt(_, tm3) in self.cfg_edge_stmts_stmt.iter_all_0(tm1) {
+            for CfgEdgeNonlinearStmtsStmt(_, tm3) in
+                self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm1)
+            {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_150(delta, tm2, tm3);
+                    self.record_action_152(delta, tm2, tm3);
                 }
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeStmtsStmt(tm1, tm3) in self.cfg_edge_stmts_stmt.iter_dirty() {
+        for CfgEdgeNonlinearStmtsStmt(tm1, tm3) in self.cfg_edge_nonlinear_stmts_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_150(delta, tm2, tm3);
+                    self.record_action_152(delta, tm2, tm3);
                 }
             }
         }
     }
-    fn record_action_151(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: StmtNode) {
-        let existing_row = self.cfg_edge.iter_all_0_1(tm3, tm1).next();
+    fn record_action_153(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: StmtNode) {
+        let existing_row = self.cfg_edge_nonlinear.iter_all_0_1(tm3, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdge(_, _)) => (),
+            Some(CfgEdgeNonlinear(_, _)) => (),
             None => {
-                delta.new_cfg_edge.push(CfgEdge(tm3, tm1));
+                delta
+                    .new_cfg_edge_nonlinear
+                    .push(CfgEdgeNonlinear(tm3, tm1));
                 ()
             }
         };
@@ -49465,25 +49797,29 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeStmtStmts(tm3, _) in self.cfg_edge_stmt_stmts.iter_all_1(tm0) {
-                self.record_action_151(delta, tm1, tm3);
+            for CfgEdgeNonlinearStmtStmts(tm3, _) in
+                self.cfg_edge_nonlinear_stmt_stmts.iter_all_1(tm0)
+            {
+                self.record_action_153(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeStmtStmts(tm3, tm0) in self.cfg_edge_stmt_stmts.iter_dirty() {
+        for CfgEdgeNonlinearStmtStmts(tm3, tm0) in self.cfg_edge_nonlinear_stmt_stmts.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_151(delta, tm1, tm3);
+                self.record_action_153(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_152(&self, delta: &mut ModelDelta, tm1: StmtNode, tm2: StmtNode) {
-        let existing_row = self.cfg_edge.iter_all_0_1(tm2, tm1).next();
+    fn record_action_154(&self, delta: &mut ModelDelta, tm1: StmtNode, tm2: StmtNode) {
+        let existing_row = self.cfg_edge_nonlinear.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdge(_, _)) => (),
+            Some(CfgEdgeNonlinear(_, _)) => (),
             None => {
-                delta.new_cfg_edge.push(CfgEdge(tm2, tm1));
+                delta
+                    .new_cfg_edge_nonlinear
+                    .push(CfgEdgeNonlinear(tm2, tm1));
                 ()
             }
         };
@@ -49492,58 +49828,71 @@ impl Eqlog {
         #[allow(unused_variables)]
         for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeStmtsStmt(_, tm1) in self.cfg_edge_stmts_stmt.iter_all_0(tm0) {
+            for CfgEdgeNonlinearStmtsStmt(_, tm1) in
+                self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm0)
+            {
                 #[allow(unused_variables)]
-                for CfgEdgeStmtStmts(tm2, _) in self.cfg_edge_stmt_stmts.iter_all_1(tm0) {
-                    self.record_action_152(delta, tm1, tm2);
+                for CfgEdgeNonlinearStmtStmts(tm2, _) in
+                    self.cfg_edge_nonlinear_stmt_stmts.iter_all_1(tm0)
+                {
+                    self.record_action_154(delta, tm1, tm2);
                 }
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeStmtsStmt(tm0, tm1) in self.cfg_edge_stmts_stmt.iter_dirty() {
+        for CfgEdgeNonlinearStmtsStmt(tm0, tm1) in self.cfg_edge_nonlinear_stmts_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeStmtStmts(tm2, _) in self.cfg_edge_stmt_stmts.iter_all_1(tm0) {
+            for CfgEdgeNonlinearStmtStmts(tm2, _) in
+                self.cfg_edge_nonlinear_stmt_stmts.iter_all_1(tm0)
+            {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_152(delta, tm1, tm2);
+                    self.record_action_154(delta, tm1, tm2);
                 }
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeStmtStmts(tm2, tm0) in self.cfg_edge_stmt_stmts.iter_dirty() {
+        for CfgEdgeNonlinearStmtStmts(tm2, tm0) in self.cfg_edge_nonlinear_stmt_stmts.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeStmtsStmt(_, tm1) in self.cfg_edge_stmts_stmt.iter_all_0(tm0) {
+            for CfgEdgeNonlinearStmtsStmt(_, tm1) in
+                self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm0)
+            {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_152(delta, tm1, tm2);
+                    self.record_action_154(delta, tm1, tm2);
                 }
             }
         }
     }
-    fn record_action_153(
+    fn record_action_155(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
         tm2: StmtBlockListNode,
         tm3: StmtNode,
     ) {
-        let existing_row = self.cfg_edge_stmt_stmts.iter_all_0_1(tm3, tm1).next();
+        let existing_row = self
+            .cfg_edge_nonlinear_stmt_stmts
+            .iter_all_0_1(tm3, tm1)
+            .next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeStmtStmts(_, _)) => (),
+            Some(CfgEdgeNonlinearStmtStmts(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_stmt_stmts
-                    .push(CfgEdgeStmtStmts(tm3, tm1));
+                    .new_cfg_edge_nonlinear_stmt_stmts
+                    .push(CfgEdgeNonlinearStmtStmts(tm3, tm1));
                 ()
             }
         };
-        let existing_row = self.cfg_edge_fork.iter_all_0_1(tm3, tm2).next();
+        let existing_row = self.cfg_edge_nonlinear_fork.iter_all_0_1(tm3, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeFork(_, _)) => (),
+            Some(CfgEdgeNonlinearFork(_, _)) => (),
             None => {
-                delta.new_cfg_edge_fork.push(CfgEdgeFork(tm3, tm2));
+                delta
+                    .new_cfg_edge_nonlinear_fork
+                    .push(CfgEdgeNonlinearFork(tm3, tm2));
                 ()
             }
         };
@@ -49552,43 +49901,48 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtBlockListNode(tm0, tm1, tm2) in self.cons_stmt_block_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeFork(tm3, _) in self.cfg_edge_fork.iter_all_1(tm0) {
-                self.record_action_153(delta, tm1, tm2, tm3);
+            for CfgEdgeNonlinearFork(tm3, _) in self.cfg_edge_nonlinear_fork.iter_all_1(tm0) {
+                self.record_action_155(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeFork(tm3, tm0) in self.cfg_edge_fork.iter_dirty() {
+        for CfgEdgeNonlinearFork(tm3, tm0) in self.cfg_edge_nonlinear_fork.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(_, tm1, tm2) in self.cons_stmt_block_list_node.iter_all_0(tm0)
             {
-                self.record_action_153(delta, tm1, tm2, tm3);
+                self.record_action_155(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_154(
+    fn record_action_156(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
         tm2: StmtBlockListNode,
         tm3: StmtNode,
     ) {
-        let existing_row = self.cfg_edge_stmts_stmt.iter_all_0_1(tm1, tm3).next();
+        let existing_row = self
+            .cfg_edge_nonlinear_stmts_stmt
+            .iter_all_0_1(tm1, tm3)
+            .next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeStmtsStmt(_, _)) => (),
+            Some(CfgEdgeNonlinearStmtsStmt(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_stmts_stmt
-                    .push(CfgEdgeStmtsStmt(tm1, tm3));
+                    .new_cfg_edge_nonlinear_stmts_stmt
+                    .push(CfgEdgeNonlinearStmtsStmt(tm1, tm3));
                 ()
             }
         };
-        let existing_row = self.cfg_edge_join.iter_all_0_1(tm2, tm3).next();
+        let existing_row = self.cfg_edge_nonlinear_join.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeJoin(_, _)) => (),
+            Some(CfgEdgeNonlinearJoin(_, _)) => (),
             None => {
-                delta.new_cfg_edge_join.push(CfgEdgeJoin(tm2, tm3));
+                delta
+                    .new_cfg_edge_nonlinear_join
+                    .push(CfgEdgeNonlinearJoin(tm2, tm3));
                 ()
             }
         };
@@ -49597,20 +49951,78 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtBlockListNode(tm0, tm1, tm2) in self.cons_stmt_block_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeJoin(_, tm3) in self.cfg_edge_join.iter_all_0(tm0) {
-                self.record_action_154(delta, tm1, tm2, tm3);
+            for CfgEdgeNonlinearJoin(_, tm3) in self.cfg_edge_nonlinear_join.iter_all_0(tm0) {
+                self.record_action_156(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeJoin(tm0, tm3) in self.cfg_edge_join.iter_dirty() {
+        for CfgEdgeNonlinearJoin(tm0, tm3) in self.cfg_edge_nonlinear_join.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(_, tm1, tm2) in self.cons_stmt_block_list_node.iter_all_0(tm0)
             {
-                self.record_action_154(delta, tm1, tm2, tm3);
+                self.record_action_156(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_155(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
+    fn record_action_157(&self, delta: &mut ModelDelta, tm1: StmtBlockListNode, tm2: StmtNode) {
+        let existing_row = self.cfg_edge_nonlinear_fork.iter_all_0_1(tm2, tm1).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgEdgeNonlinearFork(_, _)) => (),
+            None => {
+                delta
+                    .new_cfg_edge_nonlinear_fork
+                    .push(CfgEdgeNonlinearFork(tm2, tm1));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_edge_fork_stmt_into(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for CfgEdge(tm2, _) in self.cfg_edge.iter_all_1(tm0) {
+                self.record_action_157(delta, tm1, tm2);
+            }
+        }
+        #[allow(unused_variables)]
+        for CfgEdge(tm2, tm0) in self.cfg_edge.iter_dirty() {
+            #[allow(unused_variables)]
+            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                self.record_action_157(delta, tm1, tm2);
+            }
+        }
+    }
+    fn record_action_158(&self, delta: &mut ModelDelta, tm1: StmtBlockListNode, tm2: StmtNode) {
+        let existing_row = self.cfg_edge_nonlinear_join.iter_all_0_1(tm1, tm2).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgEdgeNonlinearJoin(_, _)) => (),
+            None => {
+                delta
+                    .new_cfg_edge_nonlinear_join
+                    .push(CfgEdgeNonlinearJoin(tm1, tm2));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_edge_fork_stmt_from(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for CfgEdge(_, tm2) in self.cfg_edge.iter_all_0(tm0) {
+                self.record_action_158(delta, tm1, tm2);
+            }
+        }
+        #[allow(unused_variables)]
+        for CfgEdge(tm0, tm2) in self.cfg_edge.iter_dirty() {
+            #[allow(unused_variables)]
+            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                self.record_action_158(delta, tm1, tm2);
+            }
+        }
+    }
+    fn record_action_159(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
         let existing_row = self.before_rule_structure.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -49627,10 +50039,10 @@ impl Eqlog {
     fn query_and_record_before_rule_structure_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.rule_decl_node_dirty.iter().copied() {
-            self.record_action_155(delta, tm0);
+            self.record_action_159(delta, tm0);
         }
     }
-    fn record_action_156(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: Structure) {
+    fn record_action_160(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: Structure) {
         let existing_row = self.before_stmt_structure.iter_all_0_1(tm1, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49650,7 +50062,7 @@ impl Eqlog {
             for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for BeforeRuleStructure(_, tm4) in self.before_rule_structure.iter_all_0(tm3) {
-                    self.record_action_156(delta, tm1, tm4);
+                    self.record_action_160(delta, tm1, tm4);
                 }
             }
         }
@@ -49660,7 +50072,7 @@ impl Eqlog {
             for BeforeRuleStructure(_, tm4) in self.before_rule_structure.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_156(delta, tm1, tm4);
+                    self.record_action_160(delta, tm1, tm4);
                 }
             }
         }
@@ -49670,12 +50082,12 @@ impl Eqlog {
             for RuleDecl(_, tm0) in self.rule_decl.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_156(delta, tm1, tm4);
+                    self.record_action_160(delta, tm1, tm4);
                 }
             }
         }
     }
-    fn record_action_157(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: Structure) {
+    fn record_action_161(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: Structure) {
         let existing_row = self.before_stmt_structure.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49695,7 +50107,7 @@ impl Eqlog {
             for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
-                    self.record_action_157(delta, tm1, tm3);
+                    self.record_action_161(delta, tm1, tm3);
                 }
             }
         }
@@ -49705,7 +50117,7 @@ impl Eqlog {
             for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for CfgEdge(_, tm1) in self.cfg_edge.iter_all_0(tm0) {
-                    self.record_action_157(delta, tm1, tm3);
+                    self.record_action_161(delta, tm1, tm3);
                 }
             }
         }
@@ -49715,12 +50127,12 @@ impl Eqlog {
             for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for CfgEdge(_, tm1) in self.cfg_edge.iter_all_0(tm0) {
-                    self.record_action_157(delta, tm1, tm3);
+                    self.record_action_161(delta, tm1, tm3);
                 }
             }
         }
     }
-    fn record_action_158(&self, delta: &mut ModelDelta, tm1: Structure, tm3: Structure) {
+    fn record_action_162(&self, delta: &mut ModelDelta, tm1: Structure, tm3: Structure) {
         if tm3 != tm1 {
             delta.new_structure_equalities.push((tm3, tm1));
         }
@@ -49733,18 +50145,18 @@ impl Eqlog {
         for Dom(tm0, tm1) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm2, tm3, _) in self.if_atom_morphism.iter_all_2(tm0) {
-                self.record_action_158(delta, tm1, tm3);
+                self.record_action_162(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomMorphism(tm2, tm3, tm0) in self.if_atom_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
-                self.record_action_158(delta, tm1, tm3);
+                self.record_action_162(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_159(&self, delta: &mut ModelDelta, tm1: Structure, tm3: Structure) {
+    fn record_action_163(&self, delta: &mut ModelDelta, tm1: Structure, tm3: Structure) {
         if tm3 != tm1 {
             delta.new_structure_equalities.push((tm3, tm1));
         }
@@ -49757,18 +50169,18 @@ impl Eqlog {
         for Dom(tm0, tm1) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm2, tm3, _) in self.then_atom_morphism.iter_all_2(tm0) {
-                self.record_action_159(delta, tm1, tm3);
+                self.record_action_163(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomMorphism(tm2, tm3, tm0) in self.then_atom_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
-                self.record_action_159(delta, tm1, tm3);
+                self.record_action_163(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_160(
+    fn record_action_164(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -49802,18 +50214,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for BeforeStmtStructure(_, tm2) in self.before_stmt_structure.iter_all_0(tm0) {
-                self.record_action_160(delta, tm0, tm1, tm2);
+                self.record_action_164(delta, tm0, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for BeforeStmtStructure(tm0, tm2) in self.before_stmt_structure.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                self.record_action_160(delta, tm0, tm1, tm2);
+                self.record_action_164(delta, tm0, tm1, tm2);
             }
         }
     }
-    fn record_action_161(
+    fn record_action_165(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -49847,18 +50259,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for BeforeStmtStructure(_, tm2) in self.before_stmt_structure.iter_all_0(tm0) {
-                self.record_action_161(delta, tm0, tm1, tm2);
+                self.record_action_165(delta, tm0, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for BeforeStmtStructure(tm0, tm2) in self.before_stmt_structure.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                self.record_action_161(delta, tm0, tm1, tm2);
+                self.record_action_165(delta, tm0, tm1, tm2);
             }
         }
     }
-    fn record_action_162(&self, delta: &mut ModelDelta, tm2: Morphism) {
+    fn record_action_166(&self, delta: &mut ModelDelta, tm2: Morphism) {
         let existing_row = self.if_morphism.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49874,18 +50286,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
-                self.record_action_162(delta, tm2);
+                self.record_action_166(delta, tm2);
             }
         }
         #[allow(unused_variables)]
         for StmtMorphism(tm0, tm2) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                self.record_action_162(delta, tm2);
+                self.record_action_166(delta, tm2);
             }
         }
     }
-    fn record_action_163(&self, delta: &mut ModelDelta, tm4: Morphism) {
+    fn record_action_167(&self, delta: &mut ModelDelta, tm4: Morphism) {
         let existing_row = self.surj_then_morphism.iter_all_0(tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49903,7 +50315,7 @@ impl Eqlog {
             for ThenStmtNode(tm3, _) in self.then_stmt_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
-                    self.record_action_163(delta, tm4);
+                    self.record_action_167(delta, tm4);
                 }
             }
         }
@@ -49913,7 +50325,7 @@ impl Eqlog {
             for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                    self.record_action_163(delta, tm4);
+                    self.record_action_167(delta, tm4);
                 }
             }
         }
@@ -49923,12 +50335,12 @@ impl Eqlog {
             for ThenStmtNode(_, tm0) in self.then_stmt_node.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                    self.record_action_163(delta, tm4);
+                    self.record_action_167(delta, tm4);
                 }
             }
         }
     }
-    fn record_action_164(&self, delta: &mut ModelDelta, tm4: Morphism) {
+    fn record_action_168(&self, delta: &mut ModelDelta, tm4: Morphism) {
         let existing_row = self.surj_then_morphism.iter_all_0(tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49946,7 +50358,7 @@ impl Eqlog {
             for ThenStmtNode(tm3, _) in self.then_stmt_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
-                    self.record_action_164(delta, tm4);
+                    self.record_action_168(delta, tm4);
                 }
             }
         }
@@ -49956,7 +50368,7 @@ impl Eqlog {
             for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                    self.record_action_164(delta, tm4);
+                    self.record_action_168(delta, tm4);
                 }
             }
         }
@@ -49966,12 +50378,12 @@ impl Eqlog {
             for ThenStmtNode(_, tm0) in self.then_stmt_node.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                    self.record_action_164(delta, tm4);
+                    self.record_action_168(delta, tm4);
                 }
             }
         }
     }
-    fn record_action_165(&self, delta: &mut ModelDelta, tm4: Morphism) {
+    fn record_action_169(&self, delta: &mut ModelDelta, tm4: Morphism) {
         let existing_row = self.non_surj_then_morphism.iter_all_0(tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -49991,7 +50403,7 @@ impl Eqlog {
             for ThenStmtNode(tm3, _) in self.then_stmt_node.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm3) {
-                    self.record_action_165(delta, tm4);
+                    self.record_action_169(delta, tm4);
                 }
             }
         }
@@ -50002,7 +50414,7 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
                 {
-                    self.record_action_165(delta, tm4);
+                    self.record_action_169(delta, tm4);
                 }
             }
         }
@@ -50013,12 +50425,12 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
                 {
-                    self.record_action_165(delta, tm4);
+                    self.record_action_169(delta, tm4);
                 }
             }
         }
     }
-    fn record_action_166(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: Structure) {
+    fn record_action_170(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: Structure) {
         let existing_row = self.stmt_structure.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50034,18 +50446,18 @@ impl Eqlog {
         for StmtMorphism(tm0, tm1) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for Cod(_, tm2) in self.cod.iter_all_0(tm1) {
-                self.record_action_166(delta, tm0, tm2);
+                self.record_action_170(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for Cod(tm1, tm2) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm1) {
-                self.record_action_166(delta, tm0, tm2);
+                self.record_action_170(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_167(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: Structure) {
+    fn record_action_171(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: Structure) {
         let existing_row = self.if_atom_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50061,18 +50473,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.record_action_167(delta, tm1, tm2);
+                self.record_action_171(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for StmtStructure(tm0, tm2) in self.stmt_structure.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                self.record_action_167(delta, tm1, tm2);
+                self.record_action_171(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_168(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: Structure) {
+    fn record_action_172(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: Structure) {
         let existing_row = self.then_atom_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50090,18 +50502,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.record_action_168(delta, tm1, tm2);
+                self.record_action_172(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for StmtStructure(tm0, tm2) in self.stmt_structure.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                self.record_action_168(delta, tm1, tm2);
+                self.record_action_172(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_169(
+    fn record_action_173(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -50132,18 +50544,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_169(delta, tm1, tm2, tm3);
+                self.record_action_173(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                self.record_action_169(delta, tm1, tm2, tm3);
+                self.record_action_173(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_170(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
+    fn record_action_174(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
         let existing_row = self.term_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50159,18 +50571,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm2) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_170(delta, tm1, tm2);
+                self.record_action_174(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm2) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                self.record_action_170(delta, tm1, tm2);
+                self.record_action_174(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_171(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
+    fn record_action_175(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
         let existing_row = self.terms_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50186,18 +50598,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_171(delta, tm2, tm3);
+                self.record_action_175(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                self.record_action_171(delta, tm2, tm3);
+                self.record_action_175(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_172(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: Structure) {
+    fn record_action_176(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: Structure) {
         let existing_row = self.term_structure.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50213,18 +50625,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.record_action_172(delta, tm1, tm3);
+                self.record_action_176(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                self.record_action_172(delta, tm1, tm3);
+                self.record_action_176(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_173(
+    fn record_action_177(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -50255,18 +50667,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_173(delta, tm1, tm2, tm3);
+                self.record_action_177(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                self.record_action_173(delta, tm1, tm2, tm3);
+                self.record_action_177(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_174(
+    fn record_action_178(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -50299,18 +50711,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_174(delta, tm1, tm2, tm3);
+                self.record_action_178(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0) {
-                self.record_action_174(delta, tm1, tm2, tm3);
+                self.record_action_178(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_175(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
+    fn record_action_179(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
         let existing_row = self.terms_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50326,18 +50738,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.record_action_175(delta, tm2, tm3);
+                self.record_action_179(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                self.record_action_175(delta, tm2, tm3);
+                self.record_action_179(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_176(
+    fn record_action_180(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -50368,18 +50780,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermsStructure(_, tm3) in self.terms_structure.iter_all_0(tm0) {
-                self.record_action_176(delta, tm1, tm2, tm3);
+                self.record_action_180(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for TermsStructure(tm0, tm3) in self.terms_structure.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_176(delta, tm1, tm2, tm3);
+                self.record_action_180(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_177(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
+    fn record_action_181(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: Structure) {
         let existing_row = self.term_structure.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50395,18 +50807,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for OptTermStructure(_, tm2) in self.opt_term_structure.iter_all_0(tm0) {
-                self.record_action_177(delta, tm1, tm2);
+                self.record_action_181(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for OptTermStructure(tm0, tm2) in self.opt_term_structure.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                self.record_action_177(delta, tm1, tm2);
+                self.record_action_181(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_178(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
+    fn record_action_182(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: Structure) {
         let existing_row = self.terms_structure.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50422,18 +50834,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
-                self.record_action_178(delta, tm2, tm3);
+                self.record_action_182(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for TermStructure(tm0, tm3) in self.term_structure.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_178(delta, tm2, tm3);
+                self.record_action_182(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_179(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: Structure) {
+    fn record_action_183(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: Structure) {
         let existing_row = self.semantic_el.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let (tm2,) = match existing_row {
@@ -50448,10 +50860,10 @@ impl Eqlog {
     fn query_and_record_semantic_el_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermStructure(tm0, tm1) in self.term_structure.iter_dirty() {
-            self.record_action_179(delta, tm0, tm1);
+            self.record_action_183(delta, tm0, tm1);
         }
     }
-    fn record_action_180(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
+    fn record_action_184(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
         let existing_row = self.semantic_els.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let (tm2,) = match existing_row {
@@ -50466,10 +50878,10 @@ impl Eqlog {
     fn query_and_record_semantic_els_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for TermsStructure(tm0, tm1) in self.terms_structure.iter_dirty() {
-            self.record_action_180(delta, tm0, tm1);
+            self.record_action_184(delta, tm0, tm1);
         }
     }
-    fn record_action_181(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
+    fn record_action_185(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
         let existing_row = self.nil_el_list.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50487,7 +50899,7 @@ impl Eqlog {
             for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, _, tm2) in self.semantic_els.iter_all_0_1(tm0, tm1) {
-                    self.record_action_181(delta, tm1, tm2);
+                    self.record_action_185(delta, tm1, tm2);
                 }
             }
         }
@@ -50497,7 +50909,7 @@ impl Eqlog {
             for SemanticEls(_, _, tm2) in self.semantic_els.iter_all_0_1(tm0, tm1) {
                 #[allow(unused_variables)]
                 for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                    self.record_action_181(delta, tm1, tm2);
+                    self.record_action_185(delta, tm1, tm2);
                 }
             }
         }
@@ -50507,12 +50919,12 @@ impl Eqlog {
             for TermsStructure(_, _) in self.terms_structure.iter_all_0_1(tm0, tm1) {
                 #[allow(unused_variables)]
                 for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                    self.record_action_181(delta, tm1, tm2);
+                    self.record_action_185(delta, tm1, tm2);
                 }
             }
         }
     }
-    fn record_action_182(&self, delta: &mut ModelDelta, tm4: El, tm5: ElList, tm6: ElList) {
+    fn record_action_186(&self, delta: &mut ModelDelta, tm4: El, tm5: ElList, tm6: ElList) {
         let existing_row = self.cons_el_list.iter_all_0_1_2(tm4, tm5, tm6).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50532,7 +50944,7 @@ impl Eqlog {
                 for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm1, tm3) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, _, tm6) in self.semantic_els.iter_all_0_1(tm0, tm3) {
-                        self.record_action_182(delta, tm4, tm5, tm6);
+                        self.record_action_186(delta, tm4, tm5, tm6);
                     }
                 }
             }
@@ -50545,7 +50957,7 @@ impl Eqlog {
                 for ConsTermListNode(tm0, _, _) in self.cons_term_list_node.iter_all_1_2(tm1, tm2) {
                     #[allow(unused_variables)]
                     for SemanticEls(_, _, tm6) in self.semantic_els.iter_all_0_1(tm0, tm3) {
-                        self.record_action_182(delta, tm4, tm5, tm6);
+                        self.record_action_186(delta, tm4, tm5, tm6);
                     }
                 }
             }
@@ -50558,7 +50970,7 @@ impl Eqlog {
                 for ConsTermListNode(_, tm1, _) in self.cons_term_list_node.iter_all_0_2(tm0, tm2) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm1, tm3) {
-                        self.record_action_182(delta, tm4, tm5, tm6);
+                        self.record_action_186(delta, tm4, tm5, tm6);
                     }
                 }
             }
@@ -50571,13 +50983,13 @@ impl Eqlog {
                 for ConsTermListNode(_, tm1, _) in self.cons_term_list_node.iter_all_0_2(tm0, tm2) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm1, tm3) {
-                        self.record_action_182(delta, tm4, tm5, tm6);
+                        self.record_action_186(delta, tm4, tm5, tm6);
                     }
                 }
             }
         }
     }
-    fn record_action_183(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El) {
+    fn record_action_187(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El) {
         let existing_row = self.el_structure.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50591,10 +51003,10 @@ impl Eqlog {
     fn query_and_record_semantic_el_struct(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
-            self.record_action_183(delta, tm1, tm2);
+            self.record_action_187(delta, tm1, tm2);
         }
     }
-    fn record_action_184(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
+    fn record_action_188(&self, delta: &mut ModelDelta, tm1: Structure, tm2: ElList) {
         let existing_row = self.els_structure.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50608,10 +51020,10 @@ impl Eqlog {
     fn query_and_record_semantic_els_struct(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
-            self.record_action_184(delta, tm1, tm2);
+            self.record_action_188(delta, tm1, tm2);
         }
     }
-    fn record_action_185(&self, delta: &mut ModelDelta, tm3: Func, tm5: El, tm6: ElList) {
+    fn record_action_189(&self, delta: &mut ModelDelta, tm3: Func, tm5: El, tm6: ElList) {
         let existing_row = self.func_app.iter_all_0_1_2(tm3, tm6, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50631,7 +51043,7 @@ impl Eqlog {
                 for SemanticEls(_, _, tm6) in self.semantic_els.iter_all_0_1(tm2, tm4) {
                     #[allow(unused_variables)]
                     for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                        self.record_action_185(delta, tm3, tm5, tm6);
+                        self.record_action_189(delta, tm3, tm5, tm6);
                     }
                 }
             }
@@ -50644,7 +51056,7 @@ impl Eqlog {
                 for SemanticEls(_, tm4, tm6) in self.semantic_els.iter_all_0(tm2) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm0, tm4) {
-                        self.record_action_185(delta, tm3, tm5, tm6);
+                        self.record_action_189(delta, tm3, tm5, tm6);
                     }
                 }
             }
@@ -50657,7 +51069,7 @@ impl Eqlog {
                 for AppTermNode(_, tm1, _) in self.app_term_node.iter_all_0_2(tm0, tm2) {
                     #[allow(unused_variables)]
                     for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                        self.record_action_185(delta, tm3, tm5, tm6);
+                        self.record_action_189(delta, tm3, tm5, tm6);
                     }
                 }
             }
@@ -50670,13 +51082,13 @@ impl Eqlog {
                 for AppTermNode(_, tm1, _) in self.app_term_node.iter_all_0_2(tm0, tm2) {
                     #[allow(unused_variables)]
                     for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                        self.record_action_185(delta, tm3, tm5, tm6);
+                        self.record_action_189(delta, tm3, tm5, tm6);
                     }
                 }
             }
         }
     }
-    fn record_action_186(&self, delta: &mut ModelDelta, tm2: VirtIdent, tm3: Structure, tm4: El) {
+    fn record_action_190(&self, delta: &mut ModelDelta, tm2: VirtIdent, tm3: Structure, tm4: El) {
         let existing_row = self.var.iter_all_0_1_2(tm3, tm2, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50694,7 +51106,7 @@ impl Eqlog {
             for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm0) {
-                    self.record_action_186(delta, tm2, tm3, tm4);
+                    self.record_action_190(delta, tm2, tm3, tm4);
                 }
             }
         }
@@ -50704,7 +51116,7 @@ impl Eqlog {
             for VarTermNode(tm0, _) in self.var_term_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm0) {
-                    self.record_action_186(delta, tm2, tm3, tm4);
+                    self.record_action_190(delta, tm2, tm3, tm4);
                 }
             }
         }
@@ -50714,12 +51126,12 @@ impl Eqlog {
             for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
-                    self.record_action_186(delta, tm2, tm3, tm4);
+                    self.record_action_190(delta, tm2, tm3, tm4);
                 }
             }
         }
     }
-    fn record_action_187(&self, delta: &mut ModelDelta, tm0: TermNode) {
+    fn record_action_191(&self, delta: &mut ModelDelta, tm0: TermNode) {
         let existing_row = self.wildcard_virt_ident.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
@@ -50736,10 +51148,10 @@ impl Eqlog {
     fn query_and_record_wildcard_virt_ident_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
-            self.record_action_187(delta, tm0);
+            self.record_action_191(delta, tm0);
         }
     }
-    fn record_action_188(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El, tm3: VirtIdent) {
+    fn record_action_192(&self, delta: &mut ModelDelta, tm1: Structure, tm2: El, tm3: VirtIdent) {
         let existing_row = self.var.iter_all_0_1_2(tm1, tm3, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50757,7 +51169,7 @@ impl Eqlog {
             for SemanticEl(_, tm1, tm2) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
-                    self.record_action_188(delta, tm1, tm2, tm3);
+                    self.record_action_192(delta, tm1, tm2, tm3);
                 }
             }
         }
@@ -50767,7 +51179,7 @@ impl Eqlog {
             for WildcardVirtIdent(_, tm3) in self.wildcard_virt_ident.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                    self.record_action_188(delta, tm1, tm2, tm3);
+                    self.record_action_192(delta, tm1, tm2, tm3);
                 }
             }
         }
@@ -50777,12 +51189,12 @@ impl Eqlog {
             for SemanticEl(_, tm1, tm2) in self.semantic_el.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                    self.record_action_188(delta, tm1, tm2, tm3);
+                    self.record_action_192(delta, tm1, tm2, tm3);
                 }
             }
         }
     }
-    fn record_action_189(&self, delta: &mut ModelDelta, tm4: El, tm5: El) {
+    fn record_action_193(&self, delta: &mut ModelDelta, tm4: El, tm5: El) {
         if tm4 != tm5 {
             delta.new_el_equalities.push((tm4, tm5));
         }
@@ -50797,7 +51209,7 @@ impl Eqlog {
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm1, tm3) {
-                    self.record_action_189(delta, tm4, tm5);
+                    self.record_action_193(delta, tm4, tm5);
                 }
             }
         }
@@ -50807,7 +51219,7 @@ impl Eqlog {
             for SemanticEl(tm1, _, tm5) in self.semantic_el.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(tm0, _, _) in self.equal_if_atom_node.iter_all_1_2(tm1, tm2) {
-                    self.record_action_189(delta, tm4, tm5);
+                    self.record_action_193(delta, tm4, tm5);
                 }
             }
         }
@@ -50817,12 +51229,12 @@ impl Eqlog {
             for SemanticEl(tm2, _, tm4) in self.semantic_el.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(tm0, _, _) in self.equal_if_atom_node.iter_all_1_2(tm1, tm2) {
-                    self.record_action_189(delta, tm4, tm5);
+                    self.record_action_193(delta, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_190(&self, delta: &mut ModelDelta, tm3: Pred, tm5: ElList) {
+    fn record_action_194(&self, delta: &mut ModelDelta, tm3: Pred, tm5: ElList) {
         let existing_row = self.pred_app.iter_all_0_1(tm3, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50840,7 +51252,7 @@ impl Eqlog {
             for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4, tm5) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_190(delta, tm3, tm5);
+                    self.record_action_194(delta, tm3, tm5);
                 }
             }
         }
@@ -50850,7 +51262,7 @@ impl Eqlog {
             for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4, tm5) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_190(delta, tm3, tm5);
+                    self.record_action_194(delta, tm3, tm5);
                 }
             }
         }
@@ -50860,12 +51272,12 @@ impl Eqlog {
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                    self.record_action_190(delta, tm3, tm5);
+                    self.record_action_194(delta, tm3, tm5);
                 }
             }
         }
     }
-    fn record_action_191(&self, delta: &mut ModelDelta, tm3: Type, tm5: El) {
+    fn record_action_195(&self, delta: &mut ModelDelta, tm3: Type, tm5: El) {
         let existing_row = self.el_type.iter_all_0_1(tm5, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -50883,7 +51295,7 @@ impl Eqlog {
             for SemanticType(_, tm3) in self.semantic_type.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4, tm5) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_191(delta, tm3, tm5);
+                    self.record_action_195(delta, tm3, tm5);
                 }
             }
         }
@@ -50893,7 +51305,7 @@ impl Eqlog {
             for VarIfAtomNode(tm0, tm1, _) in self.var_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, tm4, tm5) in self.semantic_el.iter_all_0(tm1) {
-                    self.record_action_191(delta, tm3, tm5);
+                    self.record_action_195(delta, tm3, tm5);
                 }
             }
         }
@@ -50903,12 +51315,12 @@ impl Eqlog {
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticType(_, tm3) in self.semantic_type.iter_all_0(tm2) {
-                    self.record_action_191(delta, tm3, tm5);
+                    self.record_action_195(delta, tm3, tm5);
                 }
             }
         }
     }
-    fn record_action_192(&self, delta: &mut ModelDelta, tm4: El, tm5: El) {
+    fn record_action_196(&self, delta: &mut ModelDelta, tm4: El, tm5: El) {
         if tm4 != tm5 {
             delta.new_el_equalities.push((tm4, tm5));
         }
@@ -50923,7 +51335,7 @@ impl Eqlog {
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm1, tm3) {
-                    self.record_action_192(delta, tm4, tm5);
+                    self.record_action_196(delta, tm4, tm5);
                 }
             }
         }
@@ -50934,7 +51346,7 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(tm0, _, _) in self.equal_then_atom_node.iter_all_1_2(tm1, tm2)
                 {
-                    self.record_action_192(delta, tm4, tm5);
+                    self.record_action_196(delta, tm4, tm5);
                 }
             }
         }
@@ -50945,12 +51357,12 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(tm0, _, _) in self.equal_then_atom_node.iter_all_1_2(tm1, tm2)
                 {
-                    self.record_action_192(delta, tm4, tm5);
+                    self.record_action_196(delta, tm4, tm5);
                 }
             }
         }
     }
-    fn record_action_193(&self, delta: &mut ModelDelta, tm5: El, tm6: El) {
+    fn record_action_197(&self, delta: &mut ModelDelta, tm5: El, tm6: El) {
         if tm5 != tm6 {
             delta.new_el_equalities.push((tm5, tm6));
         }
@@ -50967,7 +51379,7 @@ impl Eqlog {
                 for SemanticEl(_, tm4, tm5) in self.semantic_el.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for SemanticEl(_, _, tm6) in self.semantic_el.iter_all_0_1(tm1, tm4) {
-                        self.record_action_193(delta, tm5, tm6);
+                        self.record_action_197(delta, tm5, tm6);
                     }
                 }
             }
@@ -50980,7 +51392,7 @@ impl Eqlog {
                 for SemanticEl(tm1, _, tm6) in self.semantic_el.iter_all_1(tm4) {
                     #[allow(unused_variables)]
                     for SomeTermNode(_, _) in self.some_term_node.iter_all_0_1(tm0, tm1) {
-                        self.record_action_193(delta, tm5, tm6);
+                        self.record_action_197(delta, tm5, tm6);
                     }
                 }
             }
@@ -50994,7 +51406,7 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for SomeTermNode(_, _) in self.some_term_node.iter_all_0_1(tm0, tm1) {
-                        self.record_action_193(delta, tm5, tm6);
+                        self.record_action_197(delta, tm5, tm6);
                     }
                 }
             }
@@ -51008,13 +51420,13 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for SomeTermNode(_, _) in self.some_term_node.iter_all_0_1(tm0, tm1) {
-                        self.record_action_193(delta, tm5, tm6);
+                        self.record_action_197(delta, tm5, tm6);
                     }
                 }
             }
         }
     }
-    fn record_action_194(&self, delta: &mut ModelDelta, tm3: Pred, tm5: ElList) {
+    fn record_action_198(&self, delta: &mut ModelDelta, tm3: Pred, tm5: ElList) {
         let existing_row = self.pred_app.iter_all_0_1(tm3, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -51032,7 +51444,7 @@ impl Eqlog {
             for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4, tm5) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_194(delta, tm3, tm5);
+                    self.record_action_198(delta, tm3, tm5);
                 }
             }
         }
@@ -51042,7 +51454,7 @@ impl Eqlog {
             for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for SemanticEls(_, tm4, tm5) in self.semantic_els.iter_all_0(tm2) {
-                    self.record_action_194(delta, tm3, tm5);
+                    self.record_action_198(delta, tm3, tm5);
                 }
             }
         }
@@ -51052,12 +51464,12 @@ impl Eqlog {
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
                 for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                    self.record_action_194(delta, tm3, tm5);
+                    self.record_action_198(delta, tm3, tm5);
                 }
             }
         }
     }
-    fn record_action_195(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: Morphism) {
+    fn record_action_199(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: Morphism) {
         let existing_row = self.grouped_stmt_morphism.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let (tm2,) = match existing_row {
@@ -51074,10 +51486,10 @@ impl Eqlog {
     fn query_and_record_grouped_stmt_morphism_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for StmtMorphism(tm0, tm1) in self.stmt_morphism.iter_dirty() {
-            self.record_action_195(delta, tm0, tm1);
+            self.record_action_199(delta, tm0, tm1);
         }
     }
-    fn record_action_196(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm5: Morphism) {
+    fn record_action_200(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm5: Morphism) {
         let existing_row = self
             .rule_first_grouped_morphism
             .iter_all_0_1(tm3, tm5)
@@ -51100,7 +51512,7 @@ impl Eqlog {
             for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for GroupedStmtMorphism(_, tm4, tm5) in self.grouped_stmt_morphism.iter_all_0(tm1) {
-                    self.record_action_196(delta, tm3, tm5);
+                    self.record_action_200(delta, tm3, tm5);
                 }
             }
         }
@@ -51110,7 +51522,7 @@ impl Eqlog {
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for GroupedStmtMorphism(_, tm4, tm5) in self.grouped_stmt_morphism.iter_all_0(tm1) {
-                    self.record_action_196(delta, tm3, tm5);
+                    self.record_action_200(delta, tm3, tm5);
                 }
             }
         }
@@ -51120,12 +51532,12 @@ impl Eqlog {
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
-                    self.record_action_196(delta, tm3, tm5);
+                    self.record_action_200(delta, tm3, tm5);
                 }
             }
         }
     }
-    fn record_action_197(&self, delta: &mut ModelDelta, tm2: Morphism) {
+    fn record_action_201(&self, delta: &mut ModelDelta, tm2: Morphism) {
         let existing_row = self.if_morphism.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -51144,7 +51556,7 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for IfMorphism(_) in self.if_morphism.iter_all_0(tm1) {
-                    self.record_action_197(delta, tm2);
+                    self.record_action_201(delta, tm2);
                 }
             }
         }
@@ -51154,7 +51566,7 @@ impl Eqlog {
             for GroupedStmtMorphism(tm0, _, tm2) in self.grouped_stmt_morphism.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for StmtMorphism(_, _) in self.stmt_morphism.iter_all_0_1(tm0, tm1) {
-                    self.record_action_197(delta, tm2);
+                    self.record_action_201(delta, tm2);
                 }
             }
         }
@@ -51164,12 +51576,12 @@ impl Eqlog {
             for StmtMorphism(_, _) in self.stmt_morphism.iter_all_0_1(tm0, tm1) {
                 #[allow(unused_variables)]
                 for IfMorphism(_) in self.if_morphism.iter_all_0(tm1) {
-                    self.record_action_197(delta, tm2);
+                    self.record_action_201(delta, tm2);
                 }
             }
         }
     }
-    fn record_action_198(&self, delta: &mut ModelDelta, tm2: Morphism) {
+    fn record_action_202(&self, delta: &mut ModelDelta, tm2: Morphism) {
         let existing_row = self.surj_then_morphism.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -51188,7 +51600,7 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm1) {
-                    self.record_action_198(delta, tm2);
+                    self.record_action_202(delta, tm2);
                 }
             }
         }
@@ -51198,7 +51610,7 @@ impl Eqlog {
             for GroupedStmtMorphism(tm0, _, tm2) in self.grouped_stmt_morphism.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for StmtMorphism(_, _) in self.stmt_morphism.iter_all_0_1(tm0, tm1) {
-                    self.record_action_198(delta, tm2);
+                    self.record_action_202(delta, tm2);
                 }
             }
         }
@@ -51208,12 +51620,12 @@ impl Eqlog {
             for StmtMorphism(_, _) in self.stmt_morphism.iter_all_0_1(tm0, tm1) {
                 #[allow(unused_variables)]
                 for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm1) {
-                    self.record_action_198(delta, tm2);
+                    self.record_action_202(delta, tm2);
                 }
             }
         }
     }
-    fn record_action_199(&self, delta: &mut ModelDelta, tm2: Morphism) {
+    fn record_action_203(&self, delta: &mut ModelDelta, tm2: Morphism) {
         let existing_row = self.non_surj_then_morphism.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -51234,7 +51646,7 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm1) {
-                    self.record_action_199(delta, tm2);
+                    self.record_action_203(delta, tm2);
                 }
             }
         }
@@ -51244,7 +51656,7 @@ impl Eqlog {
             for GroupedStmtMorphism(tm0, _, tm2) in self.grouped_stmt_morphism.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for StmtMorphism(_, _) in self.stmt_morphism.iter_all_0_1(tm0, tm1) {
-                    self.record_action_199(delta, tm2);
+                    self.record_action_203(delta, tm2);
                 }
             }
         }
@@ -51254,12 +51666,121 @@ impl Eqlog {
             for StmtMorphism(_, _) in self.stmt_morphism.iter_all_0_1(tm0, tm1) {
                 #[allow(unused_variables)]
                 for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm1) {
-                    self.record_action_199(delta, tm2);
+                    self.record_action_203(delta, tm2);
                 }
             }
         }
     }
-    fn record_action_200(&self, delta: &mut ModelDelta, tm2: Structure, tm4: Structure) {
+    fn record_action_204(&self, delta: &mut ModelDelta, tm5: Morphism, tm6: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm6, tm5).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
+            None => {
+                delta
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm6, tm5));
+                ()
+            }
+        };
+    }
+    fn query_and_record_next_grouped_nonlinear_cfg_edge(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for CfgEdgeNonlinear(tm0, tm1) in self.cfg_edge_nonlinear.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm2, tm5) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for Dom(_, tm3) in self.dom.iter_all_0(tm2) {
+                    #[allow(unused_variables)]
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm3) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, _, tm6) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm0, tm4)
+                        {
+                            self.record_action_204(delta, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm2, tm3) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm1, _, tm5) in self.grouped_stmt_morphism.iter_all_1(tm2) {
+                #[allow(unused_variables)]
+                for Cod(tm4, _) in self.cod.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeNonlinear(_, _) in self.cfg_edge_nonlinear.iter_all_0_1(tm0, tm1)
+                        {
+                            self.record_action_204(delta, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm4, tm3) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm0, _, tm6) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for Dom(tm2, _) in self.dom.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm1, _, tm5) in
+                        self.grouped_stmt_morphism.iter_all_1(tm2)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeNonlinear(_, _) in self.cfg_edge_nonlinear.iter_all_0_1(tm0, tm1)
+                        {
+                            self.record_action_204(delta, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm2, tm5) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Dom(_, tm3) in self.dom.iter_all_0(tm2) {
+                #[allow(unused_variables)]
+                for Cod(tm4, _) in self.cod.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeNonlinear(_, _) in self.cfg_edge_nonlinear.iter_all_0_1(tm0, tm1)
+                        {
+                            self.record_action_204(delta, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm0, tm4, tm6) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm3) in self.cod.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for Dom(tm2, _) in self.dom.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm1, _, tm5) in
+                        self.grouped_stmt_morphism.iter_all_1(tm2)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeNonlinear(_, _) in self.cfg_edge_nonlinear.iter_all_0_1(tm0, tm1)
+                        {
+                            self.record_action_204(delta, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_205(&self, delta: &mut ModelDelta, tm2: Structure, tm4: Structure) {
         if tm2 != tm4 {
             delta.new_structure_equalities.push((tm2, tm4));
         }
@@ -51267,7 +51788,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm4, tm2));
         }
     }
-    fn query_and_record_grouped_stmt_morphism_first(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_first_dom(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for CfgLinearFirst(tm0) in self.cfg_linear_first.iter_dirty() {
             #[allow(unused_variables)]
@@ -51276,7 +51797,7 @@ impl Eqlog {
                 for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for Dom(_, tm4) in self.dom.iter_all_0(tm3) {
-                        self.record_action_200(delta, tm2, tm4);
+                        self.record_action_205(delta, tm2, tm4);
                     }
                 }
             }
@@ -51289,7 +51810,7 @@ impl Eqlog {
                 for Dom(_, tm4) in self.dom.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for CfgLinearFirst(_) in self.cfg_linear_first.iter_all_0(tm0) {
-                        self.record_action_200(delta, tm2, tm4);
+                        self.record_action_205(delta, tm2, tm4);
                     }
                 }
             }
@@ -51302,7 +51823,7 @@ impl Eqlog {
                 for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for CfgLinearFirst(_) in self.cfg_linear_first.iter_all_0(tm0) {
-                        self.record_action_200(delta, tm2, tm4);
+                        self.record_action_205(delta, tm2, tm4);
                     }
                 }
             }
@@ -51315,13 +51836,13 @@ impl Eqlog {
                 for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for CfgLinearFirst(_) in self.cfg_linear_first.iter_all_0(tm0) {
-                        self.record_action_200(delta, tm2, tm4);
+                        self.record_action_205(delta, tm2, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_201(&self, delta: &mut ModelDelta, tm2: Structure, tm4: Structure) {
+    fn record_action_206(&self, delta: &mut ModelDelta, tm2: Structure, tm4: Structure) {
         if tm2 != tm4 {
             delta.new_structure_equalities.push((tm2, tm4));
         }
@@ -51329,7 +51850,7 @@ impl Eqlog {
             delta.new_structure_equalities.push((tm4, tm2));
         }
     }
-    fn query_and_record_grouped_stmt_morphism_last(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_last_cod(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for CfgLinearLast(tm0) in self.cfg_linear_last.iter_dirty() {
             #[allow(unused_variables)]
@@ -51338,7 +51859,7 @@ impl Eqlog {
                 for Cod(_, tm2) in self.cod.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
-                        self.record_action_201(delta, tm2, tm4);
+                        self.record_action_206(delta, tm2, tm4);
                     }
                 }
             }
@@ -51351,7 +51872,7 @@ impl Eqlog {
                 for Cod(_, tm4) in self.cod.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for CfgLinearLast(_) in self.cfg_linear_last.iter_all_0(tm0) {
-                        self.record_action_201(delta, tm2, tm4);
+                        self.record_action_206(delta, tm2, tm4);
                     }
                 }
             }
@@ -51364,7 +51885,7 @@ impl Eqlog {
                 for Cod(_, tm2) in self.cod.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for CfgLinearLast(_) in self.cfg_linear_last.iter_all_0(tm0) {
-                        self.record_action_201(delta, tm2, tm4);
+                        self.record_action_206(delta, tm2, tm4);
                     }
                 }
             }
@@ -51377,213 +51898,152 @@ impl Eqlog {
                 for Cod(_, tm2) in self.cod.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for CfgLinearLast(_) in self.cfg_linear_last.iter_all_0(tm0) {
-                        self.record_action_201(delta, tm2, tm4);
+                        self.record_action_206(delta, tm2, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_202(
+    fn record_action_207(
         &self,
         delta: &mut ModelDelta,
-        tm5: Morphism,
-        tm6: Morphism,
-        tm8: Structure,
+        tm2: Morphism,
+        tm3: Morphism,
+        tm5: Structure,
     ) {
-        let existing_row = self.dom.iter_all_0_1(tm6, tm8).next();
+        let existing_row = self.dom.iter_all_0_1(tm3, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(Dom(_, _)) => (),
             None => {
-                delta.new_dom.push(Dom(tm6, tm8));
+                delta.new_dom.push(Dom(tm3, tm5));
                 ()
             }
         };
-        let existing_row = self.cod.iter_all_0_1(tm5, tm8).next();
+        let existing_row = self.cod.iter_all_0_1(tm2, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(Cod(_, _)) => (),
             None => {
-                delta.new_cod.push(Cod(tm5, tm8));
+                delta.new_cod.push(Cod(tm2, tm5));
                 ()
             }
         };
     }
     fn query_and_record_next_grouped_dom_cod(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+        for CfgEdge(tm0, tm1) in self.cfg_edge.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm9, tm6) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+            for GroupedStmtMorphism(_, tm6, tm3) in self.grouped_stmt_morphism.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for NextGroupedMorphism(tm5, _) in self.next_grouped_morphism.iter_all_1(tm6) {
+                for NextGroupedMorphism(tm2, _) in self.next_grouped_morphism.iter_all_1(tm3) {
                     #[allow(unused_variables)]
-                    for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(_, tm7, _) in
-                            self.grouped_stmt_morphism.iter_all_0_2(tm4, tm5)
-                        {
-                            #[allow(unused_variables)]
-                            for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
-                                self.record_action_202(delta, tm5, tm6, tm8);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm5) in self.grouped_stmt_morphism.iter_all_0(tm4) {
-                #[allow(unused_variables)]
-                for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
-                    #[allow(unused_variables)]
-                    for NextGroupedMorphism(_, tm6) in self.next_grouped_morphism.iter_all_0(tm5) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm1, tm9, _) in
-                            self.grouped_stmt_morphism.iter_all_2(tm6)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm2) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                            {
-                                self.record_action_202(delta, tm5, tm6, tm8);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for NextGroupedMorphism(tm5, tm6) in self.next_grouped_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm1, tm9, _) in self.grouped_stmt_morphism.iter_all_2(tm6) {
-                #[allow(unused_variables)]
-                for GroupedStmtMorphism(tm4, tm7, _) in self.grouped_stmt_morphism.iter_all_2(tm5) {
-                    #[allow(unused_variables)]
-                    for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm3, _, tm0) in
-                            self.cons_stmt_list_node.iter_all_1(tm4)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm2) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                            {
-                                self.record_action_202(delta, tm5, tm6, tm8);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Cod(tm7, tm8) in self.cod.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm4, _, tm5) in self.grouped_stmt_morphism.iter_all_1(tm7) {
-                #[allow(unused_variables)]
-                for NextGroupedMorphism(_, tm6) in self.next_grouped_morphism.iter_all_0(tm5) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, tm9, _) in
-                        self.grouped_stmt_morphism.iter_all_2(tm6)
+                    for GroupedStmtMorphism(_, tm4, _) in
+                        self.grouped_stmt_morphism.iter_all_0_2(tm0, tm2)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm3, _, tm0) in
-                            self.cons_stmt_list_node.iter_all_1(tm4)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm2) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                            {
-                                self.record_action_202(delta, tm5, tm6, tm8);
-                            }
+                        for Cod(_, tm5) in self.cod.iter_all_0(tm4) {
+                            self.record_action_207(delta, tm2, tm3, tm5);
                         }
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm1, tm9, tm6) in self.grouped_stmt_morphism.iter_dirty() {
+        for NextGroupedMorphism(tm2, tm3) in self.next_grouped_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for NextGroupedMorphism(tm5, _) in self.next_grouped_morphism.iter_all_1(tm6) {
+            for GroupedStmtMorphism(tm1, tm6, _) in self.grouped_stmt_morphism.iter_all_2(tm3) {
                 #[allow(unused_variables)]
-                for GroupedStmtMorphism(tm4, tm7, _) in self.grouped_stmt_morphism.iter_all_2(tm5) {
+                for GroupedStmtMorphism(tm0, tm4, _) in self.grouped_stmt_morphism.iter_all_2(tm2) {
                     #[allow(unused_variables)]
-                    for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+                    for CfgEdge(_, _) in self.cfg_edge.iter_all_0_1(tm0, tm1) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm3, _, tm0) in
-                            self.cons_stmt_list_node.iter_all_1(tm4)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm2) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                            {
-                                self.record_action_202(delta, tm5, tm6, tm8);
-                            }
+                        for Cod(_, tm5) in self.cod.iter_all_0(tm4) {
+                            self.record_action_207(delta, tm2, tm3, tm5);
                         }
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm4, tm7, tm5) in self.grouped_stmt_morphism.iter_dirty() {
+        for Cod(tm4, tm5) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(_, tm8) in self.cod.iter_all_0(tm7) {
+            for GroupedStmtMorphism(tm0, _, tm2) in self.grouped_stmt_morphism.iter_all_1(tm4) {
                 #[allow(unused_variables)]
-                for NextGroupedMorphism(_, tm6) in self.next_grouped_morphism.iter_all_0(tm5) {
+                for NextGroupedMorphism(_, tm3) in self.next_grouped_morphism.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, tm9, _) in
-                        self.grouped_stmt_morphism.iter_all_2(tm6)
+                    for GroupedStmtMorphism(tm1, tm6, _) in
+                        self.grouped_stmt_morphism.iter_all_2(tm3)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm3, _, tm0) in
-                            self.cons_stmt_list_node.iter_all_1(tm4)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm2) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                            {
-                                self.record_action_202(delta, tm5, tm6, tm8);
-                            }
+                        for CfgEdge(_, _) in self.cfg_edge.iter_all_0_1(tm0, tm1) {
+                            self.record_action_207(delta, tm2, tm3, tm5);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm1, tm6, tm3) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for NextGroupedMorphism(tm2, _) in self.next_grouped_morphism.iter_all_1(tm3) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(tm0, tm4, _) in self.grouped_stmt_morphism.iter_all_2(tm2) {
+                    #[allow(unused_variables)]
+                    for CfgEdge(_, _) in self.cfg_edge.iter_all_0_1(tm0, tm1) {
+                        #[allow(unused_variables)]
+                        for Cod(_, tm5) in self.cod.iter_all_0(tm4) {
+                            self.record_action_207(delta, tm2, tm3, tm5);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm0, tm4, tm2) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm5) in self.cod.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for NextGroupedMorphism(_, tm3) in self.next_grouped_morphism.iter_all_0(tm2) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm1, tm6, _) in
+                        self.grouped_stmt_morphism.iter_all_2(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdge(_, _) in self.cfg_edge.iter_all_0_1(tm0, tm1) {
+                            self.record_action_207(delta, tm2, tm3, tm5);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_203(&self, delta: &mut ModelDelta, tm10: Morphism, tm11: Morphism) {
-        if tm10 != tm11 {
-            delta.new_morphism_equalities.push((tm10, tm11));
+    fn record_action_208(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        if tm7 != tm8 {
+            delta.new_morphism_equalities.push((tm7, tm8));
         }
-        if tm11 != tm10 {
-            delta.new_morphism_equalities.push((tm11, tm10));
+        if tm8 != tm7 {
+            delta.new_morphism_equalities.push((tm8, tm7));
         }
     }
     fn query_and_record_grouped_stmt_morphism_if_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm10) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+            for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                    for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm4, _, tm5) in
-                            self.cons_stmt_list_node.iter_all_1(tm0)
-                        {
+                        for CfgEdgeLinear(tm2, _) in self.cfg_edge_linear.iter_all_1(tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm6, tm2, _) in
-                                self.cons_stmt_list_node.iter_all_2(tm4)
+                            for GroupedStmtMorphism(_, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm2, tm6)
                             {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm11) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm2, tm9)
-                                {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
+                                    self.record_action_208(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51594,25 +52054,68 @@ impl Eqlog {
         #[allow(unused_variables)]
         for IfStmtNode(tm2, tm3) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
+            for CfgEdgeLinear(_, tm0) in self.cfg_edge_linear.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
+                for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(_, tm7, tm10) in
-                        self.grouped_stmt_morphism.iter_all_0(tm0)
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm2, tm6)
+                            {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_208(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for CfgEdgeLinear(tm2, tm0) in self.cfg_edge_linear.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm2, tm6)
+                        {
+                            #[allow(unused_variables)]
+                            for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_208(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm4, tm5) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm6)
                     {
                         #[allow(unused_variables)]
-                        for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                            for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm11) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm2, tm9)
-                                {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_208(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51621,87 +52124,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
+        for Cod(tm6, tm5) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm10) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+            for GroupedStmtMorphism(tm2, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
                 #[allow(unused_variables)]
-                for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, tm2, _) in
-                            self.cons_stmt_list_node.iter_all_2(tm4)
-                        {
-                            #[allow(unused_variables)]
-                            for GroupedStmtMorphism(_, _, tm11) in
-                                self.grouped_stmt_morphism.iter_all_0_1(tm2, tm9)
-                            {
-                                #[allow(unused_variables)]
-                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm9, tm11) in self.grouped_stmt_morphism.iter_all_0(tm2) {
-                #[allow(unused_variables)]
-                for Cod(_, tm8) in self.cod.iter_all_0(tm9) {
-                    #[allow(unused_variables)]
-                    for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm0, _, tm10) in
-                            self.grouped_stmt_morphism.iter_all_1(tm7)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Dom(tm7, tm8) in self.dom.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm0, _, tm10) in self.grouped_stmt_morphism.iter_all_1(tm7) {
-                #[allow(unused_variables)]
-                for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm2, _, tm11) in
-                        self.grouped_stmt_morphism.iter_all_1(tm9)
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
+                            for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_208(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51710,29 +52148,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Cod(tm9, tm8) in self.cod.iter_dirty() {
+        for GroupedStmtMorphism(tm0, tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm2, _, tm11) in self.grouped_stmt_morphism.iter_all_1(tm9) {
+            for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
+                for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm0, _, tm10) in
-                        self.grouped_stmt_morphism.iter_all_1(tm7)
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm6)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
+                            for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_208(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51741,60 +52172,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm0, tm7, tm10) in self.grouped_stmt_morphism.iter_dirty() {
+        for GroupedStmtMorphism(tm2, tm6, tm8) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+            for Cod(_, tm5) in self.cod.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm2, _, tm11) in
-                        self.grouped_stmt_morphism.iter_all_1(tm9)
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
+                            for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm2, tm9, tm11) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Cod(_, tm8) in self.cod.iter_all_0(tm9) {
-                #[allow(unused_variables)]
-                for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm0, _, tm10) in
-                        self.grouped_stmt_morphism.iter_all_1(tm7)
-                    {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_203(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_208(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51803,15 +52196,15 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_204(&self, delta: &mut ModelDelta, tm10: Morphism, tm11: Morphism) {
-        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm11, tm10).next();
+    fn record_action_209(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm8, tm7).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(NextGroupedMorphism(_, _)) => (),
             None => {
                 delta
                     .new_next_grouped_morphism
-                    .push(NextGroupedMorphism(tm11, tm10));
+                    .push(NextGroupedMorphism(tm8, tm7));
                 ()
             }
         };
@@ -51820,26 +52213,20 @@ impl Eqlog {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm0) {
+            for CfgEdgeLinear(_, tm2) in self.cfg_edge_linear.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm2, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
+                for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(_, tm7, tm10) in
-                        self.grouped_stmt_morphism.iter_all_0(tm2)
-                    {
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                         #[allow(unused_variables)]
-                        for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                        for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                             #[allow(unused_variables)]
-                            for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                            for GroupedStmtMorphism(_, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm0, tm6)
+                            {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm11) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm0, tm9)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
-                                    {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51850,27 +52237,20 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm10) in self.grouped_stmt_morphism.iter_all_0(tm2) {
+            for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                    for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm4, _, tm5) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
+                        for CfgEdgeLinear(tm0, _) in self.cfg_edge_linear.iter_all_1(tm2) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm6, tm0, _) in
-                                self.cons_stmt_list_node.iter_all_2(tm4)
+                            for GroupedStmtMorphism(_, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm0, tm6)
                             {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm11) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm0, tm9)
-                                {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51879,27 +52259,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm2, tm5) in self.cons_stmt_list_node.iter_dirty() {
+        for CfgEdgeLinear(tm0, tm2) in self.cfg_edge_linear.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm10) in self.grouped_stmt_morphism.iter_all_0(tm2) {
+            for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                    for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, tm0, _) in
-                            self.cons_stmt_list_node.iter_all_2(tm4)
+                        for GroupedStmtMorphism(_, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm0, tm6)
                         {
                             #[allow(unused_variables)]
-                            for GroupedStmtMorphism(_, _, tm11) in
-                                self.grouped_stmt_morphism.iter_all_0_1(tm0, tm9)
-                            {
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51908,58 +52283,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm0, tm4) in self.cons_stmt_list_node.iter_dirty() {
+        for Dom(tm4, tm5) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm9, tm11) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+            for GroupedStmtMorphism(tm2, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm4) {
                 #[allow(unused_variables)]
-                for Cod(_, tm8) in self.cod.iter_all_0(tm9) {
+                for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm2, _, tm10) in
-                            self.grouped_stmt_morphism.iter_all_1(tm7)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Dom(tm7, tm8) in self.dom.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm2, _, tm10) in self.grouped_stmt_morphism.iter_all_1(tm7) {
-                #[allow(unused_variables)]
-                for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm0, _, tm11) in
-                        self.grouped_stmt_morphism.iter_all_1(tm9)
+                    for GroupedStmtMorphism(tm0, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm6)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm0)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                            {
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51968,29 +52307,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Cod(tm9, tm8) in self.cod.iter_dirty() {
+        for Cod(tm6, tm5) in self.cod.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm0, _, tm11) in self.grouped_stmt_morphism.iter_all_1(tm9) {
+            for GroupedStmtMorphism(tm0, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
                 #[allow(unused_variables)]
-                for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm2, _, tm10) in
-                        self.grouped_stmt_morphism.iter_all_1(tm7)
+                    for GroupedStmtMorphism(tm2, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm0)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                            {
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -51999,29 +52331,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm2, tm7, tm10) in self.grouped_stmt_morphism.iter_dirty() {
+        for GroupedStmtMorphism(tm2, tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+            for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm0, _, tm11) in
-                        self.grouped_stmt_morphism.iter_all_1(tm9)
+                    for GroupedStmtMorphism(tm0, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm6)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm0)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                            {
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -52030,29 +52355,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm0, tm9, tm11) in self.grouped_stmt_morphism.iter_dirty() {
+        for GroupedStmtMorphism(tm0, tm6, tm8) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(_, tm8) in self.cod.iter_all_0(tm9) {
+            for Cod(_, tm5) in self.cod.iter_all_0(tm6) {
                 #[allow(unused_variables)]
-                for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm2, _, tm10) in
-                        self.grouped_stmt_morphism.iter_all_1(tm7)
+                    for GroupedStmtMorphism(tm2, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
                     {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm0)
-                        {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm2)
-                            {
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
                                 #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_204(delta, tm10, tm11);
-                                    }
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_209(delta, tm7, tm8);
                                 }
                             }
                         }
@@ -52061,15 +52379,15 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_205(&self, delta: &mut ModelDelta, tm10: Morphism, tm11: Morphism) {
-        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm11, tm10).next();
+    fn record_action_210(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm8, tm7).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(NextGroupedMorphism(_, _)) => (),
             None => {
                 delta
                     .new_next_grouped_morphism
-                    .push(NextGroupedMorphism(tm11, tm10));
+                    .push(NextGroupedMorphism(tm8, tm7));
                 ()
             }
         };
@@ -52078,27 +52396,205 @@ impl Eqlog {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm10) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+            for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
                     #[allow(unused_variables)]
-                    for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                    for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
                         #[allow(unused_variables)]
-                        for ConsStmtListNode(tm4, _, tm5) in
-                            self.cons_stmt_list_node.iter_all_1(tm0)
-                        {
+                        for CfgEdgeLinear(tm2, _) in self.cfg_edge_linear.iter_all_1(tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm6, tm2, _) in
-                                self.cons_stmt_list_node.iter_all_2(tm4)
+                            for GroupedStmtMorphism(_, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm2, tm6)
                             {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm11) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm2, tm9)
-                                {
+                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for CfgEdgeLinear(_, tm0) in self.cfg_edge_linear.iter_all_0(tm2) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm2, tm6)
+                            {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for CfgEdgeLinear(tm2, tm0) in self.cfg_edge_linear.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm4, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm2, tm6)
+                        {
+                            #[allow(unused_variables)]
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm4, tm5) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm6)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
+                            #[allow(unused_variables)]
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm6, tm5) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm2, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
+                #[allow(unused_variables)]
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
+                            #[allow(unused_variables)]
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm0, tm4, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for Cod(tm6, _) in self.cod.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm6)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
+                            #[allow(unused_variables)]
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm2, tm6, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm5) in self.cod.iter_all_0(tm6) {
+                #[allow(unused_variables)]
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
+                            #[allow(unused_variables)]
+                            for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
+                                #[allow(unused_variables)]
+                                for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_210(delta, tm7, tm8);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_211(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        if tm7 != tm8 {
+            delta.new_morphism_equalities.push((tm7, tm8));
+        }
+        if tm8 != tm7 {
+            delta.new_morphism_equalities.push((tm8, tm7));
+        }
+    }
+    fn query_and_record_grouped_stmt_morphism_surj_then_surj_then(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm5, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
+                    #[allow(unused_variables)]
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
+                        #[allow(unused_variables)]
+                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for CfgEdgeLinear(tm2, _) in self.cfg_edge_linear.iter_all_1(tm0) {
                                     #[allow(unused_variables)]
-                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    for GroupedStmtMorphism(_, _, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0_1(tm2, tm4)
                                     {
-                                        self.record_action_205(delta, tm10, tm11);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm3) in
+                                            self.then_stmt_node.iter_all_0(tm2)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52110,245 +52606,29 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtListNode(tm6, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm2) {
+            for CfgEdgeLinear(_, tm0) in self.cfg_edge_linear.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for ConsStmtListNode(_, tm0, tm5) in self.cons_stmt_list_node.iter_all_0(tm4) {
+                for GroupedStmtMorphism(_, tm5, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(_, tm7, tm10) in
-                        self.grouped_stmt_morphism.iter_all_0(tm0)
-                    {
+                    for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
+                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
                             #[allow(unused_variables)]
-                            for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
+                            for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm11) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm2, tm9)
+                                for GroupedStmtMorphism(_, _, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0_1(tm2, tm4)
                                 {
                                     #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm4, tm0, tm5) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm7, tm10) in self.grouped_stmt_morphism.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
-                    #[allow(unused_variables)]
-                    for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, tm2, _) in
-                            self.cons_stmt_list_node.iter_all_2(tm4)
-                        {
-                            #[allow(unused_variables)]
-                            for GroupedStmtMorphism(_, _, tm11) in
-                                self.grouped_stmt_morphism.iter_all_0_1(tm2, tm9)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm6, tm2, tm4) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm9, tm11) in self.grouped_stmt_morphism.iter_all_0(tm2) {
-                #[allow(unused_variables)]
-                for Cod(_, tm8) in self.cod.iter_all_0(tm9) {
-                    #[allow(unused_variables)]
-                    for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm0, _, tm10) in
-                            self.grouped_stmt_morphism.iter_all_1(tm7)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Dom(tm7, tm8) in self.dom.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm0, _, tm10) in self.grouped_stmt_morphism.iter_all_1(tm7) {
-                #[allow(unused_variables)]
-                for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm2, _, tm11) in
-                        self.grouped_stmt_morphism.iter_all_1(tm9)
-                    {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Cod(tm9, tm8) in self.cod.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm2, _, tm11) in self.grouped_stmt_morphism.iter_all_1(tm9) {
-                #[allow(unused_variables)]
-                for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm0, _, tm10) in
-                        self.grouped_stmt_morphism.iter_all_1(tm7)
-                    {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm0, tm7, tm10) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Dom(_, tm8) in self.dom.iter_all_0(tm7) {
-                #[allow(unused_variables)]
-                for Cod(tm9, _) in self.cod.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm2, _, tm11) in
-                        self.grouped_stmt_morphism.iter_all_1(tm9)
-                    {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm2, tm9, tm11) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Cod(_, tm8) in self.cod.iter_all_0(tm9) {
-                #[allow(unused_variables)]
-                for Dom(tm7, _) in self.dom.iter_all_1(tm8) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm0, _, tm10) in
-                        self.grouped_stmt_morphism.iter_all_1(tm7)
-                    {
-                        #[allow(unused_variables)]
-                        for ConsStmtListNode(tm6, _, tm4) in
-                            self.cons_stmt_list_node.iter_all_1(tm2)
-                        {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(_, _, tm5) in
-                                self.cons_stmt_list_node.iter_all_0_1(tm4, tm0)
-                            {
-                                #[allow(unused_variables)]
-                                for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2) {
-                                    #[allow(unused_variables)]
-                                    for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                                        self.record_action_205(delta, tm10, tm11);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    fn record_action_206(&self, delta: &mut ModelDelta, tm8: Morphism, tm9: Morphism) {
-        if tm8 != tm9 {
-            delta.new_morphism_equalities.push((tm8, tm9));
-        }
-        if tm9 != tm8 {
-            delta.new_morphism_equalities.push((tm9, tm8));
-        }
-    }
-    fn query_and_record_grouped_stmt_morphism_surj_then_surj_then(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm6, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
-                #[allow(unused_variables)]
-                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
-                        #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, tm4, _) in
-                                    self.cons_stmt_list_node.iter_all_2(tm0)
-                                {
-                                    #[allow(unused_variables)]
-                                    for GroupedStmtMorphism(_, _, tm9) in
-                                        self.grouped_stmt_morphism.iter_all_0_1(tm4, tm5)
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm4)
                                     {
-                                        self.record_action_206(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52358,26 +52638,67 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+        for CfgEdgeLinear(tm2, tm0) in self.cfg_edge_linear.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm5, tm9) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+            for GroupedStmtMorphism(_, tm5, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                         #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                        for GroupedStmtMorphism(_, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm2, tm4)
+                        {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(tm1, _, tm8) in
-                                    self.grouped_stmt_morphism.iter_all_1(tm6)
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SurjThenMorphism(tm4) in self.surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm6) in self.cod.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for Dom(tm5, _) in self.dom.iter_all_1(tm6) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm5)
+                    {
+                        #[allow(unused_variables)]
+                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(tm2, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_1(tm4)
+                            {
+                                #[allow(unused_variables)]
+                                for CfgEdgeLinear(_, _) in
+                                    self.cfg_edge_linear.iter_all_0_1(tm2, tm0)
                                 {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
                                     {
-                                        self.record_action_206(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52389,59 +52710,28 @@ impl Eqlog {
         #[allow(unused_variables)]
         for SurjThenMorphism(tm5) in self.surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                         #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for GroupedStmtMorphism(tm4, _, tm9) in
-                                self.grouped_stmt_morphism.iter_all_1(tm5)
-                            {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_206(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for SurjThenMorphism(tm6) in self.surj_then_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm1, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
-                #[allow(unused_variables)]
-                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm4, _, tm9) in
-                            self.grouped_stmt_morphism.iter_all_1(tm5)
+                        for GroupedStmtMorphism(tm2, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_1(tm4)
                         {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
                                     {
-                                        self.record_action_206(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52451,28 +52741,63 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Dom(tm6, tm7) in self.dom.iter_dirty() {
+        for Dom(tm5, tm6) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm1, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
+                for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm4, _, tm9) in
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
+                            #[allow(unused_variables)]
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm4, tm6) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm2, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for Dom(tm5, _) in self.dom.iter_all_1(tm6) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
                         self.grouped_stmt_morphism.iter_all_1(tm5)
                     {
                         #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
                                     {
-                                        self.record_action_206(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52482,28 +52807,30 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Cod(tm5, tm7) in self.cod.iter_dirty() {
+        for GroupedStmtMorphism(tm0, tm5, tm7) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm4, _, tm9) in self.grouped_stmt_morphism.iter_all_1(tm5) {
+            for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                 #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
                     {
                         #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
                                     {
-                                        self.record_action_206(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52513,59 +52840,30 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm1, tm6, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+        for GroupedStmtMorphism(tm2, tm4, tm8) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+            for Cod(_, tm6) in self.cod.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
+                for Dom(tm5, _) in self.dom.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm4, _, tm9) in
+                    for GroupedStmtMorphism(tm0, _, tm7) in
                         self.grouped_stmt_morphism.iter_all_1(tm5)
                     {
                         #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
                                     {
-                                        self.record_action_206(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm4, tm5, tm9) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
-                #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
-                        #[allow(unused_variables)]
-                        for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_206(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_211(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52575,15 +52873,15 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_207(&self, delta: &mut ModelDelta, tm8: Morphism, tm9: Morphism) {
-        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm9, tm8).next();
+    fn record_action_212(&self, delta: &mut ModelDelta, tm7: Morphism, tm8: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm8, tm7).next();
         #[allow(unused_variables)]
         let () = match existing_row {
             Some(NextGroupedMorphism(_, _)) => (),
             None => {
                 delta
                     .new_next_grouped_morphism
-                    .push(NextGroupedMorphism(tm9, tm8));
+                    .push(NextGroupedMorphism(tm8, tm7));
                 ()
             }
         };
@@ -52593,26 +52891,29 @@ impl Eqlog {
         delta: &mut ModelDelta,
     ) {
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+        for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm6, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
+            for GroupedStmtMorphism(_, tm5, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
+                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, tm4, _) in
-                                    self.cons_stmt_list_node.iter_all_2(tm0)
-                                {
+                                for CfgEdgeLinear(tm2, _) in self.cfg_edge_linear.iter_all_1(tm0) {
                                     #[allow(unused_variables)]
-                                    for GroupedStmtMorphism(_, _, tm9) in
-                                        self.grouped_stmt_morphism.iter_all_0_1(tm4, tm5)
+                                    for GroupedStmtMorphism(_, _, tm8) in
+                                        self.grouped_stmt_morphism.iter_all_0_1(tm2, tm4)
                                     {
-                                        self.record_action_207(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm3) in
+                                            self.then_stmt_node.iter_all_0(tm2)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52622,26 +52923,31 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+        for ThenStmtNode(tm2, tm3) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm5, tm9) in self.grouped_stmt_morphism.iter_all_0(tm4) {
+            for CfgEdgeLinear(_, tm0) in self.cfg_edge_linear.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
+                for GroupedStmtMorphism(_, tm5, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                    for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
+                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(tm1, _, tm8) in
-                                    self.grouped_stmt_morphism.iter_all_1(tm6)
+                                for GroupedStmtMorphism(_, _, tm8) in
+                                    self.grouped_stmt_morphism.iter_all_0_1(tm2, tm4)
                                 {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for SurjThenMorphism(_) in
+                                        self.surj_then_morphism.iter_all_0(tm4)
                                     {
-                                        self.record_action_207(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52651,61 +52957,32 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for SurjThenMorphism(tm5) in self.surj_then_morphism.iter_dirty() {
+        for CfgEdgeLinear(tm2, tm0) in self.cfg_edge_linear.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
+            for GroupedStmtMorphism(_, tm5, tm7) in self.grouped_stmt_morphism.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for GroupedStmtMorphism(tm4, _, tm9) in
-                                self.grouped_stmt_morphism.iter_all_1(tm5)
-                            {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_207(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for NonSurjThenMorphism(tm6) in self.non_surj_then_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm1, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
-                #[allow(unused_variables)]
-                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
-                        #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm4, _, tm9) in
-                            self.grouped_stmt_morphism.iter_all_1(tm5)
+                        for GroupedStmtMorphism(_, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm2, tm4)
                         {
                             #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
+                                for NonSurjThenMorphism(_) in
+                                    self.non_surj_then_morphism.iter_all_0(tm5)
                                 {
                                     #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
                                     {
-                                        self.record_action_207(delta, tm8, tm9);
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
                                     }
                                 }
                             }
@@ -52715,189 +52992,35 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Dom(tm6, tm7) in self.dom.iter_dirty() {
+        for SurjThenMorphism(tm4) in self.surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm1, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
+            for Cod(_, tm6) in self.cod.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
+                for Dom(tm5, _) in self.dom.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm4, _, tm9) in
+                    for GroupedStmtMorphism(tm0, _, tm7) in
                         self.grouped_stmt_morphism.iter_all_1(tm5)
                     {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_207(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for Cod(tm5, tm7) in self.cod.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm4, _, tm9) in self.grouped_stmt_morphism.iter_all_1(tm5) {
-                #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
-                        #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_207(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm1, tm6, tm8) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
-                #[allow(unused_variables)]
-                for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm4, _, tm9) in
-                        self.grouped_stmt_morphism.iter_all_1(tm5)
-                    {
-                        #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_207(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm4, tm5, tm9) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
-                #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
-                        #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm6) {
-                            #[allow(unused_variables)]
-                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm5) {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(tm3, _, tm0) in
-                                    self.cons_stmt_list_node.iter_all_1(tm4)
-                                {
-                                    #[allow(unused_variables)]
-                                    for ConsStmtListNode(_, _, tm2) in
-                                        self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                    {
-                                        self.record_action_207(delta, tm8, tm9);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    fn record_action_208(&self, delta: &mut ModelDelta, tm8: Morphism, tm9: Morphism) {
-        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm9, tm8).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(NextGroupedMorphism(_, _)) => (),
-            None => {
-                delta
-                    .new_next_grouped_morphism
-                    .push(NextGroupedMorphism(tm9, tm8));
-                ()
-            }
-        };
-    }
-    fn query_and_record_grouped_stmt_morphism_non_surj_surj(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm6, tm8) in self.grouped_stmt_morphism.iter_all_0(tm1) {
-                #[allow(unused_variables)]
-                for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
-                    #[allow(unused_variables)]
-                    for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
-                        #[allow(unused_variables)]
                         for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm3, tm4, _) in
-                                self.cons_stmt_list_node.iter_all_2(tm0)
+                            for GroupedStmtMorphism(tm2, _, tm8) in
+                                self.grouped_stmt_morphism.iter_all_1(tm4)
                             {
                                 #[allow(unused_variables)]
-                                for GroupedStmtMorphism(_, _, tm9) in
-                                    self.grouped_stmt_morphism.iter_all_0_1(tm4, tm5)
+                                for CfgEdgeLinear(_, _) in
+                                    self.cfg_edge_linear.iter_all_0_1(tm2, tm0)
                                 {
-                                    self.record_action_208(delta, tm8, tm9);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for GroupedStmtMorphism(_, tm5, tm9) in self.grouped_stmt_morphism.iter_all_0(tm4) {
-                #[allow(unused_variables)]
-                for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
-                    #[allow(unused_variables)]
-                    for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
-                        #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
-                            #[allow(unused_variables)]
-                            for GroupedStmtMorphism(tm1, _, tm8) in
-                                self.grouped_stmt_morphism.iter_all_1(tm6)
-                            {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(_, _, tm2) in
-                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                {
-                                    self.record_action_208(delta, tm8, tm9);
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -52908,26 +53031,29 @@ impl Eqlog {
         #[allow(unused_variables)]
         for NonSurjThenMorphism(tm5) in self.non_surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
+                    for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                         #[allow(unused_variables)]
-                        for GroupedStmtMorphism(tm4, _, tm9) in
-                            self.grouped_stmt_morphism.iter_all_1(tm5)
+                        for GroupedStmtMorphism(tm2, _, tm8) in
+                            self.grouped_stmt_morphism.iter_all_1(tm4)
                         {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm3, _, tm0) in
-                                self.cons_stmt_list_node.iter_all_1(tm4)
-                            {
+                            for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(_, _, tm2) in
-                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                {
-                                    self.record_action_208(delta, tm8, tm9);
+                                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -52936,26 +53062,68 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Dom(tm6, tm7) in self.dom.iter_dirty() {
+        for Dom(tm5, tm6) in self.dom.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm1, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm6) {
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm5) {
                 #[allow(unused_variables)]
-                for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
+                for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm4, _, tm9) in
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
+                            #[allow(unused_variables)]
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
+                                #[allow(unused_variables)]
+                                for NonSurjThenMorphism(_) in
+                                    self.non_surj_then_morphism.iter_all_0(tm5)
+                                {
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm4, tm6) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm2, _, tm8) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for Dom(tm5, _) in self.dom.iter_all_1(tm6) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
                         self.grouped_stmt_morphism.iter_all_1(tm5)
                     {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm3, _, tm0) in
-                                self.cons_stmt_list_node.iter_all_1(tm4)
-                            {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(_, _, tm2) in
-                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                for NonSurjThenMorphism(_) in
+                                    self.non_surj_then_morphism.iter_all_0(tm5)
                                 {
-                                    self.record_action_208(delta, tm8, tm9);
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -52964,26 +53132,33 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for Cod(tm5, tm7) in self.cod.iter_dirty() {
+        for GroupedStmtMorphism(tm0, tm5, tm7) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for GroupedStmtMorphism(tm4, _, tm9) in self.grouped_stmt_morphism.iter_all_1(tm5) {
+            for Dom(_, tm6) in self.dom.iter_all_0(tm5) {
                 #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
+                for Cod(tm4, _) in self.cod.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
+                    for GroupedStmtMorphism(tm2, _, tm8) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
                     {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm3, _, tm0) in
-                                self.cons_stmt_list_node.iter_all_1(tm4)
-                            {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(_, _, tm2) in
-                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                for NonSurjThenMorphism(_) in
+                                    self.non_surj_then_morphism.iter_all_0(tm5)
                                 {
-                                    self.record_action_208(delta, tm8, tm9);
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -52992,54 +53167,33 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm1, tm6, tm8) in self.grouped_stmt_morphism.iter_dirty() {
+        for GroupedStmtMorphism(tm2, tm4, tm8) in self.grouped_stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
-            for Dom(_, tm7) in self.dom.iter_all_0(tm6) {
+            for Cod(_, tm6) in self.cod.iter_all_0(tm4) {
                 #[allow(unused_variables)]
-                for Cod(tm5, _) in self.cod.iter_all_1(tm7) {
+                for Dom(tm5, _) in self.dom.iter_all_1(tm6) {
                     #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm4, _, tm9) in
+                    for GroupedStmtMorphism(tm0, _, tm7) in
                         self.grouped_stmt_morphism.iter_all_1(tm5)
                     {
                         #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm2, tm0) {
                             #[allow(unused_variables)]
-                            for ConsStmtListNode(tm3, _, tm0) in
-                                self.cons_stmt_list_node.iter_all_1(tm4)
-                            {
+                            for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
-                                for ConsStmtListNode(_, _, tm2) in
-                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
+                                for NonSurjThenMorphism(_) in
+                                    self.non_surj_then_morphism.iter_all_0(tm5)
                                 {
-                                    self.record_action_208(delta, tm8, tm9);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for GroupedStmtMorphism(tm4, tm5, tm9) in self.grouped_stmt_morphism.iter_dirty() {
-            #[allow(unused_variables)]
-            for Cod(_, tm7) in self.cod.iter_all_0(tm5) {
-                #[allow(unused_variables)]
-                for Dom(tm6, _) in self.dom.iter_all_1(tm7) {
-                    #[allow(unused_variables)]
-                    for GroupedStmtMorphism(tm1, _, tm8) in
-                        self.grouped_stmt_morphism.iter_all_1(tm6)
-                    {
-                        #[allow(unused_variables)]
-                        for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm5) {
-                            #[allow(unused_variables)]
-                            for ConsStmtListNode(tm3, _, tm0) in
-                                self.cons_stmt_list_node.iter_all_1(tm4)
-                            {
-                                #[allow(unused_variables)]
-                                for ConsStmtListNode(_, _, tm2) in
-                                    self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
-                                {
-                                    self.record_action_208(delta, tm8, tm9);
+                                    #[allow(unused_variables)]
+                                    for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm2)
+                                    {
+                                        #[allow(unused_variables)]
+                                        for ThenStmtNode(_, tm1) in
+                                            self.then_stmt_node.iter_all_0(tm0)
+                                        {
+                                            self.record_action_212(delta, tm7, tm8);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -53048,7 +53202,348 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_209(
+    fn record_action_213(&self, delta: &mut ModelDelta, tm6: Morphism, tm7: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm6).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
+            None => {
+                delta
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm6));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_non_surj_then_arbitrary(
+        &self,
+        delta: &mut ModelDelta,
+    ) {
+        #[allow(unused_variables)]
+        for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for CfgEdgeLinear(_, tm2) in self.cfg_edge_linear.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm4, tm6) in self.grouped_stmt_morphism.iter_all_0(tm2) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                        #[allow(unused_variables)]
+                        for Cod(tm3, _) in self.cod.iter_all_1(tm5) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, _, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm0, tm3)
+                            {
+                                #[allow(unused_variables)]
+                                for NonSurjThenMorphism(_) in
+                                    self.non_surj_then_morphism.iter_all_0(tm3)
+                                {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for CfgEdgeLinear(tm0, tm2) in self.cfg_edge_linear.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm4, tm6) in self.grouped_stmt_morphism.iter_all_0(tm2) {
+                #[allow(unused_variables)]
+                for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for Cod(tm3, _) in self.cod.iter_all_1(tm5) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, _, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm0, tm3)
+                        {
+                            #[allow(unused_variables)]
+                            for NonSurjThenMorphism(_) in
+                                self.non_surj_then_morphism.iter_all_0(tm3)
+                            {
+                                #[allow(unused_variables)]
+                                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for NonSurjThenMorphism(tm3) in self.non_surj_then_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm5) in self.cod.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(tm0, _, tm7) in
+                            self.grouped_stmt_morphism.iter_all_1(tm3)
+                        {
+                            #[allow(unused_variables)]
+                            for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                                #[allow(unused_variables)]
+                                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm4, tm5) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm2, _, tm6) in self.grouped_stmt_morphism.iter_all_1(tm4) {
+                #[allow(unused_variables)]
+                for Cod(tm3, _) in self.cod.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for NonSurjThenMorphism(_) in
+                                self.non_surj_then_morphism.iter_all_0(tm3)
+                            {
+                                #[allow(unused_variables)]
+                                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm3, tm5) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm3) {
+                #[allow(unused_variables)]
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for NonSurjThenMorphism(_) in
+                                self.non_surj_then_morphism.iter_all_0(tm3)
+                            {
+                                #[allow(unused_variables)]
+                                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm2, tm4, tm6) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Dom(_, tm5) in self.dom.iter_all_0(tm4) {
+                #[allow(unused_variables)]
+                for Cod(tm3, _) in self.cod.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for NonSurjThenMorphism(_) in
+                                self.non_surj_then_morphism.iter_all_0(tm3)
+                            {
+                                #[allow(unused_variables)]
+                                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm0, tm3, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm5) in self.cod.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for Dom(tm4, _) in self.dom.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm4)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for NonSurjThenMorphism(_) in
+                                self.non_surj_then_morphism.iter_all_0(tm3)
+                            {
+                                #[allow(unused_variables)]
+                                for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
+                                    self.record_action_213(delta, tm6, tm7);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_214(&self, delta: &mut ModelDelta, tm6: Morphism, tm7: Morphism) {
+        let existing_row = self.next_grouped_morphism.iter_all_0_1(tm7, tm6).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(NextGroupedMorphism(_, _)) => (),
+            None => {
+                delta
+                    .new_next_grouped_morphism
+                    .push(NextGroupedMorphism(tm7, tm6));
+                ()
+            }
+        };
+    }
+    fn query_and_record_grouped_stmt_morphism_fork(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for CfgEdgeLinear(_, tm2) in self.cfg_edge_linear.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for GroupedStmtMorphism(_, tm3, tm6) in self.grouped_stmt_morphism.iter_all_0(tm2) {
+                    #[allow(unused_variables)]
+                    for Dom(_, tm4) in self.dom.iter_all_0(tm3) {
+                        #[allow(unused_variables)]
+                        for Cod(tm5, _) in self.cod.iter_all_1(tm4) {
+                            #[allow(unused_variables)]
+                            for GroupedStmtMorphism(_, _, tm7) in
+                                self.grouped_stmt_morphism.iter_all_0_1(tm0, tm5)
+                            {
+                                self.record_action_214(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for CfgEdgeLinear(tm0, tm2) in self.cfg_edge_linear.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(_, tm3, tm6) in self.grouped_stmt_morphism.iter_all_0(tm2) {
+                #[allow(unused_variables)]
+                for Dom(_, tm4) in self.dom.iter_all_0(tm3) {
+                    #[allow(unused_variables)]
+                    for Cod(tm5, _) in self.cod.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for GroupedStmtMorphism(_, _, tm7) in
+                            self.grouped_stmt_morphism.iter_all_0_1(tm0, tm5)
+                        {
+                            #[allow(unused_variables)]
+                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                                self.record_action_214(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Dom(tm3, tm4) in self.dom.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm2, _, tm6) in self.grouped_stmt_morphism.iter_all_1(tm3) {
+                #[allow(unused_variables)]
+                for Cod(tm5, _) in self.cod.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm5)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                                self.record_action_214(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Cod(tm5, tm4) in self.cod.iter_dirty() {
+            #[allow(unused_variables)]
+            for GroupedStmtMorphism(tm0, _, tm7) in self.grouped_stmt_morphism.iter_all_1(tm5) {
+                #[allow(unused_variables)]
+                for Dom(tm3, _) in self.dom.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                                self.record_action_214(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm2, tm3, tm6) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Dom(_, tm4) in self.dom.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for Cod(tm5, _) in self.cod.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm0, _, tm7) in
+                        self.grouped_stmt_morphism.iter_all_1(tm5)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                                self.record_action_214(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for GroupedStmtMorphism(tm0, tm5, tm7) in self.grouped_stmt_morphism.iter_dirty() {
+            #[allow(unused_variables)]
+            for Cod(_, tm4) in self.cod.iter_all_0(tm5) {
+                #[allow(unused_variables)]
+                for Dom(tm3, _) in self.dom.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for GroupedStmtMorphism(tm2, _, tm6) in
+                        self.grouped_stmt_morphism.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
+                            #[allow(unused_variables)]
+                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                                self.record_action_214(delta, tm6, tm7);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_215(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -53079,18 +53574,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmts(_, tm3) in self.var_before_stmts.iter_all_0(tm0) {
-                self.record_action_209(delta, tm1, tm2, tm3);
+                self.record_action_215(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeStmts(tm0, tm3) in self.var_before_stmts.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_209(delta, tm1, tm2, tm3);
+                self.record_action_215(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_210(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: VirtIdent) {
+    fn record_action_216(&self, delta: &mut ModelDelta, tm1: IfAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_before_if_atom.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53106,18 +53601,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmt(_, tm2) in self.var_before_stmt.iter_all_0(tm0) {
-                self.record_action_210(delta, tm1, tm2);
+                self.record_action_216(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeStmt(tm0, tm2) in self.var_before_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                self.record_action_210(delta, tm1, tm2);
+                self.record_action_216(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_211(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: VirtIdent) {
+    fn record_action_217(&self, delta: &mut ModelDelta, tm1: ThenAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_before_then_atom.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53135,18 +53630,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmt(_, tm2) in self.var_before_stmt.iter_all_0(tm0) {
-                self.record_action_211(delta, tm1, tm2);
+                self.record_action_217(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeStmt(tm0, tm2) in self.var_before_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                self.record_action_211(delta, tm1, tm2);
+                self.record_action_217(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_212(
+    fn record_action_218(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -53177,18 +53672,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_212(delta, tm1, tm2, tm3);
+                self.record_action_218(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                self.record_action_212(delta, tm1, tm2, tm3);
+                self.record_action_218(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_213(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
+    fn record_action_219(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53204,18 +53699,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm2) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_213(delta, tm1, tm2);
+                self.record_action_219(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm2) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                self.record_action_213(delta, tm1, tm2);
+                self.record_action_219(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_214(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_220(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53231,18 +53726,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_214(delta, tm2, tm3);
+                self.record_action_220(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                self.record_action_214(delta, tm2, tm3);
+                self.record_action_220(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_215(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: VirtIdent) {
+    fn record_action_221(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53258,18 +53753,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_215(delta, tm1, tm3);
+                self.record_action_221(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                self.record_action_215(delta, tm1, tm3);
+                self.record_action_221(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_216(
+    fn record_action_222(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -53300,18 +53795,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_216(delta, tm1, tm2, tm3);
+                self.record_action_222(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                self.record_action_216(delta, tm1, tm2, tm3);
+                self.record_action_222(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_217(
+    fn record_action_223(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -53344,18 +53839,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_217(delta, tm1, tm2, tm3);
+                self.record_action_223(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0) {
-                self.record_action_217(delta, tm1, tm2, tm3);
+                self.record_action_223(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_218(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_224(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53371,18 +53866,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_218(delta, tm2, tm3);
+                self.record_action_224(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                self.record_action_218(delta, tm2, tm3);
+                self.record_action_224(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_219(
+    fn record_action_225(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -53413,18 +53908,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeTerms(_, tm3) in self.var_before_terms.iter_all_0(tm0) {
-                self.record_action_219(delta, tm1, tm2, tm3);
+                self.record_action_225(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeTerms(tm0, tm3) in self.var_before_terms.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_219(delta, tm1, tm2, tm3);
+                self.record_action_225(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_220(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
+    fn record_action_226(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53440,18 +53935,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeOptTerm(_, tm2) in self.var_before_opt_term.iter_all_0(tm0) {
-                self.record_action_220(delta, tm1, tm2);
+                self.record_action_226(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeOptTerm(tm0, tm2) in self.var_before_opt_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                self.record_action_220(delta, tm1, tm2);
+                self.record_action_226(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_221(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_227(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53467,18 +53962,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeTerm(_, tm3) in self.var_before_term.iter_all_0(tm0) {
-                self.record_action_221(delta, tm2, tm3);
+                self.record_action_227(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeTerm(tm0, tm3) in self.var_before_term.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_221(delta, tm2, tm3);
+                self.record_action_227(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_222(&self, delta: &mut ModelDelta, tm0: TermNode, tm2: VirtIdent) {
+    fn record_action_228(&self, delta: &mut ModelDelta, tm0: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53494,18 +53989,18 @@ impl Eqlog {
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for RealVirtIdent(_, tm2) in self.real_virt_ident.iter_all_0(tm1) {
-                self.record_action_222(delta, tm0, tm2);
+                self.record_action_228(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for RealVirtIdent(tm1, tm2) in self.real_virt_ident.iter_dirty() {
             #[allow(unused_variables)]
             for VarTermNode(tm0, _) in self.var_term_node.iter_all_1(tm1) {
-                self.record_action_222(delta, tm0, tm2);
+                self.record_action_228(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_223(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
+    fn record_action_229(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53521,18 +54016,18 @@ impl Eqlog {
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for WildcardVirtIdent(_, tm1) in self.wildcard_virt_ident.iter_all_0(tm0) {
-                self.record_action_223(delta, tm0, tm1);
+                self.record_action_229(delta, tm0, tm1);
             }
         }
         #[allow(unused_variables)]
         for WildcardVirtIdent(tm0, tm1) in self.wildcard_virt_ident.iter_dirty() {
             #[allow(unused_variables)]
             for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                self.record_action_223(delta, tm0, tm1);
+                self.record_action_229(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_224(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: VirtIdent) {
+    fn record_action_230(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53548,18 +54043,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_224(delta, tm0, tm3);
+                self.record_action_230(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
-                self.record_action_224(delta, tm0, tm3);
+                self.record_action_230(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_225(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
+    fn record_action_231(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_terms.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53575,18 +54070,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_225(delta, tm0, tm3);
+                self.record_action_231(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
-                self.record_action_225(delta, tm0, tm3);
+                self.record_action_231(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_226(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
+    fn record_action_232(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_terms.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53602,18 +54097,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_226(delta, tm0, tm3);
+                self.record_action_232(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
-                self.record_action_226(delta, tm0, tm3);
+                self.record_action_232(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_227(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm2: VirtIdent) {
+    fn record_action_233(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm2: VirtIdent) {
         let existing_row = self.var_in_opt_term.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53629,18 +54124,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm2) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_227(delta, tm0, tm2);
+                self.record_action_233(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm2) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(tm0, _) in self.some_term_node.iter_all_1(tm1) {
-                self.record_action_227(delta, tm0, tm2);
+                self.record_action_233(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_228(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_234(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53656,18 +54151,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_228(delta, tm0, tm3);
+                self.record_action_234(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
-                self.record_action_228(delta, tm0, tm3);
+                self.record_action_234(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_229(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_235(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53683,18 +54178,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_229(delta, tm0, tm3);
+                self.record_action_235(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, tm1, _) in self.equal_if_atom_node.iter_all_2(tm2) {
-                self.record_action_229(delta, tm0, tm3);
+                self.record_action_235(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_230(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm2: VirtIdent) {
+    fn record_action_236(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53710,18 +54205,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm2) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_230(delta, tm0, tm2);
+                self.record_action_236(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm2) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(tm0, _) in self.defined_if_atom_node.iter_all_1(tm1) {
-                self.record_action_230(delta, tm0, tm2);
+                self.record_action_236(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_231(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_237(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53737,18 +54232,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_231(delta, tm0, tm3);
+                self.record_action_237(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
-                self.record_action_231(delta, tm0, tm3);
+                self.record_action_237(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_232(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_238(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53764,18 +54259,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_232(delta, tm0, tm3);
+                self.record_action_238(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
-                self.record_action_232(delta, tm0, tm3);
+                self.record_action_238(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_233(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_239(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53791,18 +54286,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_233(delta, tm0, tm3);
+                self.record_action_239(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
-                self.record_action_233(delta, tm0, tm3);
+                self.record_action_239(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_234(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_240(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53818,18 +54313,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_234(delta, tm0, tm3);
+                self.record_action_240(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
-                self.record_action_234(delta, tm0, tm3);
+                self.record_action_240(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_235(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_241(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53845,18 +54340,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInOptTerm(_, tm3) in self.var_in_opt_term.iter_all_0(tm1) {
-                self.record_action_235(delta, tm0, tm3);
+                self.record_action_241(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInOptTerm(tm1, tm3) in self.var_in_opt_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1) {
-                self.record_action_235(delta, tm0, tm3);
+                self.record_action_241(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_236(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_242(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53872,18 +54367,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_236(delta, tm0, tm3);
+                self.record_action_242(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
-                self.record_action_236(delta, tm0, tm3);
+                self.record_action_242(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_237(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+    fn record_action_243(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53899,18 +54394,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_237(delta, tm0, tm3);
+                self.record_action_243(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
-                self.record_action_237(delta, tm0, tm3);
+                self.record_action_243(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_238(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_244(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53926,18 +54421,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInIfAtom(_, tm2) in self.var_in_if_atom.iter_all_0(tm1) {
-                self.record_action_238(delta, tm0, tm2);
+                self.record_action_244(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInIfAtom(tm1, tm2) in self.var_in_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(tm0, _) in self.if_stmt_node.iter_all_1(tm1) {
-                self.record_action_238(delta, tm0, tm2);
+                self.record_action_244(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_239(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_245(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53953,18 +54448,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInThenAtom(_, tm2) in self.var_in_then_atom.iter_all_0(tm1) {
-                self.record_action_239(delta, tm0, tm2);
+                self.record_action_245(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInThenAtom(tm1, tm2) in self.var_in_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
-                self.record_action_239(delta, tm0, tm2);
+                self.record_action_245(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_240(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: VirtIdent) {
+    fn record_action_246(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_stmts.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -53980,18 +54475,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInStmt(_, tm3) in self.var_in_stmt.iter_all_0(tm1) {
-                self.record_action_240(delta, tm2, tm3);
+                self.record_action_246(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInStmt(tm1, tm3) in self.var_in_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
-                self.record_action_240(delta, tm2, tm3);
+                self.record_action_246(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_241(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
+    fn record_action_247(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54020,18 +54515,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermsShouldBeEpicOk(_) in self.terms_should_be_epic_ok.iter_all_0(tm0) {
-                self.record_action_241(delta, tm1, tm2);
+                self.record_action_247(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for TermsShouldBeEpicOk(tm0) in self.terms_should_be_epic_ok.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_241(delta, tm1, tm2);
+                self.record_action_247(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_242(&self, delta: &mut ModelDelta, tm2: TermListNode) {
+    fn record_action_248(&self, delta: &mut ModelDelta, tm2: TermListNode) {
         let existing_row = self.terms_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54049,29 +54544,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermShouldBeEpicOk(_) in self.term_should_be_epic_ok.iter_all_0(tm0) {
-                self.record_action_242(delta, tm2);
+                self.record_action_248(delta, tm2);
             }
         }
         #[allow(unused_variables)]
         for TermShouldBeEpicOk(tm0) in self.term_should_be_epic_ok.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_242(delta, tm2);
+                self.record_action_248(delta, tm2);
             }
         }
     }
-    fn record_action_243(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
-        let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(TermShouldBeEpicOk(_)) => (),
-            None => {
-                delta
-                    .new_term_should_be_epic_ok
-                    .push(TermShouldBeEpicOk(tm2));
-                ()
-            }
-        };
+    fn record_action_249(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54083,14 +54567,25 @@ impl Eqlog {
                 ()
             }
         };
+        let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(TermShouldBeEpicOk(_)) => (),
+            None => {
+                delta
+                    .new_term_should_be_epic_ok
+                    .push(TermShouldBeEpicOk(tm2));
+                ()
+            }
+        };
     }
     fn query_and_record_then_atom_epic_ok_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
-            self.record_action_243(delta, tm1, tm2);
+            self.record_action_249(delta, tm1, tm2);
         }
     }
-    fn record_action_244(&self, delta: &mut ModelDelta, tm2: TermNode) {
+    fn record_action_250(&self, delta: &mut ModelDelta, tm2: TermNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54106,10 +54601,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
-            self.record_action_244(delta, tm2);
+            self.record_action_250(delta, tm2);
         }
     }
-    fn record_action_245(&self, delta: &mut ModelDelta, tm2: TermListNode) {
+    fn record_action_251(&self, delta: &mut ModelDelta, tm2: TermListNode) {
         let existing_row = self.terms_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54125,10 +54620,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
-            self.record_action_245(delta, tm2);
+            self.record_action_251(delta, tm2);
         }
     }
-    fn record_action_246(&self, delta: &mut ModelDelta, tm1: Morphism) {
+    fn record_action_252(&self, delta: &mut ModelDelta, tm1: Morphism) {
         let existing_row = self.should_be_surjective.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54144,18 +54639,18 @@ impl Eqlog {
         for StmtMorphism(tm0, tm1) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm1) {
-                self.record_action_246(delta, tm1);
+                self.record_action_252(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for SurjThenMorphism(tm1) in self.surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm1) {
-                self.record_action_246(delta, tm1);
+                self.record_action_252(delta, tm1);
             }
         }
     }
-    fn record_action_247(&self, delta: &mut ModelDelta, tm1: Morphism) {
+    fn record_action_253(&self, delta: &mut ModelDelta, tm1: Morphism) {
         let existing_row = self.should_be_surjective.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54171,18 +54666,18 @@ impl Eqlog {
         for StmtMorphism(tm0, tm1) in self.stmt_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm1) {
-                self.record_action_247(delta, tm1);
+                self.record_action_253(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for NonSurjThenMorphism(tm1) in self.non_surj_then_morphism.iter_dirty() {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm1) {
-                self.record_action_247(delta, tm1);
+                self.record_action_253(delta, tm1);
             }
         }
     }
-    fn record_action_248(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_254(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_should_be_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54202,7 +54697,7 @@ impl Eqlog {
             for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.record_action_248(delta, tm1);
+                    self.record_action_254(delta, tm1);
                 }
             }
         }
@@ -54212,7 +54707,7 @@ impl Eqlog {
             for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                    self.record_action_248(delta, tm1);
+                    self.record_action_254(delta, tm1);
                 }
             }
         }
@@ -54222,12 +54717,12 @@ impl Eqlog {
             for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                    self.record_action_248(delta, tm1);
+                    self.record_action_254(delta, tm1);
                 }
             }
         }
     }
-    fn record_action_249(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_255(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_is_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54243,18 +54738,18 @@ impl Eqlog {
         for ElInImg(tm0, tm1) in self.el_in_img.iter_dirty() {
             #[allow(unused_variables)]
             for ShouldBeSurjective(_) in self.should_be_surjective.iter_all_0(tm0) {
-                self.record_action_249(delta, tm1);
+                self.record_action_255(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for ShouldBeSurjective(tm0) in self.should_be_surjective.iter_dirty() {
             #[allow(unused_variables)]
             for ElInImg(_, tm1) in self.el_in_img.iter_all_0(tm0) {
-                self.record_action_249(delta, tm1);
+                self.record_action_255(delta, tm1);
             }
         }
     }
-    fn record_action_250(&self, delta: &mut ModelDelta, tm4: El) {
+    fn record_action_256(&self, delta: &mut ModelDelta, tm4: El) {
         let existing_row = self.el_is_surjective_exempted.iter_all_0(tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -54272,18 +54767,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm2) {
-                self.record_action_250(delta, tm4);
+                self.record_action_256(delta, tm4);
             }
         }
         #[allow(unused_variables)]
         for SemanticEl(tm2, tm3, tm4) in self.semantic_el.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
-                self.record_action_250(delta, tm4);
+                self.record_action_256(delta, tm4);
             }
         }
     }
-    fn record_action_251(
+    fn record_action_257(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -54309,7 +54804,7 @@ impl Eqlog {
             for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                    self.record_action_251(delta, tm0, tm1, tm3);
+                    self.record_action_257(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -54319,7 +54814,7 @@ impl Eqlog {
             for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_251(delta, tm0, tm1, tm3);
+                    self.record_action_257(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -54329,7 +54824,7 @@ impl Eqlog {
             for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_251(delta, tm0, tm1, tm3);
+                    self.record_action_257(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -54392,10 +54887,11 @@ impl Eqlog {
         self.cfg_linear_first.drop_dirt();
         self.cfg_linear_last.drop_dirt();
         self.cfg_edge_linear.drop_dirt();
-        self.cfg_edge_stmts_stmt.drop_dirt();
-        self.cfg_edge_stmt_stmts.drop_dirt();
-        self.cfg_edge_fork.drop_dirt();
-        self.cfg_edge_join.drop_dirt();
+        self.cfg_edge_nonlinear.drop_dirt();
+        self.cfg_edge_nonlinear_stmts_stmt.drop_dirt();
+        self.cfg_edge_nonlinear_stmt_stmts.drop_dirt();
+        self.cfg_edge_nonlinear_fork.drop_dirt();
+        self.cfg_edge_nonlinear_join.drop_dirt();
         self.before_stmt_structure.drop_dirt();
         self.stmt_morphism.drop_dirt();
         self.if_morphism.drop_dirt();
@@ -54580,10 +55076,11 @@ impl Eqlog {
         self.cfg_linear_first.retire_dirt();
         self.cfg_linear_last.retire_dirt();
         self.cfg_edge_linear.retire_dirt();
-        self.cfg_edge_stmts_stmt.retire_dirt();
-        self.cfg_edge_stmt_stmts.retire_dirt();
-        self.cfg_edge_fork.retire_dirt();
-        self.cfg_edge_join.retire_dirt();
+        self.cfg_edge_nonlinear.retire_dirt();
+        self.cfg_edge_nonlinear_stmts_stmt.retire_dirt();
+        self.cfg_edge_nonlinear_stmt_stmts.retire_dirt();
+        self.cfg_edge_nonlinear_fork.retire_dirt();
+        self.cfg_edge_nonlinear_join.retire_dirt();
         self.before_stmt_structure.retire_dirt();
         self.stmt_morphism.retire_dirt();
         self.if_morphism.retire_dirt();
@@ -55037,19 +55534,21 @@ impl Eqlog {
             .recall_previous_dirt(&mut self.stmt_node_equalities);
         self.cfg_edge_linear
             .recall_previous_dirt(&mut self.stmt_node_equalities);
-        self.cfg_edge_stmts_stmt.recall_previous_dirt(
+        self.cfg_edge_nonlinear
+            .recall_previous_dirt(&mut self.stmt_node_equalities);
+        self.cfg_edge_nonlinear_stmts_stmt.recall_previous_dirt(
             &mut self.stmt_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
-        self.cfg_edge_stmt_stmts.recall_previous_dirt(
+        self.cfg_edge_nonlinear_stmt_stmts.recall_previous_dirt(
             &mut self.stmt_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
-        self.cfg_edge_fork.recall_previous_dirt(
+        self.cfg_edge_nonlinear_fork.recall_previous_dirt(
             &mut self.stmt_block_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
-        self.cfg_edge_join.recall_previous_dirt(
+        self.cfg_edge_nonlinear_join.recall_previous_dirt(
             &mut self.stmt_block_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
@@ -56038,10 +56537,11 @@ impl fmt::Display for Eqlog {
         self.cfg_linear_first.fmt(f)?;
         self.cfg_linear_last.fmt(f)?;
         self.cfg_edge_linear.fmt(f)?;
-        self.cfg_edge_stmts_stmt.fmt(f)?;
-        self.cfg_edge_stmt_stmts.fmt(f)?;
-        self.cfg_edge_fork.fmt(f)?;
-        self.cfg_edge_join.fmt(f)?;
+        self.cfg_edge_nonlinear.fmt(f)?;
+        self.cfg_edge_nonlinear_stmts_stmt.fmt(f)?;
+        self.cfg_edge_nonlinear_stmt_stmts.fmt(f)?;
+        self.cfg_edge_nonlinear_fork.fmt(f)?;
+        self.cfg_edge_nonlinear_join.fmt(f)?;
         self.before_stmt_structure.fmt(f)?;
         self.stmt_morphism.fmt(f)?;
         self.if_morphism.fmt(f)?;
