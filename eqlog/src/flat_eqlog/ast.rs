@@ -5,6 +5,9 @@ use eqlog_eqlog::*;
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatVar(pub usize);
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatFuncName(pub usize);
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatStmtEqual {
     pub lhs: FlatVar,
@@ -63,16 +66,21 @@ pub struct FlatNonSurjThenStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct FlatForkStmt {
-    pub blocks: Vec<Vec<FlatStmt>>,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatStmt {
     If(FlatIfStmt),
     SurjThen(FlatSurjThenStmt),
     NonSurjThen(FlatNonSurjThenStmt),
-    Fork(FlatForkStmt),
+    Call {
+        func_name: FlatFuncName,
+        args: Vec<FlatVar>,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatFunc {
+    pub name: FlatFuncName,
+    pub args: Vec<FlatVar>,
+    pub body: Vec<FlatStmt>,
 }
 
 impl FlatStmtEqual {
@@ -164,15 +172,8 @@ impl FlatStmt {
             FlatStmt::NonSurjThen(non_surj_then_stmt) => {
                 vars.extend(non_surj_then_stmt.iter_vars());
             }
-            FlatStmt::Fork(fork_stmt) => {
-                vars.extend(
-                    fork_stmt
-                        .blocks
-                        .iter()
-                        .flatten()
-                        .map(|stmt| stmt.iter_vars())
-                        .flatten(),
-                );
+            FlatStmt::Call { func_name: _, args } => {
+                vars.extend(args.iter().copied());
             }
         };
 
@@ -182,7 +183,7 @@ impl FlatStmt {
 
 pub struct FlatRule {
     pub name: String,
-    pub stmts: Vec<FlatStmt>,
+    pub funcs: Vec<FlatFunc>,
     pub var_types: BTreeMap<FlatVar, Type>,
 }
 

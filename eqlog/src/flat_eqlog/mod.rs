@@ -1,5 +1,4 @@
 mod ast;
-mod forks_continuations;
 mod index_selection;
 mod slice_group_by;
 mod sort_if_stmts;
@@ -14,30 +13,10 @@ use crate::eqlog_util::*;
 pub use ast::*;
 use by_address::ByAddress;
 use eqlog_eqlog::*;
-pub use forks_continuations::ForkSuffix;
-use forks_continuations::*;
 pub use index_selection::*;
 pub use sort_if_stmts::sort_if_stmts;
 use var_info::*;
 pub use var_info::{CanAssumeFunctionality, Quantifier, RelationInfo};
-
-pub fn ensure_unique_empty_slice_addresses(stmts: &mut Vec<FlatStmt>) {
-    if stmts.is_empty() {
-        stmts.reserve(1);
-        assert_ne!(
-            ByAddress(stmts.as_slice()),
-            ByAddress(Vec::new().as_slice())
-        );
-    } else {
-        for stmt in stmts {
-            if let FlatStmt::Fork(fork) = stmt {
-                for block in fork.blocks.iter_mut() {
-                    ensure_unique_empty_slice_addresses(block);
-                }
-            }
-        }
-    }
-}
 
 pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
@@ -71,6 +50,12 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
         FlatStmt::If(FlatIfStmt::Relation(non_dirty_rel)),
         FlatStmt::SurjThen(FlatSurjThenStmt::Equal(eq)),
     ];
+
+    let flat_func = FlatFunc {
+        name: FlatFuncName(0),
+        args: Vec::new(),
+        body: stmts,
+    };
     let var_types: BTreeMap<FlatVar, Type> = func_args
         .iter()
         .copied()
@@ -80,7 +65,7 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let name = format!("implicit_functionality_{}", func.0);
 
     FlatRule {
-        stmts,
+        funcs: vec![flat_func],
         var_types,
         name,
     }
@@ -99,28 +84,18 @@ pub struct FlatRuleAnalysis<'a> {
     pub fixed_vars: BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
     /// A map that assigns to each [FlatIfStmtRelation] in a rule some additional information.
     pub if_stmt_rel_infos: BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
-    /// A list of all [FlatForkStmt] in the rule and the corresponding suffix, i.e. the slice of
-    /// statements following the fork statement.
-    pub fork_suffixes: Vec<ForkSuffix<'a>>,
-    /// The map assigning to some empty suffixes in a rule the index of the fork statement in
-    /// `fork_suffixes` they belong to. Execution should continue at the suffix after the fork
-    /// statement.
-    pub fork_continuations: BTreeMap<ByAddress<&'a [FlatStmt]>, usize>,
 }
 
 impl<'a> FlatRuleAnalysis<'a> {
     pub fn new(rule: &'a FlatRule, can_assume_functionality: CanAssumeFunctionality) -> Self {
         let fixed_vars = fixed_vars(rule);
         let if_stmt_rel_infos = if_stmt_rel_infos(rule, can_assume_functionality, &fixed_vars);
-        let (fork_suffixes, fork_continuations) = forks_continuations(rule);
 
         Self {
             rule_name: rule.name.as_str(),
             var_types: &rule.var_types,
             fixed_vars,
             if_stmt_rel_infos,
-            fork_suffixes,
-            fork_continuations,
         }
     }
 }

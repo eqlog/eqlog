@@ -3,6 +3,7 @@ use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::iter::once;
 use std::iter::successors;
 
 fn iter_grouped_morphisms<'a>(
@@ -434,23 +435,106 @@ pub fn flatten(
     };
     let el_vars = assign_el_vars(iter_grouped_morphisms(rule, eqlog), eqlog);
 
-    let mut stmts: Vec<FlatStmt> = Vec::new();
+    let mut funcs: Vec<FlatFunc> = Vec::new();
+    // Function 0 is special in the following ways:
+    //
+    // 1. It is the entry point for execution of the rule.
+    // 2. By convention, this function contains only calls to other functions. This is so that we
+    //    can always append a call statement to the function and be guaranteed that the call is
+    //    executed once.
+    funcs.push(FlatFunc {
+        name: FlatFuncName(0),
+        args: Vec::new(),
+        body: vec![FlatStmt::Call {
+            func_name: FlatFuncName(1),
+            args: Vec::new(),
+        }],
+    });
+
+    // We always maintain an "active" function that matches the domain of the next morphism we're
+    // going to process. This means that all elements in the domain of the next morphism are in
+    // scope at the end of the active function.
+    funcs.push(FlatFunc {
+        name: FlatFuncName(1),
+        args: Vec::new(),
+        body: Vec::new(),
+    });
+    let mut active_func_index: usize = 1;
+
+    // This is the set of variables we've introduced so far by the end of the active function.
+    let mut introduced_vars: BTreeSet<FlatVar> = BTreeSet::new();
 
     for morphism in iter_grouped_morphisms(rule, eqlog) {
+        introduced_vars.extend(
+            iter_els(eqlog.cod(morphism).unwrap(), eqlog).map(|el| el_vars.get(&el).unwrap()),
+        );
+
         if eqlog.if_morphism(morphism) {
-            let mut fork_blocks = Vec::new();
-            if !stmts.is_empty() {
-                let mut first_block = stmts;
-                first_block.extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
-                fork_blocks.push(first_block);
+            // If active_func_index == 1, then no data has been matched so far. It follows that we
+            // only need to match the delta of this if morphism with new data, i.e. at least one
+            // atom in the codomain must be new.
+            let should_match_all_data = active_func_index != 1;
+            if should_match_all_data {
+                funcs[active_func_index]
+                    .body
+                    .extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
             }
-            fork_blocks.extend(flatten_if_fresh(morphism, &el_vars, eqlog));
-            stmts = vec![FlatStmt::Fork(FlatForkStmt {
-                blocks: fork_blocks,
-            })];
+
+            let before_fresh_if_func_len = funcs.len();
+            funcs.extend(
+                flatten_if_fresh(morphism, &el_vars, eqlog)
+                    .into_iter()
+                    .zip(before_fresh_if_func_len..)
+                    .map(|(body, func_index)| FlatFunc {
+                        name: FlatFuncName(func_index),
+                        args: Vec::new(),
+                        body,
+                    }),
+            );
+            let after_fresh_if_func_len = funcs.len();
+
+            let joined_func = FlatFunc {
+                name: FlatFuncName(funcs.len()),
+                args: introduced_vars.iter().copied().collect(),
+                body: Vec::new(),
+            };
+            let joined_func_name = joined_func.name;
+            funcs.push(joined_func);
+
+            for i in before_fresh_if_func_len..after_fresh_if_func_len {
+                funcs[0].body.push(FlatStmt::Call {
+                    func_name: FlatFuncName(i),
+                    args: Vec::new(),
+                });
+            }
+
+            for func_index in should_match_all_data
+                .then_some(active_func_index)
+                .into_iter()
+                .chain(before_fresh_if_func_len..after_fresh_if_func_len)
+            {
+                let call = FlatStmt::Call {
+                    func_name: joined_func_name,
+                    args: introduced_vars.iter().copied().collect(),
+                };
+                funcs[func_index].body.push(call);
+            }
+
+            active_func_index = joined_func_name.0;
         } else if eqlog.surj_then_morphism(morphism) {
-            stmts.extend(flatten_surj_then(morphism, &el_vars, eqlog));
+            // TODO: We should only execute this unconditionally if should_match_all_data is true.
+            // Otherwise, we should only execute it in the first iteration of the first `close`
+            // call, i.e. when the empty join is dirty/fresh. The best way to do this is probably
+            // to 1. introduce a flat eqlog statement that matches the empty join. Then we can
+            // introduce a new function here that matches the empty join and only then executes the
+            // flatten_surj_then statements. This function can then be called from function 0.
+            funcs[active_func_index]
+                .body
+                .extend(flatten_surj_then(morphism, &el_vars, eqlog));
         } else if eqlog.non_surj_then_morphism(morphism) {
+            // TODO: We should only execute this unconditionally if should_match_all_data is true.
+            // Otherwise, we should only execute it in the first iteration of the first `close`
+            // call, i.e. when the empty join is dirty/fresh.
             let non_surj_then_stmt = match flatten_non_surj_then(morphism, &el_vars, eqlog) {
                 Some(non_surj_then_stmt) => non_surj_then_stmt,
                 None => {
@@ -459,31 +543,52 @@ pub fn flatten(
                 }
             };
 
-            stmts.push(FlatStmt::NonSurjThen(non_surj_then_stmt));
+            let stmt = FlatStmt::NonSurjThen(non_surj_then_stmt);
+            funcs[active_func_index].body.push(stmt);
 
-            let if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog);
+            let fresh_if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog);
             assert_eq!(
-                if_blocks.len(),
+                fresh_if_blocks.len(),
                 1,
                 "A non surjective then should only require one block to match"
             );
-            let if_block = if_blocks.into_iter().next().unwrap();
+            let fresh_if_func = FlatFunc {
+                name: FlatFuncName(funcs.len()),
+                args: Vec::new(),
+                body: fresh_if_blocks.into_iter().next().unwrap(),
+            };
+            let fresh_if_func_index = funcs.len();
+            funcs[0].body.push(FlatStmt::Call {
+                func_name: fresh_if_func.name,
+                args: Vec::new(),
+            });
+            funcs.push(fresh_if_func);
 
-            let fork_blocks = vec![stmts, if_block];
-            stmts = vec![FlatStmt::Fork(FlatForkStmt {
-                blocks: fork_blocks,
-            })];
+            let cont_func = FlatFunc {
+                name: FlatFuncName(funcs.len()),
+                args: introduced_vars.iter().copied().collect(),
+                body: Vec::new(),
+            };
+            let cont_func_name = cont_func.name;
+            funcs.push(cont_func);
+
+            for func_index in once(active_func_index).chain(once(fresh_if_func_index)) {
+                funcs[func_index].body.push(FlatStmt::Call {
+                    func_name: cont_func_name,
+                    args: introduced_vars.iter().copied().collect(),
+                });
+            }
+
+            active_func_index = cont_func_name.0;
         } else {
             panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
         }
     }
 
     let var_types = make_var_type_map(&el_vars, eqlog);
-
-    ensure_unique_empty_slice_addresses(&mut stmts);
     FlatRule {
         name,
-        stmts,
+        funcs,
         var_types,
     }
 }
