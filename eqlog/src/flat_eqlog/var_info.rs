@@ -16,26 +16,11 @@ fn fixed_vars_rec<'a>(
 
         let stmt = &stmts[i];
         match stmt {
-            FlatStmt::If(_) | FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => {
+            FlatStmt::If(_)
+            | FlatStmt::SurjThen(_)
+            | FlatStmt::NonSurjThen(_)
+            | FlatStmt::Call { .. } => {
                 current_fixed_vars.extend(stmt.iter_vars());
-            }
-            FlatStmt::Fork(fork_stmt) => {
-                for stmts in fork_stmt.blocks.iter() {
-                    fixed_vars_rec(stmts, current_fixed_vars.clone(), all_fixed_vars);
-                }
-                let shared_used_vars = fork_stmt
-                    .blocks
-                    .iter()
-                    .map(|block_stmts| -> BTreeSet<FlatVar> {
-                        block_stmts
-                            .iter()
-                            .map(|stmt| stmt.iter_vars())
-                            .flatten()
-                            .collect()
-                    })
-                    .reduce(|lhs, rhs| lhs.intersection(&rhs).copied().collect())
-                    .expect("There should be at least one block");
-                current_fixed_vars.extend(shared_used_vars);
             }
         }
     }
@@ -47,8 +32,14 @@ pub fn fixed_vars<'a>(
     rule: &'a FlatRule,
 ) -> BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>> {
     let mut all_fixed_vars = BTreeMap::new();
-    let current_fixed_vars = BTreeSet::new();
-    fixed_vars_rec(&rule.stmts, current_fixed_vars, &mut all_fixed_vars);
+    for func in rule.funcs.iter() {
+        let current_fixed_vars = func.args.iter().copied().collect();
+        fixed_vars_rec(
+            func.body.as_slice(),
+            current_fixed_vars,
+            &mut all_fixed_vars,
+        );
+    }
     all_fixed_vars
 }
 
@@ -175,12 +166,7 @@ pub fn relation_info_rec<'a>(
                     infos.insert(ByAddress(rel_if_stmt), info);
                 }
             },
-            FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => (),
-            FlatStmt::Fork(fork_stmt) => {
-                for block in fork_stmt.blocks.iter() {
-                    relation_info_rec(block, can_assume_functionality, infos, fixed_vars);
-                }
-            }
+            FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => (),
         }
     }
 }
@@ -191,11 +177,14 @@ pub fn if_stmt_rel_infos<'a>(
     fixed_vars: &BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
 ) -> BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo> {
     let mut infos = BTreeMap::new();
-    relation_info_rec(
-        rule.stmts.as_slice(),
-        can_assume_functionality,
-        &mut infos,
-        fixed_vars,
-    );
+
+    for func in rule.funcs.iter() {
+        relation_info_rec(
+            func.body.as_slice(),
+            can_assume_functionality,
+            &mut infos,
+            fixed_vars,
+        );
+    }
     infos
 }

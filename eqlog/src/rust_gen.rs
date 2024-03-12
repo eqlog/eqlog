@@ -1425,27 +1425,6 @@ fn display_non_surj_then<'a>(
     })
 }
 
-fn display_fork<'a>(
-    fork: &'a FlatForkStmt,
-    analysis: &'a FlatRuleAnalysis<'a>,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    fork.blocks
-        .iter()
-        .map(move |stmts| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
-                writedoc! {f, "
-                for _ in [()] {{
-                    {stmts}
-                }}
-            "}
-            })
-        })
-        .format("\n")
-}
-
 fn display_stmts<'a>(
     stmts: &'a [FlatStmt],
     analysis: &'a FlatRuleAnalysis<'a>,
@@ -1455,21 +1434,6 @@ fn display_stmts<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         let (head, tail) = match stmts {
             [] => {
-                if let Some(continuation_index) = analysis.fork_continuations.get(&ByAddress(stmts))
-                {
-                    let rule_name = analysis.rule_name;
-                    let continuation_name: String = format!("{rule_name}_{continuation_index}");
-                    let args: &BTreeSet<FlatVar> = analysis
-                        .fixed_vars
-                        .get(&ByAddress(
-                            analysis.fork_suffixes[*continuation_index].suffix,
-                        ))
-                        .unwrap();
-                    let args = args.iter().copied().map(display_var).format(", ");
-                    writedoc! {f, "
-                        self.{continuation_name}(delta, {args});
-                    "}?;
-                }
                 return Ok(());
             }
             [head, tail @ ..] => (head, tail),
@@ -1502,12 +1466,14 @@ fn display_stmts<'a>(
                     {tail}
                 "}?;
             }
-            FlatStmt::Fork(fork) => {
-                // We're not writing out `tail` here; those statements are written to a different
-                // function that acts as continuation.
-                let fork = display_fork(fork, analysis, eqlog, identifiers);
+            FlatStmt::Call { func_name, args } => {
+                let rule_name = analysis.rule_name;
+                let i = func_name.0;
+                let args = args.iter().copied().map(display_var).format(", ");
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 writedoc! {f, "
-                    {fork}
+                    self.{rule_name}_{i}(delta, {args});
+                    {tail}
                 "}?;
             }
         };
@@ -1515,33 +1481,33 @@ fn display_stmts<'a>(
     })
 }
 
-fn display_stmts_fn<'a>(
-    name: String,
-    stmts: &'a [FlatStmt],
+fn display_rule_func<'a>(
+    rule_name: &'a str,
+    flat_func: &'a FlatFunc,
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let var_args: &BTreeSet<FlatVar> = analysis.fixed_vars.get(&ByAddress(stmts)).unwrap();
-    let var_args = var_args
+    let func_name = flat_func.name.0;
+
+    let var_args = flat_func
+        .args
         .iter()
         .copied()
-        .map(move |var| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let var_name = display_var(var);
-                let typ = *analysis.var_types.get(&var).unwrap();
-                let type_name = display_type(typ, eqlog, identifiers);
-                write!(f, "{var_name}: {type_name}")
-            })
+        .map(|var| {
+            let var_name = display_var(var);
+            let typ = *analysis.var_types.get(&var).unwrap();
+            let type_name = display_type(typ, eqlog, identifiers);
+            FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: {type_name}") })
         })
         .format(", ");
 
-    let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
+    let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
 
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
             #[allow(unused_variables)]
-            fn {name}(&self, delta: &mut ModelDelta, {var_args}) {{
+            fn {rule_name}_{func_name}(&self, delta: &mut ModelDelta, {var_args}) {{
             for _ in [()] {{
             {stmts}
             }}
@@ -1557,33 +1523,13 @@ fn display_rule_fns<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let name = rule.name.as_str();
-
-        let rule_fn = display_stmts_fn(
-            name.to_string(),
-            rule.stmts.as_slice(),
-            analysis,
-            eqlog,
-            identifiers,
-        );
-        let continuation_fns = analysis
-            .fork_suffixes
+        let funcs = rule
+            .funcs
             .iter()
-            .enumerate()
-            .map(|(i, fork_suffix)| {
-                let ForkSuffix {
-                    fork_stmt: _,
-                    suffix,
-                } = fork_suffix;
-                let name = format!("{name}_{i}");
-                display_stmts_fn(name, suffix, analysis, eqlog, identifiers)
-            })
+            .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
             .format("\n");
-
-        writedoc! {f, "
-            {rule_fn}
-            {continuation_fns}
-        "}
+        writeln!(f, "{}", funcs)?;
+        Ok(())
     })
 }
 
@@ -1619,7 +1565,7 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
         .map(|rule| {
             FmtFn(move |f: &mut Formatter| -> Result {
                 let name = rule.name.as_str();
-                write!(f, "self.{name}(&mut delta);")
+                write!(f, "self.{name}_0(&mut delta);")
             })
         })
         .format("\n");

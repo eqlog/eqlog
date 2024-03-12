@@ -16,7 +16,7 @@ pub fn iter_surjectivity_errors<'a>(
         .into_iter()
         .filter(move |el| !is_ok.contains(el) && !eqlog.el_is_surjective_exempted(*el))
         .flat_map(move |el| {
-            let mut tms = eqlog.iter_semantic_el().filter_map(move |(tm, tm_el)| {
+            let mut tms = eqlog.iter_semantic_el().filter_map(move |(tm, _, tm_el)| {
                 if eqlog.are_equal_el(tm_el, el) {
                     Some(tm)
                 } else {

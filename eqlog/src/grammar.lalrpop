@@ -157,7 +157,20 @@ ThenAtom: ThenAtomNode = {
     },
 }
 
+
+StmtBlock: StmtListNode = {
+  "{" <stmts: Stmt*> "}" => {
+    stmt_list_node(stmts.as_slice(), eqlog)
+  }
+}
+
 Stmt: StmtNode = {
+    "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> => {
+        let blocks = stmt_block_list_node(blocks.as_slice(), eqlog);
+        let stmt = eqlog.new_stmt_node();
+        eqlog.insert_branch_stmt_node(stmt, blocks);
+        stmt
+    },
     <l: @L> "if" <atom: IfAtom> ";" <r: @R> => {
         let stmt = eqlog.new_stmt_node();
         eqlog.insert_if_stmt_node(stmt, atom);

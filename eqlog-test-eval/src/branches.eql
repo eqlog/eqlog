@@ -1,0 +1,20 @@
+pred a();
+pred b();
+pred b_0();
+pred c();
+pred c_0();
+pred d();
+pred d_0();
+
+rule branching_predicates {
+    if a();
+    branch {
+        if b();
+        then b_0();
+    } along {
+        if c();
+        then c_0();
+    }
+    if d();
+    then d_0();
+}

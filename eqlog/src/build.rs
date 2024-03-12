@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io;
@@ -68,9 +69,20 @@ fn parse(
     Ok((eqlog, identifiers, locations, module))
 }
 
-fn eqlog_files<P: AsRef<Path>>(root_dir: P) -> io::Result<Vec<PathBuf>> {
+fn eqlog_files(root_path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut result = Vec::new();
-    for entry in fs::read_dir(root_dir)? {
+
+    if root_path.is_file() {
+        let ext = root_path.extension();
+        if ext != Some(OsStr::new("eql")) && ext != Some(OsStr::new("eqlog")) {
+            eprintln!("Not an eqlog file: {}", root_path.display());
+            return Ok(vec![]);
+        }
+
+        return Ok(vec![PathBuf::from(root_path)]);
+    }
+
+    for entry in fs::read_dir(root_path)? {
         let entry = entry?;
         let file_type = entry.file_type()?;
 

@@ -107,7 +107,7 @@ fn sort_if_block<'a>(if_stmts: &mut [FlatIfStmt], fixed_vars: &mut BTreeSet<Flat
 fn if_stmt(stmt: &FlatStmt) -> Option<&FlatIfStmt> {
     match stmt {
         FlatStmt::If(if_stmt) => Some(if_stmt),
-        FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Fork(_) => None,
+        FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => None,
     }
 }
 
@@ -143,13 +143,7 @@ fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatV
                     FlatStmt::If(_) => {
                         panic!("An if statement should not occur in a non-if stmt group")
                     }
-                    FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) => {
-                        fixed_vars.extend(stmt.iter_vars());
-                    }
-                    FlatStmt::Fork(fork_stmt) => {
-                        for block in fork_stmt.blocks.iter_mut() {
-                            sort_if_stmts_rec(block.as_mut_slice(), &mut fixed_vars.clone());
-                        }
+                    FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => {
                         fixed_vars.extend(stmt.iter_vars());
                     }
                 }
@@ -160,6 +154,8 @@ fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatV
 
 /// A pass that optimizes the order of  consecutive [FlatIfStmt] in `rule`.
 pub fn sort_if_stmts<'a>(rule: &mut FlatRule) {
-    let mut fixed_vars = BTreeSet::new();
-    sort_if_stmts_rec(&mut rule.stmts, &mut fixed_vars);
+    for func in rule.funcs.iter_mut() {
+        let mut fixed_vars = func.args.iter().cloned().collect();
+        sort_if_stmts_rec(&mut func.body, &mut fixed_vars);
+    }
 }

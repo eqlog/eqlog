@@ -1,0 +1,6 @@
+Error: term does not appear earlier in this rule
+  --> error-test-source/surjectivity-violation-branch/theory.eql:11
+   | 
+11 |     then foo(x) = bar(x);
+   |          ^^^^^^          
+   | 
