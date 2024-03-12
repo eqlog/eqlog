@@ -463,24 +463,14 @@ pub fn flatten(
     let mut matching_func_index: BTreeMap<Structure, usize> =
         btreemap! {eqlog.before_rule_structure(rule).unwrap() => 1};
 
-    // This is the set of variables we've introduced so far by the end of the matching function.
-    // TODO: This is redundant, the information should be contained in el_vars and the elements of
-    // the structures.
-    let mut introduced_vars_all: BTreeMap<Structure, BTreeSet<FlatVar>> =
-        btreemap! {eqlog.before_rule_structure(rule).unwrap() => BTreeSet::new()};
-
     for morphism in iter_grouped_morphisms(rule, eqlog).flatten() {
         let active_func_index = *matching_func_index
             .get(&eqlog.dom(morphism).unwrap())
             .unwrap();
-        let mut introduced_vars = introduced_vars_all
-            .get(&eqlog.dom(morphism).unwrap())
-            .unwrap()
-            .clone();
-        introduced_vars.extend(
-            iter_els(eqlog.cod(morphism).unwrap(), eqlog).map(|el| el_vars.get(&el).unwrap()),
-        );
-        introduced_vars_all.insert(eqlog.cod(morphism).unwrap(), introduced_vars.clone());
+
+        let cod_flat_vars: Vec<FlatVar> = iter_els(eqlog.cod(morphism).unwrap(), eqlog)
+            .map(|el| *el_vars.get(&el).unwrap())
+            .collect();
 
         if eqlog.if_morphism(morphism) {
             // If active_func_index == 1, then no data has been matched so far. It follows that we
@@ -508,7 +498,9 @@ pub fn flatten(
 
             let joined_func = FlatFunc {
                 name: FlatFuncName(funcs.len()),
-                args: introduced_vars.iter().copied().collect(),
+                args: iter_els(eqlog.cod(morphism).unwrap(), eqlog)
+                    .map(|el| *el_vars.get(&el).unwrap())
+                    .collect(),
                 body: Vec::new(),
             };
             let joined_func_name = joined_func.name;
@@ -528,7 +520,7 @@ pub fn flatten(
             {
                 let call = FlatStmt::Call {
                     func_name: joined_func_name,
-                    args: introduced_vars.iter().copied().collect(),
+                    args: cod_flat_vars.clone(),
                 };
                 funcs[func_index].body.push(call);
             }
@@ -580,7 +572,7 @@ pub fn flatten(
 
             let cont_func = FlatFunc {
                 name: FlatFuncName(funcs.len()),
-                args: introduced_vars.iter().copied().collect(),
+                args: cod_flat_vars.clone(),
                 body: Vec::new(),
             };
             let cont_func_name = cont_func.name;
@@ -589,7 +581,7 @@ pub fn flatten(
             for func_index in once(active_func_index).chain(once(fresh_if_func_index)) {
                 funcs[func_index].body.push(FlatStmt::Call {
                     func_name: cont_func_name,
-                    args: introduced_vars.iter().copied().collect(),
+                    args: cod_flat_vars.clone(),
                 });
             }
 
