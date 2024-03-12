@@ -1,0 +1,12 @@
+type A;
+func foo(A) -> A;
+func bar(A) -> A;
+
+rule {
+    if x: A;
+    branch {
+        if foo(x)!;
+    } with {
+    }
+    then foo(x) = bar(x);
+}

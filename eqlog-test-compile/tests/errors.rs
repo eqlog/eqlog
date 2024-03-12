@@ -189,6 +189,10 @@ fn surjectivity_violation_equality() {
 fn surjectivity_violation_nested_application() {
     test_case(Path::new("surjectivity-violation-nested-application"));
 }
+#[test]
+fn surjectivity_violation_branch() {
+    test_case(Path::new("surjectivity-violation-branch"));
+}
 
 #[test]
 fn surjectivity_violation_in_then_defined() {
