@@ -15,6 +15,7 @@ eqlog_mod!(partial_magma);
 eqlog_mod!(pca);
 eqlog_mod!(inference);
 eqlog_mod!(reduction_from_nullary);
+eqlog_mod!(branches);
 
 mod category_mod;
 #[cfg(test)]
@@ -31,6 +32,8 @@ mod monoid_test;
 // Disabled by default because it takes a while to run in debug mode.
 //#[cfg(test)]
 //mod pca_test;
+#[cfg(test)]
+mod branches_test;
 #[cfg(test)]
 mod inference_test;
 mod pointed_test;
