@@ -6,7 +6,7 @@ rule {
     if x: A;
     branch {
         if foo(x)!;
-    } with {
+    } along {
     }
     then foo(x) = bar(x);
 }

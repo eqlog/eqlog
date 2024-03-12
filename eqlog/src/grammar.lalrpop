@@ -165,7 +165,7 @@ StmtBlock: StmtListNode = {
 }
 
 Stmt: StmtNode = {
-    "branch" <blocks: NonEmptyIntersperse<StmtBlock, "with">> => {
+    "branch" <blocks: NonEmptyIntersperse<StmtBlock, "along">> => {
         let blocks = stmt_block_list_node(blocks.as_slice(), eqlog);
         let stmt = eqlog.new_stmt_node();
         eqlog.insert_branch_stmt_node(stmt, blocks);

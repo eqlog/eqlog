@@ -11,7 +11,7 @@ rule branching_predicates {
     branch {
         if b();
         then b_0();
-    } with {
+    } along {
         if c();
         then c_0();
     }
