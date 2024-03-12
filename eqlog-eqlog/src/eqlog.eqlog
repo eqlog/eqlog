@@ -65,7 +65,7 @@ pred pred_then_atom_node(ThenAtomNode, predicate: Ident, args: TermListNode);
 type StmtNode;
 pred if_stmt_node(StmtNode, IfAtomNode);
 pred then_stmt_node(StmtNode, ThenAtomNode);
-pred fork_stmt_node(StmtNode, blocks: StmtBlockListNode);
+pred branch_stmt_node(StmtNode, blocks: StmtBlockListNode);
 
 type StmtListNode;
 pred nil_stmt_list_node(nil: StmtListNode);
@@ -200,8 +200,8 @@ rule rule_child_stmt_then {
     if child_atom = rule_child_then_atom(atom);
     then rule_child(child_atom, rul);
 }
-rule rule_child_stmt_fork {
-    if fork_stmt_node(stmt, blocks);
+rule rule_child_stmt_branch {
+    if branch_stmt_node(stmt, blocks);
     if rule_child(rule_child_stmt(stmt), rul);
     if child_block_list = rule_child_stmt_block_list(blocks);
     then rule_child(child_block_list, rul);
@@ -805,7 +805,7 @@ rule cfg_edge_stmt_stmts_nil {
 
 // ### Control flow from and into block lists.
 //
-// This is for forks.
+// This is for branches.
 
 pred cfg_edge_nonlinear_fork(from: StmtNode, to: StmtBlockListNode);
 pred cfg_edge_nonlinear_join(from: StmtBlockListNode, to: StmtNode);
@@ -825,13 +825,13 @@ rule cfg_edge_join_cons {
 }
 
 rule cfg_edge_fork_stmt_into {
-    if fork_stmt_node(fork_stmt, fork_blocks);
-    if cfg_edge(from_stmt, fork_stmt);
+    if branch_stmt_node(branch_stmt, fork_blocks);
+    if cfg_edge(from_stmt, branch_stmt);
     then cfg_edge_nonlinear_fork(from_stmt, fork_blocks);
 }
 rule cfg_edge_fork_stmt_from {
-    if fork_stmt_node(fork_stmt, fork_blocks);
-    if cfg_edge(fork_stmt, into_stmt);
+    if branch_stmt_node(branch_stmt, fork_blocks);
+    if cfg_edge(branch_stmt, into_stmt);
     then cfg_edge_nonlinear_join(fork_blocks, into_stmt);
 }
 
@@ -1278,10 +1278,10 @@ rule grouped_stmt_morphism_non_surj_then_arbitrary {
 
     then next_grouped_morphism(gsm_first, gsm_second);
 }
-// #### Grouping rule for a fork statement followed by an arbitrary statement.
-rule grouped_stmt_morphism_fork {
+// #### Grouping rule for a branch statement followed by an arbitrary statement.
+rule grouped_stmt_morphism_branch {
     if cfg_edge_linear(first, second);
-    if fork_stmt_node(first, _);
+    if branch_stmt_node(first, _);
 
     if gsm_first = grouped_stmt_morphism(first, first_morph);
     if gsm_second = grouped_stmt_morphism(second, second_morph);
@@ -1343,9 +1343,9 @@ rule var_before_stmt_then {
     if then_stmt_node(stmt, atom);
     then var_before_then_atom(atom, name);
 }
-rule var_before_stmt_fork {
+rule var_before_stmt_branch {
     if var_before_stmt(stmt, name);
-    if fork_stmt_node(stmt, blocks);
+    if branch_stmt_node(stmt, blocks);
     then var_before_stmt_blocks(blocks, name);
 }
 
@@ -1504,8 +1504,8 @@ rule var_in_stmt_then {
     if var_in_then_atom(atom, name);
     then var_in_stmt(stmt, name);
 }
-rule var_in_stmt_fork {
-    if fork_stmt_node(stmt, blocks);
+rule var_in_stmt_branch {
+    if branch_stmt_node(stmt, blocks);
     if var_in_all_stmt_blocks(blocks, name);
     then var_in_stmt(stmt, name);
 }

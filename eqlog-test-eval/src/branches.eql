@@ -8,10 +8,10 @@ pred d_0();
 
 rule branching_predicates {
     if a();
-    fork {
+    branch {
         if b();
         then b_0();
-    } and {
+    } with {
         if c();
         then c_0();
     }

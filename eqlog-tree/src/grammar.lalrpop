@@ -165,11 +165,11 @@ StmtBlock: StmtListNode = {
 }
 
 Stmt: StmtNode = {
-    "fork" <blocks: NonEmptyIntersperse<StmtBlock, "and">> => {
-			  let blocks = stmt_block_list_node(blocks.as_slice(), eqlog);
-				let stmt = eqlog.new_stmt_node();
-				eqlog.insert_fork_stmt_node(stmt, blocks);
-				stmt
+    "branch" <blocks: NonEmptyIntersperse<StmtBlock, "with">> => {
+        let blocks = stmt_block_list_node(blocks.as_slice(), eqlog);
+        let stmt = eqlog.new_stmt_node();
+        eqlog.insert_branch_stmt_node(stmt, blocks);
+        stmt
     },
     <l: @L> "if" <atom: IfAtom> ";" <r: @R> => {
         let stmt = eqlog.new_stmt_node();

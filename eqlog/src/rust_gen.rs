@@ -1425,27 +1425,6 @@ fn display_non_surj_then<'a>(
     })
 }
 
-//fn display_fork<'a>(
-//    fork: &'a FlatForkStmt,
-//    analysis: &'a FlatRuleAnalysis<'a>,
-//    eqlog: &'a Eqlog,
-//    identifiers: &'a BTreeMap<Ident, String>,
-//) -> impl 'a + Display {
-//    fork.blocks
-//        .iter()
-//        .map(move |stmts| {
-//            FmtFn(move |f: &mut Formatter| -> Result {
-//                let stmts = display_stmts(stmts, analysis, eqlog, identifiers);
-//                writedoc! {f, "
-//                for _ in [()] {{
-//                    {stmts}
-//                }}
-//            "}
-//            })
-//        })
-//        .format("\n")
-//}
-
 fn display_stmts<'a>(
     stmts: &'a [FlatStmt],
     analysis: &'a FlatRuleAnalysis<'a>,

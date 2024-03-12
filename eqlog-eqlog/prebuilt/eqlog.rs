@@ -1,4 +1,4 @@
-// src-digest: 4D14C891F6E1996DFDC86A5CE7622C1FA06474094923D5A8592B91E73B880497
+// src-digest: B92892B47FEE7580DD4F76F52F0B559BC19F4E297FF7F1FA2CFC7B3629C94017
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -5741,19 +5741,19 @@ impl fmt::Display for ThenStmtNodeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ForkStmtNode(pub StmtNode, pub StmtBlockListNode);
+struct BranchStmtNode(pub StmtNode, pub StmtBlockListNode);
 #[derive(Clone, Hash, Debug)]
-struct ForkStmtNodeTable {
+struct BranchStmtNodeTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<ForkStmtNode>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<ForkStmtNode>>,
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<BranchStmtNode>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<BranchStmtNode>>,
 }
-impl ForkStmtNodeTable {
+impl BranchStmtNodeTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -5767,7 +5767,7 @@ impl ForkStmtNodeTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: ForkStmtNode) -> bool {
+    fn insert(&mut self, t: BranchStmtNode) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -5791,7 +5791,7 @@ impl ForkStmtNodeTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: ForkStmtNode) -> bool {
+    fn insert_dirt(&mut self, t: BranchStmtNode) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -5799,7 +5799,7 @@ impl ForkStmtNodeTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: ForkStmtNode) -> bool {
+    fn contains(&self, t: BranchStmtNode) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -5814,23 +5814,23 @@ impl ForkStmtNodeTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: ForkStmtNode) -> (u32, u32) {
+    fn permute_0_1(t: BranchStmtNode) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> ForkStmtNode {
-        ForkStmtNode(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> BranchStmtNode {
+        BranchStmtNode(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: ForkStmtNode) -> (u32, u32) {
+    fn permute_1_0(t: BranchStmtNode) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> ForkStmtNode {
-        ForkStmtNode(StmtNode::from(t.1), StmtBlockListNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> BranchStmtNode {
+        BranchStmtNode(StmtNode::from(t.1), StmtBlockListNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = ForkStmtNode> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = BranchStmtNode> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -5839,7 +5839,7 @@ impl ForkStmtNodeTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ForkStmtNode> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = BranchStmtNode> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -5848,7 +5848,7 @@ impl ForkStmtNodeTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = ForkStmtNode> {
+    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = BranchStmtNode> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -5858,7 +5858,7 @@ impl ForkStmtNodeTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: StmtBlockListNode) -> impl '_ + Iterator<Item = ForkStmtNode> {
+    fn iter_all_1(&self, arg1: StmtBlockListNode) -> impl '_ + Iterator<Item = BranchStmtNode> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -5871,7 +5871,7 @@ impl ForkStmtNodeTable {
     fn drain_with_element_stmt_block_list_node(
         &mut self,
         tm: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = ForkStmtNode> {
+    ) -> impl '_ + Iterator<Item = BranchStmtNode> {
         let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -5891,7 +5891,7 @@ impl ForkStmtNodeTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = ForkStmtNode> {
+    ) -> impl '_ + Iterator<Item = BranchStmtNode> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -5927,11 +5927,11 @@ impl ForkStmtNodeTable {
         }
     }
 }
-impl fmt::Display for ForkStmtNodeTable {
+impl fmt::Display for BranchStmtNodeTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("fork_stmt_node"))
+            .with(Header("branch_stmt_node"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -30520,7 +30520,7 @@ struct ModelDelta {
     new_pred_then_atom_node: Vec<PredThenAtomNode>,
     new_if_stmt_node: Vec<IfStmtNode>,
     new_then_stmt_node: Vec<ThenStmtNode>,
-    new_fork_stmt_node: Vec<ForkStmtNode>,
+    new_branch_stmt_node: Vec<BranchStmtNode>,
     new_nil_stmt_list_node: Vec<NilStmtListNode>,
     new_cons_stmt_list_node: Vec<ConsStmtListNode>,
     new_nil_stmt_block_list_node: Vec<NilStmtBlockListNode>,
@@ -30928,7 +30928,7 @@ pub struct Eqlog {
     pred_then_atom_node: PredThenAtomNodeTable,
     if_stmt_node: IfStmtNodeTable,
     then_stmt_node: ThenStmtNodeTable,
-    fork_stmt_node: ForkStmtNodeTable,
+    branch_stmt_node: BranchStmtNodeTable,
     nil_stmt_list_node: NilStmtListNodeTable,
     cons_stmt_list_node: ConsStmtListNodeTable,
     nil_stmt_block_list_node: NilStmtBlockListNodeTable,
@@ -31092,7 +31092,7 @@ impl ModelDelta {
             new_pred_then_atom_node: Vec::new(),
             new_if_stmt_node: Vec::new(),
             new_then_stmt_node: Vec::new(),
-            new_fork_stmt_node: Vec::new(),
+            new_branch_stmt_node: Vec::new(),
             new_nil_stmt_list_node: Vec::new(),
             new_cons_stmt_list_node: Vec::new(),
             new_nil_stmt_block_list_node: Vec::new(),
@@ -34005,19 +34005,19 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_fork_stmt_node.extend(
+            self.new_branch_stmt_node.extend(
                 model
-                    .fork_stmt_node
+                    .branch_stmt_node
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ForkStmtNodeTable::WEIGHT;
+                        *weight0 -= BranchStmtNodeTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= ForkStmtNodeTable::WEIGHT;
+                        *weight1 -= BranchStmtNodeTable::WEIGHT;
                     }),
             );
 
@@ -34499,19 +34499,19 @@ impl ModelDelta {
             model.stmt_block_list_node_all.remove(&child);
             model.stmt_block_list_node_dirty.remove(&child);
 
-            self.new_fork_stmt_node.extend(
+            self.new_branch_stmt_node.extend(
                 model
-                    .fork_stmt_node
+                    .branch_stmt_node
                     .drain_with_element_stmt_block_list_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= ForkStmtNodeTable::WEIGHT;
+                        *weight0 -= BranchStmtNodeTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= ForkStmtNodeTable::WEIGHT;
+                        *weight1 -= BranchStmtNodeTable::WEIGHT;
                     }),
             );
 
@@ -37228,12 +37228,12 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_fork_stmt_node.drain(..) {
+        for mut t in self.new_branch_stmt_node.drain(..) {
             t.0 = model.stmt_node_equalities.root(t.0);
             t.1 = model.stmt_block_list_node_equalities.root(t.1);
-            if model.fork_stmt_node.insert(t) {
-                model.stmt_node_weights[t.0 .0 as usize] += ForkStmtNodeTable::WEIGHT;
-                model.stmt_block_list_node_weights[t.1 .0 as usize] += ForkStmtNodeTable::WEIGHT;
+            if model.branch_stmt_node.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += BranchStmtNodeTable::WEIGHT;
+                model.stmt_block_list_node_weights[t.1 .0 as usize] += BranchStmtNodeTable::WEIGHT;
             }
         }
 
@@ -38965,7 +38965,7 @@ impl Eqlog {
             pred_then_atom_node: PredThenAtomNodeTable::new(),
             if_stmt_node: IfStmtNodeTable::new(),
             then_stmt_node: ThenStmtNodeTable::new(),
-            fork_stmt_node: ForkStmtNodeTable::new(),
+            branch_stmt_node: BranchStmtNodeTable::new(),
             nil_stmt_list_node: NilStmtListNodeTable::new(),
             cons_stmt_list_node: ConsStmtListNodeTable::new(),
             nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),
@@ -39192,7 +39192,7 @@ impl Eqlog {
                 self.query_and_record_rule_child_stmt_blocks_cons(&mut delta);
                 self.query_and_record_rule_child_stmt_if(&mut delta);
                 self.query_and_record_rule_child_stmt_then(&mut delta);
-                self.query_and_record_rule_child_stmt_fork(&mut delta);
+                self.query_and_record_rule_child_stmt_branch(&mut delta);
                 self.query_and_record_rule_child_if_atom_equal(&mut delta);
                 self.query_and_record_rule_child_if_atom_defined(&mut delta);
                 self.query_and_record_rule_child_if_atom_pred(&mut delta);
@@ -39310,12 +39310,12 @@ impl Eqlog {
                 self.query_and_record_grouped_stmt_morphism_surj_then_surj_then(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_surj_then_non_surj_then(&mut delta);
                 self.query_and_record_grouped_stmt_morphism_non_surj_then_arbitrary(&mut delta);
-                self.query_and_record_grouped_stmt_morphism_fork(&mut delta);
+                self.query_and_record_grouped_stmt_morphism_branch(&mut delta);
                 self.query_and_record_var_before_stmt_blocks_cons(&mut delta);
                 self.query_and_record_var_before_stmts_cons(&mut delta);
                 self.query_and_record_var_before_stmt_if(&mut delta);
                 self.query_and_record_var_before_stmt_then(&mut delta);
-                self.query_and_record_var_before_stmt_fork(&mut delta);
+                self.query_and_record_var_before_stmt_branch(&mut delta);
                 self.query_and_record_var_before_if_atom_equal(&mut delta);
                 self.query_and_record_var_before_if_atom_defined(&mut delta);
                 self.query_and_record_var_before_if_atom_pred(&mut delta);
@@ -39344,7 +39344,7 @@ impl Eqlog {
                 self.query_and_record_var_in_then_atom_pred(&mut delta);
                 self.query_and_record_var_in_stmt_if(&mut delta);
                 self.query_and_record_var_in_stmt_then(&mut delta);
-                self.query_and_record_var_in_stmt_fork(&mut delta);
+                self.query_and_record_var_in_stmt_branch(&mut delta);
                 self.query_and_record_var_in_stmts_cons_head(&mut delta);
                 self.query_and_record_var_in_stmts_cons_tail(&mut delta);
                 self.query_and_record_var_in_all_stmt_blocks_cons(&mut delta);
@@ -43627,28 +43627,30 @@ impl Eqlog {
             .push(ThenStmtNode(arg0, arg1));
     }
 
-    /// Returns `true` if `fork_stmt_node(arg0, arg1)` holds.
+    /// Returns `true` if `branch_stmt_node(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn fork_stmt_node(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
+    pub fn branch_stmt_node(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
         arg0 = self.root_stmt_node(arg0);
         arg1 = self.root_stmt_block_list_node(arg1);
-        self.fork_stmt_node.contains(ForkStmtNode(arg0, arg1))
+        self.branch_stmt_node.contains(BranchStmtNode(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `fork_stmt_node` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `branch_stmt_node` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_fork_stmt_node(&self) -> impl '_ + Iterator<Item = (StmtNode, StmtBlockListNode)> {
-        self.fork_stmt_node.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_branch_stmt_node(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtNode, StmtBlockListNode)> {
+        self.branch_stmt_node.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes `fork_stmt_node(arg0, arg1)` hold.
+    /// Makes `branch_stmt_node(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_fork_stmt_node(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
+    pub fn insert_branch_stmt_node(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_fork_stmt_node
-            .push(ForkStmtNode(arg0, arg1));
+            .new_branch_stmt_node
+            .push(BranchStmtNode(arg0, arg1));
     }
 
     /// Returns `true` if `nil_stmt_list_node(arg0)` holds.
@@ -45486,7 +45488,7 @@ impl Eqlog {
             || self.pred_then_atom_node.is_dirty()
             || self.if_stmt_node.is_dirty()
             || self.then_stmt_node.is_dirty()
-            || self.fork_stmt_node.is_dirty()
+            || self.branch_stmt_node.is_dirty()
             || self.nil_stmt_list_node.is_dirty()
             || self.cons_stmt_list_node.is_dirty()
             || self.nil_stmt_block_list_node.is_dirty()
@@ -47066,9 +47068,9 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_rule_child_stmt_fork(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_child_stmt_branch(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+        for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                 #[allow(unused_variables)]
@@ -47087,7 +47089,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm2) {
                 #[allow(unused_variables)]
-                for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildStmtBlockList(_, tm4) in
                         self.rule_child_stmt_block_list.iter_all_0(tm1)
@@ -47102,7 +47104,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for RuleChildStmtBlockList(_, tm4) in
                         self.rule_child_stmt_block_list.iter_all_0(tm1)
@@ -47115,7 +47117,7 @@ impl Eqlog {
         #[allow(unused_variables)]
         for RuleChildStmtBlockList(tm1, tm4) in self.rule_child_stmt_block_list.iter_dirty() {
             #[allow(unused_variables)]
-            for ForkStmtNode(tm0, _) in self.fork_stmt_node.iter_all_1(tm1) {
+            for BranchStmtNode(tm0, _) in self.branch_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
@@ -50775,7 +50777,7 @@ impl Eqlog {
     }
     fn query_and_record_cfg_edge_fork_stmt_into(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+        for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for CfgEdge(tm2, _) in self.cfg_edge.iter_all_1(tm0) {
                 self.record_action_157(delta, tm1, tm2);
@@ -50784,7 +50786,7 @@ impl Eqlog {
         #[allow(unused_variables)]
         for CfgEdge(tm2, tm0) in self.cfg_edge.iter_dirty() {
             #[allow(unused_variables)]
-            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                 self.record_action_157(delta, tm1, tm2);
             }
         }
@@ -50804,7 +50806,7 @@ impl Eqlog {
     }
     fn query_and_record_cfg_edge_fork_stmt_from(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+        for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for CfgEdge(_, tm2) in self.cfg_edge.iter_all_0(tm0) {
                 self.record_action_158(delta, tm1, tm2);
@@ -50813,7 +50815,7 @@ impl Eqlog {
         #[allow(unused_variables)]
         for CfgEdge(tm0, tm2) in self.cfg_edge.iter_dirty() {
             #[allow(unused_variables)]
-            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                 self.record_action_158(delta, tm1, tm2);
             }
         }
@@ -54211,9 +54213,9 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_grouped_stmt_morphism_fork(&self, delta: &mut ModelDelta) {
+    fn query_and_record_grouped_stmt_morphism_branch(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+        for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for CfgEdgeLinear(_, tm2) in self.cfg_edge_linear.iter_all_0(tm0) {
                 #[allow(unused_variables)]
@@ -54246,7 +54248,7 @@ impl Eqlog {
                             self.grouped_stmt_morphism.iter_all_0_1(tm0, tm5)
                         {
                             #[allow(unused_variables)]
-                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                                 self.record_action_214(delta, tm6, tm7);
                             }
                         }
@@ -54267,7 +54269,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                                 self.record_action_214(delta, tm6, tm7);
                             }
                         }
@@ -54288,7 +54290,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                                 self.record_action_214(delta, tm6, tm7);
                             }
                         }
@@ -54309,7 +54311,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                                 self.record_action_214(delta, tm6, tm7);
                             }
                         }
@@ -54330,7 +54332,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for CfgEdgeLinear(_, _) in self.cfg_edge_linear.iter_all_0_1(tm0, tm2) {
                             #[allow(unused_variables)]
-                            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+                            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                                 self.record_action_214(delta, tm6, tm7);
                             }
                         }
@@ -54495,9 +54497,9 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_var_before_stmt_fork(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_before_stmt_branch(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+        for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeStmt(_, tm2) in self.var_before_stmt.iter_all_0(tm0) {
                 self.record_action_219(delta, tm1, tm2);
@@ -54506,7 +54508,7 @@ impl Eqlog {
         #[allow(unused_variables)]
         for VarBeforeStmt(tm0, tm2) in self.var_before_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for ForkStmtNode(_, tm1) in self.fork_stmt_node.iter_all_0(tm0) {
+            for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                 self.record_action_219(delta, tm1, tm2);
             }
         }
@@ -55340,9 +55342,9 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_var_in_stmt_fork(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_stmt_branch(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for ForkStmtNode(tm0, tm1) in self.fork_stmt_node.iter_dirty() {
+        for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInAllStmtBlocks(_, tm2) in self.var_in_all_stmt_blocks.iter_all_0(tm1) {
                 self.record_action_248(delta, tm0, tm2);
@@ -55351,7 +55353,7 @@ impl Eqlog {
         #[allow(unused_variables)]
         for VarInAllStmtBlocks(tm1, tm2) in self.var_in_all_stmt_blocks.iter_dirty() {
             #[allow(unused_variables)]
-            for ForkStmtNode(tm0, _) in self.fork_stmt_node.iter_all_1(tm1) {
+            for BranchStmtNode(tm0, _) in self.branch_stmt_node.iter_all_1(tm1) {
                 self.record_action_248(delta, tm0, tm2);
             }
         }
@@ -55556,17 +55558,6 @@ impl Eqlog {
         }
     }
     fn record_action_255(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
-        let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(TermShouldBeEpicOk(_)) => (),
-            None => {
-                delta
-                    .new_term_should_be_epic_ok
-                    .push(TermShouldBeEpicOk(tm1));
-                ()
-            }
-        };
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -55575,6 +55566,17 @@ impl Eqlog {
                 delta
                     .new_term_should_be_epic_ok
                     .push(TermShouldBeEpicOk(tm2));
+                ()
+            }
+        };
+        let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(TermShouldBeEpicOk(_)) => (),
+            None => {
+                delta
+                    .new_term_should_be_epic_ok
+                    .push(TermShouldBeEpicOk(tm1));
                 ()
             }
         };
@@ -55856,7 +55858,7 @@ impl Eqlog {
         self.pred_then_atom_node.drop_dirt();
         self.if_stmt_node.drop_dirt();
         self.then_stmt_node.drop_dirt();
-        self.fork_stmt_node.drop_dirt();
+        self.branch_stmt_node.drop_dirt();
         self.nil_stmt_list_node.drop_dirt();
         self.cons_stmt_list_node.drop_dirt();
         self.nil_stmt_block_list_node.drop_dirt();
@@ -56048,7 +56050,7 @@ impl Eqlog {
         self.pred_then_atom_node.retire_dirt();
         self.if_stmt_node.retire_dirt();
         self.then_stmt_node.retire_dirt();
-        self.fork_stmt_node.retire_dirt();
+        self.branch_stmt_node.retire_dirt();
         self.nil_stmt_list_node.retire_dirt();
         self.cons_stmt_list_node.retire_dirt();
         self.nil_stmt_block_list_node.retire_dirt();
@@ -56442,7 +56444,7 @@ impl Eqlog {
             &mut self.stmt_node_equalities,
             &mut self.then_atom_node_equalities,
         );
-        self.fork_stmt_node.recall_previous_dirt(
+        self.branch_stmt_node.recall_previous_dirt(
             &mut self.stmt_block_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
@@ -57522,7 +57524,7 @@ impl fmt::Display for Eqlog {
         self.pred_then_atom_node.fmt(f)?;
         self.if_stmt_node.fmt(f)?;
         self.then_stmt_node.fmt(f)?;
-        self.fork_stmt_node.fmt(f)?;
+        self.branch_stmt_node.fmt(f)?;
         self.nil_stmt_list_node.fmt(f)?;
         self.cons_stmt_list_node.fmt(f)?;
         self.nil_stmt_block_list_node.fmt(f)?;
