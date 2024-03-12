@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::iter::once;
 use std::iter::successors;
 
+/// A breadth-first traversal of the grouped morphisms of a rule.
 fn iter_grouped_morphisms<'a>(
     rule: RuleDeclNode,
     eqlog: &'a Eqlog,
@@ -34,50 +35,38 @@ fn iter_grouped_morphisms<'a>(
     )
 }
 
-/// Assign compatible [FlatTerm]s to the [El]s of in a chain of morphisms. The first morphism must
-/// have empty domain.
+/// Assign compatible [FlatTerm]s to the [El]s in the codomains of a list of morphisms.
 ///
-/// The assigne [FlatTerm]s are compatible with morphisms in the sense that if f : X -> Y is a
-/// morphism in the chain and y is in the range of f, then the [FlatTerm] assigned to y is one of
-/// the [FlatTerm]s assigned to a preimage of y.
+/// The function takes the list of morphisms as an iterator over [Morphism] elements. These
+/// morphisms must be such that no two morphisms have the same codomain.
+///
+/// The assigned [FlatTerm]s are compatible with morphisms in the sense that if f : X -> Y is one
+/// of the provided morphisms and y is in the range of f, then the [FlatTerm] assigned to y is one
+/// of the [FlatTerm]s assigned to a preimage of y.
 fn assign_el_vars(
-    chain: impl IntoIterator<Item = Vec<Morphism>>,
+    morphisms: impl IntoIterator<Item = Morphism>,
     eqlog: &Eqlog,
 ) -> BTreeMap<El, FlatVar> {
     let mut el_terms = BTreeMap::new();
     let mut unused_flat_terms = (0..).into_iter().map(FlatVar);
 
-    let mut is_first = true;
-    for transitions in chain {
-        for transition in transitions.iter().copied() {
-            if is_first {
-                let dom = eqlog.dom(transition).expect("dom should be total");
-                assert!(
-                    iter_els(dom, eqlog).next().is_none(),
-                    "the first domain should be empty"
-                );
-                is_first = false;
+    for transition in morphisms {
+        for (m, preimage, image) in eqlog.iter_map_el() {
+            if !eqlog.are_equal_morphism(m, transition) {
+                continue;
             }
 
-            for (m, preimage, image) in eqlog.iter_map_el() {
-                if !eqlog.are_equal_morphism(m, transition) {
-                    continue;
-                }
-
-                if let Some(tm) = el_terms.get(&preimage) {
-                    el_terms.insert(image, *tm);
-                }
-            }
-
-            let cod = eqlog.cod(transition).expect("cod should be total");
-            for el in iter_els(cod, eqlog) {
-                el_terms
-                    .entry(el)
-                    .or_insert_with(|| unused_flat_terms.next().unwrap());
+            if let Some(tm) = el_terms.get(&preimage) {
+                el_terms.insert(image, *tm);
             }
         }
 
-        is_first = false;
+        let cod = eqlog.cod(transition).expect("cod should be total");
+        for el in iter_els(cod, eqlog) {
+            el_terms
+                .entry(el)
+                .or_insert_with(|| unused_flat_terms.next().unwrap());
+        }
     }
 
     el_terms
@@ -93,10 +82,10 @@ fn make_var_type_map(el_vars: &BTreeMap<El, FlatVar>, eqlog: &Eqlog) -> BTreeMap
         .collect()
 }
 
-/// Emits an if block which matches the delta given by `morphism` with arbitrary (not necessarily
-/// fresh) data.
+/// Returns a list of if statements which match the delta given by `morphism` with arbitrary (not
+/// necessarily fresh) data.
 ///
-/// The output block assumes that data in the domain of the morphism has already been matched.
+/// The output statements assumes that data in the domain of the morphism has already been matched.
 fn flatten_if_arbitrary(
     morphism: Morphism,
     el_vars: &BTreeMap<El, FlatVar>,
@@ -168,7 +157,7 @@ fn flatten_if_arbitrary(
     stmts
 }
 
-/// Generates flat if blocks which together match the delta given by `morphism` with fresh data.
+/// Returns a list of list of if statements which together match the delta given by `morphism` with fresh data.
 ///
 /// In contrast to [flatten_if_arbitrary], the output blocks assume that *no* data has been matched
 /// so far.
@@ -434,6 +423,7 @@ fn flatten_non_surj_then(
     })
 }
 
+/// Compiles an Eqlog [RuleDeclNode] into a [FlatRule].
 pub fn flatten(
     rule: RuleDeclNode,
     eqlog: &Eqlog,
@@ -443,15 +433,18 @@ pub fn flatten(
         Some(ident) => identifiers.get(&ident).unwrap().to_string(),
         None => format!("anonymous_rule_{}", rule.0),
     };
-    let el_vars = assign_el_vars(iter_grouped_morphisms(rule, eqlog), eqlog);
+    let el_vars = assign_el_vars(iter_grouped_morphisms(rule, eqlog).flatten(), eqlog);
+
+    // The general strategy is as follows:
+    // - The first flat function (with index 0) is the entry point for the flat rule. The body of
+    //   function 0 consists of call to other functions only. This ensure that we can always append
+    //   a call statement to function 0 and be guaranteed that the call is executed precisely once.
+    // - During translation, we associate a "matching function" to each structure that occurs as a
+    //   domain or codomain of a grouped morphism. The main property of the matching function is
+    //   such that by the end of its body, all elements of the corresponding structure have been
+    //   matched.
 
     let mut funcs: Vec<FlatFunc> = Vec::new();
-    // Function 0 is special in the following ways:
-    //
-    // 1. It is the entry point for execution of the rule.
-    // 2. By convention, this function contains only calls to other functions. This is so that we
-    //    can always append a call statement to the function and be guaranteed that the call is
-    //    executed precisely once.
     funcs.push(FlatFunc {
         name: FlatFuncName(0),
         args: Vec::new(),
@@ -461,9 +454,7 @@ pub fn flatten(
         }],
     });
 
-    // We always maintain an "active" function that matches the domain of the next morphism we're
-    // going to process. This means that all elements in the domain of the next morphism are in
-    // scope at the end of the active function.
+    // The first structure in a rule is always empty, so we can match it using an empty function.
     funcs.push(FlatFunc {
         name: FlatFuncName(1),
         args: Vec::new(),
@@ -471,6 +462,7 @@ pub fn flatten(
     });
     let mut matching_func_index: BTreeMap<Structure, usize> =
         btreemap! {eqlog.before_rule_structure(rule).unwrap() => 1};
+
     // This is the set of variables we've introduced so far by the end of the matching function.
     // TODO: This is redundant, the information should be contained in el_vars and the elements of
     // the structures.
