@@ -25,6 +25,8 @@ highlight default link eqlogDecl Keyword
 syntax keyword eqlogConditional
   \ if
   \ then
+  \ branch
+  \ along
 highlight default link eqlogConditional Conditional
 
 let b:current_syntax = "eqlog"
