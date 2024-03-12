@@ -1,6 +1,7 @@
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
+use maplit::btreemap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::iter::once;
@@ -9,23 +10,28 @@ use std::iter::successors;
 fn iter_grouped_morphisms<'a>(
     rule: RuleDeclNode,
     eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = Morphism> {
+) -> impl 'a + Iterator<Item = Vec<Morphism>> {
     let first_morphisms: Vec<Morphism> = eqlog
         .iter_rule_first_grouped_morphism()
         .filter_map(|(rl, morph)| eqlog.are_equal_rule_decl_node(rl, rule).then_some(morph))
         .collect();
-    // TODO: Allow more than one first morphism.
-    assert!(first_morphisms.len() <= 1);
 
-    successors(first_morphisms.into_iter().next(), |prev| {
-        let next_morphisms: Vec<Morphism> = eqlog
-            .iter_next_grouped_morphism()
-            .filter_map(|(prev0, next)| eqlog.are_equal_morphism(prev0, *prev).then_some(next))
-            .collect();
-        // TODO: Allow more than one next morphism.
-        assert!(next_morphisms.len() <= 1);
-        next_morphisms.into_iter().next()
-    })
+    successors(
+        (!first_morphisms.is_empty()).then_some(first_morphisms),
+        |prev_morphisms| {
+            let next_morphisms: Vec<Morphism> = eqlog
+                .iter_next_grouped_morphism()
+                .filter_map(|(prev0, next)| {
+                    prev_morphisms
+                        .iter()
+                        .find(|prev1| eqlog.are_equal_morphism(prev0, **prev1))
+                        .is_some()
+                        .then_some(next)
+                })
+                .collect();
+            (!next_morphisms.is_empty()).then_some(next_morphisms)
+        },
+    )
 }
 
 /// Assign compatible [FlatTerm]s to the [El]s of in a chain of morphisms. The first morphism must
@@ -35,39 +41,43 @@ fn iter_grouped_morphisms<'a>(
 /// morphism in the chain and y is in the range of f, then the [FlatTerm] assigned to y is one of
 /// the [FlatTerm]s assigned to a preimage of y.
 fn assign_el_vars(
-    chain: impl IntoIterator<Item = Morphism>,
+    chain: impl IntoIterator<Item = Vec<Morphism>>,
     eqlog: &Eqlog,
 ) -> BTreeMap<El, FlatVar> {
     let mut el_terms = BTreeMap::new();
     let mut unused_flat_terms = (0..).into_iter().map(FlatVar);
 
     let mut is_first = true;
-    for transition in chain {
-        if is_first {
-            let dom = eqlog.dom(transition).expect("dom should be total");
-            assert!(
-                iter_els(dom, eqlog).next().is_none(),
-                "the first domain should be empty"
-            );
-            is_first = false;
-        }
-
-        for (m, preimage, image) in eqlog.iter_map_el() {
-            if !eqlog.are_equal_morphism(m, transition) {
-                continue;
+    for transitions in chain {
+        for transition in transitions.iter().copied() {
+            if is_first {
+                let dom = eqlog.dom(transition).expect("dom should be total");
+                assert!(
+                    iter_els(dom, eqlog).next().is_none(),
+                    "the first domain should be empty"
+                );
+                is_first = false;
             }
 
-            if let Some(tm) = el_terms.get(&preimage) {
-                el_terms.insert(image, *tm);
+            for (m, preimage, image) in eqlog.iter_map_el() {
+                if !eqlog.are_equal_morphism(m, transition) {
+                    continue;
+                }
+
+                if let Some(tm) = el_terms.get(&preimage) {
+                    el_terms.insert(image, *tm);
+                }
+            }
+
+            let cod = eqlog.cod(transition).expect("cod should be total");
+            for el in iter_els(cod, eqlog) {
+                el_terms
+                    .entry(el)
+                    .or_insert_with(|| unused_flat_terms.next().unwrap());
             }
         }
 
-        let cod = eqlog.cod(transition).expect("cod should be total");
-        for el in iter_els(cod, eqlog) {
-            el_terms
-                .entry(el)
-                .or_insert_with(|| unused_flat_terms.next().unwrap());
-        }
+        is_first = false;
     }
 
     el_terms
@@ -441,7 +451,7 @@ pub fn flatten(
     // 1. It is the entry point for execution of the rule.
     // 2. By convention, this function contains only calls to other functions. This is so that we
     //    can always append a call statement to the function and be guaranteed that the call is
-    //    executed once.
+    //    executed precisely once.
     funcs.push(FlatFunc {
         name: FlatFuncName(0),
         args: Vec::new(),
@@ -459,15 +469,26 @@ pub fn flatten(
         args: Vec::new(),
         body: Vec::new(),
     });
-    let mut active_func_index: usize = 1;
+    let mut matching_func_index: BTreeMap<Structure, usize> =
+        btreemap! {eqlog.before_rule_structure(rule).unwrap() => 1};
+    // This is the set of variables we've introduced so far by the end of the matching function.
+    // TODO: This is redundant, the information should be contained in el_vars and the elements of
+    // the structures.
+    let mut introduced_vars_all: BTreeMap<Structure, BTreeSet<FlatVar>> =
+        btreemap! {eqlog.before_rule_structure(rule).unwrap() => BTreeSet::new()};
 
-    // This is the set of variables we've introduced so far by the end of the active function.
-    let mut introduced_vars: BTreeSet<FlatVar> = BTreeSet::new();
-
-    for morphism in iter_grouped_morphisms(rule, eqlog) {
+    for morphism in iter_grouped_morphisms(rule, eqlog).flatten() {
+        let active_func_index = *matching_func_index
+            .get(&eqlog.dom(morphism).unwrap())
+            .unwrap();
+        let mut introduced_vars = introduced_vars_all
+            .get(&eqlog.dom(morphism).unwrap())
+            .unwrap()
+            .clone();
         introduced_vars.extend(
             iter_els(eqlog.cod(morphism).unwrap(), eqlog).map(|el| el_vars.get(&el).unwrap()),
         );
+        introduced_vars_all.insert(eqlog.cod(morphism).unwrap(), introduced_vars.clone());
 
         if eqlog.if_morphism(morphism) {
             // If active_func_index == 1, then no data has been matched so far. It follows that we
@@ -520,7 +541,7 @@ pub fn flatten(
                 funcs[func_index].body.push(call);
             }
 
-            active_func_index = joined_func_name.0;
+            matching_func_index.insert(eqlog.cod(morphism).unwrap(), joined_func_name.0);
         } else if eqlog.surj_then_morphism(morphism) {
             // TODO: We should only execute this unconditionally if should_match_all_data is true.
             // Otherwise, we should only execute it in the first iteration of the first `close`
@@ -531,6 +552,7 @@ pub fn flatten(
             funcs[active_func_index]
                 .body
                 .extend(flatten_surj_then(morphism, &el_vars, eqlog));
+            matching_func_index.insert(eqlog.cod(morphism).unwrap(), active_func_index);
         } else if eqlog.non_surj_then_morphism(morphism) {
             // TODO: We should only execute this unconditionally if should_match_all_data is true.
             // Otherwise, we should only execute it in the first iteration of the first `close`
@@ -579,7 +601,7 @@ pub fn flatten(
                 });
             }
 
-            active_func_index = cont_func_name.0;
+            matching_func_index.insert(eqlog.cod(morphism).unwrap(), cont_func_name.0);
         } else {
             panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
         }
