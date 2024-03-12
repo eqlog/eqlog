@@ -1304,6 +1304,7 @@ pred var_before_if_atom(IfAtomNode, VirtIdent);
 pred var_before_then_atom(ThenAtomNode, VirtIdent);
 pred var_before_stmt(StmtNode, VirtIdent);
 pred var_before_stmts(StmtListNode, VirtIdent);
+pred var_before_stmt_blocks(StmtBlockListNode, VirtIdent);
 
 // These predicates track which variables appear in the
 // respective AST node.
@@ -1313,8 +1314,19 @@ pred var_in_opt_term(OptTermNode, VirtIdent);
 pred var_in_if_atom(IfAtomNode, VirtIdent);
 pred var_in_then_atom(ThenAtomNode, VirtIdent);
 pred var_in_stmt(StmtNode, VirtIdent);
+pred var_in_stmts(StmtListNode, VirtIdent);
+// This predicate is not quite analogous to the ones above, since it tracks
+// whether the variable occurs in *each* of the blocks in a statement block
+// list node, not just whether it occurs in some of the blocks.
+pred var_in_all_stmt_blocks(StmtBlockListNode, VirtIdent);
 
 // #### Propagate var_before_X downwards
+rule var_before_stmt_blocks_cons {
+    if var_before_stmt_blocks(blocks, name);
+    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
+    then var_before_stmts(head_block, name);
+    then var_before_stmt_blocks(tail_blocks, name);
+}
 rule var_before_stmts_cons {
     if var_before_stmts(stmts, name);
     if cons_stmt_list_node(stmts, stmt, stmts_tail);
@@ -1330,6 +1342,11 @@ rule var_before_stmt_then {
     if var_before_stmt(stmt, name);
     if then_stmt_node(stmt, atom);
     then var_before_then_atom(atom, name);
+}
+rule var_before_stmt_fork {
+    if var_before_stmt(stmt, name);
+    if fork_stmt_node(stmt, blocks);
+    then var_before_stmt_blocks(blocks, name);
 }
 
 rule var_before_if_atom_equal {
@@ -1482,11 +1499,33 @@ rule var_in_stmt_if {
     if var_in_if_atom(atom, name);
     then var_in_stmt(stmt, name);
 }
-
 rule var_in_stmt_then {
     if then_stmt_node(stmt, atom);
     if var_in_then_atom(atom, name);
     then var_in_stmt(stmt, name);
+}
+rule var_in_stmt_fork {
+    if fork_stmt_node(stmt, blocks);
+    if var_in_all_stmt_blocks(blocks, name);
+    then var_in_stmt(stmt, name);
+}
+
+rule var_in_stmts_cons_head {
+    if cons_stmt_list_node(stmts, head_stmt, _);
+    if var_in_stmt(head_stmt, name);
+    then var_in_stmts(stmts, name);
+}
+rule var_in_stmts_cons_tail {
+    if cons_stmt_list_node(stmts, _, tail_stmts);
+    if var_in_stmts(tail_stmts, name);
+    then var_in_stmts(stmts, name);
+}
+
+rule var_in_all_stmt_blocks_cons {
+    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
+    if var_in_stmts(head_block, name);
+    if var_in_all_stmt_blocks(tail_blocks, name);
+    then var_in_all_stmt_blocks(blocks, name);
 }
 
 // #### Connect var_before_X and var_in_X
