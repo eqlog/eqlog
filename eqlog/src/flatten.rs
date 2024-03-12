@@ -460,11 +460,11 @@ pub fn flatten(
         args: Vec::new(),
         body: Vec::new(),
     });
-    let mut matching_func_index: BTreeMap<Structure, usize> =
+    let mut matching_func_indices: BTreeMap<Structure, usize> =
         btreemap! {eqlog.before_rule_structure(rule).unwrap() => 1};
 
     for morphism in iter_grouped_morphisms(rule, eqlog).flatten() {
-        let active_func_index = *matching_func_index
+        let matching_func_index = *matching_func_indices
             .get(&eqlog.dom(morphism).unwrap())
             .unwrap();
 
@@ -476,9 +476,9 @@ pub fn flatten(
             // If active_func_index == 1, then no data has been matched so far. It follows that we
             // only need to match the delta of this if morphism with new data, i.e. at least one
             // atom in the codomain must be new.
-            let should_match_all_data = active_func_index != 1;
+            let should_match_all_data = matching_func_index != 1;
             if should_match_all_data {
-                funcs[active_func_index]
+                funcs[matching_func_index]
                     .body
                     .extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
             }
@@ -514,7 +514,7 @@ pub fn flatten(
             }
 
             for func_index in should_match_all_data
-                .then_some(active_func_index)
+                .then_some(matching_func_index)
                 .into_iter()
                 .chain(before_fresh_if_func_len..after_fresh_if_func_len)
             {
@@ -525,7 +525,7 @@ pub fn flatten(
                 funcs[func_index].body.push(call);
             }
 
-            matching_func_index.insert(eqlog.cod(morphism).unwrap(), joined_func_name.0);
+            matching_func_indices.insert(eqlog.cod(morphism).unwrap(), joined_func_name.0);
         } else if eqlog.surj_then_morphism(morphism) {
             // TODO: We should only execute this unconditionally if should_match_all_data is true.
             // Otherwise, we should only execute it in the first iteration of the first `close`
@@ -533,10 +533,10 @@ pub fn flatten(
             // to 1. introduce a flat eqlog statement that matches the empty join. Then we can
             // introduce a new function here that matches the empty join and only then executes the
             // flatten_surj_then statements. This function can then be called from function 0.
-            funcs[active_func_index]
+            funcs[matching_func_index]
                 .body
                 .extend(flatten_surj_then(morphism, &el_vars, eqlog));
-            matching_func_index.insert(eqlog.cod(morphism).unwrap(), active_func_index);
+            matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else if eqlog.non_surj_then_morphism(morphism) {
             // TODO: We should only execute this unconditionally if should_match_all_data is true.
             // Otherwise, we should only execute it in the first iteration of the first `close`
@@ -550,7 +550,7 @@ pub fn flatten(
             };
 
             let stmt = FlatStmt::NonSurjThen(non_surj_then_stmt);
-            funcs[active_func_index].body.push(stmt);
+            funcs[matching_func_index].body.push(stmt);
 
             let fresh_if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog);
             assert_eq!(
@@ -578,14 +578,14 @@ pub fn flatten(
             let cont_func_name = cont_func.name;
             funcs.push(cont_func);
 
-            for func_index in once(active_func_index).chain(once(fresh_if_func_index)) {
+            for func_index in once(matching_func_index).chain(once(fresh_if_func_index)) {
                 funcs[func_index].body.push(FlatStmt::Call {
                     func_name: cont_func_name,
                     args: cod_flat_vars.clone(),
                 });
             }
 
-            matching_func_index.insert(eqlog.cod(morphism).unwrap(), cont_func_name.0);
+            matching_func_indices.insert(eqlog.cod(morphism).unwrap(), cont_func_name.0);
         } else {
             panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
         }
