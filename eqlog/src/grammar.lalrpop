@@ -271,6 +271,33 @@ FuncDecl: FuncDeclNode = {
     },
 }
 
+CtorDecl: CtorDeclNode = {
+    <l: @L> <name: Id> <arg_decls: ArgDeclList> <r: @R> => {
+        let ctor_decl = eqlog.new_ctor_decl_node();
+        eqlog.insert_ctor_decl(ctor_decl, name, arg_decls);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_ctor_decl_node_loc(ctor_decl, loc);
+
+        ctor_decl
+    },
+}
+
+EnumDecl: EnumDeclNode = {
+    // TODO: Let's also allow an optional comma after the last constructor. As of this writing,
+    // adding a ","? there causes a shift-reduce conflict.
+    <l: @L> "enum" <name: Id> "{" <ctors: Intersperse<CtorDecl, ",">> "}" <r: @R> => {
+        let enum_decl = eqlog.new_enum_decl_node();
+        let ctors = ctor_decl_list_node(ctors.as_slice(), eqlog);
+        eqlog.insert_enum_decl(enum_decl, name, ctors);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_enum_decl_node_loc(enum_decl, loc);
+
+        enum_decl
+    }
+}
+
 Decl: DeclNode = {
     <typ: TypeDecl> => {
         let decl = eqlog.new_decl_node();
@@ -290,6 +317,11 @@ Decl: DeclNode = {
     <rule: RuleDecl> => {
         let decl = eqlog.new_decl_node();
         eqlog.insert_decl_node_rule(decl, rule);
+        decl
+    },
+    <enum_decl: EnumDecl> => {
+        let decl = eqlog.new_decl_node();
+        eqlog.insert_decl_node_enum(decl, enum_decl);
         decl
     },
 }

@@ -99,6 +99,17 @@ pub fn arg_decl_list_node(nodes: &[ArgDeclNode], eqlog: &mut Eqlog) -> ArgDeclLi
     l
 }
 
+pub fn ctor_decl_list_node(nodes: &[CtorDeclNode], eqlog: &mut Eqlog) -> CtorDeclListNode {
+    let mut l = eqlog.new_ctor_decl_list_node();
+    eqlog.insert_nil_ctor_decl_list_node(l);
+    for node in nodes.iter().rev() {
+        let cons = eqlog.new_ctor_decl_list_node();
+        eqlog.insert_cons_ctor_decl_list_node(cons, *node, l);
+        l = cons;
+    }
+    l
+}
+
 pub fn opt_term_node(o: Option<TermNode>, eqlog: &mut Eqlog) -> OptTermNode {
     let opt_node = eqlog.new_opt_term_node();
     match o {
