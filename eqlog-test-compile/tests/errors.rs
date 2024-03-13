@@ -139,6 +139,10 @@ fn bad_symbol_kind_predicate_function() {
 fn bad_symbol_kind_function_rule() {
     test_case(Path::new("bad-symbol-kind-function-rule"));
 }
+#[test]
+fn bad_symbol_kind_enum_ctor() {
+    test_case(Path::new("bad-symbol-kind-enum-ctor"));
+}
 
 #[test]
 fn symbol_declared_twice_type_pred() {

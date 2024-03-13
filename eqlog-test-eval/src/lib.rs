@@ -16,6 +16,7 @@ eqlog_mod!(pca);
 eqlog_mod!(inference);
 eqlog_mod!(reduction_from_nullary);
 eqlog_mod!(branches);
+eqlog_mod!(nat);
 
 mod category_mod;
 #[cfg(test)]
@@ -36,6 +37,8 @@ mod monoid_test;
 mod branches_test;
 #[cfg(test)]
 mod inference_test;
+#[cfg(test)]
+mod nat_test;
 mod pointed_test;
 #[cfg(test)]
 mod poset_test;

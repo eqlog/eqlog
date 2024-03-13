@@ -19,6 +19,12 @@ use var_info::*;
 pub use var_info::{CanAssumeFunctionality, Quantifier, RelationInfo};
 
 pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
+    if let None = eqlog.domain(func) {
+        let semantic_arg_types: Vec<_> = eqlog.iter_semantic_arg_types().collect();
+        indoc::printdoc! {"
+            semantic_arg_types = {semantic_arg_types:?}
+        "}
+    }
     let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
     let codomain = eqlog.codomain(func).expect("codomain should be total");
 

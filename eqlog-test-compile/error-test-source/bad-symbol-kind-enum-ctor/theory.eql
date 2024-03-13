@@ -1,0 +1,15 @@
+enum Foo {
+    Baz(),
+    Bar()
+}
+
+rule {
+    if x: Foo;
+    if y: Foo;
+    then x = y;
+}
+
+rule {
+    if x: Baz;
+    then x = y;
+}

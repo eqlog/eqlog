@@ -12,6 +12,8 @@ pub enum SymbolKindEnum {
     Pred,
     Func,
     Rule,
+    Enum,
+    Ctor,
 }
 
 impl Display for SymbolKindEnum {
@@ -22,6 +24,8 @@ impl Display for SymbolKindEnum {
             Pred => "predicate",
             Func => "function",
             Rule => "rule",
+            Enum => "enum",
+            Ctor => "constructor",
         })
     }
 }

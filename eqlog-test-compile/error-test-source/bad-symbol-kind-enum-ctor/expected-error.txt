@@ -1,0 +1,12 @@
+Error: expected type, found constructor "Baz"
+  --> error-test-source/bad-symbol-kind-enum-ctor/theory.eql:13
+   | 
+13 |     if x: Baz;
+   |        ^^^^^^ 
+   | 
+"Baz" declared as constructor here:
+ --> error-test-source/bad-symbol-kind-enum-ctor/theory.eql:2
+  | 
+2 |     Baz(),
+  |     ^^^^^ 
+  | 

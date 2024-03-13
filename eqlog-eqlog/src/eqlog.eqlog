@@ -328,6 +328,10 @@ rule semantic_decl_type {
     if type_decl(_, ident);
     then semantic_type(ident)!;
 }
+rule semantic_decl_enum {
+    if enum_decl(_, ident, _);
+    then semantic_type(ident)!;
+}
 
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
 rule semantic_arg_types_nil {
@@ -630,11 +634,15 @@ func type_symbol() -> SymbolKind;
 func pred_symbol() -> SymbolKind;
 func func_symbol() -> SymbolKind;
 func rule_symbol() -> SymbolKind;
+func enum_symbol() -> SymbolKind;
+func ctor_symbol() -> SymbolKind;
 rule {
     then type_symbol()!;
     then pred_symbol()!;
     then func_symbol()!;
     then rule_symbol()!;
+    then enum_symbol()!;
+    then ctor_symbol()!;
 }
 
 pred defined_symbol(Ident, SymbolKind, Loc);
@@ -647,7 +655,7 @@ rule type_decl_defines_symbol {
 }
 rule enum_decl_defines_symbol {
     if enum_decl(decl, name, _);
-    if kind = type_symbol();
+    if kind = enum_symbol();
     if loc = enum_decl_node_loc(decl);
     then defined_symbol(name, kind, loc);
 }
@@ -665,7 +673,7 @@ rule func_decl_defines_symbol {
 }
 rule ctor_decl_defines_symbol {
     if ctor_decl(decl, name, _);
-    if kind  = func_symbol();
+    if kind  = ctor_symbol();
     if loc = ctor_decl_node_loc(decl);
     then defined_symbol(name, kind, loc);
 }
@@ -678,25 +686,32 @@ rule rule_decl_defines_symbol {
 }
 
 // ### Symbol lookup checks
+
+// Only one kind of symbol is allowed.
 pred should_be_symbol(name: Ident, kind: SymbolKind, loc: Loc);
+// Two kinds of symbols are allowed, with `kind_1` being the typical one.
+pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, loc: Loc);
 
 rule arg_decl_should_be_type {
     if arg_decl_node_type(arg_decl, name);
-    if kind = type_symbol();
+    if type_kind = type_symbol();
+    if enum_kind = enum_symbol();
     if loc = arg_decl_node_loc(arg_decl);
-    then should_be_symbol(name, kind, loc);
+    then should_be_symbol_2(name, type_kind, enum_kind, loc);
 }
 rule result_should_be_type {
     if func_decl(func_decl, _, _, result_type);
-    if kind = type_symbol();
+    if type_kind = type_symbol();
+    if enum_kind = enum_symbol();
     if loc = func_decl_node_loc(func_decl);
-    then should_be_symbol(result_type, kind, loc);
+    then should_be_symbol_2(result_type, type_kind, enum_kind, loc);
 }
 rule var_atom_should_be_type {
     if var_if_atom_node(atom, _, name);
-    if kind = type_symbol();
+    if type_kind = type_symbol();
+    if enum_kind = enum_symbol();
     if loc = if_atom_node_loc(atom);
-    then should_be_symbol(name, kind, loc);
+    then should_be_symbol_2(name, type_kind, enum_kind, loc);
 }
 rule pred_if_atom_should_be_pred {
     if pred_if_atom_node(atom, pred_name, _);
@@ -712,9 +727,10 @@ rule pred_then_atom_should_be_pred {
 }
 rule app_atom_should_be_func {
     if app_term_node(term, name, _);
-    if kind = func_symbol();
+    if func_kind = func_symbol();
+    if ctor_kind = ctor_symbol();
     if loc = term_node_loc(term);
-    then should_be_symbol(name, kind, loc);
+    then should_be_symbol_2(name, func_kind, ctor_kind, loc);
 }
 
 // ### Natural numbers and argument numbers

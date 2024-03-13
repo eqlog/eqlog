@@ -3,7 +3,7 @@ use eqlog_eqlog::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
-use std::iter::successors;
+use std::iter::{once, successors};
 
 pub fn iter_els<'a>(structure: Structure, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = El> {
     eqlog.iter_el_structure().filter_map(move |(el, strct)| {
@@ -147,6 +147,12 @@ pub fn symbol_kind(kind: SymbolKind, eqlog: &Eqlog) -> SymbolKindEnum {
     if eqlog.are_equal_symbol_kind(kind, eqlog.rule_symbol().unwrap()) {
         return SymbolKindEnum::Rule;
     }
+    if eqlog.are_equal_symbol_kind(kind, eqlog.enum_symbol().unwrap()) {
+        return SymbolKindEnum::Enum;
+    }
+    if eqlog.are_equal_symbol_kind(kind, eqlog.ctor_symbol().unwrap()) {
+        return SymbolKindEnum::Ctor;
+    }
 
     panic!("Invalid symbol kind")
 }
@@ -200,18 +206,33 @@ pub fn iter_pred_arities<'a>(
     })
 }
 
+pub fn semantic_type_ident(ty: Type, eqlog: &Eqlog) -> Ident {
+    eqlog
+        .iter_semantic_type()
+        .find_map(|(ident, ty0)| eqlog.are_equal_type(ty0, ty).then_some(ident))
+        .unwrap()
+}
+
 pub fn iter_func_arities<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
-    eqlog
-        .iter_func_decl()
-        .map(|(_, ident, arg_decls, result_ident)| {
-            let name = identifiers.get(&ident).unwrap().as_str();
-            let mut arity = arg_decl_types(arg_decls, eqlog, identifiers);
-            arity.push(identifiers.get(&result_ident).unwrap().as_str());
-            (name, arity)
-        })
+    eqlog.iter_semantic_func().map(|(ident, func)| {
+        let name = identifiers.get(&ident).unwrap().as_str();
+        let domain_tys: Vec<Type> = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
+        let codomain: Type = eqlog.codomain(func).unwrap();
+
+        let arity: Vec<&str> = domain_tys
+            .into_iter()
+            .chain(once(codomain))
+            .map(|ty| {
+                let ident = semantic_type_ident(ty, eqlog);
+                identifiers.get(&ident).unwrap().as_str()
+            })
+            .collect();
+
+        (name, arity)
+    })
 }
 
 pub fn iter_relation_arities<'a>(
@@ -234,8 +255,8 @@ pub fn iter_types<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Iterator<Item = &'a str> {
     eqlog
-        .iter_type_decl()
-        .map(|(_, type_ident)| identifiers.get(&type_ident).unwrap().as_str())
+        .iter_semantic_type()
+        .map(|(type_ident, _)| identifiers.get(&type_ident).unwrap().as_str())
 }
 
 /// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element

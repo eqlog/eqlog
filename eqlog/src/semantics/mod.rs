@@ -8,6 +8,7 @@ use std::iter;
 use check_epic::*;
 use convert_case::Case;
 use convert_case::Casing;
+use itertools::Itertools;
 
 use crate::eqlog_util::*;
 use crate::error::*;
@@ -185,8 +186,19 @@ pub fn iter_symbol_lookup_errors<'a>(
 
     eqlog
         .iter_should_be_symbol()
-        .filter_map(move |(ident, kind, loc)| {
-            let kind = symbol_kind(kind, eqlog);
+        .map(|(ident, kind, loc)| (ident, vec![symbol_kind(kind, eqlog)], loc))
+        .chain(
+            eqlog
+                .iter_should_be_symbol_2()
+                .map(|(ident, kind1, kind2, loc)| {
+                    (
+                        ident,
+                        vec![symbol_kind(kind1, eqlog), symbol_kind(kind2, eqlog)],
+                        loc,
+                    )
+                }),
+        )
+        .filter_map(move |(ident, expected_kinds, loc)| {
             let name: &str = identifiers.get(&ident).unwrap().as_str();
             let location = *locations.get(&loc).unwrap();
 
@@ -200,17 +212,21 @@ pub fn iter_symbol_lookup_errors<'a>(
                 Some(decls) => decls.as_slice(),
             };
 
+            // This is the primary kind of symbol we show in the error message, e.g. "function"
+            // instead of "function or constructor".
+            let primary_expected_kind = expected_kinds[0];
+
             match decls
                 .iter()
-                .copied()
-                .find(|(decl_kind, _)| *decl_kind == kind)
+                .cartesian_product(expected_kinds.iter())
+                .find(|((decl_kind, _), expected_kind)| decl_kind == *expected_kind)
             {
                 Some(_) => None,
                 None => {
                     let (decl_kind, decl_location) = decls[0];
                     Some(CompileError::BadSymbolKind {
                         name: name.to_string(),
-                        expected: kind,
+                        expected: primary_expected_kind,
                         found: decl_kind,
                         used_at: location,
                         declared_at: decl_location,
@@ -278,7 +294,7 @@ pub fn iter_symbol_casing_errors<'a>(
 
             let symbol_kind = symbol_kind(kind, eqlog);
             match symbol_kind {
-                SymbolKindEnum::Type => {
+                SymbolKindEnum::Type | SymbolKindEnum::Enum | SymbolKindEnum::Ctor => {
                     if name != name.to_case(Case::UpperCamel) {
                         return Some(CompileError::SymbolNotCamelCase {
                             name: name.to_string(),

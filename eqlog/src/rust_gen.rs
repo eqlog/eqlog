@@ -1039,13 +1039,15 @@ fn write_model_delta_struct(
         f(&format_args!("    new_{name_snake}: Vec<{name_camel}>,"))
     });
 
-    let new_equalities = eqlog.iter_type_decl().format_with("\n", |(_, ident), f| {
-        let name = identifiers.get(&ident).unwrap().as_str();
-        let name_snake = name.to_case(Snake);
-        f(&format_args!(
-            "    new_{name_snake}_equalities: Vec<({name}, {name})>,"
-        ))
-    });
+    let new_equalities = eqlog
+        .iter_semantic_type()
+        .format_with("\n", |(ident, _), f| {
+            let name = identifiers.get(&ident).unwrap().as_str();
+            let name_snake = name.to_case(Snake);
+            f(&format_args!(
+                "    new_{name_snake}_equalities: Vec<({name}, {name})>,"
+            ))
+        });
 
     let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
         let name_snake = name.to_case(Snake);
@@ -1719,7 +1721,7 @@ fn write_theory_struct(
     write!(out, "/// A model of the `{name}` theory.\n")?;
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
-    for (_, type_ident) in eqlog.iter_type_decl() {
+    for (type_ident, _) in eqlog.iter_semantic_type() {
         let type_name = identifiers.get(&type_ident).unwrap().as_str();
         write_sort_fields(out, type_name)?;
         write!(out, "\n")?;
@@ -1854,7 +1856,7 @@ pub fn write_module(
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for (_, ident) in eqlog.iter_type_decl() {
+    for (ident, _) in eqlog.iter_semantic_type() {
         let name = identifiers.get(&ident).unwrap().as_str();
         write_sort_struct(out, name)?;
         write_sort_impl(out, name)?;

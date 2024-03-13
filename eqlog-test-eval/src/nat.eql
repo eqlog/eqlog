@@ -1,0 +1,18 @@
+
+
+enum N {
+    Zero(),
+    Succ(n: N)
+}
+
+func plus(m: N, n: N) -> N;
+
+rule zero_plus {
+    if a = plus(Zero(), n);
+    then a = n;
+}
+
+rule plus_zero {
+    if a = plus(n, Zero());
+    then a = n;
+}
