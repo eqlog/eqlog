@@ -291,6 +291,22 @@ rule rule_child_term_app {
     then rule_child(child_args, rul);
 }
 
+// ### The enum constructor belong to
+
+func ctor_enum(CtorDeclNode) -> EnumDeclNode;
+func ctors_enum(CtorDeclListNode) -> EnumDeclNode;
+
+rule enum_ctors {
+    if enum_decl(enum_node, _, ctors);
+    then ctors_enum(ctors) = enum_node;
+}
+rule enum_ctors_cons {
+    if ctors_enum(ctors) = enum_node;
+    if cons_ctor_decl_list_node(ctors, head_ctor, tail_ctors);
+    then ctor_enum(head_ctor) = enum_node;
+    then ctors_enum(tail_ctors) = enum_node;
+}
+
 // ## Semantic types, predicates and functions
 
 type Type;
@@ -350,16 +366,33 @@ rule semantic_decl_func {
     if func_decl(_, name, _, _);
     then semantic_func(name)!;
 }
+rule semantic_decl_func_ctor {
+    if ctor_decl(_, name, _);
+    then semantic_func(name)!;
+}
 
 func domain(Func) -> TypeList;
 func codomain(Func) -> Type;
-rule domain_decl {
+rule func_decl_domain_codomain {
     if func_decl(_, func_name, arg_decls, result_type_name);
     if function = semantic_func(func_name);
     if domain_types = semantic_arg_types(arg_decls);
     if result_type = semantic_type(result_type_name);
     then domain(function) = domain_types;
     then codomain(function) = result_type;
+}
+rule ctor_decl_domain {
+    if ctor_decl(_, ctor_name, arg_decls);
+    if function = semantic_func(ctor_name);
+    if domain_types = semantic_arg_types(arg_decls);
+    then domain(function) = domain_types;
+}
+rule ctor_decl_codomain {
+    if ctor_decl(ctor, ctor_name, _);
+    if function = semantic_func(ctor_name);
+    if enum_decl(ctor_enum(ctor), enum_name, _);
+    if semantic_enum_type = semantic_type(enum_name);
+    then codomain(function) = semantic_enum_type;
 }
 
 // ## Structures
@@ -612,6 +645,12 @@ rule type_decl_defines_symbol {
     if loc = type_decl_node_loc(decl);
     then defined_symbol(name, kind, loc);
 }
+rule enum_decl_defines_symbol {
+    if enum_decl(decl, name, _);
+    if kind = type_symbol();
+    if loc = enum_decl_node_loc(decl);
+    then defined_symbol(name, kind, loc);
+}
 rule pred_decl_defines_symbol {
     if pred_decl(decl, name, _);
     if kind = pred_symbol();
@@ -622,6 +661,12 @@ rule func_decl_defines_symbol {
     if func_decl(decl, name, _, _);
     if kind = func_symbol();
     if loc = func_decl_node_loc(decl);
+    then defined_symbol(name, kind, loc);
+}
+rule ctor_decl_defines_symbol {
+    if ctor_decl(decl, name, _);
+    if kind  = func_symbol();
+    if loc = ctor_decl_node_loc(decl);
     then defined_symbol(name, kind, loc);
 }
 rule rule_decl_defines_symbol {
