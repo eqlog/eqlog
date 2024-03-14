@@ -1,0 +1,9 @@
+enum Foo {
+    Bar()
+}
+
+func baz() -> Foo;
+
+rule bad_defined {
+    then baz()!;
+}

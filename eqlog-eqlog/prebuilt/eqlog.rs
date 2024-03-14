@@ -1,4 +1,4 @@
-// src-digest: 674947C18EEEB90AA11F9AA34EDB24F2ADF7962E5E3D7C0E4F774D630F5DC1EA
+// src-digest: C91E0905CC7BED1A4414185B0E4D3BE8372FC1918E76F2425C88E7AAAE0983F1
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -9545,6 +9545,7 @@ struct ElType(pub El, pub Type);
 struct ElTypeTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -9553,11 +9554,12 @@ struct ElTypeTable {
 }
 impl ElTypeTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_el: BTreeMap::new(),
             element_index_type: BTreeMap::new(),
@@ -9567,6 +9569,7 @@ impl ElTypeTable {
     fn insert(&mut self, t: ElType) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_el.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -9617,6 +9620,14 @@ impl ElTypeTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> ElType {
         ElType(El::from(t.0), Type::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: ElType) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> ElType {
+        ElType(El::from(t.1), Type::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = ElType> {
         let min = (u32::MIN, u32::MIN);
@@ -9657,6 +9668,16 @@ impl ElTypeTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = ElType> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_el(&mut self, tm: El) -> impl '_ + Iterator<Item = ElType> {
         let ts = match self.element_index_el.remove(&tm) {
             None => Vec::new(),
@@ -9666,6 +9687,7 @@ impl ElTypeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -9682,6 +9704,7 @@ impl ElTypeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -20234,6 +20257,372 @@ impl fmt::Display for VarTermInRuleTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ShouldBeObtainedByCtor(pub TermNode, pub EnumDeclNode);
+#[derive(Clone, Hash, Debug)]
+struct ShouldBeObtainedByCtorTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+
+    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+
+    element_index_enum_decl_node: BTreeMap<EnumDeclNode, Vec<ShouldBeObtainedByCtor>>,
+    element_index_term_node: BTreeMap<TermNode, Vec<ShouldBeObtainedByCtor>>,
+}
+impl ShouldBeObtainedByCtorTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            index_dirty_0_1_prev: Vec::new(),
+            element_index_enum_decl_node: BTreeMap::new(),
+            element_index_term_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ShouldBeObtainedByCtor) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_term_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_term_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_enum_decl_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_enum_decl_node.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: ShouldBeObtainedByCtor) -> bool {
+        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ShouldBeObtainedByCtor) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
+        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: ShouldBeObtainedByCtor) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> ShouldBeObtainedByCtor {
+        ShouldBeObtainedByCtor(TermNode::from(t.0), EnumDeclNode::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ShouldBeObtainedByCtor> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ShouldBeObtainedByCtor> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: TermNode,
+        arg1: EnumDeclNode,
+    ) -> impl '_ + Iterator<Item = ShouldBeObtainedByCtor> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1);
+        let max = (arg0, arg1);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_enum_decl_node(
+        &mut self,
+        tm: EnumDeclNode,
+    ) -> impl '_ + Iterator<Item = ShouldBeObtainedByCtor> {
+        let ts = match self.element_index_enum_decl_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_term_node(
+        &mut self,
+        tm: TermNode,
+    ) -> impl '_ + Iterator<Item = ShouldBeObtainedByCtor> {
+        let ts = match self.element_index_term_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(
+        &mut self,
+        enum_decl_node_equalities: &mut Unification<EnumDeclNode>,
+        term_node_equalities: &mut Unification<TermNode>,
+    ) {
+        let mut tmp_dirty_0_1_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
+
+        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1(tuple);
+            if true
+                && tuple.0 == term_node_equalities.root(tuple.0)
+                && tuple.1 == enum_decl_node_equalities.root(tuple.1)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for ShouldBeObtainedByCtorTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("should_be_obtained_by_ctor"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct IsGivenByCtor(pub TermNode, pub EnumDeclNode);
+#[derive(Clone, Hash, Debug)]
+struct IsGivenByCtorTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+
+    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+
+    element_index_enum_decl_node: BTreeMap<EnumDeclNode, Vec<IsGivenByCtor>>,
+    element_index_term_node: BTreeMap<TermNode, Vec<IsGivenByCtor>>,
+}
+impl IsGivenByCtorTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            index_dirty_0_1_prev: Vec::new(),
+            element_index_enum_decl_node: BTreeMap::new(),
+            element_index_term_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: IsGivenByCtor) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_term_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_term_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_enum_decl_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_enum_decl_node.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: IsGivenByCtor) -> bool {
+        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: IsGivenByCtor) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0_1 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
+        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: IsGivenByCtor) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> IsGivenByCtor {
+        IsGivenByCtor(TermNode::from(t.0), EnumDeclNode::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = IsGivenByCtor> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = IsGivenByCtor> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: TermNode,
+        arg1: EnumDeclNode,
+    ) -> impl '_ + Iterator<Item = IsGivenByCtor> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1);
+        let max = (arg0, arg1);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_enum_decl_node(
+        &mut self,
+        tm: EnumDeclNode,
+    ) -> impl '_ + Iterator<Item = IsGivenByCtor> {
+        let ts = match self.element_index_enum_decl_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_term_node(
+        &mut self,
+        tm: TermNode,
+    ) -> impl '_ + Iterator<Item = IsGivenByCtor> {
+        let ts = match self.element_index_term_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(
+        &mut self,
+        enum_decl_node_equalities: &mut Unification<EnumDeclNode>,
+        term_node_equalities: &mut Unification<TermNode>,
+    ) {
+        let mut tmp_dirty_0_1_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
+
+        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0_1(tuple);
+            if true
+                && tuple.0 == term_node_equalities.root(tuple.0)
+                && tuple.1 == enum_decl_node_equalities.root(tuple.1)
+            {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for IsGivenByCtorTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("is_given_by_ctor"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RealVirtIdent(pub Ident, pub VirtIdent);
 #[derive(Clone, Hash, Debug)]
 struct RealVirtIdentTable {
@@ -26127,6 +26516,7 @@ struct SemanticType(pub Ident, pub Type);
 struct SemanticTypeTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -26135,11 +26525,12 @@ struct SemanticTypeTable {
 }
 impl SemanticTypeTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_ident: BTreeMap::new(),
             element_index_type: BTreeMap::new(),
@@ -26149,6 +26540,7 @@ impl SemanticTypeTable {
     fn insert(&mut self, t: SemanticType) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_ident.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -26199,6 +26591,14 @@ impl SemanticTypeTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> SemanticType {
         SemanticType(Ident::from(t.0), Type::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: SemanticType) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> SemanticType {
+        SemanticType(Ident::from(t.1), Type::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = SemanticType> {
         let min = (u32::MIN, u32::MIN);
@@ -26228,6 +26628,16 @@ impl SemanticTypeTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = SemanticType> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_ident(&mut self, tm: Ident) -> impl '_ + Iterator<Item = SemanticType> {
         let ts = match self.element_index_ident.remove(&tm) {
             None => Vec::new(),
@@ -26237,6 +26647,7 @@ impl SemanticTypeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -26253,6 +26664,7 @@ impl SemanticTypeTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -31860,6 +32272,7 @@ struct SemanticElTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
 
@@ -31869,12 +32282,13 @@ struct SemanticElTable {
 }
 impl SemanticElTable {
     #[allow(unused)]
-    const WEIGHT: usize = 12;
+    const WEIGHT: usize = 15;
     fn new() -> Self {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
             index_all_1_0_2: BTreeSet::new(),
+            index_all_2_0_1: BTreeSet::new(),
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_el: BTreeMap::new(),
             element_index_structure: BTreeMap::new(),
@@ -31886,6 +32300,7 @@ impl SemanticElTable {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
             self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
+            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_term_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -31951,6 +32366,14 @@ impl SemanticElTable {
     fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> SemanticEl {
         SemanticEl(TermNode::from(t.1), Structure::from(t.0), El::from(t.2))
     }
+    #[allow(unused)]
+    fn permute_2_0_1(t: SemanticEl) -> (u32, u32, u32) {
+        (t.2.into(), t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_2_0_1(t: (u32, u32, u32)) -> SemanticEl {
+        SemanticEl(TermNode::from(t.1), Structure::from(t.2), El::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = SemanticEl> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
@@ -32005,6 +32428,16 @@ impl SemanticElTable {
             .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
+    fn iter_all_2(&self, arg2: El) -> impl '_ + Iterator<Item = SemanticEl> {
+        let arg2 = arg2.0;
+        let min = (arg2, u32::MIN, u32::MIN);
+        let max = (arg2, u32::MAX, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_el(&mut self, tm: El) -> impl '_ + Iterator<Item = SemanticEl> {
         let ts = match self.element_index_el.remove(&tm) {
             None => Vec::new(),
@@ -32015,6 +32448,7 @@ impl SemanticElTable {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
                 self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
                 false
@@ -32035,6 +32469,7 @@ impl SemanticElTable {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
                 self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
                 false
@@ -32055,6 +32490,7 @@ impl SemanticElTable {
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(*t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(*t));
                 self.index_all_1_0_2.remove(&Self::permute_1_0_2(*t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(*t));
                 true
             } else {
                 false
@@ -32906,6 +33342,8 @@ struct ModelDelta {
     new_el_is_surjective_ok: Vec<ElIsSurjectiveOk>,
     new_el_is_surjective_exempted: Vec<ElIsSurjectiveExempted>,
     new_var_term_in_rule: Vec<VarTermInRule>,
+    new_should_be_obtained_by_ctor: Vec<ShouldBeObtainedByCtor>,
+    new_is_given_by_ctor: Vec<IsGivenByCtor>,
     new_real_virt_ident: Vec<RealVirtIdent>,
     new_rule_name: Vec<RuleName>,
     new_type_decl_node_loc: Vec<TypeDeclNodeLoc>,
@@ -33350,6 +33788,8 @@ pub struct Eqlog {
     el_is_surjective_ok: ElIsSurjectiveOkTable,
     el_is_surjective_exempted: ElIsSurjectiveExemptedTable,
     var_term_in_rule: VarTermInRuleTable,
+    should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,
+    is_given_by_ctor: IsGivenByCtorTable,
     real_virt_ident: RealVirtIdentTable,
     rule_name: RuleNameTable,
     type_decl_node_loc: TypeDeclNodeLocTable,
@@ -33526,6 +33966,8 @@ impl ModelDelta {
             new_el_is_surjective_ok: Vec::new(),
             new_el_is_surjective_exempted: Vec::new(),
             new_var_term_in_rule: Vec::new(),
+            new_should_be_obtained_by_ctor: Vec::new(),
+            new_is_given_by_ctor: Vec::new(),
             new_real_virt_ident: Vec::new(),
             new_rule_name: Vec::new(),
             new_type_decl_node_loc: Vec::new(),
@@ -35636,6 +36078,38 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_should_be_obtained_by_ctor.extend(
+                model
+                    .should_be_obtained_by_ctor
+                    .drain_with_element_enum_decl_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= ShouldBeObtainedByCtorTable::WEIGHT;
+
+                        let weight1 = model
+                            .enum_decl_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= ShouldBeObtainedByCtorTable::WEIGHT;
+                    }),
+            );
+
+            self.new_is_given_by_ctor.extend(
+                model
+                    .is_given_by_ctor
+                    .drain_with_element_enum_decl_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= IsGivenByCtorTable::WEIGHT;
+
+                        let weight1 = model
+                            .enum_decl_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= IsGivenByCtorTable::WEIGHT;
+                    }),
+            );
+
             self.new_enum_decl_node_loc.extend(
                 model
                     .enum_decl_node_loc
@@ -35941,6 +36415,38 @@ impl ModelDelta {
                             .get_mut(t.2 .0 as usize)
                             .unwrap();
                         *weight2 -= VarTermInRuleTable::WEIGHT;
+                    }),
+            );
+
+            self.new_should_be_obtained_by_ctor.extend(
+                model
+                    .should_be_obtained_by_ctor
+                    .drain_with_element_term_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= ShouldBeObtainedByCtorTable::WEIGHT;
+
+                        let weight1 = model
+                            .enum_decl_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= ShouldBeObtainedByCtorTable::WEIGHT;
+                    }),
+            );
+
+            self.new_is_given_by_ctor.extend(
+                model
+                    .is_given_by_ctor
+                    .drain_with_element_term_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= IsGivenByCtorTable::WEIGHT;
+
+                        let weight1 = model
+                            .enum_decl_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= IsGivenByCtorTable::WEIGHT;
                     }),
             );
 
@@ -40957,6 +41463,27 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
+        for mut t in self.new_should_be_obtained_by_ctor.drain(..) {
+            t.0 = model.term_node_equalities.root(t.0);
+            t.1 = model.enum_decl_node_equalities.root(t.1);
+            if model.should_be_obtained_by_ctor.insert(t) {
+                model.term_node_weights[t.0 .0 as usize] += ShouldBeObtainedByCtorTable::WEIGHT;
+                model.enum_decl_node_weights[t.1 .0 as usize] +=
+                    ShouldBeObtainedByCtorTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
+        for mut t in self.new_is_given_by_ctor.drain(..) {
+            t.0 = model.term_node_equalities.root(t.0);
+            t.1 = model.enum_decl_node_equalities.root(t.1);
+            if model.is_given_by_ctor.insert(t) {
+                model.term_node_weights[t.0 .0 as usize] += IsGivenByCtorTable::WEIGHT;
+                model.enum_decl_node_weights[t.1 .0 as usize] += IsGivenByCtorTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
         for mut t in self.new_real_virt_ident.drain(..) {
             t.0 = model.ident_equalities.root(t.0);
             t.1 = model.virt_ident_equalities.root(t.1);
@@ -42145,6 +42672,8 @@ impl Eqlog {
             el_is_surjective_ok: ElIsSurjectiveOkTable::new(),
             el_is_surjective_exempted: ElIsSurjectiveExemptedTable::new(),
             var_term_in_rule: VarTermInRuleTable::new(),
+            should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),
+            is_given_by_ctor: IsGivenByCtorTable::new(),
             real_virt_ident: RealVirtIdentTable::new(),
             rule_name: RuleNameTable::new(),
             type_decl_node_loc: TypeDeclNodeLocTable::new(),
@@ -42486,6 +43015,8 @@ impl Eqlog {
                 self.query_and_record_surjective_img_el_is_ok(&mut delta);
                 self.query_and_record_surjective_exempted_then_defined_term(&mut delta);
                 self.query_and_record_var_term_in_rule_child(&mut delta);
+                self.query_and_record_defined_then_should_be_given_by_ctor(&mut delta);
+                self.query_and_record_ctor_app_is_given_by_ctor(&mut delta);
 
                 self.retire_dirt();
                 delta.apply(self);
@@ -49121,6 +49652,59 @@ impl Eqlog {
             .push(VarTermInRule(arg0, arg1, arg2));
     }
 
+    /// Returns `true` if `should_be_obtained_by_ctor(arg0, arg1)` holds.
+    #[allow(dead_code)]
+    pub fn should_be_obtained_by_ctor(&self, mut arg0: TermNode, mut arg1: EnumDeclNode) -> bool {
+        arg0 = self.root_term_node(arg0);
+        arg1 = self.root_enum_decl_node(arg1);
+        self.should_be_obtained_by_ctor
+            .contains(ShouldBeObtainedByCtor(arg0, arg1))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `should_be_obtained_by_ctor` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_should_be_obtained_by_ctor(
+        &self,
+    ) -> impl '_ + Iterator<Item = (TermNode, EnumDeclNode)> {
+        self.should_be_obtained_by_ctor
+            .iter_all()
+            .map(|t| (t.0, t.1))
+    }
+    /// Makes `should_be_obtained_by_ctor(arg0, arg1)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_should_be_obtained_by_ctor(&mut self, arg0: TermNode, arg1: EnumDeclNode) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_should_be_obtained_by_ctor
+            .push(ShouldBeObtainedByCtor(arg0, arg1));
+    }
+
+    /// Returns `true` if `is_given_by_ctor(arg0, arg1)` holds.
+    #[allow(dead_code)]
+    pub fn is_given_by_ctor(&self, mut arg0: TermNode, mut arg1: EnumDeclNode) -> bool {
+        arg0 = self.root_term_node(arg0);
+        arg1 = self.root_enum_decl_node(arg1);
+        self.is_given_by_ctor.contains(IsGivenByCtor(arg0, arg1))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `is_given_by_ctor` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_is_given_by_ctor(&self) -> impl '_ + Iterator<Item = (TermNode, EnumDeclNode)> {
+        self.is_given_by_ctor.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes `is_given_by_ctor(arg0, arg1)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_is_given_by_ctor(&mut self, arg0: TermNode, arg1: EnumDeclNode) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_is_given_by_ctor
+            .push(IsGivenByCtor(arg0, arg1));
+    }
+
     fn is_dirty(&self) -> bool {
         self.empty_join_is_dirty
             || self.absurd.is_dirty()
@@ -49225,6 +49809,8 @@ impl Eqlog {
             || self.el_is_surjective_ok.is_dirty()
             || self.el_is_surjective_exempted.is_dirty()
             || self.var_term_in_rule.is_dirty()
+            || self.should_be_obtained_by_ctor.is_dirty()
+            || self.is_given_by_ctor.is_dirty()
             || self.real_virt_ident.is_dirty()
             || self.rule_name.is_dirty()
             || self.type_decl_node_loc.is_dirty()
@@ -60061,6 +60647,155 @@ impl Eqlog {
             }
         }
     }
+    fn record_action_278(&self, delta: &mut ModelDelta, tm0: EnumDeclNode, tm5: TermNode) {
+        let existing_row = self
+            .should_be_obtained_by_ctor
+            .iter_all_0_1(tm5, tm0)
+            .next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(ShouldBeObtainedByCtor(_, _)) => (),
+            None => {
+                delta
+                    .new_should_be_obtained_by_ctor
+                    .push(ShouldBeObtainedByCtor(tm5, tm0));
+                ()
+            }
+        };
+    }
+    fn query_and_record_defined_then_should_be_given_by_ctor(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for EnumDecl(tm0, tm1, tm2) in self.enum_decl.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticType(_, tm7) in self.semantic_type.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for ElType(tm6, _) in self.el_type.iter_all_1(tm7) {
+                    #[allow(unused_variables)]
+                    for SemanticEl(tm5, tm8, _) in self.semantic_el.iter_all_2(tm6) {
+                        #[allow(unused_variables)]
+                        for DefinedThenAtomNode(tm3, tm4, _) in
+                            self.defined_then_atom_node.iter_all_2(tm5)
+                        {
+                            self.record_action_278(delta, tm0, tm5);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for DefinedThenAtomNode(tm3, tm4, tm5) in self.defined_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticEl(_, tm8, tm6) in self.semantic_el.iter_all_0(tm5) {
+                #[allow(unused_variables)]
+                for ElType(_, tm7) in self.el_type.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm7) {
+                        #[allow(unused_variables)]
+                        for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
+                            self.record_action_278(delta, tm0, tm5);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for ElType(tm6, tm7) in self.el_type.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm7) {
+                #[allow(unused_variables)]
+                for SemanticEl(tm5, tm8, _) in self.semantic_el.iter_all_2(tm6) {
+                    #[allow(unused_variables)]
+                    for DefinedThenAtomNode(tm3, tm4, _) in
+                        self.defined_then_atom_node.iter_all_2(tm5)
+                    {
+                        #[allow(unused_variables)]
+                        for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
+                            self.record_action_278(delta, tm0, tm5);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SemanticType(tm1, tm7) in self.semantic_type.iter_dirty() {
+            #[allow(unused_variables)]
+            for ElType(tm6, _) in self.el_type.iter_all_1(tm7) {
+                #[allow(unused_variables)]
+                for SemanticEl(tm5, tm8, _) in self.semantic_el.iter_all_2(tm6) {
+                    #[allow(unused_variables)]
+                    for DefinedThenAtomNode(tm3, tm4, _) in
+                        self.defined_then_atom_node.iter_all_2(tm5)
+                    {
+                        #[allow(unused_variables)]
+                        for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
+                            self.record_action_278(delta, tm0, tm5);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SemanticEl(tm5, tm8, tm6) in self.semantic_el.iter_dirty() {
+            #[allow(unused_variables)]
+            for ElType(_, tm7) in self.el_type.iter_all_0(tm6) {
+                #[allow(unused_variables)]
+                for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm7) {
+                    #[allow(unused_variables)]
+                    for DefinedThenAtomNode(tm3, tm4, _) in
+                        self.defined_then_atom_node.iter_all_2(tm5)
+                    {
+                        #[allow(unused_variables)]
+                        for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
+                            self.record_action_278(delta, tm0, tm5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn record_action_279(&self, delta: &mut ModelDelta, tm3: TermNode, tm5: EnumDeclNode) {
+        let existing_row = self.is_given_by_ctor.iter_all_0_1(tm3, tm5).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(IsGivenByCtor(_, _)) => (),
+            None => {
+                delta.new_is_given_by_ctor.push(IsGivenByCtor(tm3, tm5));
+                ()
+            }
+        };
+    }
+    fn query_and_record_ctor_app_is_given_by_ctor(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for CtorDecl(tm0, tm1, tm2) in self.ctor_decl.iter_dirty() {
+            #[allow(unused_variables)]
+            for AppTermNode(tm3, _, tm4) in self.app_term_node.iter_all_1(tm1) {
+                #[allow(unused_variables)]
+                for CtorEnum(_, tm5) in self.ctor_enum.iter_all_0(tm0) {
+                    self.record_action_279(delta, tm3, tm5);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for AppTermNode(tm3, tm1, tm4) in self.app_term_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
+                #[allow(unused_variables)]
+                for CtorEnum(_, tm5) in self.ctor_enum.iter_all_0(tm0) {
+                    self.record_action_279(delta, tm3, tm5);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for CtorEnum(tm0, tm5) in self.ctor_enum.iter_dirty() {
+            #[allow(unused_variables)]
+            for CtorDecl(_, tm1, tm2) in self.ctor_decl.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for AppTermNode(tm3, _, tm4) in self.app_term_node.iter_all_1(tm1) {
+                    self.record_action_279(delta, tm3, tm5);
+                }
+            }
+        }
+    }
     fn drop_dirt(&mut self) {
         self.empty_join_is_dirty = false;
 
@@ -60166,6 +60901,8 @@ impl Eqlog {
         self.el_is_surjective_ok.drop_dirt();
         self.el_is_surjective_exempted.drop_dirt();
         self.var_term_in_rule.drop_dirt();
+        self.should_be_obtained_by_ctor.drop_dirt();
+        self.is_given_by_ctor.drop_dirt();
         self.real_virt_ident.drop_dirt();
         self.rule_name.drop_dirt();
         self.type_decl_node_loc.drop_dirt();
@@ -60373,6 +61110,8 @@ impl Eqlog {
         self.el_is_surjective_ok.retire_dirt();
         self.el_is_surjective_exempted.retire_dirt();
         self.var_term_in_rule.retire_dirt();
+        self.should_be_obtained_by_ctor.retire_dirt();
+        self.is_given_by_ctor.retire_dirt();
         self.real_virt_ident.retire_dirt();
         self.rule_name.retire_dirt();
         self.type_decl_node_loc.retire_dirt();
@@ -60987,6 +61726,14 @@ impl Eqlog {
         self.var_term_in_rule.recall_previous_dirt(
             &mut self.ident_equalities,
             &mut self.rule_decl_node_equalities,
+            &mut self.term_node_equalities,
+        );
+        self.should_be_obtained_by_ctor.recall_previous_dirt(
+            &mut self.enum_decl_node_equalities,
+            &mut self.term_node_equalities,
+        );
+        self.is_given_by_ctor.recall_previous_dirt(
+            &mut self.enum_decl_node_equalities,
             &mut self.term_node_equalities,
         );
         self.real_virt_ident
@@ -61991,6 +62738,8 @@ impl fmt::Display for Eqlog {
         self.el_is_surjective_ok.fmt(f)?;
         self.el_is_surjective_exempted.fmt(f)?;
         self.var_term_in_rule.fmt(f)?;
+        self.should_be_obtained_by_ctor.fmt(f)?;
+        self.is_given_by_ctor.fmt(f)?;
         self.real_virt_ident.fmt(f)?;
         self.rule_name.fmt(f)?;
         self.type_decl_node_loc.fmt(f)?;

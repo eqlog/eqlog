@@ -211,3 +211,8 @@ fn then_defined_not_variable() {
 fn then_defined_variable_not_new() {
     test_case(Path::new("then-defined-variable-not-new"));
 }
+
+#[test]
+fn enum_ctors_not_surjective() {
+    test_case(Path::new("enum-ctors-not-surjective"));
+}

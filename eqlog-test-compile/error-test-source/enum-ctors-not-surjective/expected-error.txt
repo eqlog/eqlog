@@ -1,0 +1,16 @@
+Error: term of enum type "Foo" is not introduced with constructor 
+ --> error-test-source/enum-ctors-not-surjective/theory.eql:8
+  | 
+8 |     then baz()!;
+  |          ^^^^^  
+  | 
+Enum "Foo" declared here:
+ --> error-test-source/enum-ctors-not-surjective/theory.eql:1
+  | 
+1 | enum Foo {
+  | ^^^^^^^^^^
+2 |     Bar()
+  | ^^^^^^^^^
+3 | }
+  | ^
+  | 

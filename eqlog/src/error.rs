@@ -112,6 +112,11 @@ pub enum CompileError {
     ThenDefinedVarNotNew {
         location: Location,
     },
+    EnumCtorsNotSurjective {
+        term_location: Location,
+        enum_name: String,
+        enum_location: Location,
+    },
 }
 
 impl CompileError {
@@ -139,6 +144,11 @@ impl CompileError {
             CompileError::SurjectivityViolation { location } => *location,
             CompileError::ThenDefinedNotVar { location } => *location,
             CompileError::ThenDefinedVarNotNew { location } => *location,
+            CompileError::EnumCtorsNotSurjective {
+                term_location,
+                enum_name: _,
+                enum_location: _,
+            } => *term_location,
         }
     }
 }
@@ -372,6 +382,19 @@ impl Display for CompileErrorWithContext {
             ThenDefinedVarNotNew { location } => {
                 write!(f, "variable has already been introduced earlier\n")?;
                 write_loc(f, *location)?;
+            }
+            EnumCtorsNotSurjective {
+                term_location,
+                enum_name,
+                enum_location,
+            } => {
+                write!(
+                    f,
+                    "term of enum type \"{enum_name}\" is not introduced with constructor \n"
+                )?;
+                write_loc(f, *term_location)?;
+                write!(f, "Enum \"{enum_name}\" declared here:\n")?;
+                write_loc(f, *enum_location)?;
             }
         }
         Ok(())
