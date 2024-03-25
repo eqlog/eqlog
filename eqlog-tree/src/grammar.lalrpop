@@ -157,11 +157,22 @@ ThenAtom: ThenAtomNode = {
     },
 }
 
-
 StmtBlock: StmtListNode = {
-  "{" <stmts: Stmt*> "}" => {
-    stmt_list_node(stmts.as_slice(), eqlog)
-  }
+    "{" <stmts: Stmt*> "}" => {
+        stmt_list_node(stmts.as_slice(), eqlog)
+    }
+}
+
+MatchCase: MatchCaseNode = {
+    <l: @L> <pattern: Term> "=>" <body: StmtBlock> <r: @R> => {
+        let case = eqlog.new_match_case_node();
+        eqlog.insert_match_case(case, pattern, body);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_match_case_node_loc(case, loc);
+
+        case
+    },
 }
 
 Stmt: StmtNode = {
@@ -183,6 +194,17 @@ Stmt: StmtNode = {
     <l: @L> "then" <atom: ThenAtom> ";" <r: @R> => {
         let stmt = eqlog.new_stmt_node();
         eqlog.insert_then_stmt_node(stmt, atom);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_stmt_node_loc(stmt, loc);
+
+        stmt
+    },
+    <l: @L> "match" <tm: Term> "{" <cases: MatchCase*> "}" <r: @R> => {
+        let cases = match_case_list_node(cases.as_slice(), eqlog);
+
+        let stmt = eqlog.new_stmt_node();
+        eqlog.insert_match_stmt_node(stmt, tm, cases);
 
         let loc = make_loc(Location(l, r), eqlog, locations);
         eqlog.insert_stmt_node_loc(stmt, loc);

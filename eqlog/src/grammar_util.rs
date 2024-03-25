@@ -122,3 +122,14 @@ pub fn opt_term_node(o: Option<TermNode>, eqlog: &mut Eqlog) -> OptTermNode {
     }
     opt_node
 }
+
+pub fn match_case_list_node(nodes: &[MatchCaseNode], eqlog: &mut Eqlog) -> MatchCaseListNode {
+    let mut l = eqlog.new_match_case_list_node();
+    eqlog.insert_nil_match_case_list_node(l);
+    for node in nodes.iter().rev() {
+        let cons = eqlog.new_match_case_list_node();
+        eqlog.insert_cons_match_case_list_node(cons, *node, l);
+        l = cons;
+    }
+    l
+}
