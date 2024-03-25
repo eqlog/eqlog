@@ -1,4 +1,4 @@
-// src-digest: C91E0905CC7BED1A4414185B0E4D3BE8372FC1918E76F2425C88E7AAAE0983F1
+// src-digest: 16EC275BCD94867381A93BA928363160BD6B072090B8053E6EE2C6B79A11CFB0
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -732,6 +732,7 @@ struct TypeDecl(pub TypeDeclNode, pub Ident);
 struct TypeDeclTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -740,11 +741,12 @@ struct TypeDeclTable {
 }
 impl TypeDeclTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_ident: BTreeMap::new(),
             element_index_type_decl_node: BTreeMap::new(),
@@ -754,6 +756,7 @@ impl TypeDeclTable {
     fn insert(&mut self, t: TypeDecl) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_type_decl_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -804,6 +807,14 @@ impl TypeDeclTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> TypeDecl {
         TypeDecl(TypeDeclNode::from(t.0), Ident::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: TypeDecl) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> TypeDecl {
+        TypeDecl(TypeDeclNode::from(t.1), Ident::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = TypeDecl> {
         let min = (u32::MIN, u32::MIN);
@@ -833,6 +844,16 @@ impl TypeDeclTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Ident) -> impl '_ + Iterator<Item = TypeDecl> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_ident(&mut self, tm: Ident) -> impl '_ + Iterator<Item = TypeDecl> {
         let ts = match self.element_index_ident.remove(&tm) {
             None => Vec::new(),
@@ -842,6 +863,7 @@ impl TypeDeclTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -861,6 +883,7 @@ impl TypeDeclTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -20623,6 +20646,149 @@ impl fmt::Display for IsGivenByCtorTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct FunctionCanBeMadeDefined(pub Func);
+#[derive(Clone, Hash, Debug)]
+struct FunctionCanBeMadeDefinedTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
+
+    element_index_func: BTreeMap<Func, Vec<FunctionCanBeMadeDefined>>,
+}
+impl FunctionCanBeMadeDefinedTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
+            element_index_func: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: FunctionCanBeMadeDefined) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_func.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_func.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    fn insert_dirt(&mut self, t: FunctionCanBeMadeDefined) -> bool {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: FunctionCanBeMadeDefined) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn retire_dirt(&mut self) {
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: FunctionCanBeMadeDefined) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> FunctionCanBeMadeDefined {
+        FunctionCanBeMadeDefined(Func::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = FunctionCanBeMadeDefined> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = FunctionCanBeMadeDefined> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = FunctionCanBeMadeDefined> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_func(
+        &mut self,
+        tm: Func,
+    ) -> impl '_ + Iterator<Item = FunctionCanBeMadeDefined> {
+        let ts = match self.element_index_func.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        ts.into_iter().filter(|t| {
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
+                true
+            } else {
+                false
+            }
+        })
+    }
+    fn recall_previous_dirt(&mut self, func_equalities: &mut Unification<Func>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
+
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
+            #[allow(unused_mut)]
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == func_equalities.root(tuple.0) {
+                self.insert_dirt(tuple);
+            }
+        }
+    }
+}
+impl fmt::Display for FunctionCanBeMadeDefinedTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("function_can_be_made_defined"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RealVirtIdent(pub Ident, pub VirtIdent);
 #[derive(Clone, Hash, Debug)]
 struct RealVirtIdentTable {
@@ -27706,6 +27872,7 @@ struct Codomain(pub Func, pub Type);
 struct CodomainTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
@@ -27714,11 +27881,12 @@ struct CodomainTable {
 }
 impl CodomainTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_func: BTreeMap::new(),
             element_index_type: BTreeMap::new(),
@@ -27728,6 +27896,7 @@ impl CodomainTable {
     fn insert(&mut self, t: Codomain) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_func.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -27778,6 +27947,14 @@ impl CodomainTable {
     fn permute_inverse_0_1(t: (u32, u32)) -> Codomain {
         Codomain(Func::from(t.0), Type::from(t.1))
     }
+    #[allow(unused)]
+    fn permute_1_0(t: Codomain) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> Codomain {
+        Codomain(Func::from(t.1), Type::from(t.0))
+    }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = Codomain> {
         let min = (u32::MIN, u32::MIN);
@@ -27818,6 +27995,16 @@ impl CodomainTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_func(&mut self, tm: Func) -> impl '_ + Iterator<Item = Codomain> {
         let ts = match self.element_index_func.remove(&tm) {
             None => Vec::new(),
@@ -27827,6 +28014,7 @@ impl CodomainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -27843,6 +28031,7 @@ impl CodomainTable {
         ts.into_iter().filter(|t| {
             if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+                self.index_all_1_0.remove(&Self::permute_1_0(*t));
                 true
             } else {
                 false
@@ -33344,6 +33533,7 @@ struct ModelDelta {
     new_var_term_in_rule: Vec<VarTermInRule>,
     new_should_be_obtained_by_ctor: Vec<ShouldBeObtainedByCtor>,
     new_is_given_by_ctor: Vec<IsGivenByCtor>,
+    new_function_can_be_made_defined: Vec<FunctionCanBeMadeDefined>,
     new_real_virt_ident: Vec<RealVirtIdent>,
     new_rule_name: Vec<RuleName>,
     new_type_decl_node_loc: Vec<TypeDeclNodeLoc>,
@@ -33790,6 +33980,7 @@ pub struct Eqlog {
     var_term_in_rule: VarTermInRuleTable,
     should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,
     is_given_by_ctor: IsGivenByCtorTable,
+    function_can_be_made_defined: FunctionCanBeMadeDefinedTable,
     real_virt_ident: RealVirtIdentTable,
     rule_name: RuleNameTable,
     type_decl_node_loc: TypeDeclNodeLocTable,
@@ -33968,6 +34159,7 @@ impl ModelDelta {
             new_var_term_in_rule: Vec::new(),
             new_should_be_obtained_by_ctor: Vec::new(),
             new_is_given_by_ctor: Vec::new(),
+            new_function_can_be_made_defined: Vec::new(),
             new_real_virt_ident: Vec::new(),
             new_rule_name: Vec::new(),
             new_type_decl_node_loc: Vec::new(),
@@ -39251,6 +39443,16 @@ impl ModelDelta {
                     }),
             );
 
+            self.new_function_can_be_made_defined.extend(
+                model
+                    .function_can_be_made_defined
+                    .drain_with_element_func(child)
+                    .inspect(|t| {
+                        let weight0 = model.func_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= FunctionCanBeMadeDefinedTable::WEIGHT;
+                    }),
+            );
+
             self.new_semantic_func.extend(
                 model
                     .semantic_func
@@ -41484,6 +41686,14 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
+        for mut t in self.new_function_can_be_made_defined.drain(..) {
+            t.0 = model.func_equalities.root(t.0);
+            if model.function_can_be_made_defined.insert(t) {
+                model.func_weights[t.0 .0 as usize] += FunctionCanBeMadeDefinedTable::WEIGHT;
+            }
+        }
+
+        #[allow(unused_mut)]
         for mut t in self.new_real_virt_ident.drain(..) {
             t.0 = model.ident_equalities.root(t.0);
             t.1 = model.virt_ident_equalities.root(t.1);
@@ -42674,6 +42884,7 @@ impl Eqlog {
             var_term_in_rule: VarTermInRuleTable::new(),
             should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),
             is_given_by_ctor: IsGivenByCtorTable::new(),
+            function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),
             real_virt_ident: RealVirtIdentTable::new(),
             rule_name: RuleNameTable::new(),
             type_decl_node_loc: TypeDeclNodeLocTable::new(),
@@ -43017,6 +43228,10 @@ impl Eqlog {
                 self.query_and_record_var_term_in_rule_child(&mut delta);
                 self.query_and_record_defined_then_should_be_given_by_ctor(&mut delta);
                 self.query_and_record_ctor_app_is_given_by_ctor(&mut delta);
+                self.query_and_record_function_can_be_made_defined_if_codomain_normal_type(
+                    &mut delta,
+                );
+                self.query_and_record_function_can_be_defined_if_constructor(&mut delta);
 
                 self.retire_dirt();
                 delta.apply(self);
@@ -49705,6 +49920,30 @@ impl Eqlog {
             .push(IsGivenByCtor(arg0, arg1));
     }
 
+    /// Returns `true` if `function_can_be_made_defined(arg0)` holds.
+    #[allow(dead_code)]
+    pub fn function_can_be_made_defined(&self, mut arg0: Func) -> bool {
+        arg0 = self.root_func(arg0);
+        self.function_can_be_made_defined
+            .contains(FunctionCanBeMadeDefined(arg0))
+    }
+    /// Returns an iterator over elements satisfying the `function_can_be_made_defined` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_function_can_be_made_defined(&self) -> impl '_ + Iterator<Item = Func> {
+        self.function_can_be_made_defined.iter_all().map(|t| t.0)
+    }
+    /// Makes `function_can_be_made_defined(arg0)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_function_can_be_made_defined(&mut self, arg0: Func) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_function_can_be_made_defined
+            .push(FunctionCanBeMadeDefined(arg0));
+    }
+
     fn is_dirty(&self) -> bool {
         self.empty_join_is_dirty
             || self.absurd.is_dirty()
@@ -49811,6 +50050,7 @@ impl Eqlog {
             || self.var_term_in_rule.is_dirty()
             || self.should_be_obtained_by_ctor.is_dirty()
             || self.is_given_by_ctor.is_dirty()
+            || self.function_can_be_made_defined.is_dirty()
             || self.real_virt_ident.is_dirty()
             || self.rule_name.is_dirty()
             || self.type_decl_node_loc.is_dirty()
@@ -60796,6 +61036,83 @@ impl Eqlog {
             }
         }
     }
+    fn record_action_280(&self, delta: &mut ModelDelta, tm3: Func) {
+        let existing_row = self.function_can_be_made_defined.iter_all_0(tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(FunctionCanBeMadeDefined(_)) => (),
+            None => {
+                delta
+                    .new_function_can_be_made_defined
+                    .push(FunctionCanBeMadeDefined(tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_function_can_be_made_defined_if_codomain_normal_type(
+        &self,
+        delta: &mut ModelDelta,
+    ) {
+        #[allow(unused_variables)]
+        for TypeDecl(tm0, tm1) in self.type_decl.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticType(_, tm2) in self.semantic_type.iter_all_0(tm1) {
+                #[allow(unused_variables)]
+                for Codomain(tm3, _) in self.codomain.iter_all_1(tm2) {
+                    self.record_action_280(delta, tm3);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for SemanticType(tm1, tm2) in self.semantic_type.iter_dirty() {
+            #[allow(unused_variables)]
+            for Codomain(tm3, _) in self.codomain.iter_all_1(tm2) {
+                #[allow(unused_variables)]
+                for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
+                    self.record_action_280(delta, tm3);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for Codomain(tm3, tm2) in self.codomain.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm2) {
+                #[allow(unused_variables)]
+                for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
+                    self.record_action_280(delta, tm3);
+                }
+            }
+        }
+    }
+    fn record_action_281(&self, delta: &mut ModelDelta, tm3: Func) {
+        let existing_row = self.function_can_be_made_defined.iter_all_0(tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(FunctionCanBeMadeDefined(_)) => (),
+            None => {
+                delta
+                    .new_function_can_be_made_defined
+                    .push(FunctionCanBeMadeDefined(tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_function_can_be_defined_if_constructor(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for CtorDecl(tm0, tm1, tm2) in self.ctor_decl.iter_dirty() {
+            #[allow(unused_variables)]
+            for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
+                self.record_action_281(delta, tm3);
+            }
+        }
+        #[allow(unused_variables)]
+        for SemanticFunc(tm1, tm3) in self.semantic_func.iter_dirty() {
+            #[allow(unused_variables)]
+            for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
+                self.record_action_281(delta, tm3);
+            }
+        }
+    }
     fn drop_dirt(&mut self) {
         self.empty_join_is_dirty = false;
 
@@ -60903,6 +61220,7 @@ impl Eqlog {
         self.var_term_in_rule.drop_dirt();
         self.should_be_obtained_by_ctor.drop_dirt();
         self.is_given_by_ctor.drop_dirt();
+        self.function_can_be_made_defined.drop_dirt();
         self.real_virt_ident.drop_dirt();
         self.rule_name.drop_dirt();
         self.type_decl_node_loc.drop_dirt();
@@ -61112,6 +61430,7 @@ impl Eqlog {
         self.var_term_in_rule.retire_dirt();
         self.should_be_obtained_by_ctor.retire_dirt();
         self.is_given_by_ctor.retire_dirt();
+        self.function_can_be_made_defined.retire_dirt();
         self.real_virt_ident.retire_dirt();
         self.rule_name.retire_dirt();
         self.type_decl_node_loc.retire_dirt();
@@ -61736,6 +62055,8 @@ impl Eqlog {
             &mut self.enum_decl_node_equalities,
             &mut self.term_node_equalities,
         );
+        self.function_can_be_made_defined
+            .recall_previous_dirt(&mut self.func_equalities);
         self.real_virt_ident
             .recall_previous_dirt(&mut self.ident_equalities, &mut self.virt_ident_equalities);
         self.rule_name.recall_previous_dirt(
@@ -62740,6 +63061,7 @@ impl fmt::Display for Eqlog {
         self.var_term_in_rule.fmt(f)?;
         self.should_be_obtained_by_ctor.fmt(f)?;
         self.is_given_by_ctor.fmt(f)?;
+        self.function_can_be_made_defined.fmt(f)?;
         self.real_virt_ident.fmt(f)?;
         self.rule_name.fmt(f)?;
         self.type_decl_node_loc.fmt(f)?;

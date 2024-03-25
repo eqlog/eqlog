@@ -1710,3 +1710,20 @@ rule ctor_app_is_given_by_ctor {
     if ctor_enum(ctor) = enum_decl_node;
     then is_given_by_ctor(tm, enum_decl_node);
 }
+
+// ### Function definedness
+//
+// This predicate holds if an Eqlog function can be made defined via the Rust API.
+pred function_can_be_made_defined(Func);
+
+rule function_can_be_made_defined_if_codomain_normal_type {
+    if type_decl(_, ident);
+    if ty = semantic_type(ident);
+    if codomain(function) = ty;
+    then function_can_be_made_defined(function);
+}
+rule function_can_be_defined_if_constructor {
+    if ctor_decl(_, ident, _);
+    if function = semantic_func(ident);
+    then function_can_be_made_defined(function);
+}

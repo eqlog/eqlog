@@ -60,6 +60,78 @@ fn write_sort_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
+fn display_ctor<'a>(
+    ctor: CtorDeclNode,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let ctor_ident = eqlog
+            .iter_ctor_decl()
+            .find_map(|(ctor0, ctor_ident, _)| {
+                if eqlog.are_equal_ctor_decl_node(ctor0, ctor) {
+                    Some(ctor_ident)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
+        let ctor_name: String = identifiers.get(&ctor_ident).unwrap().to_case(UpperCamel);
+
+        let ctor_func = eqlog.semantic_func(ctor_ident).unwrap();
+        let domain: Vec<Type> =
+            type_list_vec(eqlog.domain(ctor_func).expect("should be total"), eqlog);
+
+        let domain = domain
+            .into_iter()
+            .map(|typ| display_type(typ, eqlog, identifiers))
+            .format(", ");
+
+        write!(f, "{}({})", ctor_name, domain)
+    })
+}
+
+fn display_enum<'a>(
+    enum_decl: EnumDeclNode,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let ctors = eqlog
+            .iter_ctor_enum()
+            .filter_map(|(ctor, enum_decl0)| {
+                if eqlog.are_equal_enum_decl_node(enum_decl, enum_decl0) {
+                    Some(ctor)
+                } else {
+                    None
+                }
+            })
+            .map(|ctor| format!("{},\n", display_ctor(ctor, eqlog, identifiers)))
+            .format("");
+
+        let enum_ident = eqlog
+            .iter_enum_decl()
+            .find_map(|(enum_decl0, enum_ident, _)| {
+                if eqlog.are_equal_enum_decl_node(enum_decl, enum_decl0) {
+                    Some(enum_ident)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let enum_name = identifiers.get(&enum_ident).unwrap().to_case(UpperCamel);
+
+        writedoc! {f, "
+            #[allow(unused)]
+            #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+            pub enum {enum_name}Enum {{
+            {ctors}
+            }}
+        "}
+    })
+}
+
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
 fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
@@ -839,7 +911,7 @@ fn write_pub_insert_relation(
     "}
 }
 
-fn write_new_element(
+fn write_new_element_internal(
     out: &mut impl Write,
     typ: Type,
     eqlog: &Eqlog,
@@ -850,7 +922,7 @@ fn write_new_element(
     writedoc! {out, "
         /// Adjoins a new element of type [{type_camel}].
         #[allow(dead_code)]
-        pub fn new_{type_snake}(&mut self) -> {type_camel} {{
+        fn new_{type_snake}_internal(&mut self) -> {type_camel} {{
             let old_len = self.{type_snake}_equalities.len();
             self.{type_snake}_equalities.increase_size_to(old_len + 1);
             let el = {type_camel}::from(u32::try_from(old_len).unwrap());
@@ -864,6 +936,98 @@ fn write_new_element(
             el
         }}
     "}
+}
+
+fn write_new_element(
+    out: &mut impl Write,
+    typ: Type,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
+    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
+    let type_snake = type_camel.to_case(Snake);
+    writedoc! {out, "
+        /// Adjoins a new element of type [{type_camel}].
+        #[allow(dead_code)]
+        pub fn new_{type_snake}(&mut self) -> {type_camel} {{
+            self.new_{type_snake}_internal()
+        }}
+    "}
+}
+
+fn display_new_enum_element<'a>(
+    enum_decl: EnumDeclNode,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let enum_ident = eqlog
+            .iter_enum_decl()
+            .find_map(|(enum_decl0, enum_ident, _)| {
+                if enum_decl0 == enum_decl {
+                    Some(enum_ident)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let enum_name = identifiers.get(&enum_ident).unwrap();
+        let enum_name_camel = enum_name.to_case(UpperCamel);
+        let enum_name_camel = enum_name_camel.as_str();
+        let enum_name_snake = enum_name.to_case(Snake);
+
+        let ctors = eqlog.iter_ctor_enum().filter_map(|(ctor, enum_decl0)| {
+            if eqlog.are_equal_enum_decl_node(enum_decl0, enum_decl) {
+                Some(ctor)
+            } else {
+                None
+            }
+        });
+
+        let match_branches = ctors
+            .map(|ctor| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let ctor_ident = eqlog
+                        .iter_ctor_decl()
+                        .find_map(|(ctor0, ident, _)| {
+                            if eqlog.are_equal_ctor_decl_node(ctor, ctor0) {
+                                Some(ident)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap();
+                    let ctor_name = identifiers.get(&ctor_ident).unwrap();
+                    let ctor_name_snake = ctor_name.to_case(Snake);
+                    let ctor_name_camel = ctor_name.to_case(UpperCamel);
+
+                    let ctor_func: Func = eqlog.semantic_func(ctor_ident).unwrap();
+                    let ctor_arg_types: Vec<Type> =
+                        type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog);
+                    let ctor_vars = (0..ctor_arg_types.len())
+                        .map(|i| display_var(FlatVar(i)))
+                        .format(", ");
+                    let func_vars = ctor_vars.clone();
+
+                    writedoc! {f, "
+                        {enum_name_camel}Enum::{ctor_name_camel}({ctor_vars}) => {{
+                            self.define_{ctor_name_snake}({func_vars})
+                        }}
+                    "}
+                })
+            })
+            .format("");
+
+        writedoc! {f, "
+            /// Adjoins a new element of type [{enum_name_camel}].
+            #[allow(dead_code)]
+            pub fn new_{enum_name_snake}(&mut self, value: {enum_name_camel}Enum) -> {enum_name_camel} {{
+                match value {{
+                    {match_branches}
+                }}
+            }}
+        "}
+    })
 }
 
 fn write_equate_elements(
@@ -1049,13 +1213,24 @@ fn write_model_delta_struct(
             ))
         });
 
-    let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
-        let name_snake = name.to_case(Snake);
-        let name_camel = name.to_case(UpperCamel);
-        f(&format_args!(
-            "    new_{name_snake}_def: Vec<{name_camel}Args>,"
-        ))
-    });
+    let new_defines = eqlog
+        .iter_semantic_func()
+        .filter_map(|(ident, func)| {
+            if !eqlog.function_can_be_made_defined(func) {
+                return None;
+            }
+
+            let func_name = identifiers.get(&ident).unwrap();
+            let func_snake = func_name.to_case(Snake);
+            let func_camel = func_name.to_case(UpperCamel);
+
+            Some(FmtFn(move |f: &mut Formatter| -> Result {
+                writedoc! {f, "
+                        new_{func_snake}_def: Vec<{func_camel}Args>,
+                    "}
+            }))
+        })
+        .format("");
 
     writedoc! {out, "
         #[derive(Debug, Clone)]
@@ -1107,10 +1282,23 @@ fn write_model_delta_new_fn(
             "    new_{sort_snake}_equalities: Vec::new(),"
         ))
     });
-    let new_defines = iter_func_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
-        let name_snake = name.to_case(Snake);
-        f(&format_args!("    new_{name_snake}_def: Vec::new(),"))
-    });
+    let new_defines = eqlog
+        .iter_semantic_func()
+        .filter_map(|(ident, func)| {
+            if !eqlog.function_can_be_made_defined(func) {
+                return None;
+            }
+
+            let func_name = identifiers.get(&ident).unwrap();
+            let func_snake = func_name.to_case(Snake);
+
+            Some(FmtFn(move |f: &mut Formatter| -> Result {
+                writedoc! {f, "
+                    new_{func_snake}_def: Vec::new(),
+                "}
+            }))
+        })
+        .format("\n");
 
     writedoc! {out, "
         fn new() -> ModelDelta {{
@@ -1202,21 +1390,28 @@ fn write_model_delta_apply_def_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let func_defs = iter_func_arities(eqlog, identifiers)
-        .map(|(func, arity)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let func_snake = func.to_case(Snake);
-                let func_camel = func.to_case(UpperCamel);
-                let dom = &arity[..arity.len() - 1];
-                let args0 = (0..dom.len()).map(FlatVar).map(display_var).format(", ");
-                let args1 = args0.clone();
+    let func_defs = eqlog
+        .iter_semantic_func()
+        .filter_map(|(ident, func)| {
+            if !eqlog.function_can_be_made_defined(func) {
+                return None;
+            }
+
+            let func_name = identifiers.get(&ident).unwrap();
+            let func_snake = func_name.to_case(Snake);
+            let func_camel = func_name.to_case(UpperCamel);
+
+            let domain = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
+            let args0 = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
+            let args1 = args0.clone();
+
+            Some(FmtFn(move |f: &mut Formatter| -> Result {
                 writedoc! {f, "
-                    for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
-                        model.define_{func_snake}({args1});
-                    }}
-                "}?;
-                Ok(())
-            })
+                        for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
+                            model.define_{func_snake}({args1});
+                        }}
+                    "}
+            }))
         })
         .format("\n");
 
@@ -1703,7 +1898,7 @@ fn write_define_fn(
             match self.{func_snake}({args1}) {{
                 Some(result) => result,
                 None => {{
-                    let {result_var} = self.new_{codomain_snake}();
+                    let {result_var} = self.new_{codomain_snake}_internal();
                     self.insert_{func_snake}({rel_args});
                     {result_var}
                 }}
@@ -1761,9 +1956,23 @@ fn write_theory_impl(
         write_are_equal_fn(out, type_name)?;
         write!(out, "\n")?;
     }
+
     for typ in eqlog.iter_type() {
-        write_new_element(out, typ, eqlog, identifiers)?;
+        write_new_element_internal(out, typ, eqlog, identifiers)?;
         write_equate_elements(out, typ, eqlog, identifiers)?;
+    }
+
+    for (_, ident) in eqlog.iter_type_decl() {
+        let typ = eqlog.semantic_type(ident).unwrap();
+        write_new_element(out, typ, eqlog, identifiers)?;
+    }
+
+    for (enum_decl, _, _) in eqlog.iter_enum_decl() {
+        write!(
+            out,
+            "{}",
+            display_new_enum_element(enum_decl, eqlog, identifiers)
+        )?;
     }
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
@@ -1772,8 +1981,11 @@ fn write_theory_impl(
         write_pub_insert_relation(out, func_name, &arity, true)?;
         write!(out, "\n")?;
     }
+
     for func in eqlog.iter_func() {
-        write_define_fn(out, func, eqlog, identifiers)?;
+        if eqlog.function_can_be_made_defined(func) {
+            write_define_fn(out, func, eqlog, identifiers)?;
+        }
     }
 
     for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
@@ -1862,6 +2074,10 @@ pub fn write_module(
         write_sort_impl(out, name)?;
     }
     write!(out, "\n")?;
+
+    for (enum_decl, _, _) in eqlog.iter_enum_decl() {
+        writeln!(out, "{}", display_enum(enum_decl, eqlog, identifiers))?;
+    }
 
     for (rel, arity) in iter_relation_arities(eqlog, identifiers) {
         write_relation_struct(out, rel, &arity)?;
