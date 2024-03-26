@@ -147,6 +147,8 @@ func rule_child_term_list(TermListNode) -> RuleChildNode;
 func rule_child_opt_term(OptTermNode) -> RuleChildNode;
 func rule_child_if_atom(IfAtomNode) -> RuleChildNode;
 func rule_child_then_atom(ThenAtomNode) -> RuleChildNode;
+func rule_child_match_case(MatchCaseNode) -> RuleChildNode;
+func rule_child_match_case_list(MatchCaseListNode) -> RuleChildNode;
 func rule_child_stmt(StmtNode) -> RuleChildNode;
 func rule_child_stmt_list(StmtListNode) -> RuleChildNode;
 func rule_child_stmt_block_list(StmtBlockListNode) -> RuleChildNode;
@@ -170,6 +172,14 @@ rule rule_child_if_atom_total {
 rule rule_child_then_atom_total {
     if atom: ThenAtomNode;
     then rule_child_then_atom(atom)!;
+}
+rule rule_child_match_case_total {
+    if case: MatchCaseNode;
+    then rule_child_match_case(case)!;
+}
+rule rule_child_match_case_list_total {
+    if cases: MatchCaseListNode;
+    then rule_child_match_case_list(cases)!;
 }
 rule rule_child_stmt_total {
     if stmt: StmtNode;
@@ -228,6 +238,16 @@ rule rule_child_stmt_branch {
     if child_block_list = rule_child_stmt_block_list(blocks);
     then rule_child(child_block_list, rul);
 }
+rule rule_child_stmt_match {
+    if match_stmt_node(stmt, term, cases);
+    if rule_child(rule_child_stmt(stmt), rul);
+
+    if child_term = rule_child_term(term);
+    if child_cases = rule_child_match_case_list(cases);
+
+    then rule_child(child_term, rul);
+    then rule_child(child_cases, rul);
+}
 
 rule rule_child_if_atom_equal {
     if equal_if_atom_node(atom, lhs, rhs);
@@ -277,6 +297,28 @@ rule rule_child_then_atom_pred {
     if rule_child(rule_child_then_atom(atom), rul);
     if child_tms = rule_child_term_list(tms);
     then rule_child(child_tms, rul);
+}
+
+rule rule_child_match_case_children {
+    if match_case(case, pattern, body);
+    if rule_child(rule_child_match_case(case), rul);
+
+    if child_pattern = rule_child_term(pattern);
+    if child_body = rule_child_stmt_list(body);
+
+    then rule_child(child_pattern, rul);
+    then rule_child(child_body, rul);
+}
+
+rule rule_child_match_case_list_cons {
+    if cons_match_case_list_node(cases, head_case, tail_cases);
+    if rule_child(rule_child_match_case_list(cases), rul);
+
+    if child_head = rule_child_match_case(head_case);
+    if child_tail = rule_child_match_case_list(tail_cases);
+
+    then rule_child(child_head, rul);
+    then rule_child(child_tail, rul);
 }
 
 rule rule_child_terms_cons {
