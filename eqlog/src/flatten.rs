@@ -586,6 +586,8 @@ pub fn flatten(
             }
 
             matching_func_indices.insert(eqlog.cod(morphism).unwrap(), cont_func_name.0);
+        } else if eqlog.noop_morphism(morphism) {
+            matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else {
             panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
         }

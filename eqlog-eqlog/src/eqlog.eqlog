@@ -935,21 +935,31 @@ rule cfg_edge_join_cons {
     then cfg_edge_nonlinear_stmts_stmt(head_block, stmt);
 }
 
-rule cfg_edge_branch_stmt_into {
-    if branch_stmt_node(branch_stmt, branch_blocks);
-    if cfg_edge(from_stmt, branch_stmt);
-    then cfg_edge_branch_fork(from_stmt, branch_blocks);
-}
-rule cfg_edge_branch_stmt_from {
-    if branch_stmt_node(branch_stmt, branch_blocks);
-    if cfg_edge(branch_stmt, into_stmt);
-    then cfg_edge_branch_join(branch_blocks, into_stmt);
-}
+// ## Populating the cfg edge based on the AST
 
-rule cfg_edge_adjacent {
+rule cfg_edge_if {
     if cons_stmt_list_node(_, first , tail);
+    if if_stmt_node(first, _);
     if cons_stmt_list_node(tail, second , _);
     then cfg_edge_linear(first, second);
+}
+
+rule cfg_edge_then {
+    if cons_stmt_list_node(_, first , tail);
+    if then_stmt_node(first, _);
+    if cons_stmt_list_node(tail, second , _);
+    then cfg_edge_linear(first, second);
+}
+
+rule cfg_edge_branch_fork_blocks {
+    if branch_stmt_node(branch_stmt, branch_blocks);
+    then cfg_edge_branch_fork(branch_stmt, branch_blocks);
+}
+rule cfg_edge_branch_join_blocks {
+    if branch_stmt_node(branch_stmt, branch_blocks);
+    if cons_stmt_list_node(_, branch_stmt , tail);
+    if cons_stmt_list_node(tail, after_branch_stmt , _);
+    then cfg_edge_branch_join(branch_blocks, after_branch_stmt);
 }
 
 rule cfg_linear_first_rule {
@@ -966,6 +976,17 @@ rule cfg_linear_last_list {
     if cons_stmt_list_node(_, head, tail);
     if nil_stmt_list_node(tail);
     then cfg_linear_last(head);
+}
+
+rule cfg_linear_last_branch {
+    if branch_stmt_node(stmt, _);
+    then cfg_linear_last(stmt);
+}
+rule cfg_linear_first_after_branch {
+    if branch_stmt_node(branch_stmt, _);
+    if cons_stmt_list_node(_, branch_stmt, tail);
+    if cons_stmt_list_node(tail, after_branch_stmt, _);
+    then cfg_linear_first(after_branch_stmt);
 }
 
 // ## The morphisms associated to statements.
@@ -1000,34 +1021,45 @@ rule cfg_edge_stmt_structure {
 
 func if_atom_morphism(IfAtomNode, before_structure: Structure) -> Morphism;
 func then_atom_morphism(ThenAtomNode, before_structure: Structure) -> Morphism;
+// This should only be defined for branch statements.
+func branch_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
 
 rule if_atom_morphism_dom {
     if morph_dom = dom(if_atom_morphism(_, before_structure));
     then morph_dom = before_structure;
 }
-
 rule then_atom_morphism_dom {
     if morph_dom = dom(then_atom_morphism(_, before_structure));
     then morph_dom = before_structure;
 }
+rule branch_stmt_morphism_dom {
+    if morph_dom = dom(branch_stmt_morphism(_, before_structure));
+    then morph_dom = before_structure;
+}
 
-rule if_stmt_morphism {
+rule if_stmt_morphism_defined {
     if if_stmt_node(stmt, atom);
     if before_stmt_structure(stmt, before_structure);
     then morph := if_atom_morphism(atom, before_structure)!;
     then stmt_morphism(stmt, morph);
 }
-
-rule then_stmt_morphism {
+rule then_stmt_morphism_defined {
     if then_stmt_node(stmt, atom);
     if before_stmt_structure(stmt, before_structure);
     then morph := then_atom_morphism(atom, before_structure)!;
+    then stmt_morphism(stmt, morph);
+}
+rule branch_stmt_morphism_defined {
+    if branch_stmt_node(stmt, _);
+    if before_stmt_structure(stmt, before_structure);
+    then morph := branch_stmt_morphism(stmt, before_structure)!;
     then stmt_morphism(stmt, morph);
 }
 
 pred if_morphism(Morphism);
 pred surj_then_morphism(Morphism);
 pred non_surj_then_morphism(Morphism);
+pred noop_morphism(Morphism);
 
 rule if_stmt_morphism_is_if {
     if if_stmt_node(stmt, _);
@@ -1051,6 +1083,11 @@ rule then_defined_stmt_morphism_is_non_surj {
     if defined_then_atom_node(atom, _, _);
     if stmt_morphism(stmt, morph);
     then non_surj_then_morphism(morph);
+}
+rule branch_stmt_morphism_is_noop {
+    if branch_stmt_node(stmt, _);
+    if stmt_morphism(stmt, morph);
+    then noop_morphism(morph);
 }
 
 // ### Propagation of associated structures through the AST
@@ -1422,6 +1459,8 @@ rule grouped_stmt_morphism_branch {
 
     then next_grouped_morphism(gsm_first, gsm_second);
 }
+
+// TODO: Grouping rules for branch statements.
 
 // ## Epic check
 
