@@ -860,8 +860,16 @@ rule app_term_arg_num_should_match {
 
 // ## Control flow graph
 pred cfg_edge(from: StmtNode, to: StmtNode);
+
+// ### Linear and nonlinear control flow
+//
+// This is to separate the case where we execute a linear sequence of
+// statements from cases where we branch, i.e. where execution forks into several paths.
+// All rules should be set up such that each cfg_edge is either linear or
+// nonlinear and never both.
 pred cfg_linear_first(stmt: StmtNode);
 pred cfg_linear_last(stmt: StmtNode);
+
 pred cfg_edge_linear(from: StmtNode, to: StmtNode);
 pred cfg_edge_nonlinear(from: StmtNode, to: StmtNode);
 
@@ -872,28 +880,6 @@ rule cfg_edge_linear_general {
 rule cfg_edge_nonlinear_general {
     if cfg_edge_nonlinear(from, to);
     then cfg_edge(from, to);
-}
-
-rule cfg_edge_adjacent {
-    if cons_stmt_list_node(_, first , tail);
-    if cons_stmt_list_node(tail, second , _);
-    then cfg_edge_linear(first, second);
-}
-
-rule cfg_linear_first_rule {
-    if rule_decl(_, stmts);
-    if cons_stmt_list_node(stmts, head, _);
-    then cfg_linear_first(head);
-}
-rule cfg_linear_first_block_list {
-    if cons_stmt_block_list_node(_, head_block, _);
-    if cons_stmt_list_node(head_block, head_stmt, _);
-    then cfg_linear_first(head_stmt);
-}
-rule cfg_linear_last_list {
-    if cons_stmt_list_node(_, head, tail);
-    if nil_stmt_list_node(tail);
-    then cfg_linear_last(head);
 }
 
 // ### Control flow from and into StmtListNodes
@@ -932,32 +918,54 @@ rule cfg_edge_stmt_stmts_nil {
 //
 // This is for branches.
 
-pred cfg_edge_nonlinear_fork(from: StmtNode, to: StmtBlockListNode);
-pred cfg_edge_nonlinear_join(from: StmtBlockListNode, to: StmtNode);
+pred cfg_edge_branch_fork(from: StmtNode, to: StmtBlockListNode);
+pred cfg_edge_branch_join(from: StmtBlockListNode, to: StmtNode);
 
 rule cfg_edge_fork_cons {
-    if cfg_edge_nonlinear_fork(stmt, blocks);
+    if cfg_edge_branch_fork(stmt, blocks);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_nonlinear_fork(stmt, tail_blocks);
+    then cfg_edge_branch_fork(stmt, tail_blocks);
     then cfg_edge_nonlinear_stmt_stmts(stmt, head_block);
 }
 
 rule cfg_edge_join_cons {
-    if cfg_edge_nonlinear_join(blocks, stmt);
+    if cfg_edge_branch_join(blocks, stmt);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_nonlinear_join(tail_blocks, stmt);
+    then cfg_edge_branch_join(tail_blocks, stmt);
     then cfg_edge_nonlinear_stmts_stmt(head_block, stmt);
 }
 
-rule cfg_edge_fork_stmt_into {
-    if branch_stmt_node(branch_stmt, fork_blocks);
+rule cfg_edge_branch_stmt_into {
+    if branch_stmt_node(branch_stmt, branch_blocks);
     if cfg_edge(from_stmt, branch_stmt);
-    then cfg_edge_nonlinear_fork(from_stmt, fork_blocks);
+    then cfg_edge_branch_fork(from_stmt, branch_blocks);
 }
-rule cfg_edge_fork_stmt_from {
-    if branch_stmt_node(branch_stmt, fork_blocks);
+rule cfg_edge_branch_stmt_from {
+    if branch_stmt_node(branch_stmt, branch_blocks);
     if cfg_edge(branch_stmt, into_stmt);
-    then cfg_edge_nonlinear_join(fork_blocks, into_stmt);
+    then cfg_edge_branch_join(branch_blocks, into_stmt);
+}
+
+rule cfg_edge_adjacent {
+    if cons_stmt_list_node(_, first , tail);
+    if cons_stmt_list_node(tail, second , _);
+    then cfg_edge_linear(first, second);
+}
+
+rule cfg_linear_first_rule {
+    if rule_decl(_, stmts);
+    if cons_stmt_list_node(stmts, head, _);
+    then cfg_linear_first(head);
+}
+rule cfg_linear_first_block_list {
+    if cons_stmt_block_list_node(_, head_block, _);
+    if cons_stmt_list_node(head_block, head_stmt, _);
+    then cfg_linear_first(head_stmt);
+}
+rule cfg_linear_last_list {
+    if cons_stmt_list_node(_, head, tail);
+    if nil_stmt_list_node(tail);
+    then cfg_linear_last(head);
 }
 
 // ## The morphisms associated to statements.

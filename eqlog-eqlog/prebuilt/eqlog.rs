@@ -1,4 +1,4 @@
-// src-digest: 9F5325ED9456ABDC1E3501C76B42C6F2DA4D2406221848F1101ADD356941CBE4
+// src-digest: 6358ED162B520FAB227561A5E37E0A49FE2EA2B3C461102F34D5236D4EE3E490
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -14265,18 +14265,18 @@ impl fmt::Display for CfgEdgeNonlinearStmtStmtsTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CfgEdgeNonlinearFork(pub StmtNode, pub StmtBlockListNode);
+struct CfgEdgeBranchFork(pub StmtNode, pub StmtBlockListNode);
 #[derive(Clone, Hash, Debug)]
-struct CfgEdgeNonlinearForkTable {
+struct CfgEdgeBranchForkTable {
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeNonlinearFork>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinearFork>>,
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeBranchFork>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeBranchFork>>,
 }
-impl CfgEdgeNonlinearForkTable {
+impl CfgEdgeBranchForkTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -14289,7 +14289,7 @@ impl CfgEdgeNonlinearForkTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CfgEdgeNonlinearFork) -> bool {
+    fn insert(&mut self, t: CfgEdgeBranchFork) -> bool {
         if self.index_all_1_0.insert(Self::permute_1_0(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -14312,7 +14312,7 @@ impl CfgEdgeNonlinearForkTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CfgEdgeNonlinearFork) -> bool {
+    fn insert_dirt(&mut self, t: CfgEdgeBranchFork) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -14320,7 +14320,7 @@ impl CfgEdgeNonlinearForkTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CfgEdgeNonlinearFork) -> bool {
+    fn contains(&self, t: CfgEdgeBranchFork) -> bool {
         self.index_all_1_0.contains(&Self::permute_1_0(t))
     }
     fn drop_dirt(&mut self) {
@@ -14335,23 +14335,23 @@ impl CfgEdgeNonlinearForkTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CfgEdgeNonlinearFork) -> (u32, u32) {
+    fn permute_0_1(t: CfgEdgeBranchFork) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinearFork {
-        CfgEdgeNonlinearFork(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeBranchFork {
+        CfgEdgeBranchFork(StmtNode::from(t.0), StmtBlockListNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: CfgEdgeNonlinearFork) -> (u32, u32) {
+    fn permute_1_0(t: CfgEdgeBranchFork) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeNonlinearFork {
-        CfgEdgeNonlinearFork(StmtNode::from(t.1), StmtBlockListNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> CfgEdgeBranchFork {
+        CfgEdgeBranchFork(StmtNode::from(t.1), StmtBlockListNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeBranchFork> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_1_0
@@ -14360,7 +14360,7 @@ impl CfgEdgeNonlinearForkTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeBranchFork> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -14373,7 +14373,7 @@ impl CfgEdgeNonlinearForkTable {
         &self,
         arg0: StmtNode,
         arg1: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeBranchFork> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg1, arg0);
@@ -14384,10 +14384,7 @@ impl CfgEdgeNonlinearForkTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn iter_all_1(
-        &self,
-        arg1: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
+    fn iter_all_1(&self, arg1: StmtBlockListNode) -> impl '_ + Iterator<Item = CfgEdgeBranchFork> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -14400,7 +14397,7 @@ impl CfgEdgeNonlinearForkTable {
     fn drain_with_element_stmt_block_list_node(
         &mut self,
         tm: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeBranchFork> {
         let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -14419,7 +14416,7 @@ impl CfgEdgeNonlinearForkTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearFork> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeBranchFork> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -14454,11 +14451,11 @@ impl CfgEdgeNonlinearForkTable {
         }
     }
 }
-impl fmt::Display for CfgEdgeNonlinearForkTable {
+impl fmt::Display for CfgEdgeBranchForkTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cfg_edge_nonlinear_fork"))
+            .with(Header("cfg_edge_branch_fork"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -14469,18 +14466,18 @@ impl fmt::Display for CfgEdgeNonlinearForkTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CfgEdgeNonlinearJoin(pub StmtBlockListNode, pub StmtNode);
+struct CfgEdgeBranchJoin(pub StmtBlockListNode, pub StmtNode);
 #[derive(Clone, Hash, Debug)]
-struct CfgEdgeNonlinearJoinTable {
+struct CfgEdgeBranchJoinTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeNonlinearJoin>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeNonlinearJoin>>,
+    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<CfgEdgeBranchJoin>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<CfgEdgeBranchJoin>>,
 }
-impl CfgEdgeNonlinearJoinTable {
+impl CfgEdgeBranchJoinTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -14493,7 +14490,7 @@ impl CfgEdgeNonlinearJoinTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CfgEdgeNonlinearJoin) -> bool {
+    fn insert(&mut self, t: CfgEdgeBranchJoin) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -14516,7 +14513,7 @@ impl CfgEdgeNonlinearJoinTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CfgEdgeNonlinearJoin) -> bool {
+    fn insert_dirt(&mut self, t: CfgEdgeBranchJoin) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -14524,7 +14521,7 @@ impl CfgEdgeNonlinearJoinTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CfgEdgeNonlinearJoin) -> bool {
+    fn contains(&self, t: CfgEdgeBranchJoin) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -14539,15 +14536,15 @@ impl CfgEdgeNonlinearJoinTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CfgEdgeNonlinearJoin) -> (u32, u32) {
+    fn permute_0_1(t: CfgEdgeBranchJoin) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeNonlinearJoin {
-        CfgEdgeNonlinearJoin(StmtBlockListNode::from(t.0), StmtNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CfgEdgeBranchJoin {
+        CfgEdgeBranchJoin(StmtBlockListNode::from(t.0), StmtNode::from(t.1))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CfgEdgeBranchJoin> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -14556,7 +14553,7 @@ impl CfgEdgeNonlinearJoinTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CfgEdgeBranchJoin> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -14565,10 +14562,7 @@ impl CfgEdgeNonlinearJoinTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(
-        &self,
-        arg0: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
+    fn iter_all_0(&self, arg0: StmtBlockListNode) -> impl '_ + Iterator<Item = CfgEdgeBranchJoin> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -14582,7 +14576,7 @@ impl CfgEdgeNonlinearJoinTable {
         &self,
         arg0: StmtBlockListNode,
         arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeBranchJoin> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -14596,7 +14590,7 @@ impl CfgEdgeNonlinearJoinTable {
     fn drain_with_element_stmt_block_list_node(
         &mut self,
         tm: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeBranchJoin> {
         let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -14615,7 +14609,7 @@ impl CfgEdgeNonlinearJoinTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = CfgEdgeNonlinearJoin> {
+    ) -> impl '_ + Iterator<Item = CfgEdgeBranchJoin> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -14650,11 +14644,11 @@ impl CfgEdgeNonlinearJoinTable {
         }
     }
 }
-impl fmt::Display for CfgEdgeNonlinearJoinTable {
+impl fmt::Display for CfgEdgeBranchJoinTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cfg_edge_nonlinear_join"))
+            .with(Header("cfg_edge_branch_join"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -35039,8 +35033,8 @@ struct ModelDelta {
     new_cfg_edge_nonlinear: Vec<CfgEdgeNonlinear>,
     new_cfg_edge_nonlinear_stmts_stmt: Vec<CfgEdgeNonlinearStmtsStmt>,
     new_cfg_edge_nonlinear_stmt_stmts: Vec<CfgEdgeNonlinearStmtStmts>,
-    new_cfg_edge_nonlinear_fork: Vec<CfgEdgeNonlinearFork>,
-    new_cfg_edge_nonlinear_join: Vec<CfgEdgeNonlinearJoin>,
+    new_cfg_edge_branch_fork: Vec<CfgEdgeBranchFork>,
+    new_cfg_edge_branch_join: Vec<CfgEdgeBranchJoin>,
     new_before_stmt_structure: Vec<BeforeStmtStructure>,
     new_stmt_morphism: Vec<StmtMorphism>,
     new_if_morphism: Vec<IfMorphism>,
@@ -35509,8 +35503,8 @@ pub struct Eqlog {
     cfg_edge_nonlinear: CfgEdgeNonlinearTable,
     cfg_edge_nonlinear_stmts_stmt: CfgEdgeNonlinearStmtsStmtTable,
     cfg_edge_nonlinear_stmt_stmts: CfgEdgeNonlinearStmtStmtsTable,
-    cfg_edge_nonlinear_fork: CfgEdgeNonlinearForkTable,
-    cfg_edge_nonlinear_join: CfgEdgeNonlinearJoinTable,
+    cfg_edge_branch_fork: CfgEdgeBranchForkTable,
+    cfg_edge_branch_join: CfgEdgeBranchJoinTable,
     before_stmt_structure: BeforeStmtStructureTable,
     stmt_morphism: StmtMorphismTable,
     if_morphism: IfMorphismTable,
@@ -35695,8 +35689,8 @@ impl ModelDelta {
             new_cfg_edge_nonlinear: Vec::new(),
             new_cfg_edge_nonlinear_stmts_stmt: Vec::new(),
             new_cfg_edge_nonlinear_stmt_stmts: Vec::new(),
-            new_cfg_edge_nonlinear_fork: Vec::new(),
-            new_cfg_edge_nonlinear_join: Vec::new(),
+            new_cfg_edge_branch_fork: Vec::new(),
+            new_cfg_edge_branch_join: Vec::new(),
             new_before_stmt_structure: Vec::new(),
             new_stmt_morphism: Vec::new(),
             new_if_morphism: Vec::new(),
@@ -39546,35 +39540,35 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cfg_edge_nonlinear_fork.extend(
+            self.new_cfg_edge_branch_fork.extend(
                 model
-                    .cfg_edge_nonlinear_fork
+                    .cfg_edge_branch_fork
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CfgEdgeNonlinearForkTable::WEIGHT;
+                        *weight0 -= CfgEdgeBranchForkTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CfgEdgeNonlinearForkTable::WEIGHT;
+                        *weight1 -= CfgEdgeBranchForkTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_nonlinear_join.extend(
+            self.new_cfg_edge_branch_join.extend(
                 model
-                    .cfg_edge_nonlinear_join
+                    .cfg_edge_branch_join
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= CfgEdgeNonlinearJoinTable::WEIGHT;
+                        *weight0 -= CfgEdgeBranchJoinTable::WEIGHT;
 
                         let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CfgEdgeNonlinearJoinTable::WEIGHT;
+                        *weight1 -= CfgEdgeBranchJoinTable::WEIGHT;
                     }),
             );
 
@@ -39986,35 +39980,35 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cfg_edge_nonlinear_fork.extend(
+            self.new_cfg_edge_branch_fork.extend(
                 model
-                    .cfg_edge_nonlinear_fork
+                    .cfg_edge_branch_fork
                     .drain_with_element_stmt_block_list_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CfgEdgeNonlinearForkTable::WEIGHT;
+                        *weight0 -= CfgEdgeBranchForkTable::WEIGHT;
 
                         let weight1 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CfgEdgeNonlinearForkTable::WEIGHT;
+                        *weight1 -= CfgEdgeBranchForkTable::WEIGHT;
                     }),
             );
 
-            self.new_cfg_edge_nonlinear_join.extend(
+            self.new_cfg_edge_branch_join.extend(
                 model
-                    .cfg_edge_nonlinear_join
+                    .cfg_edge_branch_join
                     .drain_with_element_stmt_block_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= CfgEdgeNonlinearJoinTable::WEIGHT;
+                        *weight0 -= CfgEdgeBranchJoinTable::WEIGHT;
 
                         let weight1 = model.stmt_node_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CfgEdgeNonlinearJoinTable::WEIGHT;
+                        *weight1 -= CfgEdgeBranchJoinTable::WEIGHT;
                     }),
             );
 
@@ -43301,24 +43295,24 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cfg_edge_nonlinear_fork.drain(..) {
+        for mut t in self.new_cfg_edge_branch_fork.drain(..) {
             t.0 = model.stmt_node_equalities.root(t.0);
             t.1 = model.stmt_block_list_node_equalities.root(t.1);
-            if model.cfg_edge_nonlinear_fork.insert(t) {
-                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeNonlinearForkTable::WEIGHT;
+            if model.cfg_edge_branch_fork.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += CfgEdgeBranchForkTable::WEIGHT;
                 model.stmt_block_list_node_weights[t.1 .0 as usize] +=
-                    CfgEdgeNonlinearForkTable::WEIGHT;
+                    CfgEdgeBranchForkTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cfg_edge_nonlinear_join.drain(..) {
+        for mut t in self.new_cfg_edge_branch_join.drain(..) {
             t.0 = model.stmt_block_list_node_equalities.root(t.0);
             t.1 = model.stmt_node_equalities.root(t.1);
-            if model.cfg_edge_nonlinear_join.insert(t) {
+            if model.cfg_edge_branch_join.insert(t) {
                 model.stmt_block_list_node_weights[t.0 .0 as usize] +=
-                    CfgEdgeNonlinearJoinTable::WEIGHT;
-                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeNonlinearJoinTable::WEIGHT;
+                    CfgEdgeBranchJoinTable::WEIGHT;
+                model.stmt_node_weights[t.1 .0 as usize] += CfgEdgeBranchJoinTable::WEIGHT;
             }
         }
 
@@ -44910,8 +44904,8 @@ impl Eqlog {
             cfg_edge_nonlinear: CfgEdgeNonlinearTable::new(),
             cfg_edge_nonlinear_stmts_stmt: CfgEdgeNonlinearStmtsStmtTable::new(),
             cfg_edge_nonlinear_stmt_stmts: CfgEdgeNonlinearStmtStmtsTable::new(),
-            cfg_edge_nonlinear_fork: CfgEdgeNonlinearForkTable::new(),
-            cfg_edge_nonlinear_join: CfgEdgeNonlinearJoinTable::new(),
+            cfg_edge_branch_fork: CfgEdgeBranchForkTable::new(),
+            cfg_edge_branch_join: CfgEdgeBranchJoinTable::new(),
             before_stmt_structure: BeforeStmtStructureTable::new(),
             stmt_morphism: StmtMorphismTable::new(),
             if_morphism: IfMorphismTable::new(),
@@ -45191,18 +45185,18 @@ impl Eqlog {
                 self.query_and_record_app_term_arg_num_should_match(&mut delta);
                 self.query_and_record_cfg_edge_linear_general(&mut delta);
                 self.query_and_record_cfg_edge_nonlinear_general(&mut delta);
-                self.query_and_record_cfg_edge_adjacent(&mut delta);
-                self.query_and_record_cfg_linear_first_rule(&mut delta);
-                self.query_and_record_cfg_linear_first_block_list(&mut delta);
-                self.query_and_record_cfg_linear_last_list(&mut delta);
                 self.query_and_record_cfg_edge_stmts_stmt_cons(&mut delta);
                 self.query_and_record_cfg_edge_stmts_stmt_singleton(&mut delta);
                 self.query_and_record_cfg_edge_stmt_stmts_cons(&mut delta);
                 self.query_and_record_cfg_edge_stmt_stmts_nil(&mut delta);
                 self.query_and_record_cfg_edge_fork_cons(&mut delta);
                 self.query_and_record_cfg_edge_join_cons(&mut delta);
-                self.query_and_record_cfg_edge_fork_stmt_into(&mut delta);
-                self.query_and_record_cfg_edge_fork_stmt_from(&mut delta);
+                self.query_and_record_cfg_edge_branch_stmt_into(&mut delta);
+                self.query_and_record_cfg_edge_branch_stmt_from(&mut delta);
+                self.query_and_record_cfg_edge_adjacent(&mut delta);
+                self.query_and_record_cfg_linear_first_rule(&mut delta);
+                self.query_and_record_cfg_linear_first_block_list(&mut delta);
+                self.query_and_record_cfg_linear_last_list(&mut delta);
                 self.query_and_record_before_first_rule_stmt(&mut delta);
                 self.query_and_record_cfg_edge_stmt_structure(&mut delta);
                 self.query_and_record_if_atom_morphism_dom(&mut delta);
@@ -51350,58 +51344,58 @@ impl Eqlog {
             .push(CfgEdgeNonlinearStmtStmts(arg0, arg1));
     }
 
-    /// Returns `true` if `cfg_edge_nonlinear_fork(arg0, arg1)` holds.
+    /// Returns `true` if `cfg_edge_branch_fork(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn cfg_edge_nonlinear_fork(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
+    pub fn cfg_edge_branch_fork(&self, mut arg0: StmtNode, mut arg1: StmtBlockListNode) -> bool {
         arg0 = self.root_stmt_node(arg0);
         arg1 = self.root_stmt_block_list_node(arg1);
-        self.cfg_edge_nonlinear_fork
-            .contains(CfgEdgeNonlinearFork(arg0, arg1))
+        self.cfg_edge_branch_fork
+            .contains(CfgEdgeBranchFork(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear_fork` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_branch_fork` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cfg_edge_nonlinear_fork(
+    pub fn iter_cfg_edge_branch_fork(
         &self,
     ) -> impl '_ + Iterator<Item = (StmtNode, StmtBlockListNode)> {
-        self.cfg_edge_nonlinear_fork.iter_all().map(|t| (t.0, t.1))
+        self.cfg_edge_branch_fork.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes `cfg_edge_nonlinear_fork(arg0, arg1)` hold.
+    /// Makes `cfg_edge_branch_fork(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cfg_edge_nonlinear_fork(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
+    pub fn insert_cfg_edge_branch_fork(&mut self, arg0: StmtNode, arg1: StmtBlockListNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cfg_edge_nonlinear_fork
-            .push(CfgEdgeNonlinearFork(arg0, arg1));
+            .new_cfg_edge_branch_fork
+            .push(CfgEdgeBranchFork(arg0, arg1));
     }
 
-    /// Returns `true` if `cfg_edge_nonlinear_join(arg0, arg1)` holds.
+    /// Returns `true` if `cfg_edge_branch_join(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn cfg_edge_nonlinear_join(&self, mut arg0: StmtBlockListNode, mut arg1: StmtNode) -> bool {
+    pub fn cfg_edge_branch_join(&self, mut arg0: StmtBlockListNode, mut arg1: StmtNode) -> bool {
         arg0 = self.root_stmt_block_list_node(arg0);
         arg1 = self.root_stmt_node(arg1);
-        self.cfg_edge_nonlinear_join
-            .contains(CfgEdgeNonlinearJoin(arg0, arg1))
+        self.cfg_edge_branch_join
+            .contains(CfgEdgeBranchJoin(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_nonlinear_join` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `cfg_edge_branch_join` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cfg_edge_nonlinear_join(
+    pub fn iter_cfg_edge_branch_join(
         &self,
     ) -> impl '_ + Iterator<Item = (StmtBlockListNode, StmtNode)> {
-        self.cfg_edge_nonlinear_join.iter_all().map(|t| (t.0, t.1))
+        self.cfg_edge_branch_join.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes `cfg_edge_nonlinear_join(arg0, arg1)` hold.
+    /// Makes `cfg_edge_branch_join(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cfg_edge_nonlinear_join(&mut self, arg0: StmtBlockListNode, arg1: StmtNode) {
+    pub fn insert_cfg_edge_branch_join(&mut self, arg0: StmtBlockListNode, arg1: StmtNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cfg_edge_nonlinear_join
-            .push(CfgEdgeNonlinearJoin(arg0, arg1));
+            .new_cfg_edge_branch_join
+            .push(CfgEdgeBranchJoin(arg0, arg1));
     }
 
     /// Returns `true` if `before_stmt_structure(arg0, arg1)` holds.
@@ -52440,8 +52434,8 @@ impl Eqlog {
             || self.cfg_edge_nonlinear.is_dirty()
             || self.cfg_edge_nonlinear_stmts_stmt.is_dirty()
             || self.cfg_edge_nonlinear_stmt_stmts.is_dirty()
-            || self.cfg_edge_nonlinear_fork.is_dirty()
-            || self.cfg_edge_nonlinear_join.is_dirty()
+            || self.cfg_edge_branch_fork.is_dirty()
+            || self.cfg_edge_branch_join.is_dirty()
             || self.before_stmt_structure.is_dirty()
             || self.stmt_morphism.is_dirty()
             || self.if_morphism.is_dirty()
@@ -58309,116 +58303,7 @@ impl Eqlog {
             self.record_action_168(delta, tm0, tm1);
         }
     }
-    fn record_action_169(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: StmtNode) {
-        let existing_row = self.cfg_edge_linear.iter_all_0_1(tm4, tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(CfgEdgeLinear(_, _)) => (),
-            None => {
-                delta.new_cfg_edge_linear.push(CfgEdgeLinear(tm4, tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_cfg_edge_adjacent(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
-                self.record_action_169(delta, tm1, tm4);
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_169(delta, tm1, tm4);
-            }
-        }
-    }
-    fn record_action_170(&self, delta: &mut ModelDelta, tm1: StmtNode) {
-        let existing_row = self.cfg_linear_first.iter_all_0(tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(CfgLinearFirst(_)) => (),
-            None => {
-                delta.new_cfg_linear_first.push(CfgLinearFirst(tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_cfg_linear_first_rule(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
-                self.record_action_170(delta, tm1);
-            }
-        }
-        #[allow(unused_variables)]
-        for RuleDecl(tm3, tm0) in self.rule_decl.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_170(delta, tm1);
-            }
-        }
-    }
-    fn record_action_171(&self, delta: &mut ModelDelta, tm1: StmtNode) {
-        let existing_row = self.cfg_linear_first.iter_all_0(tm1).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(CfgLinearFirst(_)) => (),
-            None => {
-                delta.new_cfg_linear_first.push(CfgLinearFirst(tm1));
-                ()
-            }
-        };
-    }
-    fn query_and_record_cfg_linear_first_block_list(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtBlockListNode(tm3, _, tm4) in self.cons_stmt_block_list_node.iter_all_1(tm0)
-            {
-                self.record_action_171(delta, tm1);
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtBlockListNode(tm3, tm0, tm4) in self.cons_stmt_block_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_171(delta, tm1);
-            }
-        }
-    }
-    fn record_action_172(&self, delta: &mut ModelDelta, tm2: StmtNode) {
-        let existing_row = self.cfg_linear_last.iter_all_0(tm2).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(CfgLinearLast(_)) => (),
-            None => {
-                delta.new_cfg_linear_last.push(CfgLinearLast(tm2));
-                ()
-            }
-        };
-    }
-    fn query_and_record_cfg_linear_last_list(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
-                self.record_action_172(delta, tm2);
-            }
-        }
-        #[allow(unused_variables)]
-        for ConsStmtListNode(tm1, tm2, tm0) in self.cons_stmt_list_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_172(delta, tm2);
-            }
-        }
-    }
-    fn record_action_173(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: StmtNode) {
+    fn record_action_169(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: StmtNode) {
         let existing_row = self
             .cfg_edge_nonlinear_stmts_stmt
             .iter_all_0_1(tm2, tm3)
@@ -58441,18 +58326,18 @@ impl Eqlog {
             for CfgEdgeNonlinearStmtsStmt(_, tm3) in
                 self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm0)
             {
-                self.record_action_173(delta, tm2, tm3);
+                self.record_action_169(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for CfgEdgeNonlinearStmtsStmt(tm0, tm3) in self.cfg_edge_nonlinear_stmts_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_173(delta, tm2, tm3);
+                self.record_action_169(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_174(&self, delta: &mut ModelDelta, tm2: StmtNode, tm3: StmtNode) {
+    fn record_action_170(&self, delta: &mut ModelDelta, tm2: StmtNode, tm3: StmtNode) {
         let existing_row = self.cfg_edge_nonlinear.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -58474,7 +58359,7 @@ impl Eqlog {
                 for CfgEdgeNonlinearStmtsStmt(_, tm3) in
                     self.cfg_edge_nonlinear_stmts_stmt.iter_all_0(tm1)
                 {
-                    self.record_action_174(delta, tm2, tm3);
+                    self.record_action_170(delta, tm2, tm3);
                 }
             }
         }
@@ -58486,7 +58371,7 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_174(delta, tm2, tm3);
+                    self.record_action_170(delta, tm2, tm3);
                 }
             }
         }
@@ -58496,12 +58381,12 @@ impl Eqlog {
             for ConsStmtListNode(_, tm2, tm0) in self.cons_stmt_list_node.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_174(delta, tm2, tm3);
+                    self.record_action_170(delta, tm2, tm3);
                 }
             }
         }
     }
-    fn record_action_175(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: StmtNode) {
+    fn record_action_171(&self, delta: &mut ModelDelta, tm1: StmtNode, tm3: StmtNode) {
         let existing_row = self.cfg_edge_nonlinear.iter_all_0_1(tm3, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -58521,18 +58406,18 @@ impl Eqlog {
             for CfgEdgeNonlinearStmtStmts(tm3, _) in
                 self.cfg_edge_nonlinear_stmt_stmts.iter_all_1(tm0)
             {
-                self.record_action_175(delta, tm1, tm3);
+                self.record_action_171(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for CfgEdgeNonlinearStmtStmts(tm3, tm0) in self.cfg_edge_nonlinear_stmt_stmts.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.record_action_175(delta, tm1, tm3);
+                self.record_action_171(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_176(&self, delta: &mut ModelDelta, tm1: StmtNode, tm2: StmtNode) {
+    fn record_action_172(&self, delta: &mut ModelDelta, tm1: StmtNode, tm2: StmtNode) {
         let existing_row = self.cfg_edge_nonlinear.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -58556,7 +58441,7 @@ impl Eqlog {
                 for CfgEdgeNonlinearStmtStmts(tm2, _) in
                     self.cfg_edge_nonlinear_stmt_stmts.iter_all_1(tm0)
                 {
-                    self.record_action_176(delta, tm1, tm2);
+                    self.record_action_172(delta, tm1, tm2);
                 }
             }
         }
@@ -58568,7 +58453,7 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_176(delta, tm1, tm2);
+                    self.record_action_172(delta, tm1, tm2);
                 }
             }
         }
@@ -58580,12 +58465,12 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
-                    self.record_action_176(delta, tm1, tm2);
+                    self.record_action_172(delta, tm1, tm2);
                 }
             }
         }
     }
-    fn record_action_177(
+    fn record_action_173(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -58606,14 +58491,14 @@ impl Eqlog {
                 ()
             }
         };
-        let existing_row = self.cfg_edge_nonlinear_fork.iter_all_0_1(tm3, tm2).next();
+        let existing_row = self.cfg_edge_branch_fork.iter_all_0_1(tm3, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeNonlinearFork(_, _)) => (),
+            Some(CfgEdgeBranchFork(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_nonlinear_fork
-                    .push(CfgEdgeNonlinearFork(tm3, tm2));
+                    .new_cfg_edge_branch_fork
+                    .push(CfgEdgeBranchFork(tm3, tm2));
                 ()
             }
         };
@@ -58622,20 +58507,20 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtBlockListNode(tm0, tm1, tm2) in self.cons_stmt_block_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeNonlinearFork(tm3, _) in self.cfg_edge_nonlinear_fork.iter_all_1(tm0) {
-                self.record_action_177(delta, tm1, tm2, tm3);
+            for CfgEdgeBranchFork(tm3, _) in self.cfg_edge_branch_fork.iter_all_1(tm0) {
+                self.record_action_173(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeNonlinearFork(tm3, tm0) in self.cfg_edge_nonlinear_fork.iter_dirty() {
+        for CfgEdgeBranchFork(tm3, tm0) in self.cfg_edge_branch_fork.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(_, tm1, tm2) in self.cons_stmt_block_list_node.iter_all_0(tm0)
             {
-                self.record_action_177(delta, tm1, tm2, tm3);
+                self.record_action_173(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_178(
+    fn record_action_174(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -58656,14 +58541,14 @@ impl Eqlog {
                 ()
             }
         };
-        let existing_row = self.cfg_edge_nonlinear_join.iter_all_0_1(tm2, tm3).next();
+        let existing_row = self.cfg_edge_branch_join.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeNonlinearJoin(_, _)) => (),
+            Some(CfgEdgeBranchJoin(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_nonlinear_join
-                    .push(CfgEdgeNonlinearJoin(tm2, tm3));
+                    .new_cfg_edge_branch_join
+                    .push(CfgEdgeBranchJoin(tm2, tm3));
                 ()
             }
         };
@@ -58672,74 +58557,183 @@ impl Eqlog {
         #[allow(unused_variables)]
         for ConsStmtBlockListNode(tm0, tm1, tm2) in self.cons_stmt_block_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CfgEdgeNonlinearJoin(_, tm3) in self.cfg_edge_nonlinear_join.iter_all_0(tm0) {
-                self.record_action_178(delta, tm1, tm2, tm3);
+            for CfgEdgeBranchJoin(_, tm3) in self.cfg_edge_branch_join.iter_all_0(tm0) {
+                self.record_action_174(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
-        for CfgEdgeNonlinearJoin(tm0, tm3) in self.cfg_edge_nonlinear_join.iter_dirty() {
+        for CfgEdgeBranchJoin(tm0, tm3) in self.cfg_edge_branch_join.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(_, tm1, tm2) in self.cons_stmt_block_list_node.iter_all_0(tm0)
             {
-                self.record_action_178(delta, tm1, tm2, tm3);
+                self.record_action_174(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_179(&self, delta: &mut ModelDelta, tm1: StmtBlockListNode, tm2: StmtNode) {
-        let existing_row = self.cfg_edge_nonlinear_fork.iter_all_0_1(tm2, tm1).next();
+    fn record_action_175(&self, delta: &mut ModelDelta, tm1: StmtBlockListNode, tm2: StmtNode) {
+        let existing_row = self.cfg_edge_branch_fork.iter_all_0_1(tm2, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeNonlinearFork(_, _)) => (),
+            Some(CfgEdgeBranchFork(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_nonlinear_fork
-                    .push(CfgEdgeNonlinearFork(tm2, tm1));
+                    .new_cfg_edge_branch_fork
+                    .push(CfgEdgeBranchFork(tm2, tm1));
                 ()
             }
         };
     }
-    fn query_and_record_cfg_edge_fork_stmt_into(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cfg_edge_branch_stmt_into(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for CfgEdge(tm2, _) in self.cfg_edge.iter_all_1(tm0) {
-                self.record_action_179(delta, tm1, tm2);
+                self.record_action_175(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for CfgEdge(tm2, tm0) in self.cfg_edge.iter_dirty() {
             #[allow(unused_variables)]
             for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                self.record_action_179(delta, tm1, tm2);
+                self.record_action_175(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_180(&self, delta: &mut ModelDelta, tm1: StmtBlockListNode, tm2: StmtNode) {
-        let existing_row = self.cfg_edge_nonlinear_join.iter_all_0_1(tm1, tm2).next();
+    fn record_action_176(&self, delta: &mut ModelDelta, tm1: StmtBlockListNode, tm2: StmtNode) {
+        let existing_row = self.cfg_edge_branch_join.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CfgEdgeNonlinearJoin(_, _)) => (),
+            Some(CfgEdgeBranchJoin(_, _)) => (),
             None => {
                 delta
-                    .new_cfg_edge_nonlinear_join
-                    .push(CfgEdgeNonlinearJoin(tm1, tm2));
+                    .new_cfg_edge_branch_join
+                    .push(CfgEdgeBranchJoin(tm1, tm2));
                 ()
             }
         };
     }
-    fn query_and_record_cfg_edge_fork_stmt_from(&self, delta: &mut ModelDelta) {
+    fn query_and_record_cfg_edge_branch_stmt_from(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for CfgEdge(_, tm2) in self.cfg_edge.iter_all_0(tm0) {
-                self.record_action_180(delta, tm1, tm2);
+                self.record_action_176(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for CfgEdge(tm0, tm2) in self.cfg_edge.iter_dirty() {
             #[allow(unused_variables)]
             for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                self.record_action_180(delta, tm1, tm2);
+                self.record_action_176(delta, tm1, tm2);
+            }
+        }
+    }
+    fn record_action_177(&self, delta: &mut ModelDelta, tm1: StmtNode, tm4: StmtNode) {
+        let existing_row = self.cfg_edge_linear.iter_all_0_1(tm4, tm1).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgEdgeLinear(_, _)) => (),
+            None => {
+                delta.new_cfg_edge_linear.push(CfgEdgeLinear(tm4, tm1));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_edge_adjacent(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(tm3, tm4, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                self.record_action_177(delta, tm1, tm4);
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm3, tm4, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                self.record_action_177(delta, tm1, tm4);
+            }
+        }
+    }
+    fn record_action_178(&self, delta: &mut ModelDelta, tm1: StmtNode) {
+        let existing_row = self.cfg_linear_first.iter_all_0(tm1).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgLinearFirst(_)) => (),
+            None => {
+                delta.new_cfg_linear_first.push(CfgLinearFirst(tm1));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_linear_first_rule(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for RuleDecl(tm3, _) in self.rule_decl.iter_all_1(tm0) {
+                self.record_action_178(delta, tm1);
+            }
+        }
+        #[allow(unused_variables)]
+        for RuleDecl(tm3, tm0) in self.rule_decl.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                self.record_action_178(delta, tm1);
+            }
+        }
+    }
+    fn record_action_179(&self, delta: &mut ModelDelta, tm1: StmtNode) {
+        let existing_row = self.cfg_linear_first.iter_all_0(tm1).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgLinearFirst(_)) => (),
+            None => {
+                delta.new_cfg_linear_first.push(CfgLinearFirst(tm1));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_linear_first_block_list(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtBlockListNode(tm3, _, tm4) in self.cons_stmt_block_list_node.iter_all_1(tm0)
+            {
+                self.record_action_179(delta, tm1);
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtBlockListNode(tm3, tm0, tm4) in self.cons_stmt_block_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
+                self.record_action_179(delta, tm1);
+            }
+        }
+    }
+    fn record_action_180(&self, delta: &mut ModelDelta, tm2: StmtNode) {
+        let existing_row = self.cfg_linear_last.iter_all_0(tm2).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(CfgLinearLast(_)) => (),
+            None => {
+                delta.new_cfg_linear_last.push(CfgLinearLast(tm2));
+                ()
+            }
+        };
+    }
+    fn query_and_record_cfg_linear_last_list(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for NilStmtListNode(tm0) in self.nil_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for ConsStmtListNode(tm1, tm2, _) in self.cons_stmt_list_node.iter_all_2(tm0) {
+                self.record_action_180(delta, tm2);
+            }
+        }
+        #[allow(unused_variables)]
+        for ConsStmtListNode(tm1, tm2, tm0) in self.cons_stmt_list_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm0) {
+                self.record_action_180(delta, tm2);
             }
         }
     }
@@ -64051,8 +64045,8 @@ impl Eqlog {
         self.cfg_edge_nonlinear.drop_dirt();
         self.cfg_edge_nonlinear_stmts_stmt.drop_dirt();
         self.cfg_edge_nonlinear_stmt_stmts.drop_dirt();
-        self.cfg_edge_nonlinear_fork.drop_dirt();
-        self.cfg_edge_nonlinear_join.drop_dirt();
+        self.cfg_edge_branch_fork.drop_dirt();
+        self.cfg_edge_branch_join.drop_dirt();
         self.before_stmt_structure.drop_dirt();
         self.stmt_morphism.drop_dirt();
         self.if_morphism.drop_dirt();
@@ -64270,8 +64264,8 @@ impl Eqlog {
         self.cfg_edge_nonlinear.retire_dirt();
         self.cfg_edge_nonlinear_stmts_stmt.retire_dirt();
         self.cfg_edge_nonlinear_stmt_stmts.retire_dirt();
-        self.cfg_edge_nonlinear_fork.retire_dirt();
-        self.cfg_edge_nonlinear_join.retire_dirt();
+        self.cfg_edge_branch_fork.retire_dirt();
+        self.cfg_edge_branch_join.retire_dirt();
         self.before_stmt_structure.retire_dirt();
         self.stmt_morphism.retire_dirt();
         self.if_morphism.retire_dirt();
@@ -64829,11 +64823,11 @@ impl Eqlog {
             &mut self.stmt_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
-        self.cfg_edge_nonlinear_fork.recall_previous_dirt(
+        self.cfg_edge_branch_fork.recall_previous_dirt(
             &mut self.stmt_block_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
-        self.cfg_edge_nonlinear_join.recall_previous_dirt(
+        self.cfg_edge_branch_join.recall_previous_dirt(
             &mut self.stmt_block_list_node_equalities,
             &mut self.stmt_node_equalities,
         );
@@ -65994,8 +65988,8 @@ impl fmt::Display for Eqlog {
         self.cfg_edge_nonlinear.fmt(f)?;
         self.cfg_edge_nonlinear_stmts_stmt.fmt(f)?;
         self.cfg_edge_nonlinear_stmt_stmts.fmt(f)?;
-        self.cfg_edge_nonlinear_fork.fmt(f)?;
-        self.cfg_edge_nonlinear_join.fmt(f)?;
+        self.cfg_edge_branch_fork.fmt(f)?;
+        self.cfg_edge_branch_join.fmt(f)?;
         self.before_stmt_structure.fmt(f)?;
         self.stmt_morphism.fmt(f)?;
         self.if_morphism.fmt(f)?;
