@@ -1527,39 +1527,34 @@ rule then_atom_epic_ok_pred {
 }
 
 // ## Surjectivity check
-
-pred should_be_surjective(Morphism);
-rule surj_then_should_be_surjective {
-    if stmt_morphism(_, morph);
-    if surj_then_morphism(morph);
-    then should_be_surjective(morph);
-}
-rule non_surj_then_should_be_surjective {
-    if stmt_morphism(_, morph);
-    if non_surj_then_morphism(morph);
-    then should_be_surjective(morph);
-}
+//
+// Since the morphisms we derive from statements are such that no two morphisms
+// share a codomain, we don't need to reference a morphism in the surjectivity
+// check.
 
 pred el_should_be_surjective_ok(El);
 pred el_is_surjective_ok(El);
-pred el_is_surjective_exempted(El);
 
 rule surjective_codomain_should_be_ok {
-    if should_be_surjective(morph);
+    if surj_then_morphism(morph);
+    if el_structure(el) = cod(morph);
+    then el_should_be_surjective_ok(el);
+}
+rule non_surjective_codomain_should_be_ok {
+    if non_surj_then_morphism(morph);
     if el_structure(el) = cod(morph);
     then el_should_be_surjective_ok(el);
 }
 
 rule surjective_img_el_is_ok {
-    if should_be_surjective(morph);
-    if el_in_img(morph, el);
+    if el_should_be_surjective_ok(el);
+    if el_in_img(_, el);
     then el_is_surjective_ok(el);
 }
-
 rule surjective_exempted_then_defined_term {
     if defined_then_atom_node(_, _, tm);
     if el = semantic_el(tm, _);
-    then el_is_surjective_exempted(el);
+    then el_is_surjective_ok(el);
 }
 
 // ## Variable occurs twice check
