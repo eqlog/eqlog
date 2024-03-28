@@ -7,29 +7,44 @@ use std::collections::BTreeSet;
 use std::iter::once;
 use std::iter::successors;
 
-/// A breadth-first traversal of the grouped morphisms of a rule.
-fn iter_grouped_morphisms<'a>(
+/// A breadth-first traversal of the morphisms of a rule.
+fn iter_rule_morphisms<'a>(
     rule: RuleDeclNode,
     eqlog: &'a Eqlog,
 ) -> impl 'a + Iterator<Item = Vec<Morphism>> {
+    let first_dom = eqlog.before_rule_structure(rule).unwrap();
+
     let first_morphisms: Vec<Morphism> = eqlog
-        .iter_rule_first_grouped_morphism()
-        .filter_map(|(rl, morph)| eqlog.are_equal_rule_decl_node(rl, rule).then_some(morph))
+        .iter_dom()
+        .filter_map(|(morph, dom)| {
+            if eqlog.are_equal_structure(dom, first_dom) {
+                Some(morph)
+            } else {
+                None
+            }
+        })
         .collect();
 
     successors(
         (!first_morphisms.is_empty()).then_some(first_morphisms),
         |prev_morphisms| {
+            let prev_cods: BTreeSet<Structure> = prev_morphisms
+                .iter()
+                .copied()
+                .map(|morph| eqlog.cod(morph).unwrap())
+                .collect();
+
             let next_morphisms: Vec<Morphism> = eqlog
-                .iter_next_grouped_morphism()
-                .filter_map(|(prev0, next)| {
-                    prev_morphisms
-                        .iter()
-                        .find(|prev1| eqlog.are_equal_morphism(prev0, **prev1))
-                        .is_some()
-                        .then_some(next)
+                .iter_dom()
+                .filter_map(|(morph, dom)| {
+                    if prev_cods.contains(&dom) {
+                        Some(morph)
+                    } else {
+                        None
+                    }
                 })
                 .collect();
+
             (!next_morphisms.is_empty()).then_some(next_morphisms)
         },
     )
@@ -433,16 +448,15 @@ pub fn flatten(
         Some(ident) => identifiers.get(&ident).unwrap().to_string(),
         None => format!("anonymous_rule_{}", rule.0),
     };
-    let el_vars = assign_el_vars(iter_grouped_morphisms(rule, eqlog).flatten(), eqlog);
+    let el_vars = assign_el_vars(iter_rule_morphisms(rule, eqlog).flatten(), eqlog);
 
     // The general strategy is as follows:
     // - The first flat function (with index 0) is the entry point for the flat rule. The body of
     //   function 0 consists of call to other functions only. This ensure that we can always append
     //   a call statement to function 0 and be guaranteed that the call is executed precisely once.
     // - During translation, we associate a "matching function" to each structure that occurs as a
-    //   domain or codomain of a grouped morphism. The main property of the matching function is
-    //   such that by the end of its body, all elements of the corresponding structure have been
-    //   matched.
+    //   domain or codomain of a morphism. The main property of the matching function is such that
+    //   by the end of its body, all elements of the corresponding structure have been matched.
 
     let mut funcs: Vec<FlatFunc> = Vec::new();
     funcs.push(FlatFunc {
@@ -463,7 +477,7 @@ pub fn flatten(
     let mut matching_func_indices: BTreeMap<Structure, usize> =
         btreemap! {eqlog.before_rule_structure(rule).unwrap() => 1};
 
-    for morphism in iter_grouped_morphisms(rule, eqlog).flatten() {
+    for morphism in iter_rule_morphisms(rule, eqlog).flatten() {
         let matching_func_index = *matching_func_indices
             .get(&eqlog.dom(morphism).unwrap())
             .unwrap();
@@ -589,7 +603,7 @@ pub fn flatten(
         } else if eqlog.noop_morphism(morphism) {
             matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else {
-            panic!("Every grouped morphism must be either if, surj_then or non_surj_then");
+            panic!("Every rule morphism must be either if, surj_then or non_surj_then");
         }
     }
 
