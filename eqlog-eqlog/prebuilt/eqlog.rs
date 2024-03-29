@@ -1,4 +1,4 @@
-// src-digest: 94927455E4DA9CA2A335629FADE8E4371F86A898CB3DE64CEB414E1FDB85E481
+// src-digest: 983A82D3143BBA8233F92FE1E3D71D146FAAEAB7AB5B2CAC9682E7B0337C3D7D
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -46330,6 +46330,8 @@ impl Eqlog {
                 self.query_and_record_var_before_stmt_if(&mut delta);
                 self.query_and_record_var_before_stmt_then(&mut delta);
                 self.query_and_record_var_before_stmt_branch(&mut delta);
+                self.query_and_record_var_before_stmt_case(&mut delta);
+                self.query_and_record_desugared_var_before_stmt_case(&mut delta);
                 self.query_and_record_var_before_if_atom_equal(&mut delta);
                 self.query_and_record_var_before_if_atom_defined(&mut delta);
                 self.query_and_record_var_before_if_atom_pred(&mut delta);
@@ -62493,7 +62495,107 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_251(
+    fn record_action_251(&self, delta: &mut ModelDelta, tm3: VirtIdent, tm4: StmtBlockListNode) {
+        let existing_row = self.var_before_stmt_blocks.iter_all_0_1(tm4, tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(VarBeforeStmtBlocks(_, _)) => (),
+            None => {
+                delta
+                    .new_var_before_stmt_blocks
+                    .push(VarBeforeStmtBlocks(tm4, tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_var_before_stmt_case(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for MatchStmtNode(tm0, tm1, tm2) in self.match_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for VarBeforeStmt(_, tm3) in self.var_before_stmt.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for DesugaredCaseBlockList(_, tm4) in self.desugared_case_block_list.iter_all_0(tm2)
+                {
+                    self.record_action_251(delta, tm3, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for VarBeforeStmt(tm0, tm3) in self.var_before_stmt.iter_dirty() {
+            #[allow(unused_variables)]
+            for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for DesugaredCaseBlockList(_, tm4) in self.desugared_case_block_list.iter_all_0(tm2)
+                {
+                    self.record_action_251(delta, tm3, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for DesugaredCaseBlockList(tm2, tm4) in self.desugared_case_block_list.iter_dirty() {
+            #[allow(unused_variables)]
+            for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                #[allow(unused_variables)]
+                for VarBeforeStmt(_, tm3) in self.var_before_stmt.iter_all_0(tm0) {
+                    self.record_action_251(delta, tm3, tm4);
+                }
+            }
+        }
+    }
+    fn record_action_252(&self, delta: &mut ModelDelta, tm3: VirtIdent, tm4: StmtBlockListNode) {
+        let existing_row = self.var_before_stmt_blocks.iter_all_0_1(tm4, tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(VarBeforeStmtBlocks(_, _)) => (),
+            None => {
+                delta
+                    .new_var_before_stmt_blocks
+                    .push(VarBeforeStmtBlocks(tm4, tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_desugared_var_before_stmt_case(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for MatchStmtNode(tm0, tm1, tm2) in self.match_stmt_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for DesugaredMatchTermIdentifier(_, tm3) in
+                self.desugared_match_term_identifier.iter_all_0(tm0)
+            {
+                #[allow(unused_variables)]
+                for DesugaredCaseBlockList(_, tm4) in self.desugared_case_block_list.iter_all_0(tm2)
+                {
+                    self.record_action_252(delta, tm3, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for DesugaredMatchTermIdentifier(tm0, tm3) in
+            self.desugared_match_term_identifier.iter_dirty()
+        {
+            #[allow(unused_variables)]
+            for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for DesugaredCaseBlockList(_, tm4) in self.desugared_case_block_list.iter_all_0(tm2)
+                {
+                    self.record_action_252(delta, tm3, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for DesugaredCaseBlockList(tm2, tm4) in self.desugared_case_block_list.iter_dirty() {
+            #[allow(unused_variables)]
+            for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                #[allow(unused_variables)]
+                for DesugaredMatchTermIdentifier(_, tm3) in
+                    self.desugared_match_term_identifier.iter_all_0(tm0)
+                {
+                    self.record_action_252(delta, tm3, tm4);
+                }
+            }
+        }
+    }
+    fn record_action_253(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -62524,18 +62626,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_251(delta, tm1, tm2, tm3);
+                self.record_action_253(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                self.record_action_251(delta, tm1, tm2, tm3);
+                self.record_action_253(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_252(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
+    fn record_action_254(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62551,18 +62653,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm2) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_252(delta, tm1, tm2);
+                self.record_action_254(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm2) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                self.record_action_252(delta, tm1, tm2);
+                self.record_action_254(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_253(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_255(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62578,18 +62680,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_253(delta, tm2, tm3);
+                self.record_action_255(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                self.record_action_253(delta, tm2, tm3);
+                self.record_action_255(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_254(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: VirtIdent) {
+    fn record_action_256(&self, delta: &mut ModelDelta, tm1: TermNode, tm3: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62605,18 +62707,18 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeIfAtom(_, tm3) in self.var_before_if_atom.iter_all_0(tm0) {
-                self.record_action_254(delta, tm1, tm3);
+                self.record_action_256(delta, tm1, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeIfAtom(tm0, tm3) in self.var_before_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                self.record_action_254(delta, tm1, tm3);
+                self.record_action_256(delta, tm1, tm3);
             }
         }
     }
-    fn record_action_255(
+    fn record_action_257(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -62647,18 +62749,18 @@ impl Eqlog {
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_255(delta, tm1, tm2, tm3);
+                self.record_action_257(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                self.record_action_255(delta, tm1, tm2, tm3);
+                self.record_action_257(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_256(
+    fn record_action_258(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -62691,18 +62793,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_256(delta, tm1, tm2, tm3);
+                self.record_action_258(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0) {
-                self.record_action_256(delta, tm1, tm2, tm3);
+                self.record_action_258(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_257(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_259(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62718,18 +62820,18 @@ impl Eqlog {
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeThenAtom(_, tm3) in self.var_before_then_atom.iter_all_0(tm0) {
-                self.record_action_257(delta, tm2, tm3);
+                self.record_action_259(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeThenAtom(tm0, tm3) in self.var_before_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                self.record_action_257(delta, tm2, tm3);
+                self.record_action_259(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_258(
+    fn record_action_260(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -62760,18 +62862,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeTerms(_, tm3) in self.var_before_terms.iter_all_0(tm0) {
-                self.record_action_258(delta, tm1, tm2, tm3);
+                self.record_action_260(delta, tm1, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeTerms(tm0, tm3) in self.var_before_terms.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_258(delta, tm1, tm2, tm3);
+                self.record_action_260(delta, tm1, tm2, tm3);
             }
         }
     }
-    fn record_action_259(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
+    fn record_action_261(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: VirtIdent) {
         let existing_row = self.var_before_term.iter_all_0_1(tm1, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62787,18 +62889,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeOptTerm(_, tm2) in self.var_before_opt_term.iter_all_0(tm0) {
-                self.record_action_259(delta, tm1, tm2);
+                self.record_action_261(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeOptTerm(tm0, tm2) in self.var_before_opt_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                self.record_action_259(delta, tm1, tm2);
+                self.record_action_261(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_260(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
+    fn record_action_262(&self, delta: &mut ModelDelta, tm2: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_terms.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62814,18 +62916,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarBeforeTerm(_, tm3) in self.var_before_term.iter_all_0(tm0) {
-                self.record_action_260(delta, tm2, tm3);
+                self.record_action_262(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarBeforeTerm(tm0, tm3) in self.var_before_term.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_260(delta, tm2, tm3);
+                self.record_action_262(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_261(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
+    fn record_action_263(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62839,10 +62941,10 @@ impl Eqlog {
     fn query_and_record_var_in_term_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
-            self.record_action_261(delta, tm0, tm1);
+            self.record_action_263(delta, tm0, tm1);
         }
     }
-    fn record_action_262(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
+    fn record_action_264(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62858,18 +62960,18 @@ impl Eqlog {
         for WildcardTermNode(tm0) in self.wildcard_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for WildcardVirtIdent(_, tm1) in self.wildcard_virt_ident.iter_all_0(tm0) {
-                self.record_action_262(delta, tm0, tm1);
+                self.record_action_264(delta, tm0, tm1);
             }
         }
         #[allow(unused_variables)]
         for WildcardVirtIdent(tm0, tm1) in self.wildcard_virt_ident.iter_dirty() {
             #[allow(unused_variables)]
             for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                self.record_action_262(delta, tm0, tm1);
+                self.record_action_264(delta, tm0, tm1);
             }
         }
     }
-    fn record_action_263(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: VirtIdent) {
+    fn record_action_265(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: VirtIdent) {
         let existing_row = self.var_in_term.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62885,18 +62987,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_263(delta, tm0, tm3);
+                self.record_action_265(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
-                self.record_action_263(delta, tm0, tm3);
+                self.record_action_265(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_264(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
+    fn record_action_266(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_terms.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62912,18 +63014,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_264(delta, tm0, tm3);
+                self.record_action_266(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
-                self.record_action_264(delta, tm0, tm3);
+                self.record_action_266(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_265(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
+    fn record_action_267(&self, delta: &mut ModelDelta, tm0: TermListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_terms.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62939,18 +63041,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_265(delta, tm0, tm3);
+                self.record_action_267(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
-                self.record_action_265(delta, tm0, tm3);
+                self.record_action_267(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_266(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm2: VirtIdent) {
+    fn record_action_268(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm2: VirtIdent) {
         let existing_row = self.var_in_opt_term.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62966,18 +63068,18 @@ impl Eqlog {
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm2) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_266(delta, tm0, tm2);
+                self.record_action_268(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm2) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(tm0, _) in self.some_term_node.iter_all_1(tm1) {
-                self.record_action_266(delta, tm0, tm2);
+                self.record_action_268(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_267(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_269(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -62993,18 +63095,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_267(delta, tm0, tm3);
+                self.record_action_269(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
-                self.record_action_267(delta, tm0, tm3);
+                self.record_action_269(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_268(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_270(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63020,18 +63122,18 @@ impl Eqlog {
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_268(delta, tm0, tm3);
+                self.record_action_270(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, tm1, _) in self.equal_if_atom_node.iter_all_2(tm2) {
-                self.record_action_268(delta, tm0, tm3);
+                self.record_action_270(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_269(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm2: VirtIdent) {
+    fn record_action_271(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm2: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63047,18 +63149,18 @@ impl Eqlog {
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm2) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_269(delta, tm0, tm2);
+                self.record_action_271(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm2) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(tm0, _) in self.defined_if_atom_node.iter_all_1(tm1) {
-                self.record_action_269(delta, tm0, tm2);
+                self.record_action_271(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_270(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_272(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63074,18 +63176,18 @@ impl Eqlog {
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_270(delta, tm0, tm3);
+                self.record_action_272(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
-                self.record_action_270(delta, tm0, tm3);
+                self.record_action_272(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_271(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
+    fn record_action_273(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm3: VirtIdent) {
         let existing_row = self.var_in_if_atom.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63101,67 +63203,13 @@ impl Eqlog {
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_271(delta, tm0, tm3);
+                self.record_action_273(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
-                self.record_action_271(delta, tm0, tm3);
-            }
-        }
-    }
-    fn record_action_272(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
-        let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(VarInThenAtom(_, _)) => (),
-            None => {
-                delta.new_var_in_then_atom.push(VarInThenAtom(tm0, tm3));
-                ()
-            }
-        };
-    }
-    fn query_and_record_var_in_then_atom_equal_lhs(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
-                self.record_action_272(delta, tm0, tm3);
-            }
-        }
-        #[allow(unused_variables)]
-        for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
-            #[allow(unused_variables)]
-            for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
-                self.record_action_272(delta, tm0, tm3);
-            }
-        }
-    }
-    fn record_action_273(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
-        let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
-        #[allow(unused_variables)]
-        let () = match existing_row {
-            Some(VarInThenAtom(_, _)) => (),
-            None => {
-                delta.new_var_in_then_atom.push(VarInThenAtom(tm0, tm3));
-                ()
-            }
-        };
-    }
-    fn query_and_record_var_in_then_atom_equal_rhs(&self, delta: &mut ModelDelta) {
-        #[allow(unused_variables)]
-        for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
-            #[allow(unused_variables)]
-            for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
-                self.record_action_273(delta, tm0, tm3);
-            }
-        }
-        #[allow(unused_variables)]
-        for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
-            #[allow(unused_variables)]
-            for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
                 self.record_action_273(delta, tm0, tm3);
             }
         }
@@ -63177,18 +63225,18 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_var_in_then_atom_defined_var_term(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_equal_lhs(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+        for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for VarInOptTerm(_, tm3) in self.var_in_opt_term.iter_all_0(tm1) {
+            for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm1) {
                 self.record_action_274(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
-        for VarInOptTerm(tm1, tm3) in self.var_in_opt_term.iter_dirty() {
+        for VarInTerm(tm1, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
-            for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1) {
+            for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
                 self.record_action_274(delta, tm0, tm3);
             }
         }
@@ -63204,9 +63252,9 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_var_in_then_atom_defined_term(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_in_then_atom_equal_rhs(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+        for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
                 self.record_action_275(delta, tm0, tm3);
@@ -63215,7 +63263,7 @@ impl Eqlog {
         #[allow(unused_variables)]
         for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
             #[allow(unused_variables)]
-            for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
+            for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
                 self.record_action_275(delta, tm0, tm3);
             }
         }
@@ -63231,23 +63279,77 @@ impl Eqlog {
             }
         };
     }
+    fn query_and_record_var_in_then_atom_defined_var_term(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for VarInOptTerm(_, tm3) in self.var_in_opt_term.iter_all_0(tm1) {
+                self.record_action_276(delta, tm0, tm3);
+            }
+        }
+        #[allow(unused_variables)]
+        for VarInOptTerm(tm1, tm3) in self.var_in_opt_term.iter_dirty() {
+            #[allow(unused_variables)]
+            for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1) {
+                self.record_action_276(delta, tm0, tm3);
+            }
+        }
+    }
+    fn record_action_277(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+        let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(VarInThenAtom(_, _)) => (),
+            None => {
+                delta.new_var_in_then_atom.push(VarInThenAtom(tm0, tm3));
+                ()
+            }
+        };
+    }
+    fn query_and_record_var_in_then_atom_defined_term(&self, delta: &mut ModelDelta) {
+        #[allow(unused_variables)]
+        for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
+            #[allow(unused_variables)]
+            for VarInTerm(_, tm3) in self.var_in_term.iter_all_0(tm2) {
+                self.record_action_277(delta, tm0, tm3);
+            }
+        }
+        #[allow(unused_variables)]
+        for VarInTerm(tm2, tm3) in self.var_in_term.iter_dirty() {
+            #[allow(unused_variables)]
+            for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
+                self.record_action_277(delta, tm0, tm3);
+            }
+        }
+    }
+    fn record_action_278(&self, delta: &mut ModelDelta, tm0: ThenAtomNode, tm3: VirtIdent) {
+        let existing_row = self.var_in_then_atom.iter_all_0_1(tm0, tm3).next();
+        #[allow(unused_variables)]
+        let () = match existing_row {
+            Some(VarInThenAtom(_, _)) => (),
+            None => {
+                delta.new_var_in_then_atom.push(VarInThenAtom(tm0, tm3));
+                ()
+            }
+        };
+    }
     fn query_and_record_var_in_then_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInTerms(_, tm3) in self.var_in_terms.iter_all_0(tm2) {
-                self.record_action_276(delta, tm0, tm3);
+                self.record_action_278(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInTerms(tm2, tm3) in self.var_in_terms.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
-                self.record_action_276(delta, tm0, tm3);
+                self.record_action_278(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_277(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_279(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63263,18 +63365,18 @@ impl Eqlog {
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInIfAtom(_, tm2) in self.var_in_if_atom.iter_all_0(tm1) {
-                self.record_action_277(delta, tm0, tm2);
+                self.record_action_279(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInIfAtom(tm1, tm2) in self.var_in_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(tm0, _) in self.if_stmt_node.iter_all_1(tm1) {
-                self.record_action_277(delta, tm0, tm2);
+                self.record_action_279(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_278(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_280(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63290,18 +63392,18 @@ impl Eqlog {
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInThenAtom(_, tm2) in self.var_in_then_atom.iter_all_0(tm1) {
-                self.record_action_278(delta, tm0, tm2);
+                self.record_action_280(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInThenAtom(tm1, tm2) in self.var_in_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
-                self.record_action_278(delta, tm0, tm2);
+                self.record_action_280(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_279(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
+    fn record_action_281(&self, delta: &mut ModelDelta, tm0: StmtNode, tm2: VirtIdent) {
         let existing_row = self.var_in_stmt.iter_all_0_1(tm0, tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63317,18 +63419,18 @@ impl Eqlog {
         for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInAllStmtBlocks(_, tm2) in self.var_in_all_stmt_blocks.iter_all_0(tm1) {
-                self.record_action_279(delta, tm0, tm2);
+                self.record_action_281(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
         for VarInAllStmtBlocks(tm1, tm2) in self.var_in_all_stmt_blocks.iter_dirty() {
             #[allow(unused_variables)]
             for BranchStmtNode(tm0, _) in self.branch_stmt_node.iter_all_1(tm1) {
-                self.record_action_279(delta, tm0, tm2);
+                self.record_action_281(delta, tm0, tm2);
             }
         }
     }
-    fn record_action_280(&self, delta: &mut ModelDelta, tm0: StmtListNode, tm3: VirtIdent) {
+    fn record_action_282(&self, delta: &mut ModelDelta, tm0: StmtListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_stmts.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63344,18 +63446,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInStmt(_, tm3) in self.var_in_stmt.iter_all_0(tm1) {
-                self.record_action_280(delta, tm0, tm3);
+                self.record_action_282(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInStmt(tm1, tm3) in self.var_in_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
-                self.record_action_280(delta, tm0, tm3);
+                self.record_action_282(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_281(&self, delta: &mut ModelDelta, tm0: StmtListNode, tm3: VirtIdent) {
+    fn record_action_283(&self, delta: &mut ModelDelta, tm0: StmtListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_stmts.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63371,18 +63473,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInStmts(_, tm3) in self.var_in_stmts.iter_all_0(tm2) {
-                self.record_action_281(delta, tm0, tm3);
+                self.record_action_283(delta, tm0, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInStmts(tm2, tm3) in self.var_in_stmts.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, tm1, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
-                self.record_action_281(delta, tm0, tm3);
+                self.record_action_283(delta, tm0, tm3);
             }
         }
     }
-    fn record_action_282(&self, delta: &mut ModelDelta, tm0: StmtBlockListNode, tm3: VirtIdent) {
+    fn record_action_284(&self, delta: &mut ModelDelta, tm0: StmtBlockListNode, tm3: VirtIdent) {
         let existing_row = self.var_in_all_stmt_blocks.iter_all_0_1(tm0, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63402,7 +63504,7 @@ impl Eqlog {
             for VarInStmts(_, tm3) in self.var_in_stmts.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for VarInAllStmtBlocks(_, _) in self.var_in_all_stmt_blocks.iter_all_0_1(tm2, tm3) {
-                    self.record_action_282(delta, tm0, tm3);
+                    self.record_action_284(delta, tm0, tm3);
                 }
             }
         }
@@ -63414,7 +63516,7 @@ impl Eqlog {
                 for ConsStmtBlockListNode(tm0, _, _) in
                     self.cons_stmt_block_list_node.iter_all_1_2(tm1, tm2)
                 {
-                    self.record_action_282(delta, tm0, tm3);
+                    self.record_action_284(delta, tm0, tm3);
                 }
             }
         }
@@ -63426,12 +63528,12 @@ impl Eqlog {
                 for ConsStmtBlockListNode(tm0, _, _) in
                     self.cons_stmt_block_list_node.iter_all_1_2(tm1, tm2)
                 {
-                    self.record_action_282(delta, tm0, tm3);
+                    self.record_action_284(delta, tm0, tm3);
                 }
             }
         }
     }
-    fn record_action_283(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: VirtIdent) {
+    fn record_action_285(&self, delta: &mut ModelDelta, tm2: StmtListNode, tm3: VirtIdent) {
         let existing_row = self.var_before_stmts.iter_all_0_1(tm2, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63447,18 +63549,18 @@ impl Eqlog {
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for VarInStmt(_, tm3) in self.var_in_stmt.iter_all_0(tm1) {
-                self.record_action_283(delta, tm2, tm3);
+                self.record_action_285(delta, tm2, tm3);
             }
         }
         #[allow(unused_variables)]
         for VarInStmt(tm1, tm3) in self.var_in_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
-                self.record_action_283(delta, tm2, tm3);
+                self.record_action_285(delta, tm2, tm3);
             }
         }
     }
-    fn record_action_284(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
+    fn record_action_286(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermListNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63487,18 +63589,18 @@ impl Eqlog {
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermsShouldBeEpicOk(_) in self.terms_should_be_epic_ok.iter_all_0(tm0) {
-                self.record_action_284(delta, tm1, tm2);
+                self.record_action_286(delta, tm1, tm2);
             }
         }
         #[allow(unused_variables)]
         for TermsShouldBeEpicOk(tm0) in self.terms_should_be_epic_ok.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.record_action_284(delta, tm1, tm2);
+                self.record_action_286(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_285(&self, delta: &mut ModelDelta, tm2: TermListNode) {
+    fn record_action_287(&self, delta: &mut ModelDelta, tm2: TermListNode) {
         let existing_row = self.terms_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63516,18 +63618,18 @@ impl Eqlog {
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
             for TermShouldBeEpicOk(_) in self.term_should_be_epic_ok.iter_all_0(tm0) {
-                self.record_action_285(delta, tm2);
+                self.record_action_287(delta, tm2);
             }
         }
         #[allow(unused_variables)]
         for TermShouldBeEpicOk(tm0) in self.term_should_be_epic_ok.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.record_action_285(delta, tm2);
+                self.record_action_287(delta, tm2);
             }
         }
     }
-    fn record_action_286(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
+    fn record_action_288(&self, delta: &mut ModelDelta, tm1: TermNode, tm2: TermNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63554,10 +63656,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
-            self.record_action_286(delta, tm1, tm2);
+            self.record_action_288(delta, tm1, tm2);
         }
     }
-    fn record_action_287(&self, delta: &mut ModelDelta, tm2: TermNode) {
+    fn record_action_289(&self, delta: &mut ModelDelta, tm2: TermNode) {
         let existing_row = self.term_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63573,10 +63675,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
-            self.record_action_287(delta, tm2);
+            self.record_action_289(delta, tm2);
         }
     }
-    fn record_action_288(&self, delta: &mut ModelDelta, tm2: TermListNode) {
+    fn record_action_290(&self, delta: &mut ModelDelta, tm2: TermListNode) {
         let existing_row = self.terms_should_be_epic_ok.iter_all_0(tm2).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63592,10 +63694,10 @@ impl Eqlog {
     fn query_and_record_then_atom_epic_ok_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
-            self.record_action_288(delta, tm2);
+            self.record_action_290(delta, tm2);
         }
     }
-    fn record_action_289(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_291(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_should_be_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63615,7 +63717,7 @@ impl Eqlog {
             for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.record_action_289(delta, tm1);
+                    self.record_action_291(delta, tm1);
                 }
             }
         }
@@ -63625,7 +63727,7 @@ impl Eqlog {
             for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
-                    self.record_action_289(delta, tm1);
+                    self.record_action_291(delta, tm1);
                 }
             }
         }
@@ -63635,12 +63737,12 @@ impl Eqlog {
             for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
-                    self.record_action_289(delta, tm1);
+                    self.record_action_291(delta, tm1);
                 }
             }
         }
     }
-    fn record_action_290(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_292(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_should_be_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63660,7 +63762,7 @@ impl Eqlog {
             for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.record_action_290(delta, tm1);
+                    self.record_action_292(delta, tm1);
                 }
             }
         }
@@ -63670,7 +63772,7 @@ impl Eqlog {
             for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
-                    self.record_action_290(delta, tm1);
+                    self.record_action_292(delta, tm1);
                 }
             }
         }
@@ -63680,12 +63782,12 @@ impl Eqlog {
             for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
-                    self.record_action_290(delta, tm1);
+                    self.record_action_292(delta, tm1);
                 }
             }
         }
     }
-    fn record_action_291(&self, delta: &mut ModelDelta, tm1: El) {
+    fn record_action_293(&self, delta: &mut ModelDelta, tm1: El) {
         let existing_row = self.el_is_surjective_ok.iter_all_0(tm1).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63701,18 +63803,18 @@ impl Eqlog {
         for ElInImg(tm0, tm1) in self.el_in_img.iter_dirty() {
             #[allow(unused_variables)]
             for ElShouldBeSurjectiveOk(_) in self.el_should_be_surjective_ok.iter_all_0(tm1) {
-                self.record_action_291(delta, tm1);
+                self.record_action_293(delta, tm1);
             }
         }
         #[allow(unused_variables)]
         for ElShouldBeSurjectiveOk(tm1) in self.el_should_be_surjective_ok.iter_dirty() {
             #[allow(unused_variables)]
             for ElInImg(tm0, _) in self.el_in_img.iter_all_1(tm1) {
-                self.record_action_291(delta, tm1);
+                self.record_action_293(delta, tm1);
             }
         }
     }
-    fn record_action_292(&self, delta: &mut ModelDelta, tm4: El) {
+    fn record_action_294(&self, delta: &mut ModelDelta, tm4: El) {
         let existing_row = self.el_is_surjective_ok.iter_all_0(tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63728,18 +63830,18 @@ impl Eqlog {
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm2) {
-                self.record_action_292(delta, tm4);
+                self.record_action_294(delta, tm4);
             }
         }
         #[allow(unused_variables)]
         for SemanticEl(tm2, tm3, tm4) in self.semantic_el.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
-                self.record_action_292(delta, tm4);
+                self.record_action_294(delta, tm4);
             }
         }
     }
-    fn record_action_293(
+    fn record_action_295(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -63765,7 +63867,7 @@ impl Eqlog {
             for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
-                    self.record_action_293(delta, tm0, tm1, tm3);
+                    self.record_action_295(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -63775,7 +63877,7 @@ impl Eqlog {
             for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_293(delta, tm0, tm1, tm3);
+                    self.record_action_295(delta, tm0, tm1, tm3);
                 }
             }
         }
@@ -63785,12 +63887,12 @@ impl Eqlog {
             for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_293(delta, tm0, tm1, tm3);
+                    self.record_action_295(delta, tm0, tm1, tm3);
                 }
             }
         }
     }
-    fn record_action_294(&self, delta: &mut ModelDelta, tm0: EnumDeclNode, tm5: TermNode) {
+    fn record_action_296(&self, delta: &mut ModelDelta, tm0: EnumDeclNode, tm5: TermNode) {
         let existing_row = self
             .should_be_obtained_by_ctor
             .iter_all_0_1(tm5, tm0)
@@ -63819,7 +63921,7 @@ impl Eqlog {
                         for DefinedThenAtomNode(tm3, tm4, _) in
                             self.defined_then_atom_node.iter_all_2(tm5)
                         {
-                            self.record_action_294(delta, tm0, tm5);
+                            self.record_action_296(delta, tm0, tm5);
                         }
                     }
                 }
@@ -63835,7 +63937,7 @@ impl Eqlog {
                     for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm7) {
                         #[allow(unused_variables)]
                         for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
-                            self.record_action_294(delta, tm0, tm5);
+                            self.record_action_296(delta, tm0, tm5);
                         }
                     }
                 }
@@ -63853,7 +63955,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
-                            self.record_action_294(delta, tm0, tm5);
+                            self.record_action_296(delta, tm0, tm5);
                         }
                     }
                 }
@@ -63871,7 +63973,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
-                            self.record_action_294(delta, tm0, tm5);
+                            self.record_action_296(delta, tm0, tm5);
                         }
                     }
                 }
@@ -63889,14 +63991,14 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
-                            self.record_action_294(delta, tm0, tm5);
+                            self.record_action_296(delta, tm0, tm5);
                         }
                     }
                 }
             }
         }
     }
-    fn record_action_295(&self, delta: &mut ModelDelta, tm3: TermNode, tm5: EnumDeclNode) {
+    fn record_action_297(&self, delta: &mut ModelDelta, tm3: TermNode, tm5: EnumDeclNode) {
         let existing_row = self.is_given_by_ctor.iter_all_0_1(tm3, tm5).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63914,7 +64016,7 @@ impl Eqlog {
             for AppTermNode(tm3, _, tm4) in self.app_term_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for CtorEnum(_, tm5) in self.ctor_enum.iter_all_0(tm0) {
-                    self.record_action_295(delta, tm3, tm5);
+                    self.record_action_297(delta, tm3, tm5);
                 }
             }
         }
@@ -63924,7 +64026,7 @@ impl Eqlog {
             for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
                 #[allow(unused_variables)]
                 for CtorEnum(_, tm5) in self.ctor_enum.iter_all_0(tm0) {
-                    self.record_action_295(delta, tm3, tm5);
+                    self.record_action_297(delta, tm3, tm5);
                 }
             }
         }
@@ -63934,12 +64036,12 @@ impl Eqlog {
             for CtorDecl(_, tm1, tm2) in self.ctor_decl.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for AppTermNode(tm3, _, tm4) in self.app_term_node.iter_all_1(tm1) {
-                    self.record_action_295(delta, tm3, tm5);
+                    self.record_action_297(delta, tm3, tm5);
                 }
             }
         }
     }
-    fn record_action_296(&self, delta: &mut ModelDelta, tm3: Func) {
+    fn record_action_298(&self, delta: &mut ModelDelta, tm3: Func) {
         let existing_row = self.function_can_be_made_defined.iter_all_0(tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -63962,7 +64064,7 @@ impl Eqlog {
             for SemanticType(_, tm2) in self.semantic_type.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for Codomain(tm3, _) in self.codomain.iter_all_1(tm2) {
-                    self.record_action_296(delta, tm3);
+                    self.record_action_298(delta, tm3);
                 }
             }
         }
@@ -63972,7 +64074,7 @@ impl Eqlog {
             for Codomain(tm3, _) in self.codomain.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
-                    self.record_action_296(delta, tm3);
+                    self.record_action_298(delta, tm3);
                 }
             }
         }
@@ -63982,12 +64084,12 @@ impl Eqlog {
             for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
-                    self.record_action_296(delta, tm3);
+                    self.record_action_298(delta, tm3);
                 }
             }
         }
     }
-    fn record_action_297(&self, delta: &mut ModelDelta, tm3: Func) {
+    fn record_action_299(&self, delta: &mut ModelDelta, tm3: Func) {
         let existing_row = self.function_can_be_made_defined.iter_all_0(tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
@@ -64005,14 +64107,14 @@ impl Eqlog {
         for CtorDecl(tm0, tm1, tm2) in self.ctor_decl.iter_dirty() {
             #[allow(unused_variables)]
             for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                self.record_action_297(delta, tm3);
+                self.record_action_299(delta, tm3);
             }
         }
         #[allow(unused_variables)]
         for SemanticFunc(tm1, tm3) in self.semantic_func.iter_dirty() {
             #[allow(unused_variables)]
             for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
-                self.record_action_297(delta, tm3);
+                self.record_action_299(delta, tm3);
             }
         }
     }

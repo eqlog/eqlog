@@ -1417,6 +1417,18 @@ rule var_before_stmt_branch {
     if branch_stmt_node(stmt, blocks);
     then var_before_stmt_blocks(blocks, name);
 }
+rule var_before_stmt_case {
+    if var_before_stmt(stmt, name);
+    if match_stmt_node(stmt, _, cases);
+    if blocks = desugared_case_block_list(cases);
+    then var_before_stmt_blocks(blocks, name);
+}
+rule desugared_var_before_stmt_case {
+    if match_stmt_node(stmt, _, cases);
+    if term_identifier = desugared_match_term_identifier(stmt);
+    if blocks = desugared_case_block_list(cases);
+    then var_before_stmt_blocks(blocks, term_identifier);
+}
 
 rule var_before_if_atom_equal {
     if var_before_if_atom(atom, name);

@@ -17,15 +17,15 @@ rule plus_zero {
     then a = n;
 }
 
-//rule {
-//    if plus(m, n) = k;
-//    match n {
-//        Zero() => {
-//            then k = m;
-//        }
-//        Succ(p) => {
-//            then Succ(m)!;
-//            then k = plus(Succ(m), p);
-//        }
-//    }
-//}
+rule {
+    if plus(m, n) = k;
+    match n {
+        Zero() => {
+            then k = m;
+        }
+        Succ(p) => {
+            then Succ(m)!;
+            then k = plus(Succ(m), p);
+        }
+    }
+}
