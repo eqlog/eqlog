@@ -12,12 +12,7 @@ rule zero_plus {
     then a = n;
 }
 
-rule plus_zero {
-    if a = plus(n, Zero());
-    then a = n;
-}
-
-rule {
+rule plus_induction_second_arg {
     if plus(m, n) = k;
     match n {
         Zero() => {
