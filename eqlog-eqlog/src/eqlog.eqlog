@@ -9,11 +9,17 @@ pred absurd();
 // does not arise from an `Ident`.
 type Ident;
 type VirtIdent;
+
 func real_virt_ident(Ident) -> VirtIdent;
+func virt_real_ident(VirtIdent) -> Ident;
 
 rule real_virt_ident_total {
     if ident: Ident;
     then real_virt_ident(ident)!;
+}
+rule virt_real_ident_retraction {
+    if virt_ident = real_virt_ident(ident);
+    then virt_real_ident(virt_ident) = ident;
 }
 
 // ## Abstract syntax tree (AST) nodes

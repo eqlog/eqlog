@@ -47,7 +47,7 @@ pub fn iter_variable_introduced_in_then_errors<'a>(
 ) -> impl 'a + Iterator<Item = CompileError> {
     eqlog.iter_term_should_be_epic_ok().filter_map(|tm| {
         // Only consider those terms that are variables:
-        let name = eqlog.iter_var_term_node().find_map(|(var_tm, ident)| {
+        let virt_name = eqlog.iter_var_term_node().find_map(|(var_tm, ident)| {
             if eqlog.are_equal_term_node(tm, var_tm) {
                 Some(ident)
             } else {
@@ -55,7 +55,6 @@ pub fn iter_variable_introduced_in_then_errors<'a>(
             }
         })?;
 
-        let virt_name = eqlog.real_virt_ident(name).unwrap();
         if eqlog.var_before_term(tm, virt_name) {
             return None;
         }
@@ -103,7 +102,7 @@ pub fn iter_then_defined_variable_errors<'a>(
             let loc = eqlog.term_node_loc(var_term).unwrap();
             let location = *locations.get(&loc).unwrap();
 
-            let var_name: Option<Ident> = eqlog.iter_var_term_node().find_map(|(vt, name)| {
+            let var_name: Option<VirtIdent> = eqlog.iter_var_term_node().find_map(|(vt, name)| {
                 if eqlog.are_equal_term_node(vt, var_term) {
                     Some(name)
                 } else {
@@ -111,14 +110,14 @@ pub fn iter_then_defined_variable_errors<'a>(
                 }
             });
 
-            let var_name: Ident = match var_name {
+            let var_name: VirtIdent = match var_name {
                 None => {
                     return Some(CompileError::ThenDefinedNotVar { location });
                 }
                 Some(name) => name,
             };
 
-            if eqlog.var_before_term(var_term, eqlog.real_virt_ident(var_name).unwrap()) {
+            if eqlog.var_before_term(var_term, var_name) {
                 return Some(CompileError::ThenDefinedVarNotNew { location });
             }
 

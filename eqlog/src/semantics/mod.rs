@@ -20,7 +20,8 @@ pub fn iter_variable_not_snake_case_errors<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    eqlog.iter_var_term_node().filter_map(|(tm, ident)| {
+    eqlog.iter_var_term_node().filter_map(|(tm, virt_ident)| {
+        let ident = eqlog.virt_real_ident(virt_ident)?;
         let name: &str = identifiers.get(&ident).unwrap().as_str();
 
         if name == &name.to_case(Case::Snake) {
@@ -44,7 +45,13 @@ pub fn iter_variable_occurs_twice<'a>(
 ) -> impl 'a + Iterator<Item = CompileError> {
     let mut var_tms: BTreeMap<(RuleDeclNode, Ident), BTreeSet<TermNode>> = BTreeMap::new();
 
-    for (tm, ident, rule) in eqlog.iter_var_term_in_rule() {
+    for (tm, virt_ident, rule) in eqlog.iter_var_term_in_rule() {
+        let ident = match eqlog.virt_real_ident(virt_ident) {
+            None => {
+                continue;
+            }
+            Some(ident) => ident,
+        };
         var_tms
             .entry((rule, ident))
             .or_insert(BTreeSet::new())

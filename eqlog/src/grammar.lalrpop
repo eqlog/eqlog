@@ -39,7 +39,8 @@ Intersperse<Item, Separator>: Vec<Item> = {
 Variable: TermNode = {
     <l: @L> <ident: Id> <r: @R> => {
         let tm = eqlog.new_term_node();
-        eqlog.insert_var_term_node(tm, ident);
+        let virt_ident = eqlog.define_real_virt_ident(ident);
+        eqlog.insert_var_term_node(tm, virt_ident);
 
         let loc = make_loc(Location(l, r), eqlog, locations);
         eqlog.insert_term_node_loc(tm, loc);
