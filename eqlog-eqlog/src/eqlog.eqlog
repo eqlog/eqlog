@@ -57,7 +57,7 @@ type OptTermNode;
 pred none_term_node(OptTermNode);
 pred some_term_node(OptTermNode, value: TermNode);
 
-pred var_term_node(TermNode, Ident);
+pred var_term_node(TermNode, VirtIdent);
 pred wildcard_term_node(TermNode);
 pred app_term_node(TermNode, function: Ident, args: TermListNode);
 
@@ -356,6 +356,81 @@ rule enum_ctors_cons {
     if cons_ctor_decl_list_node(ctors, head_ctor, tail_ctors);
     then ctor_enum(head_ctor) = enum_node;
     then ctors_enum(tail_ctors) = enum_node;
+}
+
+// ## Desugaring MatchCase nodes
+
+// ### The match statement that a mach case (list) node belongs to.
+func cases_match_stmt(MatchCaseListNode) -> StmtNode;
+func case_match_stmt(MatchCaseNode) -> StmtNode;
+
+rule match_stmt_case_list {
+    if match_stmt_node(stmt, _, cases);
+    then cases_match_stmt(cases) = stmt;
+}
+rule cases_match_stmt_cons {
+    if cases_match_stmt(cases) = stmt;
+    if cons_match_case_list_node(cases, head_case, tail_cases);
+    then case_match_stmt(head_case) = stmt;
+    then cases_match_stmt(tail_cases) = stmt;
+}
+
+// ### Desugared AST nodes
+func desugared_match_term_identifier(StmtNode) -> VirtIdent;
+rule desugared_match_term_identifier_defined {
+    if match_stmt_node(stmt, _, _);
+    then desugared_match_term_identifier(stmt)!;
+}
+
+func desugared_case_term_variable(MatchCaseNode) -> TermNode;
+func desugared_case_equality_atom(MatchCaseNode) -> IfAtomNode;
+func desugared_case_equality_stmt(MatchCaseNode) -> StmtNode;
+func desugared_case_block(MatchCaseNode) -> StmtListNode;
+func desugared_case_block_list(MatchCaseListNode) -> StmtBlockListNode;
+
+rule desugared_case_defined {
+    if match_case(case_node, _, _);
+
+    then desugared_case_term_variable(case_node)!;
+    then desugared_case_equality_atom(case_node)!;
+    then desugared_case_equality_stmt(case_node)!;
+    then desugared_case_block(case_node)!;
+}
+rule desugared_case_block_list_defined {
+    if cases: MatchCaseListNode;
+    then desugared_case_block_list(cases)!;
+}
+
+rule desugared_case_term_variable_identifier {
+    if tm = desugared_case_term_variable(case_node);
+    if match_stmt = case_match_stmt(case_node);
+    if desugared_match_term_identifier(match_stmt) = ident;
+    then var_term_node(tm, ident);
+}
+rule desugared_case_equality_atom_stmt {
+    if var_term = desugared_case_term_variable(case_node);
+    if match_case(case_node, pattern, _);
+    if atom = desugared_case_equality_atom(case_node);
+    if stmt = desugared_case_equality_stmt(case_node);
+
+    then equal_if_atom_node(atom, var_term, pattern);
+    then if_stmt_node(stmt, atom);
+}
+rule desugared_case_block_structure {
+    if match_case(case_node, _, block);
+    if desugared_stmt = desugared_case_equality_stmt(case_node);
+    if desugared_block = desugared_case_block(case_node);
+
+    then cons_stmt_list_node(desugared_block, desugared_stmt, block);
+}
+rule desugared_case_blocks {
+    if cons_match_case_list_node(cases, head_case, tail_cases);
+
+    if desugared_blocks = desugared_case_block_list(cases);
+    if desugared_head_block = desugared_case_block(head_case);
+    if desugared_tail_blocks = desugared_case_block_list(tail_cases);
+
+    then cons_stmt_block_list_node(desugared_blocks, desugared_head_block, desugared_tail_blocks);
 }
 
 // ## Semantic types, predicates and functions
@@ -897,28 +972,19 @@ rule cfg_edge_stmt_stmts_nil {
 //
 // This is for branch and match statements.
 
-pred cfg_edge_branch_fork(from: StmtNode, to: StmtBlockListNode);
-pred cfg_edge_match_fork(from: StmtNode, to: MatchCaseListNode);
-pred cfg_edge_branch_join(from: StmtBlockListNode, to: StmtNode);
-pred cfg_edge_match_join(from: MatchCaseListNode, to: StmtNode);
+pred cfg_edge_fork(from: StmtNode, to: StmtBlockListNode);
+pred cfg_edge_join(from: StmtBlockListNode, to: StmtNode);
 
-rule cfg_edge_branch_fork_cons {
-    if cfg_edge_branch_fork(stmt, blocks);
+rule cfg_edge_fork_cons {
+    if cfg_edge_fork(stmt, blocks);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_branch_fork(stmt, tail_blocks);
+    then cfg_edge_fork(stmt, tail_blocks);
     then cfg_edge_stmt_stmts(stmt, head_block);
 }
-rule cfg_edge_match_fork_cons {
-    if cfg_edge_match_fork(stmt, cases);
-    if cons_match_case_list_node(cases, head_case, tail_cases);
-    then cfg_edge_match_fork(stmt, tail_cases);
-    then cfg_edge_stmt_stmts(stmt, head_case);
-}
-
 rule cfg_edge_join_cons {
-    if cfg_edge_branch_join(blocks, stmt);
+    if cfg_edge_join(blocks, stmt);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then cfg_edge_branch_join(tail_blocks, stmt);
+    then cfg_edge_join(tail_blocks, stmt);
     then cfg_edge_stmts_stmt(head_block, stmt);
 }
 
@@ -940,13 +1006,26 @@ rule cfg_edge_then {
 
 rule cfg_edge_branch_fork_blocks {
     if branch_stmt_node(branch_stmt, branch_blocks);
-    then cfg_edge_branch_fork(branch_stmt, branch_blocks);
+    then cfg_edge_fork(branch_stmt, branch_blocks);
 }
+rule cfg_edge_match_fork_blocks {
+    if match_stmt_node(match_stmt, _, cases);
+    if branch_blocks = desugared_case_block_list(cases);
+    then cfg_edge_fork(match_stmt, branch_blocks);
+}
+
 rule cfg_edge_branch_join_blocks {
     if branch_stmt_node(branch_stmt, branch_blocks);
     if cons_stmt_list_node(_, branch_stmt , tail);
     if cons_stmt_list_node(tail, after_branch_stmt , _);
-    then cfg_edge_branch_join(branch_blocks, after_branch_stmt);
+    then cfg_edge_join(branch_blocks, after_branch_stmt);
+}
+rule cfg_edge_match_join_blocks {
+    if match_stmt_node(match_stmt, _, cases);
+    if cons_stmt_list_node(_, match_stmt , tail);
+    if cons_stmt_list_node(tail, after_match_stmt , _);
+    if branch_blocks = desugared_case_block_list(cases);
+    then cfg_edge_join(branch_blocks, after_match_stmt);
 }
 
 // ## The morphisms associated to statements.
@@ -1022,7 +1101,7 @@ rule branch_stmt_morphism_defined {
     then stmt_morphism(stmt, morph);
 }
 rule match_stmt_morphism_defined {
-    if match_stmt_node(stmt, _);
+    if match_stmt_node(stmt, _, _);
     if before_stmt_structure(stmt, before_structure);
     then morph := match_stmt_morphism(stmt, before_structure)!;
     then stmt_morphism(stmt, morph);
@@ -1062,7 +1141,7 @@ rule branch_stmt_morphism_is_noop {
     then noop_morphism(morph);
 }
 rule match_stmt_morphism_is_if {
-    if match_stmt_node(stmt, _);
+    if match_stmt_node(stmt, _, _);
     if stmt_morphism(stmt, morph);
     then if_morphism(morph);
 }
@@ -1216,9 +1295,8 @@ rule app_term_semantics {
 
 rule var_term_semantics {
     if var_term_node(term, name);
-    if virt_name = real_virt_ident(name);
     if el = semantic_el(term, structure);
-    then el = var(structure, virt_name);
+    then el = var(structure, name);
 }
 
 func wildcard_virt_ident(TermNode) -> VirtIdent;
@@ -1396,8 +1474,7 @@ rule var_before_term_app {
 // #### Propagate var_in_X upwards
 rule var_in_term_var {
     if var_term_node(tm, ident);
-    if name = real_virt_ident(ident);
-    then var_in_term(tm, name);
+    then var_in_term(tm, ident);
 }
 rule var_in_term_wildcard {
     if wildcard_term_node(tm);
@@ -1589,7 +1666,7 @@ rule surjective_exempted_then_defined_term {
 
 // ## Variable occurs twice check
 
-pred var_term_in_rule(TermNode, Ident, RuleDeclNode);
+pred var_term_in_rule(TermNode, VirtIdent, RuleDeclNode);
 rule var_term_in_rule_child {
     if var_term_node(tm, ident);
     if rule_child(rule_child_term(tm), rul);
