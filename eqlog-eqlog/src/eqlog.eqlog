@@ -1584,8 +1584,15 @@ rule var_in_stmt_then {
     if var_in_then_atom(atom, name);
     then var_in_stmt(stmt, name);
 }
+// TODO: These rules seem to be not enough to make a variable defined after a branch/match statement in which it is introduced in each branch.
 rule var_in_stmt_branch {
     if branch_stmt_node(stmt, blocks);
+    if var_in_all_stmt_blocks(blocks, name);
+    then var_in_stmt(stmt, name);
+}
+rule var_in_match_branch {
+    if match_stmt_node(stmt, _, cases);
+    if blocks = desugared_case_block_list(cases);
     if var_in_all_stmt_blocks(blocks, name);
     then var_in_stmt(stmt, name);
 }
