@@ -893,18 +893,26 @@ rule cfg_edge_stmt_stmts_nil {
     then cfg_edge(stmt, next_stmt);
 }
 
-// ### Control flow from and into block lists.
+// ### Control flow from and into branches
 //
-// This is for branches.
+// This is for branch and match statements.
 
 pred cfg_edge_branch_fork(from: StmtNode, to: StmtBlockListNode);
+pred cfg_edge_match_fork(from: StmtNode, to: MatchCaseListNode);
 pred cfg_edge_branch_join(from: StmtBlockListNode, to: StmtNode);
+pred cfg_edge_match_join(from: MatchCaseListNode, to: StmtNode);
 
-rule cfg_edge_fork_cons {
+rule cfg_edge_branch_fork_cons {
     if cfg_edge_branch_fork(stmt, blocks);
     if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
     then cfg_edge_branch_fork(stmt, tail_blocks);
     then cfg_edge_stmt_stmts(stmt, head_block);
+}
+rule cfg_edge_match_fork_cons {
+    if cfg_edge_match_fork(stmt, cases);
+    if cons_match_case_list_node(cases, head_case, tail_cases);
+    then cfg_edge_match_fork(stmt, tail_cases);
+    then cfg_edge_stmt_stmts(stmt, head_case);
 }
 
 rule cfg_edge_join_cons {
@@ -975,6 +983,8 @@ func if_atom_morphism(IfAtomNode, before_structure: Structure) -> Morphism;
 func then_atom_morphism(ThenAtomNode, before_structure: Structure) -> Morphism;
 // This should only be defined for branch statements.
 func branch_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
+// This should only be defined for match statements.
+func match_stmt_morphism(StmtNode, before_structure: Structure) -> Morphism;
 
 rule if_atom_morphism_dom {
     if morph_dom = dom(if_atom_morphism(_, before_structure));
@@ -986,6 +996,10 @@ rule then_atom_morphism_dom {
 }
 rule branch_stmt_morphism_dom {
     if morph_dom = dom(branch_stmt_morphism(_, before_structure));
+    then morph_dom = before_structure;
+}
+rule match_stmt_morphism_dom {
+    if morph_dom = dom(match_stmt_morphism(_, before_structure));
     then morph_dom = before_structure;
 }
 
@@ -1005,6 +1019,12 @@ rule branch_stmt_morphism_defined {
     if branch_stmt_node(stmt, _);
     if before_stmt_structure(stmt, before_structure);
     then morph := branch_stmt_morphism(stmt, before_structure)!;
+    then stmt_morphism(stmt, morph);
+}
+rule match_stmt_morphism_defined {
+    if match_stmt_node(stmt, _);
+    if before_stmt_structure(stmt, before_structure);
+    then morph := match_stmt_morphism(stmt, before_structure)!;
     then stmt_morphism(stmt, morph);
 }
 
@@ -1041,6 +1061,11 @@ rule branch_stmt_morphism_is_noop {
     if stmt_morphism(stmt, morph);
     then noop_morphism(morph);
 }
+rule match_stmt_morphism_is_if {
+    if match_stmt_node(stmt, _);
+    if stmt_morphism(stmt, morph);
+    then if_morphism(morph);
+}
 
 // ### Propagation of associated structures through the AST
 //
@@ -1071,6 +1096,11 @@ rule then_stmt_structure {
     if then_stmt_node(stmt, atom);
     if stmt_structure(stmt, structure);
     then then_atom_structure(atom, structure);
+}
+rule match_stmt_structure {
+    if match_stmt_node(stmt, term, _);
+    if stmt_structure(stmt, structure);
+    then term_structure(term, structure);
 }
 
 // #### Propagate associated structures through if atoms.
