@@ -1795,13 +1795,13 @@ rule pattern_ctor_arg_is_app_defined {
     then pattern_ctor_arg_is_app(loc);
 }
 
-pred pattern_ctor_arg_var_is_not_fresh(TermNode, Loc);
+pred pattern_ctor_arg_var_is_not_fresh(Loc);
 rule pattern_ctor_arg_var_is_not_fresh_defined {
     if is_pattern_ctor_arg(arg);
     if var_term_node(arg, ident);
     if var_before_term(arg, ident);
     if loc = term_node_loc(arg);
-    then pattern_ctor_arg_var_is_not_fresh(arg, loc);
+    then pattern_ctor_arg_var_is_not_fresh(loc);
 }
 
 // ### Which constructors occur in a case list, and if they determine the enum type uniquely

@@ -452,7 +452,7 @@ impl Display for CompileErrorWithContext {
             MatchPatternArgVarIsNotFresh { location } => {
                 write!(f, "Variable in pattern has been used before\n")?;
                 write_loc(f, *location)?;
-                write!(f, "Arguments in patterns must be fresh variables\n")?;
+                write!(f, "Variables in patterns must be fresh\n")?;
             }
             MatchConflictingEnum {
                 first_pattern_location,

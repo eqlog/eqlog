@@ -1,0 +1,14 @@
+type A;
+func const_a() -> A;
+
+enum E {
+    Foo(A)
+}
+
+rule {
+    if x: E;
+    if y: A;
+    match x {
+        Foo(y) => {}
+    }
+}

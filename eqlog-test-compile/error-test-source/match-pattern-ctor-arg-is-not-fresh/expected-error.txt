@@ -1,0 +1,7 @@
+Error: Variable in pattern has been used before
+  --> error-test-source/match-pattern-ctor-arg-is-not-fresh/theory.eql:12
+   | 
+12 |         Foo(y) => {}
+   |             ^       
+   | 
+Variables in patterns must be fresh

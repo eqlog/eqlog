@@ -231,3 +231,8 @@ fn bad_match_pattern_wildcard() {
 fn match_pattern_ctor_arg_is_app() {
     test_case(Path::new("match-pattern-ctor-arg-is-app"));
 }
+
+#[test]
+fn match_pattern_ctor_arg_is_not_fresh() {
+    test_case(Path::new("match-pattern-ctor-arg-is-not-fresh"));
+}

@@ -1,4 +1,4 @@
-// src-digest: 2C522E52F064F7ED4B8349D50E5C1653CF848CC492DE017185A50686103416E1
+// src-digest: 67C6718391CE319AC0B814F6CB32A6B711FD4720EBAC52585C9098B68C71F266
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -21382,45 +21382,36 @@ impl fmt::Display for PatternCtorArgIsAppTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct PatternCtorArgVarIsNotFresh(pub TermNode, pub Loc);
+struct PatternCtorArgVarIsNotFresh(pub Loc);
 #[derive(Clone, Hash, Debug)]
 struct PatternCtorArgVarIsNotFreshTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
 
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
 
     element_index_loc: BTreeMap<Loc, Vec<PatternCtorArgVarIsNotFresh>>,
-    element_index_term_node: BTreeMap<TermNode, Vec<PatternCtorArgVarIsNotFresh>>,
 }
 impl PatternCtorArgVarIsNotFreshTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 3;
     fn new() -> Self {
         Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
             element_index_loc: BTreeMap::new(),
-            element_index_term_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: PatternCtorArgVarIsNotFresh) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
 
-            match self.element_index_term_node.get_mut(&t.0) {
+            match self.element_index_loc.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_term_node.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_loc.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_loc.insert(t.1, vec![t]);
+                    self.element_index_loc.insert(t.0, vec![t]);
                 }
             };
 
@@ -21430,7 +21421,7 @@ impl PatternCtorArgVarIsNotFreshTable {
         }
     }
     fn insert_dirt(&mut self, t: PatternCtorArgVarIsNotFresh) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
             true
         } else {
             false
@@ -21438,59 +21429,54 @@ impl PatternCtorArgVarIsNotFreshTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: PatternCtorArgVarIsNotFresh) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
+        self.index_all_0.contains(&Self::permute_0(t))
     }
     fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
+        self.index_dirty_0.clear();
     }
     fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
     }
     fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
+        !self.index_dirty_0.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: PatternCtorArgVarIsNotFresh) -> (u32, u32) {
-        (t.0.into(), t.1.into())
+    fn permute_0(t: PatternCtorArgVarIsNotFresh) -> (u32,) {
+        (t.0.into(),)
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> PatternCtorArgVarIsNotFresh {
-        PatternCtorArgVarIsNotFresh(TermNode::from(t.0), Loc::from(t.1))
+    fn permute_inverse_0(t: (u32,)) -> PatternCtorArgVarIsNotFresh {
+        PatternCtorArgVarIsNotFresh(Loc::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = PatternCtorArgVarIsNotFresh> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = PatternCtorArgVarIsNotFresh> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: TermNode,
-        arg1: Loc,
-    ) -> impl '_ + Iterator<Item = PatternCtorArgVarIsNotFresh> {
+    fn iter_all_0(&self, arg0: Loc) -> impl '_ + Iterator<Item = PatternCtorArgVarIsNotFresh> {
         let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_loc(
@@ -21503,48 +21489,22 @@ impl PatternCtorArgVarIsNotFreshTable {
         };
 
         ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
                 true
             } else {
                 false
             }
         })
     }
-    #[allow(dead_code)]
-    fn drain_with_element_term_node(
-        &mut self,
-        tm: TermNode,
-    ) -> impl '_ + Iterator<Item = PatternCtorArgVarIsNotFresh> {
-        let ts = match self.element_index_term_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
+    fn recall_previous_dirt(&mut self, loc_equalities: &mut Unification<Loc>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
 
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        loc_equalities: &mut Unification<Loc>,
-        term_node_equalities: &mut Unification<TermNode>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
             #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == term_node_equalities.root(tuple.0)
-                && tuple.1 == loc_equalities.root(tuple.1)
-            {
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == loc_equalities.root(tuple.0) {
                 self.insert_dirt(tuple);
             }
         }
@@ -41487,19 +41447,6 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_pattern_ctor_arg_var_is_not_fresh.extend(
-                model
-                    .pattern_ctor_arg_var_is_not_fresh
-                    .drain_with_element_term_node(child)
-                    .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= PatternCtorArgVarIsNotFreshTable::WEIGHT;
-
-                        let weight1 = model.loc_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= PatternCtorArgVarIsNotFreshTable::WEIGHT;
-                    }),
-            );
-
             self.new_term_node_loc.extend(
                 model
                     .term_node_loc
@@ -44167,11 +44114,8 @@ impl ModelDelta {
                     .pattern_ctor_arg_var_is_not_fresh
                     .drain_with_element_loc(child)
                     .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        let weight0 = model.loc_weights.get_mut(t.0 .0 as usize).unwrap();
                         *weight0 -= PatternCtorArgVarIsNotFreshTable::WEIGHT;
-
-                        let weight1 = model.loc_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= PatternCtorArgVarIsNotFreshTable::WEIGHT;
                     }),
             );
 
@@ -47251,12 +47195,9 @@ impl ModelDelta {
 
         #[allow(unused_mut)]
         for mut t in self.new_pattern_ctor_arg_var_is_not_fresh.drain(..) {
-            t.0 = model.term_node_equalities.root(t.0);
-            t.1 = model.loc_equalities.root(t.1);
+            t.0 = model.loc_equalities.root(t.0);
             if model.pattern_ctor_arg_var_is_not_fresh.insert(t) {
-                model.term_node_weights[t.0 .0 as usize] +=
-                    PatternCtorArgVarIsNotFreshTable::WEIGHT;
-                model.loc_weights[t.1 .0 as usize] += PatternCtorArgVarIsNotFreshTable::WEIGHT;
+                model.loc_weights[t.0 .0 as usize] += PatternCtorArgVarIsNotFreshTable::WEIGHT;
             }
         }
 
@@ -56576,33 +56517,30 @@ impl Eqlog {
             .push(PatternCtorArgIsApp(arg0));
     }
 
-    /// Returns `true` if `pattern_ctor_arg_var_is_not_fresh(arg0, arg1)` holds.
+    /// Returns `true` if `pattern_ctor_arg_var_is_not_fresh(arg0)` holds.
     #[allow(dead_code)]
-    pub fn pattern_ctor_arg_var_is_not_fresh(&self, mut arg0: TermNode, mut arg1: Loc) -> bool {
-        arg0 = self.root_term_node(arg0);
-        arg1 = self.root_loc(arg1);
+    pub fn pattern_ctor_arg_var_is_not_fresh(&self, mut arg0: Loc) -> bool {
+        arg0 = self.root_loc(arg0);
         self.pattern_ctor_arg_var_is_not_fresh
-            .contains(PatternCtorArgVarIsNotFresh(arg0, arg1))
+            .contains(PatternCtorArgVarIsNotFresh(arg0))
     }
-    /// Returns an iterator over tuples of elements satisfying the `pattern_ctor_arg_var_is_not_fresh` predicate.
+    /// Returns an iterator over elements satisfying the `pattern_ctor_arg_var_is_not_fresh` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_pattern_ctor_arg_var_is_not_fresh(
-        &self,
-    ) -> impl '_ + Iterator<Item = (TermNode, Loc)> {
+    pub fn iter_pattern_ctor_arg_var_is_not_fresh(&self) -> impl '_ + Iterator<Item = Loc> {
         self.pattern_ctor_arg_var_is_not_fresh
             .iter_all()
-            .map(|t| (t.0, t.1))
+            .map(|t| t.0)
     }
-    /// Makes `pattern_ctor_arg_var_is_not_fresh(arg0, arg1)` hold.
+    /// Makes `pattern_ctor_arg_var_is_not_fresh(arg0)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_pattern_ctor_arg_var_is_not_fresh(&mut self, arg0: TermNode, arg1: Loc) {
+    pub fn insert_pattern_ctor_arg_var_is_not_fresh(&mut self, arg0: Loc) {
         self.delta
             .as_mut()
             .unwrap()
             .new_pattern_ctor_arg_var_is_not_fresh
-            .push(PatternCtorArgVarIsNotFresh(arg0, arg1));
+            .push(PatternCtorArgVarIsNotFresh(arg0));
     }
 
     /// Returns `true` if `cases_contain_ctor(arg0, arg1)` holds.
@@ -67576,18 +67514,18 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_310(&self, delta: &mut ModelDelta, tm0: TermNode, tm2: Loc) {
+    fn record_action_310(&self, delta: &mut ModelDelta, tm2: Loc) {
         let existing_row = self
             .pattern_ctor_arg_var_is_not_fresh
-            .iter_all_0_1(tm0, tm2)
+            .iter_all_0(tm2)
             .next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(PatternCtorArgVarIsNotFresh(_, _)) => (),
+            Some(PatternCtorArgVarIsNotFresh(_)) => (),
             None => {
                 delta
                     .new_pattern_ctor_arg_var_is_not_fresh
-                    .push(PatternCtorArgVarIsNotFresh(tm0, tm2));
+                    .push(PatternCtorArgVarIsNotFresh(tm2));
                 ()
             }
         };
@@ -67601,7 +67539,7 @@ impl Eqlog {
                 for IsPatternCtorArg(_) in self.is_pattern_ctor_arg.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for TermNodeLoc(_, tm2) in self.term_node_loc.iter_all_0(tm0) {
-                        self.record_action_310(delta, tm0, tm2);
+                        self.record_action_310(delta, tm2);
                     }
                 }
             }
@@ -67614,7 +67552,7 @@ impl Eqlog {
                 for TermNodeLoc(_, tm2) in self.term_node_loc.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for IsPatternCtorArg(_) in self.is_pattern_ctor_arg.iter_all_0(tm0) {
-                        self.record_action_310(delta, tm0, tm2);
+                        self.record_action_310(delta, tm2);
                     }
                 }
             }
@@ -67627,7 +67565,7 @@ impl Eqlog {
                 for VarBeforeTerm(_, tm1) in self.var_before_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for VarTermNode(_, _) in self.var_term_node.iter_all_0_1(tm0, tm1) {
-                        self.record_action_310(delta, tm0, tm2);
+                        self.record_action_310(delta, tm2);
                     }
                 }
             }
@@ -67640,7 +67578,7 @@ impl Eqlog {
                 for VarBeforeTerm(_, tm1) in self.var_before_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for VarTermNode(_, _) in self.var_term_node.iter_all_0_1(tm0, tm1) {
-                        self.record_action_310(delta, tm0, tm2);
+                        self.record_action_310(delta, tm2);
                     }
                 }
             }
@@ -69164,7 +69102,7 @@ impl Eqlog {
         self.pattern_ctor_arg_is_app
             .recall_previous_dirt(&mut self.loc_equalities);
         self.pattern_ctor_arg_var_is_not_fresh
-            .recall_previous_dirt(&mut self.loc_equalities, &mut self.term_node_equalities);
+            .recall_previous_dirt(&mut self.loc_equalities);
         self.cases_contain_ctor.recall_previous_dirt(
             &mut self.ctor_decl_node_equalities,
             &mut self.match_case_list_node_equalities,

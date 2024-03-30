@@ -49,6 +49,18 @@ fn iter_match_pattern_ctor_arg_is_app_errors<'a>(
     })
 }
 
+fn iter_match_pattern_ctor_arg_is_not_fresh<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_pattern_ctor_arg_var_is_not_fresh()
+        .filter_map(move |loc| {
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::MatchPatternArgVarIsNotFresh { location })
+        })
+}
+
 pub fn iter_variable_not_snake_case_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -418,6 +430,7 @@ pub fn check_eqlog(
         .chain(iter_match_pattern_is_variable_errors(eqlog, locations))
         .chain(iter_match_pattern_is_wildcard_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_app_errors(eqlog, locations))
+        .chain(iter_match_pattern_ctor_arg_is_not_fresh(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
