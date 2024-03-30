@@ -1,0 +1,7 @@
+Error: Pattern is a wildcard
+ --> error-test-source/bad-match-pattern-wildcard/theory.eql:8
+  | 
+8 |         _ => {}
+  |         ^      
+  | 
+Patterns must be given by constructors of an enum type

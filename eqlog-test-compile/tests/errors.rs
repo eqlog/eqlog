@@ -221,3 +221,8 @@ fn enum_ctors_not_surjective() {
 fn bad_match_pattern_variable() {
     test_case(Path::new("bad-match-pattern-variable"));
 }
+
+#[test]
+fn bad_match_pattern_wildcard() {
+    test_case(Path::new("bad-match-pattern-wildcard"));
+}
