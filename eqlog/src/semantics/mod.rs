@@ -61,6 +61,48 @@ fn iter_match_pattern_ctor_arg_is_not_fresh<'a>(
         })
 }
 
+fn iter_match_conflicting_enum<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    let mut match_stmt_contains_ctor_of_enum: Vec<(StmtNode, CtorDeclNode, EnumDeclNode)> =
+        eqlog.iter_match_stmt_contains_ctor_of_enum().collect();
+    match_stmt_contains_ctor_of_enum.sort_by_key(|(match_stmt, _, _)| *match_stmt);
+
+    match_stmt_contains_ctor_of_enum
+        .into_iter()
+        .group_by(|(match_stmt, _, _)| *match_stmt)
+        .into_iter()
+        .filter_map(move |(match_stmt, rows)| {
+            let enum_ctors: BTreeMap<EnumDeclNode, CtorDeclNode> = rows
+                .map(|(_, ctor_node, enum_node)| (enum_node, ctor_node))
+                .collect();
+
+            let mut enum_ctors_iter = enum_ctors.into_iter();
+            let (_, first_ctor) = enum_ctors_iter.next()?;
+            let (_, second_ctor) = enum_ctors_iter.next()?;
+
+            let match_stmt_location = *locations
+                .get(&eqlog.stmt_node_loc(match_stmt).unwrap())
+                .unwrap();
+            let first_ctor_decl_location = *locations
+                .get(&eqlog.ctor_decl_node_loc(first_ctor).unwrap())
+                .unwrap();
+            let second_ctor_decl_location = *locations
+                .get(&eqlog.ctor_decl_node_loc(second_ctor).unwrap())
+                .unwrap();
+
+            Some(CompileError::MatchConflictingEnum {
+                match_stmt_location,
+                first_ctor_decl_location,
+                second_ctor_decl_location,
+            })
+        })
+        // TODO: If we don't collect here we get a lifetime error. Why?
+        .collect::<Vec<CompileError>>()
+        .into_iter()
+}
+
 pub fn iter_variable_not_snake_case_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -431,6 +473,7 @@ pub fn check_eqlog(
         .chain(iter_match_pattern_is_wildcard_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_app_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_not_fresh(eqlog, locations))
+        .chain(iter_match_conflicting_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))

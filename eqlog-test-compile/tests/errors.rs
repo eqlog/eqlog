@@ -236,3 +236,8 @@ fn match_pattern_ctor_arg_is_app() {
 fn match_pattern_ctor_arg_is_not_fresh() {
     test_case(Path::new("match-pattern-ctor-arg-is-not-fresh"));
 }
+
+#[test]
+fn match_conflicting_enum() {
+    test_case(Path::new("match-conflicting-enum"));
+}

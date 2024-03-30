@@ -1,4 +1,4 @@
-// src-digest: 67C6718391CE319AC0B814F6CB32A6B711FD4720EBAC52585C9098B68C71F266
+// src-digest: C831380E34ADB1BEFBBA97855500E4708E6BDA51E7C10B5E751A26EAF8470CE0
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -21741,19 +21741,19 @@ impl fmt::Display for CasesContainCtorTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CasesContainCtorOfEnum(pub MatchCaseListNode, pub CtorDeclNode, pub EnumDeclNode);
+struct MatchStmtContainsCtorOfEnum(pub StmtNode, pub CtorDeclNode, pub EnumDeclNode);
 #[derive(Clone, Hash, Debug)]
-struct CasesContainCtorOfEnumTable {
+struct MatchStmtContainsCtorOfEnumTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
 
     index_dirty_0_1_2_prev: Vec<BTreeSet<(u32, u32, u32)>>,
 
-    element_index_ctor_decl_node: BTreeMap<CtorDeclNode, Vec<CasesContainCtorOfEnum>>,
-    element_index_enum_decl_node: BTreeMap<EnumDeclNode, Vec<CasesContainCtorOfEnum>>,
-    element_index_match_case_list_node: BTreeMap<MatchCaseListNode, Vec<CasesContainCtorOfEnum>>,
+    element_index_ctor_decl_node: BTreeMap<CtorDeclNode, Vec<MatchStmtContainsCtorOfEnum>>,
+    element_index_enum_decl_node: BTreeMap<EnumDeclNode, Vec<MatchStmtContainsCtorOfEnum>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<MatchStmtContainsCtorOfEnum>>,
 }
-impl CasesContainCtorOfEnumTable {
+impl MatchStmtContainsCtorOfEnumTable {
     #[allow(unused)]
     const WEIGHT: usize = 9;
     fn new() -> Self {
@@ -21763,18 +21763,18 @@ impl CasesContainCtorOfEnumTable {
             index_dirty_0_1_2_prev: Vec::new(),
             element_index_ctor_decl_node: BTreeMap::new(),
             element_index_enum_decl_node: BTreeMap::new(),
-            element_index_match_case_list_node: BTreeMap::new(),
+            element_index_stmt_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CasesContainCtorOfEnum) -> bool {
+    fn insert(&mut self, t: MatchStmtContainsCtorOfEnum) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
 
-            match self.element_index_match_case_list_node.get_mut(&t.0) {
+            match self.element_index_stmt_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_match_case_list_node.insert(t.0, vec![t]);
+                    self.element_index_stmt_node.insert(t.0, vec![t]);
                 }
             };
 
@@ -21797,7 +21797,7 @@ impl CasesContainCtorOfEnumTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: CasesContainCtorOfEnum) -> bool {
+    fn insert_dirt(&mut self, t: MatchStmtContainsCtorOfEnum) -> bool {
         if self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t)) {
             true
         } else {
@@ -21805,7 +21805,7 @@ impl CasesContainCtorOfEnumTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CasesContainCtorOfEnum) -> bool {
+    fn contains(&self, t: MatchStmtContainsCtorOfEnum) -> bool {
         self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
     }
     fn drop_dirt(&mut self) {
@@ -21820,19 +21820,19 @@ impl CasesContainCtorOfEnumTable {
         !self.index_dirty_0_1_2.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1_2(t: CasesContainCtorOfEnum) -> (u32, u32, u32) {
+    fn permute_0_1_2(t: MatchStmtContainsCtorOfEnum) -> (u32, u32, u32) {
         (t.0.into(), t.1.into(), t.2.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> CasesContainCtorOfEnum {
-        CasesContainCtorOfEnum(
-            MatchCaseListNode::from(t.0),
+    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> MatchStmtContainsCtorOfEnum {
+        MatchStmtContainsCtorOfEnum(
+            StmtNode::from(t.0),
             CtorDeclNode::from(t.1),
             EnumDeclNode::from(t.2),
         )
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CasesContainCtorOfEnum> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = MatchStmtContainsCtorOfEnum> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
         self.index_all_0_1_2
@@ -21841,7 +21841,7 @@ impl CasesContainCtorOfEnumTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CasesContainCtorOfEnum> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = MatchStmtContainsCtorOfEnum> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
         self.index_dirty_0_1_2
@@ -21852,10 +21852,10 @@ impl CasesContainCtorOfEnumTable {
     #[allow(dead_code)]
     fn iter_all_0_1_2(
         &self,
-        arg0: MatchCaseListNode,
+        arg0: StmtNode,
         arg1: CtorDeclNode,
         arg2: EnumDeclNode,
-    ) -> impl '_ + Iterator<Item = CasesContainCtorOfEnum> {
+    ) -> impl '_ + Iterator<Item = MatchStmtContainsCtorOfEnum> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
@@ -21870,7 +21870,7 @@ impl CasesContainCtorOfEnumTable {
     fn drain_with_element_ctor_decl_node(
         &mut self,
         tm: CtorDeclNode,
-    ) -> impl '_ + Iterator<Item = CasesContainCtorOfEnum> {
+    ) -> impl '_ + Iterator<Item = MatchStmtContainsCtorOfEnum> {
         let ts = match self.element_index_ctor_decl_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -21889,7 +21889,7 @@ impl CasesContainCtorOfEnumTable {
     fn drain_with_element_enum_decl_node(
         &mut self,
         tm: EnumDeclNode,
-    ) -> impl '_ + Iterator<Item = CasesContainCtorOfEnum> {
+    ) -> impl '_ + Iterator<Item = MatchStmtContainsCtorOfEnum> {
         let ts = match self.element_index_enum_decl_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -21905,11 +21905,11 @@ impl CasesContainCtorOfEnumTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_match_case_list_node(
+    fn drain_with_element_stmt_node(
         &mut self,
-        tm: MatchCaseListNode,
-    ) -> impl '_ + Iterator<Item = CasesContainCtorOfEnum> {
-        let ts = match self.element_index_match_case_list_node.remove(&tm) {
+        tm: StmtNode,
+    ) -> impl '_ + Iterator<Item = MatchStmtContainsCtorOfEnum> {
+        let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -21927,7 +21927,7 @@ impl CasesContainCtorOfEnumTable {
         &mut self,
         ctor_decl_node_equalities: &mut Unification<CtorDeclNode>,
         enum_decl_node_equalities: &mut Unification<EnumDeclNode>,
-        match_case_list_node_equalities: &mut Unification<MatchCaseListNode>,
+        stmt_node_equalities: &mut Unification<StmtNode>,
     ) {
         let mut tmp_dirty_0_1_2_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_2_prev, &mut self.index_dirty_0_1_2_prev);
@@ -21936,7 +21936,7 @@ impl CasesContainCtorOfEnumTable {
             #[allow(unused_mut)]
             let mut tuple = Self::permute_inverse_0_1_2(tuple);
             if true
-                && tuple.0 == match_case_list_node_equalities.root(tuple.0)
+                && tuple.0 == stmt_node_equalities.root(tuple.0)
                 && tuple.1 == ctor_decl_node_equalities.root(tuple.1)
                 && tuple.2 == enum_decl_node_equalities.root(tuple.2)
             {
@@ -21945,11 +21945,11 @@ impl CasesContainCtorOfEnumTable {
         }
     }
 }
-impl fmt::Display for CasesContainCtorOfEnumTable {
+impl fmt::Display for MatchStmtContainsCtorOfEnumTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cases_contain_ctor_of_enum"))
+            .with(Header("match_stmt_contains_ctor_of_enum"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -37992,7 +37992,7 @@ struct ModelDelta {
     new_pattern_ctor_arg_is_app: Vec<PatternCtorArgIsApp>,
     new_pattern_ctor_arg_var_is_not_fresh: Vec<PatternCtorArgVarIsNotFresh>,
     new_cases_contain_ctor: Vec<CasesContainCtor>,
-    new_cases_contain_ctor_of_enum: Vec<CasesContainCtorOfEnum>,
+    new_match_stmt_contains_ctor_of_enum: Vec<MatchStmtContainsCtorOfEnum>,
     new_match_stmt_should_contain_ctor: Vec<MatchStmtShouldContainCtor>,
     new_match_stmt_contains_ctor: Vec<MatchStmtContainsCtor>,
     new_real_virt_ident: Vec<RealVirtIdent>,
@@ -38477,7 +38477,7 @@ pub struct Eqlog {
     pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,
     pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,
     cases_contain_ctor: CasesContainCtorTable,
-    cases_contain_ctor_of_enum: CasesContainCtorOfEnumTable,
+    match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,
     match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,
     match_stmt_contains_ctor: MatchStmtContainsCtorTable,
     real_virt_ident: RealVirtIdentTable,
@@ -38678,7 +38678,7 @@ impl ModelDelta {
             new_pattern_ctor_arg_is_app: Vec::new(),
             new_pattern_ctor_arg_var_is_not_fresh: Vec::new(),
             new_cases_contain_ctor: Vec::new(),
-            new_cases_contain_ctor_of_enum: Vec::new(),
+            new_match_stmt_contains_ctor_of_enum: Vec::new(),
             new_match_stmt_should_contain_ctor: Vec::new(),
             new_match_stmt_contains_ctor: Vec::new(),
             new_real_virt_ident: Vec::new(),
@@ -40708,28 +40708,25 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cases_contain_ctor_of_enum.extend(
+            self.new_match_stmt_contains_ctor_of_enum.extend(
                 model
-                    .cases_contain_ctor_of_enum
+                    .match_stmt_contains_ctor_of_enum
                     .drain_with_element_ctor_decl_node(child)
                     .inspect(|t| {
-                        let weight0 = model
-                            .match_case_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= CasesContainCtorOfEnumTable::WEIGHT;
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
 
                         let weight1 = model
                             .ctor_decl_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CasesContainCtorOfEnumTable::WEIGHT;
+                        *weight1 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
 
                         let weight2 = model
                             .enum_decl_node_weights
                             .get_mut(t.2 .0 as usize)
                             .unwrap();
-                        *weight2 -= CasesContainCtorOfEnumTable::WEIGHT;
+                        *weight2 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
                     }),
             );
 
@@ -41012,28 +41009,25 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cases_contain_ctor_of_enum.extend(
+            self.new_match_stmt_contains_ctor_of_enum.extend(
                 model
-                    .cases_contain_ctor_of_enum
+                    .match_stmt_contains_ctor_of_enum
                     .drain_with_element_enum_decl_node(child)
                     .inspect(|t| {
-                        let weight0 = model
-                            .match_case_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= CasesContainCtorOfEnumTable::WEIGHT;
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
 
                         let weight1 = model
                             .ctor_decl_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= CasesContainCtorOfEnumTable::WEIGHT;
+                        *weight1 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
 
                         let weight2 = model
                             .enum_decl_node_weights
                             .get_mut(t.2 .0 as usize)
                             .unwrap();
-                        *weight2 -= CasesContainCtorOfEnumTable::WEIGHT;
+                        *weight2 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
                     }),
             );
 
@@ -42240,31 +42234,6 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_cases_contain_ctor_of_enum.extend(
-                model
-                    .cases_contain_ctor_of_enum
-                    .drain_with_element_match_case_list_node(child)
-                    .inspect(|t| {
-                        let weight0 = model
-                            .match_case_list_node_weights
-                            .get_mut(t.0 .0 as usize)
-                            .unwrap();
-                        *weight0 -= CasesContainCtorOfEnumTable::WEIGHT;
-
-                        let weight1 = model
-                            .ctor_decl_node_weights
-                            .get_mut(t.1 .0 as usize)
-                            .unwrap();
-                        *weight1 -= CasesContainCtorOfEnumTable::WEIGHT;
-
-                        let weight2 = model
-                            .enum_decl_node_weights
-                            .get_mut(t.2 .0 as usize)
-                            .unwrap();
-                        *weight2 -= CasesContainCtorOfEnumTable::WEIGHT;
-                    }),
-            );
-
             self.new_rule_child_match_case_list.extend(
                 model
                     .rule_child_match_case_list
@@ -42984,6 +42953,28 @@ impl ModelDelta {
 
                         let weight1 = model.virt_ident_weights.get_mut(t.1 .0 as usize).unwrap();
                         *weight1 -= VarInStmtTable::WEIGHT;
+                    }),
+            );
+
+            self.new_match_stmt_contains_ctor_of_enum.extend(
+                model
+                    .match_stmt_contains_ctor_of_enum
+                    .drain_with_element_stmt_node(child)
+                    .inspect(|t| {
+                        let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        *weight0 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
+
+                        let weight1 = model
+                            .ctor_decl_node_weights
+                            .get_mut(t.1 .0 as usize)
+                            .unwrap();
+                        *weight1 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
+
+                        let weight2 = model
+                            .enum_decl_node_weights
+                            .get_mut(t.2 .0 as usize)
+                            .unwrap();
+                        *weight2 -= MatchStmtContainsCtorOfEnumTable::WEIGHT;
                     }),
             );
 
@@ -47213,17 +47204,17 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_cases_contain_ctor_of_enum.drain(..) {
-            t.0 = model.match_case_list_node_equalities.root(t.0);
+        for mut t in self.new_match_stmt_contains_ctor_of_enum.drain(..) {
+            t.0 = model.stmt_node_equalities.root(t.0);
             t.1 = model.ctor_decl_node_equalities.root(t.1);
             t.2 = model.enum_decl_node_equalities.root(t.2);
-            if model.cases_contain_ctor_of_enum.insert(t) {
-                model.match_case_list_node_weights[t.0 .0 as usize] +=
-                    CasesContainCtorOfEnumTable::WEIGHT;
+            if model.match_stmt_contains_ctor_of_enum.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] +=
+                    MatchStmtContainsCtorOfEnumTable::WEIGHT;
                 model.ctor_decl_node_weights[t.1 .0 as usize] +=
-                    CasesContainCtorOfEnumTable::WEIGHT;
+                    MatchStmtContainsCtorOfEnumTable::WEIGHT;
                 model.enum_decl_node_weights[t.2 .0 as usize] +=
-                    CasesContainCtorOfEnumTable::WEIGHT;
+                    MatchStmtContainsCtorOfEnumTable::WEIGHT;
             }
         }
 
@@ -48632,7 +48623,7 @@ impl Eqlog {
             pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),
             pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),
             cases_contain_ctor: CasesContainCtorTable::new(),
-            cases_contain_ctor_of_enum: CasesContainCtorOfEnumTable::new(),
+            match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),
             match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),
             match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),
             real_virt_ident: RealVirtIdentTable::new(),
@@ -49022,7 +49013,7 @@ impl Eqlog {
                 self.query_and_record_pattern_ctor_arg_var_is_not_fresh_defined(&mut delta);
                 self.query_and_record_contains_ctor_case_head(&mut delta);
                 self.query_and_record_contains_ctor_case_tail(&mut delta);
-                self.query_and_record_cases_contain_ctor_of_enum_defined(&mut delta);
+                self.query_and_record_match_stmt_contains_ctor_of_enum_defined(&mut delta);
                 self.query_and_record_ctor_cases_determine_enum_singleton(&mut delta);
                 self.query_and_record_ctor_cases_determine_enum_cons(&mut delta);
                 self.query_and_record_match_term_type_if_cases_determine_enum(&mut delta);
@@ -56570,44 +56561,44 @@ impl Eqlog {
             .push(CasesContainCtor(arg0, arg1));
     }
 
-    /// Returns `true` if `cases_contain_ctor_of_enum(arg0, arg1, arg2)` holds.
+    /// Returns `true` if `match_stmt_contains_ctor_of_enum(arg0, arg1, arg2)` holds.
     #[allow(dead_code)]
-    pub fn cases_contain_ctor_of_enum(
+    pub fn match_stmt_contains_ctor_of_enum(
         &self,
-        mut arg0: MatchCaseListNode,
+        mut arg0: StmtNode,
         mut arg1: CtorDeclNode,
         mut arg2: EnumDeclNode,
     ) -> bool {
-        arg0 = self.root_match_case_list_node(arg0);
+        arg0 = self.root_stmt_node(arg0);
         arg1 = self.root_ctor_decl_node(arg1);
         arg2 = self.root_enum_decl_node(arg2);
-        self.cases_contain_ctor_of_enum
-            .contains(CasesContainCtorOfEnum(arg0, arg1, arg2))
+        self.match_stmt_contains_ctor_of_enum
+            .contains(MatchStmtContainsCtorOfEnum(arg0, arg1, arg2))
     }
-    /// Returns an iterator over tuples of elements satisfying the `cases_contain_ctor_of_enum` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `match_stmt_contains_ctor_of_enum` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_cases_contain_ctor_of_enum(
+    pub fn iter_match_stmt_contains_ctor_of_enum(
         &self,
-    ) -> impl '_ + Iterator<Item = (MatchCaseListNode, CtorDeclNode, EnumDeclNode)> {
-        self.cases_contain_ctor_of_enum
+    ) -> impl '_ + Iterator<Item = (StmtNode, CtorDeclNode, EnumDeclNode)> {
+        self.match_stmt_contains_ctor_of_enum
             .iter_all()
             .map(|t| (t.0, t.1, t.2))
     }
-    /// Makes `cases_contain_ctor_of_enum(arg0, arg1, arg2)` hold.
+    /// Makes `match_stmt_contains_ctor_of_enum(arg0, arg1, arg2)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cases_contain_ctor_of_enum(
+    pub fn insert_match_stmt_contains_ctor_of_enum(
         &mut self,
-        arg0: MatchCaseListNode,
+        arg0: StmtNode,
         arg1: CtorDeclNode,
         arg2: EnumDeclNode,
     ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_cases_contain_ctor_of_enum
-            .push(CasesContainCtorOfEnum(arg0, arg1, arg2));
+            .new_match_stmt_contains_ctor_of_enum
+            .push(MatchStmtContainsCtorOfEnum(arg0, arg1, arg2));
     }
 
     /// Returns `true` if `match_stmt_should_contain_ctor(arg0, arg1)` holds.
@@ -56781,7 +56772,7 @@ impl Eqlog {
             || self.pattern_ctor_arg_is_app.is_dirty()
             || self.pattern_ctor_arg_var_is_not_fresh.is_dirty()
             || self.cases_contain_ctor.is_dirty()
-            || self.cases_contain_ctor_of_enum.is_dirty()
+            || self.match_stmt_contains_ctor_of_enum.is_dirty()
             || self.match_stmt_should_contain_ctor.is_dirty()
             || self.match_stmt_contains_ctor.is_dirty()
             || self.real_virt_ident.is_dirty()
@@ -67647,38 +67638,54 @@ impl Eqlog {
     fn record_action_313(
         &self,
         delta: &mut ModelDelta,
-        tm0: MatchCaseListNode,
-        tm1: CtorDeclNode,
-        tm2: EnumDeclNode,
+        tm0: StmtNode,
+        tm3: CtorDeclNode,
+        tm4: EnumDeclNode,
     ) {
         let existing_row = self
-            .cases_contain_ctor_of_enum
-            .iter_all_0_1_2(tm0, tm1, tm2)
+            .match_stmt_contains_ctor_of_enum
+            .iter_all_0_1_2(tm0, tm3, tm4)
             .next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CasesContainCtorOfEnum(_, _, _)) => (),
+            Some(MatchStmtContainsCtorOfEnum(_, _, _)) => (),
             None => {
                 delta
-                    .new_cases_contain_ctor_of_enum
-                    .push(CasesContainCtorOfEnum(tm0, tm1, tm2));
+                    .new_match_stmt_contains_ctor_of_enum
+                    .push(MatchStmtContainsCtorOfEnum(tm0, tm3, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_cases_contain_ctor_of_enum_defined(&self, delta: &mut ModelDelta) {
+    fn query_and_record_match_stmt_contains_ctor_of_enum_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for CasesContainCtor(tm0, tm1) in self.cases_contain_ctor.iter_dirty() {
+        for MatchStmtNode(tm0, tm1, tm2) in self.match_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for CtorEnum(_, tm2) in self.ctor_enum.iter_all_0(tm1) {
-                self.record_action_313(delta, tm0, tm1, tm2);
+            for CasesContainCtor(_, tm3) in self.cases_contain_ctor.iter_all_0(tm2) {
+                #[allow(unused_variables)]
+                for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm3) {
+                    self.record_action_313(delta, tm0, tm3, tm4);
+                }
             }
         }
         #[allow(unused_variables)]
-        for CtorEnum(tm1, tm2) in self.ctor_enum.iter_dirty() {
+        for CasesContainCtor(tm2, tm3) in self.cases_contain_ctor.iter_dirty() {
             #[allow(unused_variables)]
-            for CasesContainCtor(tm0, _) in self.cases_contain_ctor.iter_all_1(tm1) {
-                self.record_action_313(delta, tm0, tm1, tm2);
+            for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm3) {
+                #[allow(unused_variables)]
+                for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                    self.record_action_313(delta, tm0, tm3, tm4);
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for CtorEnum(tm3, tm4) in self.ctor_enum.iter_dirty() {
+            #[allow(unused_variables)]
+            for CasesContainCtor(tm2, _) in self.cases_contain_ctor.iter_all_1(tm3) {
+                #[allow(unused_variables)]
+                for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                    self.record_action_313(delta, tm0, tm3, tm4);
+                }
             }
         }
     }
@@ -68195,7 +68202,7 @@ impl Eqlog {
         self.pattern_ctor_arg_is_app.drop_dirt();
         self.pattern_ctor_arg_var_is_not_fresh.drop_dirt();
         self.cases_contain_ctor.drop_dirt();
-        self.cases_contain_ctor_of_enum.drop_dirt();
+        self.match_stmt_contains_ctor_of_enum.drop_dirt();
         self.match_stmt_should_contain_ctor.drop_dirt();
         self.match_stmt_contains_ctor.drop_dirt();
         self.real_virt_ident.drop_dirt();
@@ -68429,7 +68436,7 @@ impl Eqlog {
         self.pattern_ctor_arg_is_app.retire_dirt();
         self.pattern_ctor_arg_var_is_not_fresh.retire_dirt();
         self.cases_contain_ctor.retire_dirt();
-        self.cases_contain_ctor_of_enum.retire_dirt();
+        self.match_stmt_contains_ctor_of_enum.retire_dirt();
         self.match_stmt_should_contain_ctor.retire_dirt();
         self.match_stmt_contains_ctor.retire_dirt();
         self.real_virt_ident.retire_dirt();
@@ -69107,10 +69114,10 @@ impl Eqlog {
             &mut self.ctor_decl_node_equalities,
             &mut self.match_case_list_node_equalities,
         );
-        self.cases_contain_ctor_of_enum.recall_previous_dirt(
+        self.match_stmt_contains_ctor_of_enum.recall_previous_dirt(
             &mut self.ctor_decl_node_equalities,
             &mut self.enum_decl_node_equalities,
-            &mut self.match_case_list_node_equalities,
+            &mut self.stmt_node_equalities,
         );
         self.match_stmt_should_contain_ctor.recall_previous_dirt(
             &mut self.ctor_decl_node_equalities,
@@ -70231,7 +70238,7 @@ impl fmt::Display for Eqlog {
         self.pattern_ctor_arg_is_app.fmt(f)?;
         self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;
         self.cases_contain_ctor.fmt(f)?;
-        self.cases_contain_ctor_of_enum.fmt(f)?;
+        self.match_stmt_contains_ctor_of_enum.fmt(f)?;
         self.match_stmt_should_contain_ctor.fmt(f)?;
         self.match_stmt_contains_ctor.fmt(f)?;
         self.real_virt_ident.fmt(f)?;

@@ -1818,11 +1818,12 @@ rule contains_ctor_case_tail {
     then cases_contain_ctor(cases, ctor);
 }
 
-pred cases_contain_ctor_of_enum(MatchCaseListNode, CtorDeclNode, EnumDeclNode);
-rule cases_contain_ctor_of_enum_defined {
+pred match_stmt_contains_ctor_of_enum(StmtNode, CtorDeclNode, EnumDeclNode);
+rule match_stmt_contains_ctor_of_enum_defined {
+    if match_stmt_node(stmt, _, cases);
     if cases_contain_ctor(cases, ctor);
     if ctor_enum(ctor) = enum_decl_node;
-    then cases_contain_ctor_of_enum(cases, ctor, enum_decl_node);
+    then match_stmt_contains_ctor_of_enum(stmt, ctor, enum_decl_node);
 }
 
 func cases_determined_enum(MatchCaseListNode) -> EnumDeclNode;

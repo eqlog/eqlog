@@ -1,0 +1,14 @@
+enum E {
+    NewE()
+}
+enum F {
+    NewF()
+}
+
+rule {
+    if x: E;
+    match x {
+        NewE() => {}
+        NewF() => {}
+    }
+}

@@ -130,10 +130,8 @@ pub enum CompileError {
         location: Location,
     },
     MatchConflictingEnum {
-        first_pattern_location: Location,
+        match_stmt_location: Location,
         first_ctor_decl_location: Location,
-
-        second_pattern_location: Location,
         second_ctor_decl_location: Location,
     },
     MatchNotExhaustive {
@@ -174,9 +172,9 @@ impl CompileError {
             } => *term_location,
             CompileError::MatchPatternIsVariable { location } => *location,
             CompileError::MatchConflictingEnum {
-                second_pattern_location,
+                match_stmt_location,
                 ..
-            } => *second_pattern_location,
+            } => *match_stmt_location,
             CompileError::MatchPatternIsWildcard { location } => *location,
             CompileError::MatchPatternCtorArgIsApp { location } => *location,
             CompileError::MatchPatternArgVarIsNotFresh { location } => *location,
@@ -455,19 +453,14 @@ impl Display for CompileErrorWithContext {
                 write!(f, "Variables in patterns must be fresh\n")?;
             }
             MatchConflictingEnum {
-                first_pattern_location,
+                match_stmt_location,
                 first_ctor_decl_location,
-                second_pattern_location,
                 second_ctor_decl_location,
             } => {
-                write!(f, "Conflicting enum types of patterns\n")?;
-                write!(f, "This constructor:\n")?;
-                write_loc(f, *first_pattern_location)?;
-                write!(f, "is declared here:\n")?;
+                write!(f, "Conflicting pattern types\n")?;
+                write_loc(f, *match_stmt_location)?;
+                write!(f, "Constructors belong to different enums:\n")?;
                 write_loc(f, *first_ctor_decl_location)?;
-                write!(f, "but this constructor:\n")?;
-                write_loc(f, *second_pattern_location)?;
-                write!(f, "is declared here:\n")?;
                 write_loc(f, *second_ctor_decl_location)?;
             }
             MatchNotExhaustive {

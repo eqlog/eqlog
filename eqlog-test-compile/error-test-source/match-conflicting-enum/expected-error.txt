@@ -1,0 +1,23 @@
+Error: Conflicting pattern types
+  --> error-test-source/match-conflicting-enum/theory.eql:10
+   | 
+10 |     match x {
+   |     ^^^^^^^^^
+11 |         NewE() => {}
+   | ^^^^^^^^^^^^^^^^^^^^
+12 |         NewF() => {}
+   | ^^^^^^^^^^^^^^^^^^^^
+13 |     }
+   | ^^^^^
+   | 
+Constructors belong to different enums:
+ --> error-test-source/match-conflicting-enum/theory.eql:2
+  | 
+2 |     NewE()
+  |     ^^^^^^
+  | 
+ --> error-test-source/match-conflicting-enum/theory.eql:5
+  | 
+5 |     NewF()
+  |     ^^^^^^
+  | 
