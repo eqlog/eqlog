@@ -1734,3 +1734,129 @@ rule function_can_be_defined_if_constructor {
     if function = semantic_func(ident);
     then function_can_be_made_defined(function);
 }
+
+// ## Match statement exhaustiveness check
+//
+// ### Checking that the pattern of every match case is a valid enum constructor.
+
+pred case_pattern_is_variable(TermNode, Loc);
+pred case_pattern_is_wildcard(TermNode, Loc);
+rule case_pattern_is_variable_defined {
+    if match_case(_, pattern, _);
+    if var_term_node(pattern, _);
+    if pattern_loc = term_node_loc(pattern);
+    then case_pattern_is_variable(pattern, pattern_loc);
+}
+rule case_pattern_is_wildcard_defined {
+    if match_case(_, pattern, _);
+    if wildcard_term_node(pattern);
+    if pattern_loc = term_node_loc(pattern);
+    then case_pattern_is_wildcard(pattern, pattern_loc);
+}
+
+// The constructor of the pattern of a match case, if any, i.e. if the pattern
+// term is a valid enum constructor.
+func match_case_pattern_ctor(MatchCaseNode) -> CtorDeclNode;
+rule case_pattern_app_should_be_constructor {
+    if match_case(_, pattern, _);
+    if app_term_node(pattern, func_name, _);
+    if pattern_loc = term_node_loc(pattern);
+    if ctor_sym = ctor_symbol();
+    then should_be_symbol(func_name, ctor_sym, pattern_loc);
+}
+rule match_case_pattern_ctor_defined {
+    if match_case(case_node, pattern, _);
+    if app_term_node(pattern, func_name, _);
+    if ctor_decl(ctor, func_name, _);
+    then match_case_pattern_ctor(case_node) = ctor;
+}
+
+// ### Checking of constructor arguments in patterns
+pred is_pattern_ctor_arg(TermNode);
+pred are_pattern_ctor_args(TermListNode);
+rule is_pattern_ctor_arg_cons {
+    if are_pattern_ctor_args(tms);
+    if cons_term_list_node(tms, head, tail);
+    then is_pattern_ctor_arg(head);
+    then are_pattern_ctor_args(tail);
+}
+
+pred pattern_ctor_arg_is_app(TermNode, Loc);
+rule pattern_ctor_arg_is_app_defined {
+    if is_pattern_ctor_arg(arg);
+    if app_term_node(arg, _, _);
+    if loc = term_node_loc(arg);
+    then pattern_ctor_arg_is_app(arg, loc);
+}
+
+pred pattern_ctor_arg_var_is_not_fresh(TermNode, Loc);
+rule pattern_ctor_arg_var_is_not_fresh_defined {
+    if is_pattern_ctor_arg(arg);
+    if var_term_node(arg, ident);
+    if var_before_term(arg, ident);
+    if loc = term_node_loc(arg);
+    then pattern_ctor_arg_var_is_not_fresh(arg, loc);
+}
+
+// ### Which constructors occur in a case list, and if they determine the enum type uniquely
+
+pred cases_contain_ctor(MatchCaseListNode, CtorDeclNode);
+rule contains_ctor_case_head {
+    if cons_match_case_list_node(cases, head_case, _);
+    if ctor = match_case_pattern_ctor(head_case);
+    then cases_contain_ctor(cases, ctor);
+}
+rule contains_ctor_case_tail {
+    if cons_match_case_list_node(cases, _, tail_cases);
+    if cases_contain_ctor(tail_cases, ctor);
+    then cases_contain_ctor(cases, ctor);
+}
+
+pred cases_contain_ctor_of_enum(MatchCaseListNode, CtorDeclNode, EnumDeclNode);
+rule cases_contain_ctor_of_enum_defined {
+    if cases_contain_ctor(cases, ctor);
+    if ctor_enum(ctor) = enum_decl_node;
+    then cases_contain_ctor_of_enum(cases, ctor, enum_decl_node);
+}
+
+func cases_determined_enum(MatchCaseListNode) -> EnumDeclNode;
+rule ctor_cases_determine_enum_singleton {
+    if cons_match_case_list_node(cases, head_case, tail_cases);
+    if nil_match_case_list_node(tail_cases);
+    if enum_type = ctor_enum(match_case_pattern_ctor(head_case));
+    then cases_determined_enum(cases) = enum_type;
+}
+rule ctor_cases_determine_enum_cons {
+    if cons_match_case_list_node(cases, head_case, tail_cases);
+    if enum_type = cases_determined_enum(tail_cases);
+    if enum_type = ctor_enum(match_case_pattern_ctor(head_case));
+    then cases_determined_enum(cases) = enum_type;
+}
+
+rule match_term_type_if_cases_determine_enum {
+    if match_stmt_node(_, match_term, cases);
+    if enum_decl_node = cases_determined_enum(cases);
+    if enum_decl(enum_decl_node, ident, _);
+    if enum_type = semantic_type(ident);
+    if match_el = semantic_el(match_term, _);
+    then el_type(match_el, enum_type);
+}
+
+// ## Exhaustiveness of case lists in match statement
+
+pred match_stmt_should_contain_ctor(StmtNode, CtorDeclNode);
+rule match_stmt_should_contain_ctor_defined {
+    if match_stmt_node(stmt, match_term, _);
+    if el_type(semantic_el(match_term, _), enum_type);
+    if semantic_type(enum_ident) = enum_type;
+    if enum_decl(enum_decl_node, enum_ident, _);
+    if ctor_enum(ctor) = enum_decl_node;
+    then match_stmt_should_contain_ctor(stmt, ctor);
+}
+
+pred match_stmt_contains_ctor(StmtNode, CtorDeclNode);
+rule match_stmt_contains_ctor_defined {
+    if match_stmt_node(stmt, _, cases);
+    if cases_contain_ctor(cases, ctor);
+    then match_stmt_contains_ctor(stmt, ctor);
+}
