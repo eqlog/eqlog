@@ -117,6 +117,29 @@ pub enum CompileError {
         enum_name: String,
         enum_location: Location,
     },
+    MatchPatternIsVariable {
+        location: Location,
+    },
+    MatchPatternIsWildcard {
+        location: Location,
+    },
+    MatchPatternArgIsApp {
+        location: Location,
+    },
+    MatchPatternArgVarIsNotFresh {
+        location: Location,
+    },
+    MatchConflictingEnum {
+        first_pattern_location: Location,
+        first_ctor_decl_location: Location,
+
+        second_pattern_location: Location,
+        second_ctor_decl_location: Location,
+    },
+    MatchNotExhaustive {
+        match_location: Location,
+        missing_ctor_decl_location: Location,
+    },
 }
 
 impl CompileError {
@@ -149,6 +172,15 @@ impl CompileError {
                 enum_name: _,
                 enum_location: _,
             } => *term_location,
+            CompileError::MatchPatternIsVariable { location } => *location,
+            CompileError::MatchConflictingEnum {
+                second_pattern_location,
+                ..
+            } => *second_pattern_location,
+            CompileError::MatchPatternIsWildcard { location } => *location,
+            CompileError::MatchPatternArgIsApp { location } => *location,
+            CompileError::MatchPatternArgVarIsNotFresh { location } => *location,
+            CompileError::MatchNotExhaustive { match_location, .. } => *match_location,
         }
     }
 }
@@ -395,6 +427,57 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *term_location)?;
                 write!(f, "Enum \"{enum_name}\" declared here:\n")?;
                 write_loc(f, *enum_location)?;
+            }
+            MatchPatternIsVariable { location } => {
+                write!(f, "Pattern is a variable\n")?;
+                write_loc(f, *location)?;
+                write!(
+                    f,
+                    "Patterns must be given by constructors of an enum type\n"
+                )?;
+            }
+            MatchPatternIsWildcard { location } => {
+                write!(f, "Pattern is a wildcard\n")?;
+                write_loc(f, *location)?;
+                write!(
+                    f,
+                    "Patterns must be given by constructors of an enum type\n"
+                )?;
+            }
+            MatchPatternArgIsApp { location } => {
+                write!(f, "Nested patterns are not supported yet\n")?;
+                write_loc(f, *location)?;
+                write!(f, "Only variables may occur as arguments\n")?;
+            }
+            MatchPatternArgVarIsNotFresh { location } => {
+                write!(f, "Variable in pattern has been used before\n")?;
+                write_loc(f, *location)?;
+                write!(f, "Arguments in patterns must be fresh variables\n")?;
+            }
+            MatchConflictingEnum {
+                first_pattern_location,
+                first_ctor_decl_location,
+                second_pattern_location,
+                second_ctor_decl_location,
+            } => {
+                write!(f, "Conflicting enum types of patterns\n")?;
+                write!(f, "This constructor:\n")?;
+                write_loc(f, *first_pattern_location)?;
+                write!(f, "is declared here:\n")?;
+                write_loc(f, *first_ctor_decl_location)?;
+                write!(f, "but this constructor:\n")?;
+                write_loc(f, *second_pattern_location)?;
+                write!(f, "is declared here:\n")?;
+                write_loc(f, *second_ctor_decl_location)?;
+            }
+            MatchNotExhaustive {
+                match_location,
+                missing_ctor_decl_location,
+            } => {
+                write!(f, "Missing match case:\n")?;
+                write_loc(f, *match_location)?;
+                write!(f, "This constructor is not covered:\n")?;
+                write_loc(f, *missing_ctor_decl_location)?;
             }
         }
         Ok(())

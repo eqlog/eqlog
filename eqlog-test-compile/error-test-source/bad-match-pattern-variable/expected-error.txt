@@ -1,0 +1,7 @@
+Error: Pattern is a variable
+ --> error-test-source/bad-match-pattern-variable/theory.eql:8
+  | 
+8 |         y => {}
+  |         ^      
+  | 
+Patterns must be given by constructors of an enum type

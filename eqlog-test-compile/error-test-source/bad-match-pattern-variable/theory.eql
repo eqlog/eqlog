@@ -1,0 +1,10 @@
+enum E {
+    Foo()
+}
+
+rule {
+    if x: E;
+    match x {
+        y => {}
+    }
+}

@@ -1,4 +1,4 @@
-// src-digest: C98082BD6624CE217DED30373587DF3B1F698AEC3039588C16F6EC774FA517D8
+// src-digest: C34D112E1FCEBFEA6C8C177B33757E38B9D9E4922A82B8233A866E599856582E
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -20667,45 +20667,36 @@ impl fmt::Display for FunctionCanBeMadeDefinedTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CasePatternIsVariable(pub TermNode, pub Loc);
+struct CasePatternIsVariable(pub Loc);
 #[derive(Clone, Hash, Debug)]
 struct CasePatternIsVariableTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
 
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
 
     element_index_loc: BTreeMap<Loc, Vec<CasePatternIsVariable>>,
-    element_index_term_node: BTreeMap<TermNode, Vec<CasePatternIsVariable>>,
 }
 impl CasePatternIsVariableTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 3;
     fn new() -> Self {
         Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
             element_index_loc: BTreeMap::new(),
-            element_index_term_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: CasePatternIsVariable) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
 
-            match self.element_index_term_node.get_mut(&t.0) {
+            match self.element_index_loc.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_term_node.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_loc.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_loc.insert(t.1, vec![t]);
+                    self.element_index_loc.insert(t.0, vec![t]);
                 }
             };
 
@@ -20715,7 +20706,7 @@ impl CasePatternIsVariableTable {
         }
     }
     fn insert_dirt(&mut self, t: CasePatternIsVariable) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
             true
         } else {
             false
@@ -20723,59 +20714,54 @@ impl CasePatternIsVariableTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: CasePatternIsVariable) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
+        self.index_all_0.contains(&Self::permute_0(t))
     }
     fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
+        self.index_dirty_0.clear();
     }
     fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
     }
     fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
+        !self.index_dirty_0.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CasePatternIsVariable) -> (u32, u32) {
-        (t.0.into(), t.1.into())
+    fn permute_0(t: CasePatternIsVariable) -> (u32,) {
+        (t.0.into(),)
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CasePatternIsVariable {
-        CasePatternIsVariable(TermNode::from(t.0), Loc::from(t.1))
+    fn permute_inverse_0(t: (u32,)) -> CasePatternIsVariable {
+        CasePatternIsVariable(Loc::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = CasePatternIsVariable> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = CasePatternIsVariable> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: TermNode,
-        arg1: Loc,
-    ) -> impl '_ + Iterator<Item = CasePatternIsVariable> {
+    fn iter_all_0(&self, arg0: Loc) -> impl '_ + Iterator<Item = CasePatternIsVariable> {
         let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_loc(
@@ -20788,48 +20774,22 @@ impl CasePatternIsVariableTable {
         };
 
         ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
                 true
             } else {
                 false
             }
         })
     }
-    #[allow(dead_code)]
-    fn drain_with_element_term_node(
-        &mut self,
-        tm: TermNode,
-    ) -> impl '_ + Iterator<Item = CasePatternIsVariable> {
-        let ts = match self.element_index_term_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
+    fn recall_previous_dirt(&mut self, loc_equalities: &mut Unification<Loc>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
 
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        loc_equalities: &mut Unification<Loc>,
-        term_node_equalities: &mut Unification<TermNode>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
             #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == term_node_equalities.root(tuple.0)
-                && tuple.1 == loc_equalities.root(tuple.1)
-            {
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == loc_equalities.root(tuple.0) {
                 self.insert_dirt(tuple);
             }
         }
@@ -20850,45 +20810,36 @@ impl fmt::Display for CasePatternIsVariableTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CasePatternIsWildcard(pub TermNode, pub Loc);
+struct CasePatternIsWildcard(pub Loc);
 #[derive(Clone, Hash, Debug)]
 struct CasePatternIsWildcardTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
 
-    index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
+    index_dirty_0_prev: Vec<BTreeSet<(u32,)>>,
 
     element_index_loc: BTreeMap<Loc, Vec<CasePatternIsWildcard>>,
-    element_index_term_node: BTreeMap<TermNode, Vec<CasePatternIsWildcard>>,
 }
 impl CasePatternIsWildcardTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 3;
     fn new() -> Self {
         Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_dirty_0_1_prev: Vec::new(),
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            index_dirty_0_prev: Vec::new(),
             element_index_loc: BTreeMap::new(),
-            element_index_term_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: CasePatternIsWildcard) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
 
-            match self.element_index_term_node.get_mut(&t.0) {
+            match self.element_index_loc.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_term_node.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_loc.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_loc.insert(t.1, vec![t]);
+                    self.element_index_loc.insert(t.0, vec![t]);
                 }
             };
 
@@ -20898,7 +20849,7 @@ impl CasePatternIsWildcardTable {
         }
     }
     fn insert_dirt(&mut self, t: CasePatternIsWildcard) -> bool {
-        if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
+        if self.index_dirty_0.insert(Self::permute_0(t)) {
             true
         } else {
             false
@@ -20906,59 +20857,54 @@ impl CasePatternIsWildcardTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: CasePatternIsWildcard) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
+        self.index_all_0.contains(&Self::permute_0(t))
     }
     fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
+        self.index_dirty_0.clear();
     }
     fn retire_dirt(&mut self) {
-        let mut tmp_dirty_0_1 = BTreeSet::new();
-        std::mem::swap(&mut tmp_dirty_0_1, &mut self.index_dirty_0_1);
-        self.index_dirty_0_1_prev.push(tmp_dirty_0_1);
+        let mut tmp_dirty_0 = BTreeSet::new();
+        std::mem::swap(&mut tmp_dirty_0, &mut self.index_dirty_0);
+        self.index_dirty_0_prev.push(tmp_dirty_0);
     }
     fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
+        !self.index_dirty_0.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CasePatternIsWildcard) -> (u32, u32) {
-        (t.0.into(), t.1.into())
+    fn permute_0(t: CasePatternIsWildcard) -> (u32,) {
+        (t.0.into(),)
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CasePatternIsWildcard {
-        CasePatternIsWildcard(TermNode::from(t.0), Loc::from(t.1))
+    fn permute_inverse_0(t: (u32,)) -> CasePatternIsWildcard {
+        CasePatternIsWildcard(Loc::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = CasePatternIsWildcard> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = CasePatternIsWildcard> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: TermNode,
-        arg1: Loc,
-    ) -> impl '_ + Iterator<Item = CasePatternIsWildcard> {
+    fn iter_all_0(&self, arg0: Loc) -> impl '_ + Iterator<Item = CasePatternIsWildcard> {
         let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1)
+            .map(Self::permute_inverse_0)
     }
     #[allow(dead_code)]
     fn drain_with_element_loc(
@@ -20971,48 +20917,22 @@ impl CasePatternIsWildcardTable {
         };
 
         ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
+            if self.index_all_0.remove(&Self::permute_0(*t)) {
+                self.index_dirty_0.remove(&Self::permute_0(*t));
                 true
             } else {
                 false
             }
         })
     }
-    #[allow(dead_code)]
-    fn drain_with_element_term_node(
-        &mut self,
-        tm: TermNode,
-    ) -> impl '_ + Iterator<Item = CasePatternIsWildcard> {
-        let ts = match self.element_index_term_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
+    fn recall_previous_dirt(&mut self, loc_equalities: &mut Unification<Loc>) {
+        let mut tmp_dirty_0_prev = Vec::new();
+        std::mem::swap(&mut tmp_dirty_0_prev, &mut self.index_dirty_0_prev);
 
-        ts.into_iter().filter(|t| {
-            if self.index_all_0_1.remove(&Self::permute_0_1(*t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(*t));
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn recall_previous_dirt(
-        &mut self,
-        loc_equalities: &mut Unification<Loc>,
-        term_node_equalities: &mut Unification<TermNode>,
-    ) {
-        let mut tmp_dirty_0_1_prev = Vec::new();
-        std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
-
-        for tuple in tmp_dirty_0_1_prev.into_iter().flatten() {
+        for tuple in tmp_dirty_0_prev.into_iter().flatten() {
             #[allow(unused_mut)]
-            let mut tuple = Self::permute_inverse_0_1(tuple);
-            if true
-                && tuple.0 == term_node_equalities.root(tuple.0)
-                && tuple.1 == loc_equalities.root(tuple.1)
-            {
+            let mut tuple = Self::permute_inverse_0(tuple);
+            if true && tuple.0 == loc_equalities.root(tuple.0) {
                 self.insert_dirt(tuple);
             }
         }
@@ -41597,32 +41517,6 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_case_pattern_is_variable.extend(
-                model
-                    .case_pattern_is_variable
-                    .drain_with_element_term_node(child)
-                    .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CasePatternIsVariableTable::WEIGHT;
-
-                        let weight1 = model.loc_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CasePatternIsVariableTable::WEIGHT;
-                    }),
-            );
-
-            self.new_case_pattern_is_wildcard.extend(
-                model
-                    .case_pattern_is_wildcard
-                    .drain_with_element_term_node(child)
-                    .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= CasePatternIsWildcardTable::WEIGHT;
-
-                        let weight1 = model.loc_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CasePatternIsWildcardTable::WEIGHT;
-                    }),
-            );
-
             self.new_is_pattern_ctor_arg.extend(
                 model
                     .is_pattern_ctor_arg
@@ -44296,11 +44190,8 @@ impl ModelDelta {
                     .case_pattern_is_variable
                     .drain_with_element_loc(child)
                     .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        let weight0 = model.loc_weights.get_mut(t.0 .0 as usize).unwrap();
                         *weight0 -= CasePatternIsVariableTable::WEIGHT;
-
-                        let weight1 = model.loc_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CasePatternIsVariableTable::WEIGHT;
                     }),
             );
 
@@ -44309,11 +44200,8 @@ impl ModelDelta {
                     .case_pattern_is_wildcard
                     .drain_with_element_loc(child)
                     .inspect(|t| {
-                        let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
+                        let weight0 = model.loc_weights.get_mut(t.0 .0 as usize).unwrap();
                         *weight0 -= CasePatternIsWildcardTable::WEIGHT;
-
-                        let weight1 = model.loc_weights.get_mut(t.1 .0 as usize).unwrap();
-                        *weight1 -= CasePatternIsWildcardTable::WEIGHT;
                     }),
             );
 
@@ -47379,21 +47267,17 @@ impl ModelDelta {
 
         #[allow(unused_mut)]
         for mut t in self.new_case_pattern_is_variable.drain(..) {
-            t.0 = model.term_node_equalities.root(t.0);
-            t.1 = model.loc_equalities.root(t.1);
+            t.0 = model.loc_equalities.root(t.0);
             if model.case_pattern_is_variable.insert(t) {
-                model.term_node_weights[t.0 .0 as usize] += CasePatternIsVariableTable::WEIGHT;
-                model.loc_weights[t.1 .0 as usize] += CasePatternIsVariableTable::WEIGHT;
+                model.loc_weights[t.0 .0 as usize] += CasePatternIsVariableTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
         for mut t in self.new_case_pattern_is_wildcard.drain(..) {
-            t.0 = model.term_node_equalities.root(t.0);
-            t.1 = model.loc_equalities.root(t.1);
+            t.0 = model.loc_equalities.root(t.0);
             if model.case_pattern_is_wildcard.insert(t) {
-                model.term_node_weights[t.0 .0 as usize] += CasePatternIsWildcardTable::WEIGHT;
-                model.loc_weights[t.1 .0 as usize] += CasePatternIsWildcardTable::WEIGHT;
+                model.loc_weights[t.0 .0 as usize] += CasePatternIsWildcardTable::WEIGHT;
             }
         }
 
@@ -56630,54 +56514,52 @@ impl Eqlog {
             .push(FunctionCanBeMadeDefined(arg0));
     }
 
-    /// Returns `true` if `case_pattern_is_variable(arg0, arg1)` holds.
+    /// Returns `true` if `case_pattern_is_variable(arg0)` holds.
     #[allow(dead_code)]
-    pub fn case_pattern_is_variable(&self, mut arg0: TermNode, mut arg1: Loc) -> bool {
-        arg0 = self.root_term_node(arg0);
-        arg1 = self.root_loc(arg1);
+    pub fn case_pattern_is_variable(&self, mut arg0: Loc) -> bool {
+        arg0 = self.root_loc(arg0);
         self.case_pattern_is_variable
-            .contains(CasePatternIsVariable(arg0, arg1))
+            .contains(CasePatternIsVariable(arg0))
     }
-    /// Returns an iterator over tuples of elements satisfying the `case_pattern_is_variable` predicate.
+    /// Returns an iterator over elements satisfying the `case_pattern_is_variable` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_case_pattern_is_variable(&self) -> impl '_ + Iterator<Item = (TermNode, Loc)> {
-        self.case_pattern_is_variable.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_case_pattern_is_variable(&self) -> impl '_ + Iterator<Item = Loc> {
+        self.case_pattern_is_variable.iter_all().map(|t| t.0)
     }
-    /// Makes `case_pattern_is_variable(arg0, arg1)` hold.
+    /// Makes `case_pattern_is_variable(arg0)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_case_pattern_is_variable(&mut self, arg0: TermNode, arg1: Loc) {
+    pub fn insert_case_pattern_is_variable(&mut self, arg0: Loc) {
         self.delta
             .as_mut()
             .unwrap()
             .new_case_pattern_is_variable
-            .push(CasePatternIsVariable(arg0, arg1));
+            .push(CasePatternIsVariable(arg0));
     }
 
-    /// Returns `true` if `case_pattern_is_wildcard(arg0, arg1)` holds.
+    /// Returns `true` if `case_pattern_is_wildcard(arg0)` holds.
     #[allow(dead_code)]
-    pub fn case_pattern_is_wildcard(&self, mut arg0: TermNode, mut arg1: Loc) -> bool {
-        arg0 = self.root_term_node(arg0);
-        arg1 = self.root_loc(arg1);
+    pub fn case_pattern_is_wildcard(&self, mut arg0: Loc) -> bool {
+        arg0 = self.root_loc(arg0);
         self.case_pattern_is_wildcard
-            .contains(CasePatternIsWildcard(arg0, arg1))
+            .contains(CasePatternIsWildcard(arg0))
     }
-    /// Returns an iterator over tuples of elements satisfying the `case_pattern_is_wildcard` predicate.
+    /// Returns an iterator over elements satisfying the `case_pattern_is_wildcard` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_case_pattern_is_wildcard(&self) -> impl '_ + Iterator<Item = (TermNode, Loc)> {
-        self.case_pattern_is_wildcard.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_case_pattern_is_wildcard(&self) -> impl '_ + Iterator<Item = Loc> {
+        self.case_pattern_is_wildcard.iter_all().map(|t| t.0)
     }
-    /// Makes `case_pattern_is_wildcard(arg0, arg1)` hold.
+    /// Makes `case_pattern_is_wildcard(arg0)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_case_pattern_is_wildcard(&mut self, arg0: TermNode, arg1: Loc) {
+    pub fn insert_case_pattern_is_wildcard(&mut self, arg0: Loc) {
         self.delta
             .as_mut()
             .unwrap()
             .new_case_pattern_is_wildcard
-            .push(CasePatternIsWildcard(arg0, arg1));
+            .push(CasePatternIsWildcard(arg0));
     }
 
     /// Returns `true` if `is_pattern_ctor_arg(arg0)` holds.
@@ -67438,15 +67320,15 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_303(&self, delta: &mut ModelDelta, tm0: TermNode, tm4: Loc) {
-        let existing_row = self.case_pattern_is_variable.iter_all_0_1(tm0, tm4).next();
+    fn record_action_303(&self, delta: &mut ModelDelta, tm4: Loc) {
+        let existing_row = self.case_pattern_is_variable.iter_all_0(tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CasePatternIsVariable(_, _)) => (),
+            Some(CasePatternIsVariable(_)) => (),
             None => {
                 delta
                     .new_case_pattern_is_variable
-                    .push(CasePatternIsVariable(tm0, tm4));
+                    .push(CasePatternIsVariable(tm4));
                 ()
             }
         };
@@ -67458,7 +67340,7 @@ impl Eqlog {
             for MatchCase(tm2, _, tm3) in self.match_case.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for TermNodeLoc(_, tm4) in self.term_node_loc.iter_all_0(tm0) {
-                    self.record_action_303(delta, tm0, tm4);
+                    self.record_action_303(delta, tm4);
                 }
             }
         }
@@ -67468,7 +67350,7 @@ impl Eqlog {
             for TermNodeLoc(_, tm4) in self.term_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_303(delta, tm0, tm4);
+                    self.record_action_303(delta, tm4);
                 }
             }
         }
@@ -67478,20 +67360,20 @@ impl Eqlog {
             for MatchCase(tm2, _, tm3) in self.match_case.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.record_action_303(delta, tm0, tm4);
+                    self.record_action_303(delta, tm4);
                 }
             }
         }
     }
-    fn record_action_304(&self, delta: &mut ModelDelta, tm0: TermNode, tm3: Loc) {
-        let existing_row = self.case_pattern_is_wildcard.iter_all_0_1(tm0, tm3).next();
+    fn record_action_304(&self, delta: &mut ModelDelta, tm3: Loc) {
+        let existing_row = self.case_pattern_is_wildcard.iter_all_0(tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(CasePatternIsWildcard(_, _)) => (),
+            Some(CasePatternIsWildcard(_)) => (),
             None => {
                 delta
                     .new_case_pattern_is_wildcard
-                    .push(CasePatternIsWildcard(tm0, tm3));
+                    .push(CasePatternIsWildcard(tm3));
                 ()
             }
         };
@@ -67503,7 +67385,7 @@ impl Eqlog {
             for MatchCase(tm1, _, tm2) in self.match_case.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
-                    self.record_action_304(delta, tm0, tm3);
+                    self.record_action_304(delta, tm3);
                 }
             }
         }
@@ -67513,7 +67395,7 @@ impl Eqlog {
             for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                    self.record_action_304(delta, tm0, tm3);
+                    self.record_action_304(delta, tm3);
                 }
             }
         }
@@ -67523,7 +67405,7 @@ impl Eqlog {
             for MatchCase(tm1, _, tm2) in self.match_case.iter_all_1(tm0) {
                 #[allow(unused_variables)]
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                    self.record_action_304(delta, tm0, tm3);
+                    self.record_action_304(delta, tm3);
                 }
             }
         }
@@ -69301,9 +69183,9 @@ impl Eqlog {
         self.function_can_be_made_defined
             .recall_previous_dirt(&mut self.func_equalities);
         self.case_pattern_is_variable
-            .recall_previous_dirt(&mut self.loc_equalities, &mut self.term_node_equalities);
+            .recall_previous_dirt(&mut self.loc_equalities);
         self.case_pattern_is_wildcard
-            .recall_previous_dirt(&mut self.loc_equalities, &mut self.term_node_equalities);
+            .recall_previous_dirt(&mut self.loc_equalities);
         self.is_pattern_ctor_arg
             .recall_previous_dirt(&mut self.term_node_equalities);
         self.are_pattern_ctor_args

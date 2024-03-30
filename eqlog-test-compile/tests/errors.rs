@@ -216,3 +216,8 @@ fn then_defined_variable_not_new() {
 fn enum_ctors_not_surjective() {
     test_case(Path::new("enum-ctors-not-surjective"));
 }
+
+#[test]
+fn bad_match_pattern_variable() {
+    test_case(Path::new("bad-match-pattern-variable"));
+}

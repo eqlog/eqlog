@@ -15,6 +15,18 @@ use crate::error::*;
 use crate::grammar_util::*;
 use eqlog_eqlog::*;
 
+fn iter_match_pattern_is_variable_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_case_pattern_is_variable()
+        .filter_map(move |loc| {
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::MatchPatternIsVariable { location })
+        })
+}
+
 pub fn iter_variable_not_snake_case_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -131,7 +143,7 @@ pub fn iter_undetermined_type_errors<'a>(
                     return None;
                 }
 
-                let loc = eqlog.term_node_loc(tm).unwrap();
+                let loc = eqlog.term_node_loc(tm)?;
                 let location = *locations.get(&loc).unwrap();
                 return Some(CompileError::UndeterminedTermType { location });
             })
@@ -381,6 +393,7 @@ pub fn check_eqlog(
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
         .chain(iter_conflicting_type_errors(eqlog, locations))
+        .chain(iter_match_pattern_is_variable_errors(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))

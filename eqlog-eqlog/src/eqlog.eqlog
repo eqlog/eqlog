@@ -1739,19 +1739,19 @@ rule function_can_be_defined_if_constructor {
 //
 // ### Checking that the pattern of every match case is a valid enum constructor.
 
-pred case_pattern_is_variable(TermNode, Loc);
-pred case_pattern_is_wildcard(TermNode, Loc);
+pred case_pattern_is_variable(Loc);
+pred case_pattern_is_wildcard(Loc);
 rule case_pattern_is_variable_defined {
     if match_case(_, pattern, _);
     if var_term_node(pattern, _);
     if pattern_loc = term_node_loc(pattern);
-    then case_pattern_is_variable(pattern, pattern_loc);
+    then case_pattern_is_variable(pattern_loc);
 }
 rule case_pattern_is_wildcard_defined {
     if match_case(_, pattern, _);
     if wildcard_term_node(pattern);
     if pattern_loc = term_node_loc(pattern);
-    then case_pattern_is_wildcard(pattern, pattern_loc);
+    then case_pattern_is_wildcard(pattern_loc);
 }
 
 // The constructor of the pattern of a match case, if any, i.e. if the pattern
