@@ -123,7 +123,7 @@ pub enum CompileError {
     MatchPatternIsWildcard {
         location: Location,
     },
-    MatchPatternArgIsApp {
+    MatchPatternCtorArgIsApp {
         location: Location,
     },
     MatchPatternArgVarIsNotFresh {
@@ -178,7 +178,7 @@ impl CompileError {
                 ..
             } => *second_pattern_location,
             CompileError::MatchPatternIsWildcard { location } => *location,
-            CompileError::MatchPatternArgIsApp { location } => *location,
+            CompileError::MatchPatternCtorArgIsApp { location } => *location,
             CompileError::MatchPatternArgVarIsNotFresh { location } => *location,
             CompileError::MatchNotExhaustive { match_location, .. } => *match_location,
         }
@@ -444,7 +444,7 @@ impl Display for CompileErrorWithContext {
                     "Patterns must be given by constructors of an enum type\n"
                 )?;
             }
-            MatchPatternArgIsApp { location } => {
+            MatchPatternCtorArgIsApp { location } => {
                 write!(f, "Nested patterns are not supported yet\n")?;
                 write_loc(f, *location)?;
                 write!(f, "Only variables may occur as arguments\n")?;

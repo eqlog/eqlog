@@ -1781,12 +1781,18 @@ rule is_pattern_ctor_arg_cons {
     then are_pattern_ctor_args(tail);
 }
 
-pred pattern_ctor_arg_is_app(TermNode, Loc);
+rule are_pattern_ctor_args_defined {
+    if match_case(_, pattern, _);
+    if app_term_node(pattern, _, args);
+    then are_pattern_ctor_args(args);
+}
+
+pred pattern_ctor_arg_is_app(Loc);
 rule pattern_ctor_arg_is_app_defined {
     if is_pattern_ctor_arg(arg);
     if app_term_node(arg, _, _);
     if loc = term_node_loc(arg);
-    then pattern_ctor_arg_is_app(arg, loc);
+    then pattern_ctor_arg_is_app(loc);
 }
 
 pred pattern_ctor_arg_var_is_not_fresh(TermNode, Loc);

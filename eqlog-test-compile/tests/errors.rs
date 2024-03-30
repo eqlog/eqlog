@@ -226,3 +226,8 @@ fn bad_match_pattern_variable() {
 fn bad_match_pattern_wildcard() {
     test_case(Path::new("bad-match-pattern-wildcard"));
 }
+
+#[test]
+fn match_pattern_ctor_arg_is_app() {
+    test_case(Path::new("match-pattern-ctor-arg-is-app"));
+}

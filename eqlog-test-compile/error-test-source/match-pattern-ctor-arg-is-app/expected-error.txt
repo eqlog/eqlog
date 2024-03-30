@@ -1,0 +1,7 @@
+Error: Nested patterns are not supported yet
+  --> error-test-source/match-pattern-ctor-arg-is-app/theory.eql:11
+   | 
+11 |         Foo(const_a()) => {}
+   |             ^^^^^^^^^       
+   | 
+Only variables may occur as arguments
