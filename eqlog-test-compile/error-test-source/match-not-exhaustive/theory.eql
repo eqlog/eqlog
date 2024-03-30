@@ -1,0 +1,11 @@
+enum E {
+    First(),
+    Second()
+}
+
+rule {
+    if x: E;
+    match x {
+        First() => {}
+    }
+}

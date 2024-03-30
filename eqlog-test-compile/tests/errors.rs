@@ -241,3 +241,7 @@ fn match_pattern_ctor_arg_is_not_fresh() {
 fn match_conflicting_enum() {
     test_case(Path::new("match-conflicting-enum"));
 }
+#[test]
+fn match_not_exhaustive() {
+    test_case(Path::new("match-not-exhaustive"));
+}

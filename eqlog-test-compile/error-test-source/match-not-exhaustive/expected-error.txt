@@ -1,0 +1,16 @@
+Error: Missing match case:
+  --> error-test-source/match-not-exhaustive/theory.eql:8
+   | 
+ 8 |     match x {
+   |     ^^^^^^^^^
+ 9 |         First() => {}
+   | ^^^^^^^^^^^^^^^^^^^^^
+10 |     }
+   | ^^^^^
+   | 
+This constructor is not covered:
+ --> error-test-source/match-not-exhaustive/theory.eql:3
+  | 
+3 |     Second()
+  |     ^^^^^^^^
+  | 

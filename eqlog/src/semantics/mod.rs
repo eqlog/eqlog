@@ -103,6 +103,28 @@ fn iter_match_conflicting_enum<'a>(
         .into_iter()
 }
 
+fn iter_match_stmt_contains_ctor_of_enum<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_match_stmt_should_contain_ctor()
+        .filter_map(|(stmt, ctor)| {
+            if eqlog.match_stmt_contains_ctor(stmt, ctor) {
+                return None;
+            }
+
+            let match_location = *locations.get(&eqlog.stmt_node_loc(stmt).unwrap()).unwrap();
+            let missing_ctor_decl_location = *locations
+                .get(&eqlog.ctor_decl_node_loc(ctor).unwrap())
+                .unwrap();
+            Some(CompileError::MatchNotExhaustive {
+                match_location,
+                missing_ctor_decl_location,
+            })
+        })
+}
+
 pub fn iter_variable_not_snake_case_errors<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -474,6 +496,7 @@ pub fn check_eqlog(
         .chain(iter_match_pattern_ctor_arg_is_app_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_not_fresh(eqlog, locations))
         .chain(iter_match_conflicting_enum(eqlog, locations))
+        .chain(iter_match_stmt_contains_ctor_of_enum(eqlog, locations))
         .chain(iter_undetermined_type_errors(eqlog, locations))
         .chain(iter_surjectivity_errors(eqlog, locations))
         .chain(iter_variable_occurs_twice(eqlog, identifiers, locations))
