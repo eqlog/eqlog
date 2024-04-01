@@ -200,153 +200,177 @@ rule rule_descendant_stmt_block_list_total {
     then rule_descendant_stmt_block_list(blocks)!;
 }
 
-pred rule_descendant(RuleDescendantNode, RuleDeclNode);
+pred is_ordered_sibling(left: RuleDescendantNode, right: RuleDescendantNode);
+pred is_child(child: RuleDescendantNode, parent: RuleDescendantNode);
 
 rule rule_descendant_rule_decl {
     if rule_decl(rul, stmts);
     if descendant = rule_descendant_stmt_list(stmts);
-    then rule_descendant(descendant, rul);
+    then is_rule_descendant(descendant, rul);
 }
 
 rule rule_descendant_stmts_cons {
     if cons_stmt_list_node(stmts, head, tail);
-    if rule_descendant(rule_descendant_stmt_list(stmts), rul);
+    if descendant_stmts = rule_descendant_stmt_list(stmts);
     if descendant_head = rule_descendant_stmt(head);
     if descendant_tail = rule_descendant_stmt_list(tail);
-    then rule_descendant(descendant_head, rul);
-    then rule_descendant(descendant_tail, rul);
+
+    then is_child(descendant_head, descendant_stmts);
+    then is_child(descendant_tail, descendant_stmts);
+    then is_ordered_sibling(descendant_head, descendant_tail);
 }
 
 rule rule_descendant_stmt_blocks_cons {
     if cons_stmt_block_list_node(block, head, tail);
-    if rule_descendant(rule_descendant_stmt_block_list(block), rul);
+    if descendant_block = rule_descendant_stmt_block_list(block);
     if descendant_head = rule_descendant_stmt_list(head);
     if descendant_tail = rule_descendant_stmt_block_list(tail);
-    then rule_descendant(descendant_head, rul);
-    then rule_descendant(descendant_tail, rul);
+
+    then is_child(descendant_head, descendant_block);
+    then is_child(descendant_tail, descendant_block);
+    then is_ordered_sibling(descendant_head, descendant_tail);
 }
 
 rule rule_descendant_stmt_if {
     if if_stmt_node(stmt, atom);
-    if rule_descendant(rule_descendant_stmt(stmt), rul);
+    if descendant_stmt = rule_descendant_stmt(stmt);
     if descendant_atom = rule_descendant_if_atom(atom);
-    then rule_descendant(descendant_atom, rul);
+    then is_child(descendant_atom, descendant_stmt);
 }
 rule rule_descendant_stmt_then {
     if then_stmt_node(stmt, atom);
-    if rule_descendant(rule_descendant_stmt(stmt), rul);
+    if descendant_stmt = rule_descendant_stmt(stmt);
     if descendant_atom = rule_descendant_then_atom(atom);
-    then rule_descendant(descendant_atom, rul);
+    then is_child(descendant_atom, descendant_stmt);
 }
 rule rule_descendant_stmt_branch {
     if branch_stmt_node(stmt, blocks);
-    if rule_descendant(rule_descendant_stmt(stmt), rul);
+    if descendant_stmt = rule_descendant_stmt(stmt);
     if descendant_block_list = rule_descendant_stmt_block_list(blocks);
-    then rule_descendant(descendant_block_list, rul);
+    then is_child(descendant_block_list, descendant_stmt);
 }
 rule rule_descendant_stmt_match {
     if match_stmt_node(stmt, term, cases);
-    if rule_descendant(rule_descendant_stmt(stmt), rul);
-
+    if stmt_descendant = rule_descendant_stmt(stmt);
     if descendant_term = rule_descendant_term(term);
     if descendant_cases = rule_descendant_match_case_list(cases);
 
-    then rule_descendant(descendant_term, rul);
-    then rule_descendant(descendant_cases, rul);
+    then is_child(descendant_term, stmt_descendant);
+    then is_child(descendant_cases, stmt_descendant);
+    then is_ordered_sibling(descendant_term, descendant_cases);
 }
 
 rule rule_descendant_if_atom_equal {
     if equal_if_atom_node(atom, lhs, rhs);
-    if rule_descendant(rule_descendant_if_atom(atom), rul);
+    if atom_dsescendant = rule_descendant_if_atom(atom);
     if descendant_lhs = rule_descendant_term(lhs);
     if descendant_rhs = rule_descendant_term(rhs);
-    then rule_descendant(descendant_lhs, rul);
-    then rule_descendant(descendant_rhs, rul);
+    then is_child(descendant_lhs, atom_dsescendant);
+    then is_child(descendant_rhs, atom_dsescendant);
+    then is_ordered_sibling(descendant_lhs, descendant_rhs);
 }
 rule rule_descendant_if_atom_defined {
     if defined_if_atom_node(atom, tm);
-    if rule_descendant(rule_descendant_if_atom(atom), rul);
+    if atom_descendant = rule_descendant_if_atom(atom);
     if descendant_tm = rule_descendant_term(tm);
-    then rule_descendant(descendant_tm, rul);
+    then is_child(descendant_tm, atom_descendant);
 }
 rule rule_descendant_if_atom_pred {
     if pred_if_atom_node(atom, _, tms);
-    if rule_descendant(rule_descendant_if_atom(atom), rul);
+    if atom_descendant = rule_descendant_if_atom(atom);
     if descendant_tms = rule_descendant_term_list(tms);
-    then rule_descendant(descendant_tms, rul);
+    then is_child(descendant_tms, atom_descendant);
 }
 rule rule_descendant_if_atom_var {
     if var_if_atom_node(atom, tm, _);
-    if rule_descendant(rule_descendant_if_atom(atom), rul);
-    if descendant_tm = rule_descendant_term(tm);
-    then rule_descendant(descendant_tm, rul);
+    if atom_descendant = rule_descendant_if_atom(atom);
+    if tm_descendant = rule_descendant_term(tm);
+    then is_child(tm_descendant, atom_descendant);
 }
 
 rule rule_descendant_then_atom_equal {
     if equal_then_atom_node(atom, lhs, rhs);
-    if rule_descendant(rule_descendant_then_atom(atom), rul);
-    if descendant_lhs = rule_descendant_term(lhs);
-    if descendant_rhs = rule_descendant_term(rhs);
-    then rule_descendant(descendant_lhs, rul);
-    then rule_descendant(descendant_rhs, rul);
+    if atom_descendant = rule_descendant_then_atom(atom);
+    if lhs_descendant = rule_descendant_term(lhs);
+    if rhs_descendant = rule_descendant_term(rhs);
+
+    then is_child(lhs_descendant, atom_descendant);
+    then is_child(rhs_descendant, atom_descendant);
+    then is_ordered_sibling(lhs_descendant, rhs_descendant);
 }
 rule rule_descendant_then_atom_defined {
     if defined_then_atom_node(atom, var_tm, tm);
-    if rule_descendant(rule_descendant_then_atom(atom), rul);
-    if descendant_var_tm = rule_descendant_opt_term(var_tm);
-    if descendant_tm = rule_descendant_term(tm);
-    then rule_descendant(descendant_var_tm, rul);
-    then rule_descendant(descendant_tm, rul);
+    if atom_descendant = rule_descendant_then_atom(atom);
+    if var_tm_descendant = rule_descendant_opt_term(var_tm);
+    if tm_descendant = rule_descendant_term(tm);
+    then is_child(var_tm_descendant, atom_descendant);
+    then is_child(tm_descendant, atom_descendant);
+    then is_ordered_sibling(var_tm_descendant, tm_descendant);
 }
 rule rule_descendant_then_atom_pred {
     if pred_then_atom_node(atom, _, tms);
-    if rule_descendant(rule_descendant_then_atom(atom), rul);
-    if descendant_tms = rule_descendant_term_list(tms);
-    then rule_descendant(descendant_tms, rul);
+    if atom_descendant = rule_descendant_then_atom(atom);
+    if tms_descendant = rule_descendant_term_list(tms);
+    then is_child(tms_descendant, atom_descendant);
 }
 
-rule rule_descendant_match_case_descendantren {
+rule rule_descendant_match_case_defined {
     if match_case(case, pattern, body);
-    if rule_descendant(rule_descendant_match_case(case), rul);
+    if case_descendant = rule_descendant_match_case(case);
+    if pattern_descendant = rule_descendant_term(pattern);
+    if body_descendant = rule_descendant_stmt_list(body);
 
-    if descendant_pattern = rule_descendant_term(pattern);
-    if descendant_body = rule_descendant_stmt_list(body);
-
-    then rule_descendant(descendant_pattern, rul);
-    then rule_descendant(descendant_body, rul);
+    then is_child(pattern_descendant, case_descendant);
+    then is_child(body_descendant, case_descendant);
+    then is_ordered_sibling(pattern_descendant, body_descendant);
 }
 
 rule rule_descendant_match_case_list_cons {
     if cons_match_case_list_node(cases, head_case, tail_cases);
-    if rule_descendant(rule_descendant_match_case_list(cases), rul);
+    if case_descendant = rule_descendant_match_case_list(cases);
+    if head_descendant = rule_descendant_match_case(head_case);
+    if tail_descendant = rule_descendant_match_case_list(tail_cases);
 
-    if descendant_head = rule_descendant_match_case(head_case);
-    if descendant_tail = rule_descendant_match_case_list(tail_cases);
-
-    then rule_descendant(descendant_head, rul);
-    then rule_descendant(descendant_tail, rul);
+    then is_child(head_descendant, case_descendant);
+    then is_child(tail_descendant, case_descendant);
+    then is_ordered_sibling(head_descendant, tail_descendant);
 }
 
 rule rule_descendant_terms_cons {
     if cons_term_list_node(tms, head, tail);
-    if rule_descendant(rule_descendant_term_list(tms), rul);
-    if descendant_head = rule_descendant_term(head);
-    if descendant_tail = rule_descendant_term_list(tail);
-    then rule_descendant(descendant_head, rul);
-    then rule_descendant(descendant_tail, rul);
+    if tms_descendant = rule_descendant_term_list(tms);
+    if head_descendant = rule_descendant_term(head);
+    if tail_descendant = rule_descendant_term_list(tail);
+
+    then is_child(head_descendant, tms_descendant);
+    then is_child(tail_descendant, tms_descendant);
+    then is_ordered_sibling(head_descendant, tail_descendant);
 }
 rule rule_descendant_opt_term_some {
     if some_term_node(opt_tm, tm);
-    if rule_descendant(rule_descendant_opt_term(opt_tm), rul);
-    if descendant_tm = rule_descendant_term(tm);
-    then rule_descendant(descendant_tm, rul);
+    if opt_tm_descendant = rule_descendant_opt_term(opt_tm);
+    if tm_descendant = rule_descendant_term(tm);
+    then is_child(tm_descendant, opt_tm_descendant);
 }
 rule rule_descendant_term_app {
     if app_term_node(tm, _, args);
-    if rule_descendant(rule_descendant_term(tm), rul);
-    if descendant_args = rule_descendant_term_list(args);
-    then rule_descendant(descendant_args, rul);
+    if tm_descendant = rule_descendant_term(tm);
+    if args_descendant = rule_descendant_term_list(args);
+    then is_child(args_descendant, tm_descendant);
 }
+
+pred is_rule_descendant(RuleDescendantNode, RuleDeclNode);
+rule rule_child_stmts_descendant {
+    if rule_decl(rul, stmts);
+    if stmts_descendant = rule_descendant_stmt_list(stmts);
+    then is_rule_descendant(stmts_descendant, rul);
+}
+rule descendant_child_is_rule_descendant {
+    if is_child(child, parent);
+    if is_rule_descendant(parent, rul);
+    then is_rule_descendant(child, rul);
+}
+
 
 // ### The enum constructor belong to
 
@@ -1694,7 +1718,7 @@ rule surjective_exempted_then_defined_term {
 pred var_term_in_rule(TermNode, VirtIdent, RuleDeclNode);
 rule var_term_in_rule_descendant {
     if var_term_node(tm, ident);
-    if rule_descendant(rule_descendant_term(tm), rul);
+    if is_rule_descendant(rule_descendant_term(tm), rul);
     then var_term_in_rule(tm, ident, rul);
 }
 
