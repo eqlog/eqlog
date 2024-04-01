@@ -1,4 +1,4 @@
-// src-digest: C831380E34ADB1BEFBBA97855500E4708E6BDA51E7C10B5E751A26EAF8470CE0
+// src-digest: 8FF78C6123AAB10757A41722FCC49B871BDB971CCB624A6F6AC662564A820F7F
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -461,18 +461,18 @@ impl fmt::Display for Loc {
 }
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct RuleChildNode(pub u32);
-impl Into<u32> for RuleChildNode {
+pub struct RuleDescendantNode(pub u32);
+impl Into<u32> for RuleDescendantNode {
     fn into(self) -> u32 {
         self.0
     }
 }
-impl From<u32> for RuleChildNode {
+impl From<u32> for RuleDescendantNode {
     fn from(x: u32) -> Self {
-        RuleChildNode(x)
+        RuleDescendantNode(x)
     }
 }
-impl fmt::Display for RuleChildNode {
+impl fmt::Display for RuleDescendantNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -10215,18 +10215,18 @@ impl fmt::Display for DeclsModuleNodeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChild(pub RuleChildNode, pub RuleDeclNode);
+struct RuleDescendant(pub RuleDescendantNode, pub RuleDeclNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildTable {
+struct RuleDescendantTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChild>>,
-    element_index_rule_decl_node: BTreeMap<RuleDeclNode, Vec<RuleChild>>,
+    element_index_rule_decl_node: BTreeMap<RuleDeclNode, Vec<RuleDescendant>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendant>>,
 }
-impl RuleChildTable {
+impl RuleDescendantTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -10234,19 +10234,19 @@ impl RuleChildTable {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
             element_index_rule_decl_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChild) -> bool {
+    fn insert(&mut self, t: RuleDescendant) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
-            match self.element_index_rule_child_node.get_mut(&t.0) {
+            match self.element_index_rule_descendant_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.0, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.0, vec![t]);
                 }
             };
 
@@ -10262,7 +10262,7 @@ impl RuleChildTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChild) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendant) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -10270,7 +10270,7 @@ impl RuleChildTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChild) -> bool {
+    fn contains(&self, t: RuleDescendant) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -10285,15 +10285,15 @@ impl RuleChildTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChild) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendant) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChild {
-        RuleChild(RuleChildNode::from(t.0), RuleDeclNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendant {
+        RuleDescendant(RuleDescendantNode::from(t.0), RuleDeclNode::from(t.1))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChild> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendant> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -10302,7 +10302,7 @@ impl RuleChildTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChild> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendant> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -10311,7 +10311,7 @@ impl RuleChildTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: RuleChildNode) -> impl '_ + Iterator<Item = RuleChild> {
+    fn iter_all_0(&self, arg0: RuleDescendantNode) -> impl '_ + Iterator<Item = RuleDescendant> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -10323,9 +10323,9 @@ impl RuleChildTable {
     #[allow(dead_code)]
     fn iter_all_0_1(
         &self,
-        arg0: RuleChildNode,
+        arg0: RuleDescendantNode,
         arg1: RuleDeclNode,
-    ) -> impl '_ + Iterator<Item = RuleChild> {
+    ) -> impl '_ + Iterator<Item = RuleDescendant> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -10336,11 +10336,11 @@ impl RuleChildTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_decl_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChild> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDeclNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendant> {
+        let ts = match self.element_index_rule_decl_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -10355,11 +10355,11 @@ impl RuleChildTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_decl_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleDeclNode,
-    ) -> impl '_ + Iterator<Item = RuleChild> {
-        let ts = match self.element_index_rule_decl_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendant> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -10375,8 +10375,8 @@ impl RuleChildTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
         rule_decl_node_equalities: &mut Unification<RuleDeclNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
@@ -10385,7 +10385,7 @@ impl RuleChildTable {
             #[allow(unused_mut)]
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
-                && tuple.0 == rule_child_node_equalities.root(tuple.0)
+                && tuple.0 == rule_descendant_node_equalities.root(tuple.0)
                 && tuple.1 == rule_decl_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
@@ -10393,11 +10393,11 @@ impl RuleChildTable {
         }
     }
 }
-impl fmt::Display for RuleChildTable {
+impl fmt::Display for RuleDescendantTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child"))
+            .with(Header("rule_descendant"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26191,19 +26191,19 @@ impl fmt::Display for ModuleNodeLocTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildTerm(pub TermNode, pub RuleChildNode);
+struct RuleDescendantTerm(pub TermNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildTermTable {
+struct RuleDescendantTermTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildTerm>>,
-    element_index_term_node: BTreeMap<TermNode, Vec<RuleChildTerm>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantTerm>>,
+    element_index_term_node: BTreeMap<TermNode, Vec<RuleDescendantTerm>>,
 }
-impl RuleChildTermTable {
+impl RuleDescendantTermTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -26212,12 +26212,12 @@ impl RuleChildTermTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
             element_index_term_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildTerm) -> bool {
+    fn insert(&mut self, t: RuleDescendantTerm) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -26229,10 +26229,10 @@ impl RuleChildTermTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -26241,7 +26241,7 @@ impl RuleChildTermTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildTerm) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantTerm) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -26249,7 +26249,7 @@ impl RuleChildTermTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildTerm) -> bool {
+    fn contains(&self, t: RuleDescendantTerm) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -26264,23 +26264,23 @@ impl RuleChildTermTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildTerm) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantTerm) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildTerm {
-        RuleChildTerm(TermNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantTerm {
+        RuleDescendantTerm(TermNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildTerm) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantTerm) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildTerm {
-        RuleChildTerm(TermNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantTerm {
+        RuleDescendantTerm(TermNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildTerm> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantTerm> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -26289,7 +26289,7 @@ impl RuleChildTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildTerm> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantTerm> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -26298,7 +26298,7 @@ impl RuleChildTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: TermNode) -> impl '_ + Iterator<Item = RuleChildTerm> {
+    fn iter_all_0(&self, arg0: TermNode) -> impl '_ + Iterator<Item = RuleDescendantTerm> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -26308,7 +26308,10 @@ impl RuleChildTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildTerm> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantTerm> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -26318,11 +26321,11 @@ impl RuleChildTermTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildTerm> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantTerm> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -26341,7 +26344,7 @@ impl RuleChildTermTable {
     fn drain_with_element_term_node(
         &mut self,
         tm: TermNode,
-    ) -> impl '_ + Iterator<Item = RuleChildTerm> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantTerm> {
         let ts = match self.element_index_term_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -26359,7 +26362,7 @@ impl RuleChildTermTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
         term_node_equalities: &mut Unification<TermNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -26370,18 +26373,18 @@ impl RuleChildTermTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == term_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildTermTable {
+impl fmt::Display for RuleDescendantTermTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_term"))
+            .with(Header("rule_descendant_term"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26392,19 +26395,19 @@ impl fmt::Display for RuleChildTermTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildTermList(pub TermListNode, pub RuleChildNode);
+struct RuleDescendantTermList(pub TermListNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildTermListTable {
+struct RuleDescendantTermListTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildTermList>>,
-    element_index_term_list_node: BTreeMap<TermListNode, Vec<RuleChildTermList>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantTermList>>,
+    element_index_term_list_node: BTreeMap<TermListNode, Vec<RuleDescendantTermList>>,
 }
-impl RuleChildTermListTable {
+impl RuleDescendantTermListTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -26413,12 +26416,12 @@ impl RuleChildTermListTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
             element_index_term_list_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildTermList) -> bool {
+    fn insert(&mut self, t: RuleDescendantTermList) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -26430,10 +26433,10 @@ impl RuleChildTermListTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -26442,7 +26445,7 @@ impl RuleChildTermListTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildTermList) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantTermList) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -26450,7 +26453,7 @@ impl RuleChildTermListTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildTermList) -> bool {
+    fn contains(&self, t: RuleDescendantTermList) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -26465,23 +26468,23 @@ impl RuleChildTermListTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildTermList) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantTermList) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildTermList {
-        RuleChildTermList(TermListNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantTermList {
+        RuleDescendantTermList(TermListNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildTermList) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantTermList) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildTermList {
-        RuleChildTermList(TermListNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantTermList {
+        RuleDescendantTermList(TermListNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildTermList> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantTermList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -26490,7 +26493,7 @@ impl RuleChildTermListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildTermList> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantTermList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -26499,7 +26502,7 @@ impl RuleChildTermListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: TermListNode) -> impl '_ + Iterator<Item = RuleChildTermList> {
+    fn iter_all_0(&self, arg0: TermListNode) -> impl '_ + Iterator<Item = RuleDescendantTermList> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -26509,7 +26512,10 @@ impl RuleChildTermListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildTermList> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantTermList> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -26519,11 +26525,11 @@ impl RuleChildTermListTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildTermList> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantTermList> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -26542,7 +26548,7 @@ impl RuleChildTermListTable {
     fn drain_with_element_term_list_node(
         &mut self,
         tm: TermListNode,
-    ) -> impl '_ + Iterator<Item = RuleChildTermList> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantTermList> {
         let ts = match self.element_index_term_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -26560,7 +26566,7 @@ impl RuleChildTermListTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
         term_list_node_equalities: &mut Unification<TermListNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -26571,18 +26577,18 @@ impl RuleChildTermListTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == term_list_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildTermListTable {
+impl fmt::Display for RuleDescendantTermListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_term_list"))
+            .with(Header("rule_descendant_term_list"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26593,19 +26599,19 @@ impl fmt::Display for RuleChildTermListTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildOptTerm(pub OptTermNode, pub RuleChildNode);
+struct RuleDescendantOptTerm(pub OptTermNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildOptTermTable {
+struct RuleDescendantOptTermTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_opt_term_node: BTreeMap<OptTermNode, Vec<RuleChildOptTerm>>,
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildOptTerm>>,
+    element_index_opt_term_node: BTreeMap<OptTermNode, Vec<RuleDescendantOptTerm>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantOptTerm>>,
 }
-impl RuleChildOptTermTable {
+impl RuleDescendantOptTermTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -26615,11 +26621,11 @@ impl RuleChildOptTermTable {
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_opt_term_node: BTreeMap::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildOptTerm) -> bool {
+    fn insert(&mut self, t: RuleDescendantOptTerm) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -26631,10 +26637,10 @@ impl RuleChildOptTermTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -26643,7 +26649,7 @@ impl RuleChildOptTermTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildOptTerm) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantOptTerm) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -26651,7 +26657,7 @@ impl RuleChildOptTermTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildOptTerm) -> bool {
+    fn contains(&self, t: RuleDescendantOptTerm) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -26666,23 +26672,23 @@ impl RuleChildOptTermTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildOptTerm) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantOptTerm) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildOptTerm {
-        RuleChildOptTerm(OptTermNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantOptTerm {
+        RuleDescendantOptTerm(OptTermNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildOptTerm) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantOptTerm) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildOptTerm {
-        RuleChildOptTerm(OptTermNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantOptTerm {
+        RuleDescendantOptTerm(OptTermNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantOptTerm> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -26691,7 +26697,7 @@ impl RuleChildOptTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantOptTerm> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -26700,7 +26706,7 @@ impl RuleChildOptTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: OptTermNode) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
+    fn iter_all_0(&self, arg0: OptTermNode) -> impl '_ + Iterator<Item = RuleDescendantOptTerm> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -26710,7 +26716,10 @@ impl RuleChildOptTermTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantOptTerm> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -26723,7 +26732,7 @@ impl RuleChildOptTermTable {
     fn drain_with_element_opt_term_node(
         &mut self,
         tm: OptTermNode,
-    ) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantOptTerm> {
         let ts = match self.element_index_opt_term_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -26740,11 +26749,11 @@ impl RuleChildOptTermTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildOptTerm> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantOptTerm> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -26762,7 +26771,7 @@ impl RuleChildOptTermTable {
     fn recall_previous_dirt(
         &mut self,
         opt_term_node_equalities: &mut Unification<OptTermNode>,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
@@ -26772,18 +26781,18 @@ impl RuleChildOptTermTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == opt_term_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildOptTermTable {
+impl fmt::Display for RuleDescendantOptTermTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_opt_term"))
+            .with(Header("rule_descendant_opt_term"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26794,19 +26803,19 @@ impl fmt::Display for RuleChildOptTermTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildIfAtom(pub IfAtomNode, pub RuleChildNode);
+struct RuleDescendantIfAtom(pub IfAtomNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildIfAtomTable {
+struct RuleDescendantIfAtomTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_if_atom_node: BTreeMap<IfAtomNode, Vec<RuleChildIfAtom>>,
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildIfAtom>>,
+    element_index_if_atom_node: BTreeMap<IfAtomNode, Vec<RuleDescendantIfAtom>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantIfAtom>>,
 }
-impl RuleChildIfAtomTable {
+impl RuleDescendantIfAtomTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -26816,11 +26825,11 @@ impl RuleChildIfAtomTable {
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_if_atom_node: BTreeMap::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildIfAtom) -> bool {
+    fn insert(&mut self, t: RuleDescendantIfAtom) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -26832,10 +26841,10 @@ impl RuleChildIfAtomTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -26844,7 +26853,7 @@ impl RuleChildIfAtomTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildIfAtom) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantIfAtom) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -26852,7 +26861,7 @@ impl RuleChildIfAtomTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildIfAtom) -> bool {
+    fn contains(&self, t: RuleDescendantIfAtom) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -26867,23 +26876,23 @@ impl RuleChildIfAtomTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildIfAtom) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantIfAtom) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildIfAtom {
-        RuleChildIfAtom(IfAtomNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantIfAtom {
+        RuleDescendantIfAtom(IfAtomNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildIfAtom) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantIfAtom) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildIfAtom {
-        RuleChildIfAtom(IfAtomNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantIfAtom {
+        RuleDescendantIfAtom(IfAtomNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -26892,7 +26901,7 @@ impl RuleChildIfAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -26901,7 +26910,7 @@ impl RuleChildIfAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: IfAtomNode) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
+    fn iter_all_0(&self, arg0: IfAtomNode) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -26911,7 +26920,10 @@ impl RuleChildIfAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -26924,7 +26936,7 @@ impl RuleChildIfAtomTable {
     fn drain_with_element_if_atom_node(
         &mut self,
         tm: IfAtomNode,
-    ) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
         let ts = match self.element_index_if_atom_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -26941,11 +26953,11 @@ impl RuleChildIfAtomTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildIfAtom> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -26963,7 +26975,7 @@ impl RuleChildIfAtomTable {
     fn recall_previous_dirt(
         &mut self,
         if_atom_node_equalities: &mut Unification<IfAtomNode>,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
@@ -26973,18 +26985,18 @@ impl RuleChildIfAtomTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == if_atom_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildIfAtomTable {
+impl fmt::Display for RuleDescendantIfAtomTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_if_atom"))
+            .with(Header("rule_descendant_if_atom"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -26995,19 +27007,19 @@ impl fmt::Display for RuleChildIfAtomTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildThenAtom(pub ThenAtomNode, pub RuleChildNode);
+struct RuleDescendantThenAtom(pub ThenAtomNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildThenAtomTable {
+struct RuleDescendantThenAtomTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildThenAtom>>,
-    element_index_then_atom_node: BTreeMap<ThenAtomNode, Vec<RuleChildThenAtom>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantThenAtom>>,
+    element_index_then_atom_node: BTreeMap<ThenAtomNode, Vec<RuleDescendantThenAtom>>,
 }
-impl RuleChildThenAtomTable {
+impl RuleDescendantThenAtomTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -27016,12 +27028,12 @@ impl RuleChildThenAtomTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
             element_index_then_atom_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildThenAtom) -> bool {
+    fn insert(&mut self, t: RuleDescendantThenAtom) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -27033,10 +27045,10 @@ impl RuleChildThenAtomTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -27045,7 +27057,7 @@ impl RuleChildThenAtomTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildThenAtom) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantThenAtom) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -27053,7 +27065,7 @@ impl RuleChildThenAtomTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildThenAtom) -> bool {
+    fn contains(&self, t: RuleDescendantThenAtom) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -27068,23 +27080,23 @@ impl RuleChildThenAtomTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildThenAtom) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantThenAtom) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildThenAtom {
-        RuleChildThenAtom(ThenAtomNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantThenAtom {
+        RuleDescendantThenAtom(ThenAtomNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildThenAtom) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantThenAtom) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildThenAtom {
-        RuleChildThenAtom(ThenAtomNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantThenAtom {
+        RuleDescendantThenAtom(ThenAtomNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -27093,7 +27105,7 @@ impl RuleChildThenAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -27102,7 +27114,7 @@ impl RuleChildThenAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: ThenAtomNode) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
+    fn iter_all_0(&self, arg0: ThenAtomNode) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -27112,7 +27124,10 @@ impl RuleChildThenAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -27122,11 +27137,11 @@ impl RuleChildThenAtomTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -27145,7 +27160,7 @@ impl RuleChildThenAtomTable {
     fn drain_with_element_then_atom_node(
         &mut self,
         tm: ThenAtomNode,
-    ) -> impl '_ + Iterator<Item = RuleChildThenAtom> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
         let ts = match self.element_index_then_atom_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -27163,7 +27178,7 @@ impl RuleChildThenAtomTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
         then_atom_node_equalities: &mut Unification<ThenAtomNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -27174,18 +27189,18 @@ impl RuleChildThenAtomTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == then_atom_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildThenAtomTable {
+impl fmt::Display for RuleDescendantThenAtomTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_then_atom"))
+            .with(Header("rule_descendant_then_atom"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -27196,19 +27211,19 @@ impl fmt::Display for RuleChildThenAtomTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildMatchCase(pub MatchCaseNode, pub RuleChildNode);
+struct RuleDescendantMatchCase(pub MatchCaseNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildMatchCaseTable {
+struct RuleDescendantMatchCaseTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_match_case_node: BTreeMap<MatchCaseNode, Vec<RuleChildMatchCase>>,
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildMatchCase>>,
+    element_index_match_case_node: BTreeMap<MatchCaseNode, Vec<RuleDescendantMatchCase>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantMatchCase>>,
 }
-impl RuleChildMatchCaseTable {
+impl RuleDescendantMatchCaseTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -27218,11 +27233,11 @@ impl RuleChildMatchCaseTable {
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_match_case_node: BTreeMap::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildMatchCase) -> bool {
+    fn insert(&mut self, t: RuleDescendantMatchCase) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -27234,10 +27249,10 @@ impl RuleChildMatchCaseTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -27246,7 +27261,7 @@ impl RuleChildMatchCaseTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildMatchCase) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantMatchCase) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -27254,7 +27269,7 @@ impl RuleChildMatchCaseTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildMatchCase) -> bool {
+    fn contains(&self, t: RuleDescendantMatchCase) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -27269,23 +27284,23 @@ impl RuleChildMatchCaseTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildMatchCase) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantMatchCase) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildMatchCase {
-        RuleChildMatchCase(MatchCaseNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantMatchCase {
+        RuleDescendantMatchCase(MatchCaseNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildMatchCase) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantMatchCase) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildMatchCase {
-        RuleChildMatchCase(MatchCaseNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantMatchCase {
+        RuleDescendantMatchCase(MatchCaseNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildMatchCase> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantMatchCase> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -27294,7 +27309,7 @@ impl RuleChildMatchCaseTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildMatchCase> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantMatchCase> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -27303,7 +27318,10 @@ impl RuleChildMatchCaseTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: MatchCaseNode) -> impl '_ + Iterator<Item = RuleChildMatchCase> {
+    fn iter_all_0(
+        &self,
+        arg0: MatchCaseNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCase> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -27313,7 +27331,10 @@ impl RuleChildMatchCaseTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildMatchCase> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCase> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -27326,7 +27347,7 @@ impl RuleChildMatchCaseTable {
     fn drain_with_element_match_case_node(
         &mut self,
         tm: MatchCaseNode,
-    ) -> impl '_ + Iterator<Item = RuleChildMatchCase> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCase> {
         let ts = match self.element_index_match_case_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -27343,11 +27364,11 @@ impl RuleChildMatchCaseTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildMatchCase> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCase> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -27365,7 +27386,7 @@ impl RuleChildMatchCaseTable {
     fn recall_previous_dirt(
         &mut self,
         match_case_node_equalities: &mut Unification<MatchCaseNode>,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
@@ -27375,18 +27396,18 @@ impl RuleChildMatchCaseTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == match_case_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildMatchCaseTable {
+impl fmt::Display for RuleDescendantMatchCaseTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_match_case"))
+            .with(Header("rule_descendant_match_case"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -27397,19 +27418,21 @@ impl fmt::Display for RuleChildMatchCaseTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildMatchCaseList(pub MatchCaseListNode, pub RuleChildNode);
+struct RuleDescendantMatchCaseList(pub MatchCaseListNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildMatchCaseListTable {
+struct RuleDescendantMatchCaseListTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_match_case_list_node: BTreeMap<MatchCaseListNode, Vec<RuleChildMatchCaseList>>,
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildMatchCaseList>>,
+    element_index_match_case_list_node:
+        BTreeMap<MatchCaseListNode, Vec<RuleDescendantMatchCaseList>>,
+    element_index_rule_descendant_node:
+        BTreeMap<RuleDescendantNode, Vec<RuleDescendantMatchCaseList>>,
 }
-impl RuleChildMatchCaseListTable {
+impl RuleDescendantMatchCaseListTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -27419,11 +27442,11 @@ impl RuleChildMatchCaseListTable {
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
             element_index_match_case_list_node: BTreeMap::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildMatchCaseList) -> bool {
+    fn insert(&mut self, t: RuleDescendantMatchCaseList) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -27435,10 +27458,10 @@ impl RuleChildMatchCaseListTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -27447,7 +27470,7 @@ impl RuleChildMatchCaseListTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildMatchCaseList) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantMatchCaseList) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -27455,7 +27478,7 @@ impl RuleChildMatchCaseListTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildMatchCaseList) -> bool {
+    fn contains(&self, t: RuleDescendantMatchCaseList) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -27470,23 +27493,23 @@ impl RuleChildMatchCaseListTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildMatchCaseList) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantMatchCaseList) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildMatchCaseList {
-        RuleChildMatchCaseList(MatchCaseListNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantMatchCaseList {
+        RuleDescendantMatchCaseList(MatchCaseListNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildMatchCaseList) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantMatchCaseList) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildMatchCaseList {
-        RuleChildMatchCaseList(MatchCaseListNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantMatchCaseList {
+        RuleDescendantMatchCaseList(MatchCaseListNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildMatchCaseList> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantMatchCaseList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -27495,7 +27518,7 @@ impl RuleChildMatchCaseListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildMatchCaseList> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantMatchCaseList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -27507,7 +27530,7 @@ impl RuleChildMatchCaseListTable {
     fn iter_all_0(
         &self,
         arg0: MatchCaseListNode,
-    ) -> impl '_ + Iterator<Item = RuleChildMatchCaseList> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCaseList> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -27517,7 +27540,10 @@ impl RuleChildMatchCaseListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildMatchCaseList> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCaseList> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -27530,7 +27556,7 @@ impl RuleChildMatchCaseListTable {
     fn drain_with_element_match_case_list_node(
         &mut self,
         tm: MatchCaseListNode,
-    ) -> impl '_ + Iterator<Item = RuleChildMatchCaseList> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCaseList> {
         let ts = match self.element_index_match_case_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -27547,11 +27573,11 @@ impl RuleChildMatchCaseListTable {
         })
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildMatchCaseList> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantMatchCaseList> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -27569,7 +27595,7 @@ impl RuleChildMatchCaseListTable {
     fn recall_previous_dirt(
         &mut self,
         match_case_list_node_equalities: &mut Unification<MatchCaseListNode>,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
         std::mem::swap(&mut tmp_dirty_0_1_prev, &mut self.index_dirty_0_1_prev);
@@ -27579,18 +27605,18 @@ impl RuleChildMatchCaseListTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == match_case_list_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildMatchCaseListTable {
+impl fmt::Display for RuleDescendantMatchCaseListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_match_case_list"))
+            .with(Header("rule_descendant_match_case_list"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -27601,19 +27627,19 @@ impl fmt::Display for RuleChildMatchCaseListTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildStmt(pub StmtNode, pub RuleChildNode);
+struct RuleDescendantStmt(pub StmtNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildStmtTable {
+struct RuleDescendantStmtTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildStmt>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<RuleChildStmt>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantStmt>>,
+    element_index_stmt_node: BTreeMap<StmtNode, Vec<RuleDescendantStmt>>,
 }
-impl RuleChildStmtTable {
+impl RuleDescendantStmtTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -27622,12 +27648,12 @@ impl RuleChildStmtTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
             element_index_stmt_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildStmt) -> bool {
+    fn insert(&mut self, t: RuleDescendantStmt) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -27639,10 +27665,10 @@ impl RuleChildStmtTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -27651,7 +27677,7 @@ impl RuleChildStmtTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildStmt) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantStmt) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -27659,7 +27685,7 @@ impl RuleChildStmtTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildStmt) -> bool {
+    fn contains(&self, t: RuleDescendantStmt) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -27674,23 +27700,23 @@ impl RuleChildStmtTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildStmt) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantStmt) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildStmt {
-        RuleChildStmt(StmtNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantStmt {
+        RuleDescendantStmt(StmtNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildStmt) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantStmt) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildStmt {
-        RuleChildStmt(StmtNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantStmt {
+        RuleDescendantStmt(StmtNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildStmt> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantStmt> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -27699,7 +27725,7 @@ impl RuleChildStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildStmt> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantStmt> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -27708,7 +27734,7 @@ impl RuleChildStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = RuleChildStmt> {
+    fn iter_all_0(&self, arg0: StmtNode) -> impl '_ + Iterator<Item = RuleDescendantStmt> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -27718,7 +27744,10 @@ impl RuleChildStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildStmt> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmt> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -27728,11 +27757,11 @@ impl RuleChildStmtTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmt> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmt> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -27751,7 +27780,7 @@ impl RuleChildStmtTable {
     fn drain_with_element_stmt_node(
         &mut self,
         tm: StmtNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmt> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmt> {
         let ts = match self.element_index_stmt_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -27769,7 +27798,7 @@ impl RuleChildStmtTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
         stmt_node_equalities: &mut Unification<StmtNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -27780,18 +27809,18 @@ impl RuleChildStmtTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == stmt_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildStmtTable {
+impl fmt::Display for RuleDescendantStmtTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_stmt"))
+            .with(Header("rule_descendant_stmt"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -27802,19 +27831,19 @@ impl fmt::Display for RuleChildStmtTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildStmtList(pub StmtListNode, pub RuleChildNode);
+struct RuleDescendantStmtList(pub StmtListNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildStmtListTable {
+struct RuleDescendantStmtListTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildStmtList>>,
-    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<RuleChildStmtList>>,
+    element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantStmtList>>,
+    element_index_stmt_list_node: BTreeMap<StmtListNode, Vec<RuleDescendantStmtList>>,
 }
-impl RuleChildStmtListTable {
+impl RuleDescendantStmtListTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -27823,12 +27852,12 @@ impl RuleChildStmtListTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
             element_index_stmt_list_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildStmtList) -> bool {
+    fn insert(&mut self, t: RuleDescendantStmtList) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -27840,10 +27869,10 @@ impl RuleChildStmtListTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -27852,7 +27881,7 @@ impl RuleChildStmtListTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildStmtList) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantStmtList) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -27860,7 +27889,7 @@ impl RuleChildStmtListTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildStmtList) -> bool {
+    fn contains(&self, t: RuleDescendantStmtList) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -27875,23 +27904,23 @@ impl RuleChildStmtListTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildStmtList) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantStmtList) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildStmtList {
-        RuleChildStmtList(StmtListNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantStmtList {
+        RuleDescendantStmtList(StmtListNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildStmtList) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantStmtList) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildStmtList {
-        RuleChildStmtList(StmtListNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantStmtList {
+        RuleDescendantStmtList(StmtListNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildStmtList> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantStmtList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -27900,7 +27929,7 @@ impl RuleChildStmtListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildStmtList> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantStmtList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -27909,7 +27938,7 @@ impl RuleChildStmtListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: StmtListNode) -> impl '_ + Iterator<Item = RuleChildStmtList> {
+    fn iter_all_0(&self, arg0: StmtListNode) -> impl '_ + Iterator<Item = RuleDescendantStmtList> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -27919,7 +27948,10 @@ impl RuleChildStmtListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildStmtList> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtList> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -27929,11 +27961,11 @@ impl RuleChildStmtListTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmtList> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtList> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -27952,7 +27984,7 @@ impl RuleChildStmtListTable {
     fn drain_with_element_stmt_list_node(
         &mut self,
         tm: StmtListNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmtList> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtList> {
         let ts = match self.element_index_stmt_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -27970,7 +28002,7 @@ impl RuleChildStmtListTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
         stmt_list_node_equalities: &mut Unification<StmtListNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -27981,18 +28013,18 @@ impl RuleChildStmtListTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == stmt_list_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildStmtListTable {
+impl fmt::Display for RuleDescendantStmtListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_stmt_list"))
+            .with(Header("rule_descendant_stmt_list"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -28003,19 +28035,21 @@ impl fmt::Display for RuleChildStmtListTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RuleChildStmtBlockList(pub StmtBlockListNode, pub RuleChildNode);
+struct RuleDescendantStmtBlockList(pub StmtBlockListNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
-struct RuleChildStmtBlockListTable {
+struct RuleDescendantStmtBlockListTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
 
     index_dirty_0_1_prev: Vec<BTreeSet<(u32, u32)>>,
 
-    element_index_rule_child_node: BTreeMap<RuleChildNode, Vec<RuleChildStmtBlockList>>,
-    element_index_stmt_block_list_node: BTreeMap<StmtBlockListNode, Vec<RuleChildStmtBlockList>>,
+    element_index_rule_descendant_node:
+        BTreeMap<RuleDescendantNode, Vec<RuleDescendantStmtBlockList>>,
+    element_index_stmt_block_list_node:
+        BTreeMap<StmtBlockListNode, Vec<RuleDescendantStmtBlockList>>,
 }
-impl RuleChildStmtBlockListTable {
+impl RuleDescendantStmtBlockListTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -28024,12 +28058,12 @@ impl RuleChildStmtBlockListTable {
             index_dirty_0_1: BTreeSet::new(),
             index_all_1_0: BTreeSet::new(),
             index_dirty_0_1_prev: Vec::new(),
-            element_index_rule_child_node: BTreeMap::new(),
+            element_index_rule_descendant_node: BTreeMap::new(),
             element_index_stmt_block_list_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: RuleChildStmtBlockList) -> bool {
+    fn insert(&mut self, t: RuleDescendantStmtBlockList) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -28041,10 +28075,10 @@ impl RuleChildStmtBlockListTable {
                 }
             };
 
-            match self.element_index_rule_child_node.get_mut(&t.1) {
+            match self.element_index_rule_descendant_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_rule_child_node.insert(t.1, vec![t]);
+                    self.element_index_rule_descendant_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -28053,7 +28087,7 @@ impl RuleChildStmtBlockListTable {
             false
         }
     }
-    fn insert_dirt(&mut self, t: RuleChildStmtBlockList) -> bool {
+    fn insert_dirt(&mut self, t: RuleDescendantStmtBlockList) -> bool {
         if self.index_dirty_0_1.insert(Self::permute_0_1(t)) {
             true
         } else {
@@ -28061,7 +28095,7 @@ impl RuleChildStmtBlockListTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: RuleChildStmtBlockList) -> bool {
+    fn contains(&self, t: RuleDescendantStmtBlockList) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -28076,23 +28110,23 @@ impl RuleChildStmtBlockListTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: RuleChildStmtBlockList) -> (u32, u32) {
+    fn permute_0_1(t: RuleDescendantStmtBlockList) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> RuleChildStmtBlockList {
-        RuleChildStmtBlockList(StmtBlockListNode::from(t.0), RuleChildNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantStmtBlockList {
+        RuleDescendantStmtBlockList(StmtBlockListNode::from(t.0), RuleDescendantNode::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: RuleChildStmtBlockList) -> (u32, u32) {
+    fn permute_1_0(t: RuleDescendantStmtBlockList) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> RuleChildStmtBlockList {
-        RuleChildStmtBlockList(StmtBlockListNode::from(t.1), RuleChildNode::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantStmtBlockList {
+        RuleDescendantStmtBlockList(StmtBlockListNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleChildStmtBlockList> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantStmtBlockList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -28101,7 +28135,7 @@ impl RuleChildStmtBlockListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleChildStmtBlockList> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = RuleDescendantStmtBlockList> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -28113,7 +28147,7 @@ impl RuleChildStmtBlockListTable {
     fn iter_all_0(
         &self,
         arg0: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmtBlockList> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtBlockList> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -28123,7 +28157,10 @@ impl RuleChildStmtBlockListTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: RuleChildNode) -> impl '_ + Iterator<Item = RuleChildStmtBlockList> {
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtBlockList> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -28133,11 +28170,11 @@ impl RuleChildStmtBlockListTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_rule_child_node(
+    fn drain_with_element_rule_descendant_node(
         &mut self,
-        tm: RuleChildNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmtBlockList> {
-        let ts = match self.element_index_rule_child_node.remove(&tm) {
+        tm: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtBlockList> {
+        let ts = match self.element_index_rule_descendant_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -28156,7 +28193,7 @@ impl RuleChildStmtBlockListTable {
     fn drain_with_element_stmt_block_list_node(
         &mut self,
         tm: StmtBlockListNode,
-    ) -> impl '_ + Iterator<Item = RuleChildStmtBlockList> {
+    ) -> impl '_ + Iterator<Item = RuleDescendantStmtBlockList> {
         let ts = match self.element_index_stmt_block_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -28174,7 +28211,7 @@ impl RuleChildStmtBlockListTable {
     }
     fn recall_previous_dirt(
         &mut self,
-        rule_child_node_equalities: &mut Unification<RuleChildNode>,
+        rule_descendant_node_equalities: &mut Unification<RuleDescendantNode>,
         stmt_block_list_node_equalities: &mut Unification<StmtBlockListNode>,
     ) {
         let mut tmp_dirty_0_1_prev = Vec::new();
@@ -28185,18 +28222,18 @@ impl RuleChildStmtBlockListTable {
             let mut tuple = Self::permute_inverse_0_1(tuple);
             if true
                 && tuple.0 == stmt_block_list_node_equalities.root(tuple.0)
-                && tuple.1 == rule_child_node_equalities.root(tuple.1)
+                && tuple.1 == rule_descendant_node_equalities.root(tuple.1)
             {
                 self.insert_dirt(tuple);
             }
         }
     }
 }
-impl fmt::Display for RuleChildStmtBlockListTable {
+impl fmt::Display for RuleDescendantStmtBlockListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_child_stmt_block_list"))
+            .with(Header("rule_descendant_stmt_block_list"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -37929,7 +37966,7 @@ struct ModelDelta {
     new_nil_decl_list_node: Vec<NilDeclListNode>,
     new_cons_decl_list_node: Vec<ConsDeclListNode>,
     new_decls_module_node: Vec<DeclsModuleNode>,
-    new_rule_child: Vec<RuleChild>,
+    new_rule_descendant: Vec<RuleDescendant>,
     new_pred_app: Vec<PredApp>,
     new_el_type: Vec<ElType>,
     new_el_types: Vec<ElTypes>,
@@ -38017,16 +38054,16 @@ struct ModelDelta {
     new_decl_node_loc: Vec<DeclNodeLoc>,
     new_decl_list_node_loc: Vec<DeclListNodeLoc>,
     new_module_node_loc: Vec<ModuleNodeLoc>,
-    new_rule_child_term: Vec<RuleChildTerm>,
-    new_rule_child_term_list: Vec<RuleChildTermList>,
-    new_rule_child_opt_term: Vec<RuleChildOptTerm>,
-    new_rule_child_if_atom: Vec<RuleChildIfAtom>,
-    new_rule_child_then_atom: Vec<RuleChildThenAtom>,
-    new_rule_child_match_case: Vec<RuleChildMatchCase>,
-    new_rule_child_match_case_list: Vec<RuleChildMatchCaseList>,
-    new_rule_child_stmt: Vec<RuleChildStmt>,
-    new_rule_child_stmt_list: Vec<RuleChildStmtList>,
-    new_rule_child_stmt_block_list: Vec<RuleChildStmtBlockList>,
+    new_rule_descendant_term: Vec<RuleDescendantTerm>,
+    new_rule_descendant_term_list: Vec<RuleDescendantTermList>,
+    new_rule_descendant_opt_term: Vec<RuleDescendantOptTerm>,
+    new_rule_descendant_if_atom: Vec<RuleDescendantIfAtom>,
+    new_rule_descendant_then_atom: Vec<RuleDescendantThenAtom>,
+    new_rule_descendant_match_case: Vec<RuleDescendantMatchCase>,
+    new_rule_descendant_match_case_list: Vec<RuleDescendantMatchCaseList>,
+    new_rule_descendant_stmt: Vec<RuleDescendantStmt>,
+    new_rule_descendant_stmt_list: Vec<RuleDescendantStmtList>,
+    new_rule_descendant_stmt_block_list: Vec<RuleDescendantStmtBlockList>,
     new_ctor_enum: Vec<CtorEnum>,
     new_ctors_enum: Vec<CtorsEnum>,
     new_cases_match_stmt: Vec<CasesMatchStmt>,
@@ -38101,7 +38138,7 @@ struct ModelDelta {
     new_decl_list_node_equalities: Vec<(DeclListNode, DeclListNode)>,
     new_module_node_equalities: Vec<(ModuleNode, ModuleNode)>,
     new_loc_equalities: Vec<(Loc, Loc)>,
-    new_rule_child_node_equalities: Vec<(RuleChildNode, RuleChildNode)>,
+    new_rule_descendant_node_equalities: Vec<(RuleDescendantNode, RuleDescendantNode)>,
     new_type_equalities: Vec<(Type, Type)>,
     new_type_list_equalities: Vec<(TypeList, TypeList)>,
     new_pred_equalities: Vec<(Pred, Pred)>,
@@ -38137,7 +38174,7 @@ struct ModelDelta {
     new_decl_list_node_number: usize,
     new_module_node_number: usize,
     new_loc_number: usize,
-    new_rule_child_node_number: usize,
+    new_rule_descendant_node_number: usize,
     new_type_number: usize,
     new_type_list_number: usize,
     new_pred_number: usize,
@@ -38302,11 +38339,11 @@ pub struct Eqlog {
     loc_dirty_prev: Vec<BTreeSet<Loc>>,
     loc_weights: Vec<usize>,
 
-    rule_child_node_equalities: Unification<RuleChildNode>,
-    rule_child_node_all: BTreeSet<RuleChildNode>,
-    rule_child_node_dirty: BTreeSet<RuleChildNode>,
-    rule_child_node_dirty_prev: Vec<BTreeSet<RuleChildNode>>,
-    rule_child_node_weights: Vec<usize>,
+    rule_descendant_node_equalities: Unification<RuleDescendantNode>,
+    rule_descendant_node_all: BTreeSet<RuleDescendantNode>,
+    rule_descendant_node_dirty: BTreeSet<RuleDescendantNode>,
+    rule_descendant_node_dirty_prev: Vec<BTreeSet<RuleDescendantNode>>,
+    rule_descendant_node_weights: Vec<usize>,
 
     type_equalities: Unification<Type>,
     type_all: BTreeSet<Type>,
@@ -38414,7 +38451,7 @@ pub struct Eqlog {
     nil_decl_list_node: NilDeclListNodeTable,
     cons_decl_list_node: ConsDeclListNodeTable,
     decls_module_node: DeclsModuleNodeTable,
-    rule_child: RuleChildTable,
+    rule_descendant: RuleDescendantTable,
     pred_app: PredAppTable,
     el_type: ElTypeTable,
     el_types: ElTypesTable,
@@ -38502,16 +38539,16 @@ pub struct Eqlog {
     decl_node_loc: DeclNodeLocTable,
     decl_list_node_loc: DeclListNodeLocTable,
     module_node_loc: ModuleNodeLocTable,
-    rule_child_term: RuleChildTermTable,
-    rule_child_term_list: RuleChildTermListTable,
-    rule_child_opt_term: RuleChildOptTermTable,
-    rule_child_if_atom: RuleChildIfAtomTable,
-    rule_child_then_atom: RuleChildThenAtomTable,
-    rule_child_match_case: RuleChildMatchCaseTable,
-    rule_child_match_case_list: RuleChildMatchCaseListTable,
-    rule_child_stmt: RuleChildStmtTable,
-    rule_child_stmt_list: RuleChildStmtListTable,
-    rule_child_stmt_block_list: RuleChildStmtBlockListTable,
+    rule_descendant_term: RuleDescendantTermTable,
+    rule_descendant_term_list: RuleDescendantTermListTable,
+    rule_descendant_opt_term: RuleDescendantOptTermTable,
+    rule_descendant_if_atom: RuleDescendantIfAtomTable,
+    rule_descendant_then_atom: RuleDescendantThenAtomTable,
+    rule_descendant_match_case: RuleDescendantMatchCaseTable,
+    rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,
+    rule_descendant_stmt: RuleDescendantStmtTable,
+    rule_descendant_stmt_list: RuleDescendantStmtListTable,
+    rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,
     ctor_enum: CtorEnumTable,
     ctors_enum: CtorsEnumTable,
     cases_match_stmt: CasesMatchStmtTable,
@@ -38615,7 +38652,7 @@ impl ModelDelta {
             new_nil_decl_list_node: Vec::new(),
             new_cons_decl_list_node: Vec::new(),
             new_decls_module_node: Vec::new(),
-            new_rule_child: Vec::new(),
+            new_rule_descendant: Vec::new(),
             new_pred_app: Vec::new(),
             new_el_type: Vec::new(),
             new_el_types: Vec::new(),
@@ -38703,16 +38740,16 @@ impl ModelDelta {
             new_decl_node_loc: Vec::new(),
             new_decl_list_node_loc: Vec::new(),
             new_module_node_loc: Vec::new(),
-            new_rule_child_term: Vec::new(),
-            new_rule_child_term_list: Vec::new(),
-            new_rule_child_opt_term: Vec::new(),
-            new_rule_child_if_atom: Vec::new(),
-            new_rule_child_then_atom: Vec::new(),
-            new_rule_child_match_case: Vec::new(),
-            new_rule_child_match_case_list: Vec::new(),
-            new_rule_child_stmt: Vec::new(),
-            new_rule_child_stmt_list: Vec::new(),
-            new_rule_child_stmt_block_list: Vec::new(),
+            new_rule_descendant_term: Vec::new(),
+            new_rule_descendant_term_list: Vec::new(),
+            new_rule_descendant_opt_term: Vec::new(),
+            new_rule_descendant_if_atom: Vec::new(),
+            new_rule_descendant_then_atom: Vec::new(),
+            new_rule_descendant_match_case: Vec::new(),
+            new_rule_descendant_match_case_list: Vec::new(),
+            new_rule_descendant_stmt: Vec::new(),
+            new_rule_descendant_stmt_list: Vec::new(),
+            new_rule_descendant_stmt_block_list: Vec::new(),
             new_ctor_enum: Vec::new(),
             new_ctors_enum: Vec::new(),
             new_cases_match_stmt: Vec::new(),
@@ -38787,7 +38824,7 @@ impl ModelDelta {
             new_decl_list_node_equalities: Vec::new(),
             new_module_node_equalities: Vec::new(),
             new_loc_equalities: Vec::new(),
-            new_rule_child_node_equalities: Vec::new(),
+            new_rule_descendant_node_equalities: Vec::new(),
             new_type_equalities: Vec::new(),
             new_type_list_equalities: Vec::new(),
             new_pred_equalities: Vec::new(),
@@ -38823,7 +38860,7 @@ impl ModelDelta {
             new_decl_list_node_number: 0,
             new_module_node_number: 0,
             new_loc_number: 0,
-            new_rule_child_node_number: 0,
+            new_rule_descendant_node_number: 0,
             new_type_number: 0,
             new_type_list_number: 0,
             new_pred_number: 0,
@@ -39255,23 +39292,23 @@ impl ModelDelta {
 
         self.new_loc_number = 0;
 
-        let old_rule_child_node_number = model.rule_child_node_equalities.len();
-        let new_rule_child_node_number =
-            old_rule_child_node_number + self.new_rule_child_node_number;
+        let old_rule_descendant_node_number = model.rule_descendant_node_equalities.len();
+        let new_rule_descendant_node_number =
+            old_rule_descendant_node_number + self.new_rule_descendant_node_number;
         model
-            .rule_child_node_equalities
-            .increase_size_to(new_rule_child_node_number);
-        for i in old_rule_child_node_number..new_rule_child_node_number {
-            let el = RuleChildNode::from(i as u32);
-            model.rule_child_node_dirty.insert(el);
-            model.rule_child_node_all.insert(el);
+            .rule_descendant_node_equalities
+            .increase_size_to(new_rule_descendant_node_number);
+        for i in old_rule_descendant_node_number..new_rule_descendant_node_number {
+            let el = RuleDescendantNode::from(i as u32);
+            model.rule_descendant_node_dirty.insert(el);
+            model.rule_descendant_node_all.insert(el);
         }
 
         model
-            .rule_child_node_weights
-            .resize(new_rule_child_node_number, 0);
+            .rule_descendant_node_weights
+            .resize(new_rule_descendant_node_number, 0);
 
-        self.new_rule_child_node_number = 0;
+        self.new_rule_descendant_node_number = 0;
 
         let old_type_number = model.type_equalities.len();
         let new_type_number = old_type_number + self.new_type_number;
@@ -41454,19 +41491,19 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_term.extend(
+            self.new_rule_descendant_term.extend(
                 model
-                    .rule_child_term
+                    .rule_descendant_term
                     .drain_with_element_term_node(child)
                     .inspect(|t| {
                         let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= RuleChildTermTable::WEIGHT;
+                        *weight0 -= RuleDescendantTermTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildTermTable::WEIGHT;
+                        *weight1 -= RuleDescendantTermTable::WEIGHT;
                     }),
             );
 
@@ -41722,22 +41759,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_term_list.extend(
+            self.new_rule_descendant_term_list.extend(
                 model
-                    .rule_child_term_list
+                    .rule_descendant_term_list
                     .drain_with_element_term_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .term_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildTermListTable::WEIGHT;
+                        *weight0 -= RuleDescendantTermListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildTermListTable::WEIGHT;
+                        *weight1 -= RuleDescendantTermListTable::WEIGHT;
                     }),
             );
 
@@ -41911,22 +41948,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_opt_term.extend(
+            self.new_rule_descendant_opt_term.extend(
                 model
-                    .rule_child_opt_term
+                    .rule_descendant_opt_term
                     .drain_with_element_opt_term_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .opt_term_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildOptTermTable::WEIGHT;
+                        *weight0 -= RuleDescendantOptTermTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildOptTermTable::WEIGHT;
+                        *weight1 -= RuleDescendantOptTermTable::WEIGHT;
                     }),
             );
         }
@@ -42015,22 +42052,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_match_case.extend(
+            self.new_rule_descendant_match_case.extend(
                 model
-                    .rule_child_match_case
+                    .rule_descendant_match_case
                     .drain_with_element_match_case_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .match_case_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildMatchCaseTable::WEIGHT;
+                        *weight0 -= RuleDescendantMatchCaseTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildMatchCaseTable::WEIGHT;
+                        *weight1 -= RuleDescendantMatchCaseTable::WEIGHT;
                     }),
             );
 
@@ -42234,22 +42271,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_match_case_list.extend(
+            self.new_rule_descendant_match_case_list.extend(
                 model
-                    .rule_child_match_case_list
+                    .rule_descendant_match_case_list
                     .drain_with_element_match_case_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .match_case_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildMatchCaseListTable::WEIGHT;
+                        *weight0 -= RuleDescendantMatchCaseListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildMatchCaseListTable::WEIGHT;
+                        *weight1 -= RuleDescendantMatchCaseListTable::WEIGHT;
                     }),
             );
 
@@ -42456,19 +42493,19 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_if_atom.extend(
+            self.new_rule_descendant_if_atom.extend(
                 model
-                    .rule_child_if_atom
+                    .rule_descendant_if_atom
                     .drain_with_element_if_atom_node(child)
                     .inspect(|t| {
                         let weight0 = model.if_atom_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= RuleChildIfAtomTable::WEIGHT;
+                        *weight0 -= RuleDescendantIfAtomTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildIfAtomTable::WEIGHT;
+                        *weight1 -= RuleDescendantIfAtomTable::WEIGHT;
                     }),
             );
 
@@ -42669,22 +42706,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_then_atom.extend(
+            self.new_rule_descendant_then_atom.extend(
                 model
-                    .rule_child_then_atom
+                    .rule_descendant_then_atom
                     .drain_with_element_then_atom_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .then_atom_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildThenAtomTable::WEIGHT;
+                        *weight0 -= RuleDescendantThenAtomTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildThenAtomTable::WEIGHT;
+                        *weight1 -= RuleDescendantThenAtomTable::WEIGHT;
                     }),
             );
 
@@ -43023,19 +43060,19 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_stmt.extend(
+            self.new_rule_descendant_stmt.extend(
                 model
-                    .rule_child_stmt
+                    .rule_descendant_stmt
                     .drain_with_element_stmt_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= RuleChildStmtTable::WEIGHT;
+                        *weight0 -= RuleDescendantStmtTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildStmtTable::WEIGHT;
+                        *weight1 -= RuleDescendantStmtTable::WEIGHT;
                     }),
             );
 
@@ -43335,22 +43372,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_stmt_list.extend(
+            self.new_rule_descendant_stmt_list.extend(
                 model
-                    .rule_child_stmt_list
+                    .rule_descendant_stmt_list
                     .drain_with_element_stmt_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildStmtListTable::WEIGHT;
+                        *weight0 -= RuleDescendantStmtListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildStmtListTable::WEIGHT;
+                        *weight1 -= RuleDescendantStmtListTable::WEIGHT;
                     }),
             );
 
@@ -43513,22 +43550,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child_stmt_block_list.extend(
+            self.new_rule_descendant_stmt_block_list.extend(
                 model
-                    .rule_child_stmt_block_list
+                    .rule_descendant_stmt_block_list
                     .drain_with_element_stmt_block_list_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildStmtBlockListTable::WEIGHT;
+                        *weight0 -= RuleDescendantStmtBlockListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildStmtBlockListTable::WEIGHT;
+                        *weight1 -= RuleDescendantStmtBlockListTable::WEIGHT;
                     }),
             );
 
@@ -43608,22 +43645,22 @@ impl ModelDelta {
                     }),
             );
 
-            self.new_rule_child.extend(
+            self.new_rule_descendant.extend(
                 model
-                    .rule_child
+                    .rule_descendant
                     .drain_with_element_rule_decl_node(child)
                     .inspect(|t| {
                         let weight0 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildTable::WEIGHT;
+                        *weight0 -= RuleDescendantTable::WEIGHT;
 
                         let weight1 = model
                             .rule_decl_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildTable::WEIGHT;
+                        *weight1 -= RuleDescendantTable::WEIGHT;
                     }),
             );
 
@@ -44400,15 +44437,15 @@ impl ModelDelta {
             );
         }
 
-        for (mut lhs, mut rhs) in self.new_rule_child_node_equalities.drain(..) {
-            lhs = model.rule_child_node_equalities.root(lhs);
-            rhs = model.rule_child_node_equalities.root(rhs);
+        for (mut lhs, mut rhs) in self.new_rule_descendant_node_equalities.drain(..) {
+            lhs = model.rule_descendant_node_equalities.root(lhs);
+            rhs = model.rule_descendant_node_equalities.root(rhs);
             if lhs == rhs {
                 continue;
             }
 
-            let lhs_weight = model.rule_child_node_weights[lhs.0 as usize];
-            let rhs_weight = model.rule_child_node_weights[rhs.0 as usize];
+            let lhs_weight = model.rule_descendant_node_weights[lhs.0 as usize];
+            let rhs_weight = model.rule_descendant_node_weights[rhs.0 as usize];
             let (root, child) = if lhs_weight >= rhs_weight {
                 (lhs, rhs)
             } else {
@@ -44416,208 +44453,208 @@ impl ModelDelta {
             };
 
             model
-                .rule_child_node_equalities
+                .rule_descendant_node_equalities
                 .union_roots_into(child, root);
-            model.rule_child_node_all.remove(&child);
-            model.rule_child_node_dirty.remove(&child);
+            model.rule_descendant_node_all.remove(&child);
+            model.rule_descendant_node_dirty.remove(&child);
 
-            self.new_rule_child.extend(
+            self.new_rule_descendant.extend(
                 model
-                    .rule_child
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildTable::WEIGHT;
+                        *weight0 -= RuleDescendantTable::WEIGHT;
 
                         let weight1 = model
                             .rule_decl_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildTable::WEIGHT;
+                        *weight1 -= RuleDescendantTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_term.extend(
+            self.new_rule_descendant_term.extend(
                 model
-                    .rule_child_term
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_term
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model.term_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= RuleChildTermTable::WEIGHT;
+                        *weight0 -= RuleDescendantTermTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildTermTable::WEIGHT;
+                        *weight1 -= RuleDescendantTermTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_term_list.extend(
+            self.new_rule_descendant_term_list.extend(
                 model
-                    .rule_child_term_list
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_term_list
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .term_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildTermListTable::WEIGHT;
+                        *weight0 -= RuleDescendantTermListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildTermListTable::WEIGHT;
+                        *weight1 -= RuleDescendantTermListTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_opt_term.extend(
+            self.new_rule_descendant_opt_term.extend(
                 model
-                    .rule_child_opt_term
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_opt_term
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .opt_term_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildOptTermTable::WEIGHT;
+                        *weight0 -= RuleDescendantOptTermTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildOptTermTable::WEIGHT;
+                        *weight1 -= RuleDescendantOptTermTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_if_atom.extend(
+            self.new_rule_descendant_if_atom.extend(
                 model
-                    .rule_child_if_atom
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_if_atom
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model.if_atom_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= RuleChildIfAtomTable::WEIGHT;
+                        *weight0 -= RuleDescendantIfAtomTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildIfAtomTable::WEIGHT;
+                        *weight1 -= RuleDescendantIfAtomTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_then_atom.extend(
+            self.new_rule_descendant_then_atom.extend(
                 model
-                    .rule_child_then_atom
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_then_atom
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .then_atom_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildThenAtomTable::WEIGHT;
+                        *weight0 -= RuleDescendantThenAtomTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildThenAtomTable::WEIGHT;
+                        *weight1 -= RuleDescendantThenAtomTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_match_case.extend(
+            self.new_rule_descendant_match_case.extend(
                 model
-                    .rule_child_match_case
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_match_case
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .match_case_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildMatchCaseTable::WEIGHT;
+                        *weight0 -= RuleDescendantMatchCaseTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildMatchCaseTable::WEIGHT;
+                        *weight1 -= RuleDescendantMatchCaseTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_match_case_list.extend(
+            self.new_rule_descendant_match_case_list.extend(
                 model
-                    .rule_child_match_case_list
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_match_case_list
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .match_case_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildMatchCaseListTable::WEIGHT;
+                        *weight0 -= RuleDescendantMatchCaseListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildMatchCaseListTable::WEIGHT;
+                        *weight1 -= RuleDescendantMatchCaseListTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_stmt.extend(
+            self.new_rule_descendant_stmt.extend(
                 model
-                    .rule_child_stmt
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_stmt
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model.stmt_node_weights.get_mut(t.0 .0 as usize).unwrap();
-                        *weight0 -= RuleChildStmtTable::WEIGHT;
+                        *weight0 -= RuleDescendantStmtTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildStmtTable::WEIGHT;
+                        *weight1 -= RuleDescendantStmtTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_stmt_list.extend(
+            self.new_rule_descendant_stmt_list.extend(
                 model
-                    .rule_child_stmt_list
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_stmt_list
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildStmtListTable::WEIGHT;
+                        *weight0 -= RuleDescendantStmtListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildStmtListTable::WEIGHT;
+                        *weight1 -= RuleDescendantStmtListTable::WEIGHT;
                     }),
             );
 
-            self.new_rule_child_stmt_block_list.extend(
+            self.new_rule_descendant_stmt_block_list.extend(
                 model
-                    .rule_child_stmt_block_list
-                    .drain_with_element_rule_child_node(child)
+                    .rule_descendant_stmt_block_list
+                    .drain_with_element_rule_descendant_node(child)
                     .inspect(|t| {
                         let weight0 = model
                             .stmt_block_list_node_weights
                             .get_mut(t.0 .0 as usize)
                             .unwrap();
-                        *weight0 -= RuleChildStmtBlockListTable::WEIGHT;
+                        *weight0 -= RuleDescendantStmtBlockListTable::WEIGHT;
 
                         let weight1 = model
-                            .rule_child_node_weights
+                            .rule_descendant_node_weights
                             .get_mut(t.1 .0 as usize)
                             .unwrap();
-                        *weight1 -= RuleChildStmtBlockListTable::WEIGHT;
+                        *weight1 -= RuleDescendantStmtBlockListTable::WEIGHT;
                     }),
             );
         }
@@ -46584,12 +46621,12 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child.drain(..) {
-            t.0 = model.rule_child_node_equalities.root(t.0);
+        for mut t in self.new_rule_descendant.drain(..) {
+            t.0 = model.rule_descendant_node_equalities.root(t.0);
             t.1 = model.rule_decl_node_equalities.root(t.1);
-            if model.rule_child.insert(t) {
-                model.rule_child_node_weights[t.0 .0 as usize] += RuleChildTable::WEIGHT;
-                model.rule_decl_node_weights[t.1 .0 as usize] += RuleChildTable::WEIGHT;
+            if model.rule_descendant.insert(t) {
+                model.rule_descendant_node_weights[t.0 .0 as usize] += RuleDescendantTable::WEIGHT;
+                model.rule_decl_node_weights[t.1 .0 as usize] += RuleDescendantTable::WEIGHT;
             }
         }
 
@@ -47461,106 +47498,118 @@ impl ModelDelta {
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_term.drain(..) {
+        for mut t in self.new_rule_descendant_term.drain(..) {
             t.0 = model.term_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_term.insert(t) {
-                model.term_node_weights[t.0 .0 as usize] += RuleChildTermTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildTermTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_term.insert(t) {
+                model.term_node_weights[t.0 .0 as usize] += RuleDescendantTermTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantTermTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_term_list.drain(..) {
+        for mut t in self.new_rule_descendant_term_list.drain(..) {
             t.0 = model.term_list_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_term_list.insert(t) {
-                model.term_list_node_weights[t.0 .0 as usize] += RuleChildTermListTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildTermListTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_term_list.insert(t) {
+                model.term_list_node_weights[t.0 .0 as usize] +=
+                    RuleDescendantTermListTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantTermListTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_opt_term.drain(..) {
+        for mut t in self.new_rule_descendant_opt_term.drain(..) {
             t.0 = model.opt_term_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_opt_term.insert(t) {
-                model.opt_term_node_weights[t.0 .0 as usize] += RuleChildOptTermTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildOptTermTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_opt_term.insert(t) {
+                model.opt_term_node_weights[t.0 .0 as usize] += RuleDescendantOptTermTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantOptTermTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_if_atom.drain(..) {
+        for mut t in self.new_rule_descendant_if_atom.drain(..) {
             t.0 = model.if_atom_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_if_atom.insert(t) {
-                model.if_atom_node_weights[t.0 .0 as usize] += RuleChildIfAtomTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildIfAtomTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_if_atom.insert(t) {
+                model.if_atom_node_weights[t.0 .0 as usize] += RuleDescendantIfAtomTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantIfAtomTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_then_atom.drain(..) {
+        for mut t in self.new_rule_descendant_then_atom.drain(..) {
             t.0 = model.then_atom_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_then_atom.insert(t) {
-                model.then_atom_node_weights[t.0 .0 as usize] += RuleChildThenAtomTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildThenAtomTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_then_atom.insert(t) {
+                model.then_atom_node_weights[t.0 .0 as usize] +=
+                    RuleDescendantThenAtomTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantThenAtomTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_match_case.drain(..) {
+        for mut t in self.new_rule_descendant_match_case.drain(..) {
             t.0 = model.match_case_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_match_case.insert(t) {
-                model.match_case_node_weights[t.0 .0 as usize] += RuleChildMatchCaseTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildMatchCaseTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_match_case.insert(t) {
+                model.match_case_node_weights[t.0 .0 as usize] +=
+                    RuleDescendantMatchCaseTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantMatchCaseTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_match_case_list.drain(..) {
+        for mut t in self.new_rule_descendant_match_case_list.drain(..) {
             t.0 = model.match_case_list_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_match_case_list.insert(t) {
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_match_case_list.insert(t) {
                 model.match_case_list_node_weights[t.0 .0 as usize] +=
-                    RuleChildMatchCaseListTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] +=
-                    RuleChildMatchCaseListTable::WEIGHT;
+                    RuleDescendantMatchCaseListTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantMatchCaseListTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_stmt.drain(..) {
+        for mut t in self.new_rule_descendant_stmt.drain(..) {
             t.0 = model.stmt_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_stmt.insert(t) {
-                model.stmt_node_weights[t.0 .0 as usize] += RuleChildStmtTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildStmtTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_stmt.insert(t) {
+                model.stmt_node_weights[t.0 .0 as usize] += RuleDescendantStmtTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantStmtTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_stmt_list.drain(..) {
+        for mut t in self.new_rule_descendant_stmt_list.drain(..) {
             t.0 = model.stmt_list_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_stmt_list.insert(t) {
-                model.stmt_list_node_weights[t.0 .0 as usize] += RuleChildStmtListTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] += RuleChildStmtListTable::WEIGHT;
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_stmt_list.insert(t) {
+                model.stmt_list_node_weights[t.0 .0 as usize] +=
+                    RuleDescendantStmtListTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantStmtListTable::WEIGHT;
             }
         }
 
         #[allow(unused_mut)]
-        for mut t in self.new_rule_child_stmt_block_list.drain(..) {
+        for mut t in self.new_rule_descendant_stmt_block_list.drain(..) {
             t.0 = model.stmt_block_list_node_equalities.root(t.0);
-            t.1 = model.rule_child_node_equalities.root(t.1);
-            if model.rule_child_stmt_block_list.insert(t) {
+            t.1 = model.rule_descendant_node_equalities.root(t.1);
+            if model.rule_descendant_stmt_block_list.insert(t) {
                 model.stmt_block_list_node_weights[t.0 .0 as usize] +=
-                    RuleChildStmtBlockListTable::WEIGHT;
-                model.rule_child_node_weights[t.1 .0 as usize] +=
-                    RuleChildStmtBlockListTable::WEIGHT;
+                    RuleDescendantStmtBlockListTable::WEIGHT;
+                model.rule_descendant_node_weights[t.1 .0 as usize] +=
+                    RuleDescendantStmtBlockListTable::WEIGHT;
             }
         }
 
@@ -48251,11 +48300,12 @@ impl ModelDelta {
         Loc::from(id as u32)
     }
     #[allow(dead_code)]
-    fn new_rule_child_node(&mut self, model: &Model) -> RuleChildNode {
-        let id: usize = model.rule_child_node_equalities.len() + self.new_rule_child_node_number;
+    fn new_rule_descendant_node(&mut self, model: &Model) -> RuleDescendantNode {
+        let id: usize =
+            model.rule_descendant_node_equalities.len() + self.new_rule_descendant_node_number;
         assert!(id <= (u32::MAX as usize));
-        self.new_rule_child_node_number += 1;
-        RuleChildNode::from(id as u32)
+        self.new_rule_descendant_node_number += 1;
+        RuleDescendantNode::from(id as u32)
     }
     #[allow(dead_code)]
     fn new_type(&mut self, model: &Model) -> Type {
@@ -48459,11 +48509,11 @@ impl Eqlog {
             loc_dirty_prev: Vec::new(),
             loc_weights: Vec::new(),
             loc_all: BTreeSet::new(),
-            rule_child_node_equalities: Unification::new(),
-            rule_child_node_dirty: BTreeSet::new(),
-            rule_child_node_dirty_prev: Vec::new(),
-            rule_child_node_weights: Vec::new(),
-            rule_child_node_all: BTreeSet::new(),
+            rule_descendant_node_equalities: Unification::new(),
+            rule_descendant_node_dirty: BTreeSet::new(),
+            rule_descendant_node_dirty_prev: Vec::new(),
+            rule_descendant_node_weights: Vec::new(),
+            rule_descendant_node_all: BTreeSet::new(),
             type_equalities: Unification::new(),
             type_dirty: BTreeSet::new(),
             type_dirty_prev: Vec::new(),
@@ -48560,7 +48610,7 @@ impl Eqlog {
             nil_decl_list_node: NilDeclListNodeTable::new(),
             cons_decl_list_node: ConsDeclListNodeTable::new(),
             decls_module_node: DeclsModuleNodeTable::new(),
-            rule_child: RuleChildTable::new(),
+            rule_descendant: RuleDescendantTable::new(),
             pred_app: PredAppTable::new(),
             el_type: ElTypeTable::new(),
             el_types: ElTypesTable::new(),
@@ -48648,16 +48698,16 @@ impl Eqlog {
             decl_node_loc: DeclNodeLocTable::new(),
             decl_list_node_loc: DeclListNodeLocTable::new(),
             module_node_loc: ModuleNodeLocTable::new(),
-            rule_child_term: RuleChildTermTable::new(),
-            rule_child_term_list: RuleChildTermListTable::new(),
-            rule_child_opt_term: RuleChildOptTermTable::new(),
-            rule_child_if_atom: RuleChildIfAtomTable::new(),
-            rule_child_then_atom: RuleChildThenAtomTable::new(),
-            rule_child_match_case: RuleChildMatchCaseTable::new(),
-            rule_child_match_case_list: RuleChildMatchCaseListTable::new(),
-            rule_child_stmt: RuleChildStmtTable::new(),
-            rule_child_stmt_list: RuleChildStmtListTable::new(),
-            rule_child_stmt_block_list: RuleChildStmtBlockListTable::new(),
+            rule_descendant_term: RuleDescendantTermTable::new(),
+            rule_descendant_term_list: RuleDescendantTermListTable::new(),
+            rule_descendant_opt_term: RuleDescendantOptTermTable::new(),
+            rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),
+            rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),
+            rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),
+            rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),
+            rule_descendant_stmt: RuleDescendantStmtTable::new(),
+            rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),
+            rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),
             ctor_enum: CtorEnumTable::new(),
             ctors_enum: CtorsEnumTable::new(),
             cases_match_stmt: CasesMatchStmtTable::new(),
@@ -48759,16 +48809,16 @@ impl Eqlog {
                 self.query_and_record_functionality_decl_node_loc(&mut delta);
                 self.query_and_record_functionality_decl_list_node_loc(&mut delta);
                 self.query_and_record_functionality_module_node_loc(&mut delta);
-                self.query_and_record_functionality_rule_child_term(&mut delta);
-                self.query_and_record_functionality_rule_child_term_list(&mut delta);
-                self.query_and_record_functionality_rule_child_opt_term(&mut delta);
-                self.query_and_record_functionality_rule_child_if_atom(&mut delta);
-                self.query_and_record_functionality_rule_child_then_atom(&mut delta);
-                self.query_and_record_functionality_rule_child_match_case(&mut delta);
-                self.query_and_record_functionality_rule_child_match_case_list(&mut delta);
-                self.query_and_record_functionality_rule_child_stmt(&mut delta);
-                self.query_and_record_functionality_rule_child_stmt_list(&mut delta);
-                self.query_and_record_functionality_rule_child_stmt_block_list(&mut delta);
+                self.query_and_record_functionality_rule_descendant_term(&mut delta);
+                self.query_and_record_functionality_rule_descendant_term_list(&mut delta);
+                self.query_and_record_functionality_rule_descendant_opt_term(&mut delta);
+                self.query_and_record_functionality_rule_descendant_if_atom(&mut delta);
+                self.query_and_record_functionality_rule_descendant_then_atom(&mut delta);
+                self.query_and_record_functionality_rule_descendant_match_case(&mut delta);
+                self.query_and_record_functionality_rule_descendant_match_case_list(&mut delta);
+                self.query_and_record_functionality_rule_descendant_stmt(&mut delta);
+                self.query_and_record_functionality_rule_descendant_stmt_list(&mut delta);
+                self.query_and_record_functionality_rule_descendant_stmt_block_list(&mut delta);
                 self.query_and_record_functionality_ctor_enum(&mut delta);
                 self.query_and_record_functionality_ctors_enum(&mut delta);
                 self.query_and_record_functionality_cases_match_stmt(&mut delta);
@@ -48819,25 +48869,25 @@ impl Eqlog {
                 self.query_and_record_functionality_match_case_pattern_ctor(&mut delta);
                 self.query_and_record_functionality_cases_determined_enum(&mut delta);
                 self.query_and_record_virt_real_ident_retraction(&mut delta);
-                self.query_and_record_rule_child_rule_decl(&mut delta);
-                self.query_and_record_rule_child_stmts_cons(&mut delta);
-                self.query_and_record_rule_child_stmt_blocks_cons(&mut delta);
-                self.query_and_record_rule_child_stmt_if(&mut delta);
-                self.query_and_record_rule_child_stmt_then(&mut delta);
-                self.query_and_record_rule_child_stmt_branch(&mut delta);
-                self.query_and_record_rule_child_stmt_match(&mut delta);
-                self.query_and_record_rule_child_if_atom_equal(&mut delta);
-                self.query_and_record_rule_child_if_atom_defined(&mut delta);
-                self.query_and_record_rule_child_if_atom_pred(&mut delta);
-                self.query_and_record_rule_child_if_atom_var(&mut delta);
-                self.query_and_record_rule_child_then_atom_equal(&mut delta);
-                self.query_and_record_rule_child_then_atom_defined(&mut delta);
-                self.query_and_record_rule_child_then_atom_pred(&mut delta);
-                self.query_and_record_rule_child_match_case_children(&mut delta);
-                self.query_and_record_rule_child_match_case_list_cons(&mut delta);
-                self.query_and_record_rule_child_terms_cons(&mut delta);
-                self.query_and_record_rule_child_opt_term_some(&mut delta);
-                self.query_and_record_rule_child_term_app(&mut delta);
+                self.query_and_record_rule_descendant_rule_decl(&mut delta);
+                self.query_and_record_rule_descendant_stmts_cons(&mut delta);
+                self.query_and_record_rule_descendant_stmt_blocks_cons(&mut delta);
+                self.query_and_record_rule_descendant_stmt_if(&mut delta);
+                self.query_and_record_rule_descendant_stmt_then(&mut delta);
+                self.query_and_record_rule_descendant_stmt_branch(&mut delta);
+                self.query_and_record_rule_descendant_stmt_match(&mut delta);
+                self.query_and_record_rule_descendant_if_atom_equal(&mut delta);
+                self.query_and_record_rule_descendant_if_atom_defined(&mut delta);
+                self.query_and_record_rule_descendant_if_atom_pred(&mut delta);
+                self.query_and_record_rule_descendant_if_atom_var(&mut delta);
+                self.query_and_record_rule_descendant_then_atom_equal(&mut delta);
+                self.query_and_record_rule_descendant_then_atom_defined(&mut delta);
+                self.query_and_record_rule_descendant_then_atom_pred(&mut delta);
+                self.query_and_record_rule_descendant_match_case_descendantren(&mut delta);
+                self.query_and_record_rule_descendant_match_case_list_cons(&mut delta);
+                self.query_and_record_rule_descendant_terms_cons(&mut delta);
+                self.query_and_record_rule_descendant_opt_term_some(&mut delta);
+                self.query_and_record_rule_descendant_term_app(&mut delta);
                 self.query_and_record_enum_ctors(&mut delta);
                 self.query_and_record_enum_ctors_cons(&mut delta);
                 self.query_and_record_match_stmt_case_list(&mut delta);
@@ -48996,7 +49046,7 @@ impl Eqlog {
                 self.query_and_record_non_surjective_codomain_should_be_ok(&mut delta);
                 self.query_and_record_surjective_img_el_is_ok(&mut delta);
                 self.query_and_record_surjective_exempted_then_defined_term(&mut delta);
-                self.query_and_record_var_term_in_rule_child(&mut delta);
+                self.query_and_record_var_term_in_rule_descendant(&mut delta);
                 self.query_and_record_defined_then_should_be_given_by_ctor(&mut delta);
                 self.query_and_record_ctor_app_is_given_by_ctor(&mut delta);
                 self.query_and_record_function_can_be_made_defined_if_codomain_normal_type(
@@ -49034,16 +49084,16 @@ impl Eqlog {
 
             self.recall_previous_dirt();
             self.query_and_record_real_virt_ident_total(&mut delta);
-            self.query_and_record_rule_child_term_total(&mut delta);
-            self.query_and_record_rule_child_term_list_total(&mut delta);
-            self.query_and_record_rule_child_opt_term_total(&mut delta);
-            self.query_and_record_rule_child_if_atom_total(&mut delta);
-            self.query_and_record_rule_child_then_atom_total(&mut delta);
-            self.query_and_record_rule_child_match_case_total(&mut delta);
-            self.query_and_record_rule_child_match_case_list_total(&mut delta);
-            self.query_and_record_rule_child_stmt_total(&mut delta);
-            self.query_and_record_rule_child_stmt_list_total(&mut delta);
-            self.query_and_record_rule_child_stmt_block_list_total(&mut delta);
+            self.query_and_record_rule_descendant_term_total(&mut delta);
+            self.query_and_record_rule_descendant_term_list_total(&mut delta);
+            self.query_and_record_rule_descendant_opt_term_total(&mut delta);
+            self.query_and_record_rule_descendant_if_atom_total(&mut delta);
+            self.query_and_record_rule_descendant_then_atom_total(&mut delta);
+            self.query_and_record_rule_descendant_match_case_total(&mut delta);
+            self.query_and_record_rule_descendant_match_case_list_total(&mut delta);
+            self.query_and_record_rule_descendant_stmt_total(&mut delta);
+            self.query_and_record_rule_descendant_stmt_list_total(&mut delta);
+            self.query_and_record_rule_descendant_stmt_block_list_total(&mut delta);
             self.query_and_record_desugared_match_term_identifier_defined(&mut delta);
             self.query_and_record_desugared_case_defined(&mut delta);
             self.query_and_record_desugared_case_block_list_defined(&mut delta);
@@ -50145,46 +50195,54 @@ impl Eqlog {
         self.root_loc(lhs) == self.root_loc(rhs)
     }
 
-    /// Adjoins a new element of sort `RuleChildNode`.
+    /// Adjoins a new element of sort `RuleDescendantNode`.
     #[allow(dead_code)]
-    pub fn new_rule_child_node(&mut self) -> RuleChildNode {
+    pub fn new_rule_descendant_node(&mut self) -> RuleDescendantNode {
         let mut delta_opt = None;
         std::mem::swap(&mut delta_opt, &mut self.delta);
         let mut delta = delta_opt.unwrap();
 
-        let el = delta.new_rule_child_node(self);
+        let el = delta.new_rule_descendant_node(self);
 
         self.delta = Some(delta);
         el
     }
     /// Enforces the equality `lhs = rhs`.
     #[allow(dead_code)]
-    pub fn equate_rule_child_node(&mut self, lhs: RuleChildNode, rhs: RuleChildNode) {
+    pub fn equate_rule_descendant_node(
+        &mut self,
+        lhs: RuleDescendantNode,
+        rhs: RuleDescendantNode,
+    ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_node_equalities
+            .new_rule_descendant_node_equalities
             .push((lhs, rhs));
     }
-    /// Returns and iterator over elements of sort `RuleChildNode`.
+    /// Returns and iterator over elements of sort `RuleDescendantNode`.
     /// The iterator yields canonical representatives only.
     #[allow(dead_code)]
-    pub fn iter_rule_child_node(&self) -> impl '_ + Iterator<Item = RuleChildNode> {
-        self.rule_child_node_all.iter().copied()
+    pub fn iter_rule_descendant_node(&self) -> impl '_ + Iterator<Item = RuleDescendantNode> {
+        self.rule_descendant_node_all.iter().copied()
     }
     /// Returns the canonical representative of the equivalence class of `el`.
     #[allow(dead_code)]
-    pub fn root_rule_child_node(&self, el: RuleChildNode) -> RuleChildNode {
-        if el.0 as usize >= self.rule_child_node_equalities.len() {
+    pub fn root_rule_descendant_node(&self, el: RuleDescendantNode) -> RuleDescendantNode {
+        if el.0 as usize >= self.rule_descendant_node_equalities.len() {
             el
         } else {
-            self.rule_child_node_equalities.root_const(el)
+            self.rule_descendant_node_equalities.root_const(el)
         }
     }
     /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
     #[allow(dead_code)]
-    pub fn are_equal_rule_child_node(&self, lhs: RuleChildNode, rhs: RuleChildNode) -> bool {
-        self.root_rule_child_node(lhs) == self.root_rule_child_node(rhs)
+    pub fn are_equal_rule_descendant_node(
+        &self,
+        lhs: RuleDescendantNode,
+        rhs: RuleDescendantNode,
+    ) -> bool {
+        self.root_rule_descendant_node(lhs) == self.root_rule_descendant_node(rhs)
     }
 
     /// Adjoins a new element of sort `Type`.
@@ -51383,409 +51441,471 @@ impl Eqlog {
             .push(ModuleNodeLoc(arg0, result));
     }
 
-    /// Evaluates `rule_child_term(arg0)`.
+    /// Evaluates `rule_descendant_term(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_term(&self, mut arg0: TermNode) -> Option<RuleChildNode> {
+    pub fn rule_descendant_term(&self, mut arg0: TermNode) -> Option<RuleDescendantNode> {
         arg0 = self.root_term_node(arg0);
-        self.rule_child_term.iter_all_0(arg0).next().map(|t| t.1)
+        self.rule_descendant_term
+            .iter_all_0(arg0)
+            .next()
+            .map(|t| t.1)
     }
-    /// Enforces that `rule_child_term(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_term(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_term(&mut self, mut arg0: TermNode) -> RuleChildNode {
+    pub fn define_rule_descendant_term(&mut self, mut arg0: TermNode) -> RuleDescendantNode {
         arg0 = self.root_term_node(arg0);
-        if let Some(t) = self.rule_child_term.iter_all_0(arg0).next() {
+        if let Some(t) = self.rule_descendant_term.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_term(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_term(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_term` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_term` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_term(&self) -> impl '_ + Iterator<Item = (TermNode, RuleChildNode)> {
-        self.rule_child_term.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_rule_descendant_term(
+        &self,
+    ) -> impl '_ + Iterator<Item = (TermNode, RuleDescendantNode)> {
+        self.rule_descendant_term.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_term(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_term(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_term(&mut self, arg0: TermNode, result: RuleChildNode) {
+    pub fn insert_rule_descendant_term(&mut self, arg0: TermNode, result: RuleDescendantNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_term
-            .push(RuleChildTerm(arg0, result));
+            .new_rule_descendant_term
+            .push(RuleDescendantTerm(arg0, result));
     }
 
-    /// Evaluates `rule_child_term_list(arg0)`.
+    /// Evaluates `rule_descendant_term_list(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_term_list(&self, mut arg0: TermListNode) -> Option<RuleChildNode> {
+    pub fn rule_descendant_term_list(&self, mut arg0: TermListNode) -> Option<RuleDescendantNode> {
         arg0 = self.root_term_list_node(arg0);
-        self.rule_child_term_list
+        self.rule_descendant_term_list
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_term_list(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_term_list(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_term_list(&mut self, mut arg0: TermListNode) -> RuleChildNode {
+    pub fn define_rule_descendant_term_list(
+        &mut self,
+        mut arg0: TermListNode,
+    ) -> RuleDescendantNode {
         arg0 = self.root_term_list_node(arg0);
-        if let Some(t) = self.rule_child_term_list.iter_all_0(arg0).next() {
+        if let Some(t) = self.rule_descendant_term_list.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_term_list(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_term_list(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_term_list` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_term_list` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_term_list(
+    pub fn iter_rule_descendant_term_list(
         &self,
-    ) -> impl '_ + Iterator<Item = (TermListNode, RuleChildNode)> {
-        self.rule_child_term_list.iter_all().map(|t| (t.0, t.1))
+    ) -> impl '_ + Iterator<Item = (TermListNode, RuleDescendantNode)> {
+        self.rule_descendant_term_list
+            .iter_all()
+            .map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_term_list(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_term_list(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_term_list(&mut self, arg0: TermListNode, result: RuleChildNode) {
+    pub fn insert_rule_descendant_term_list(
+        &mut self,
+        arg0: TermListNode,
+        result: RuleDescendantNode,
+    ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_term_list
-            .push(RuleChildTermList(arg0, result));
+            .new_rule_descendant_term_list
+            .push(RuleDescendantTermList(arg0, result));
     }
 
-    /// Evaluates `rule_child_opt_term(arg0)`.
+    /// Evaluates `rule_descendant_opt_term(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_opt_term(&self, mut arg0: OptTermNode) -> Option<RuleChildNode> {
+    pub fn rule_descendant_opt_term(&self, mut arg0: OptTermNode) -> Option<RuleDescendantNode> {
         arg0 = self.root_opt_term_node(arg0);
-        self.rule_child_opt_term
+        self.rule_descendant_opt_term
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_opt_term(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_opt_term(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_opt_term(&mut self, mut arg0: OptTermNode) -> RuleChildNode {
+    pub fn define_rule_descendant_opt_term(&mut self, mut arg0: OptTermNode) -> RuleDescendantNode {
         arg0 = self.root_opt_term_node(arg0);
-        if let Some(t) = self.rule_child_opt_term.iter_all_0(arg0).next() {
+        if let Some(t) = self.rule_descendant_opt_term.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_opt_term(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_opt_term(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_opt_term` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_opt_term` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_opt_term(
+    pub fn iter_rule_descendant_opt_term(
         &self,
-    ) -> impl '_ + Iterator<Item = (OptTermNode, RuleChildNode)> {
-        self.rule_child_opt_term.iter_all().map(|t| (t.0, t.1))
+    ) -> impl '_ + Iterator<Item = (OptTermNode, RuleDescendantNode)> {
+        self.rule_descendant_opt_term.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_opt_term(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_opt_term(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_opt_term(&mut self, arg0: OptTermNode, result: RuleChildNode) {
+    pub fn insert_rule_descendant_opt_term(
+        &mut self,
+        arg0: OptTermNode,
+        result: RuleDescendantNode,
+    ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_opt_term
-            .push(RuleChildOptTerm(arg0, result));
+            .new_rule_descendant_opt_term
+            .push(RuleDescendantOptTerm(arg0, result));
     }
 
-    /// Evaluates `rule_child_if_atom(arg0)`.
+    /// Evaluates `rule_descendant_if_atom(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_if_atom(&self, mut arg0: IfAtomNode) -> Option<RuleChildNode> {
+    pub fn rule_descendant_if_atom(&self, mut arg0: IfAtomNode) -> Option<RuleDescendantNode> {
         arg0 = self.root_if_atom_node(arg0);
-        self.rule_child_if_atom.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Enforces that `rule_child_if_atom(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_rule_child_if_atom(&mut self, mut arg0: IfAtomNode) -> RuleChildNode {
-        arg0 = self.root_if_atom_node(arg0);
-        if let Some(t) = self.rule_child_if_atom.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_if_atom(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `rule_child_if_atom` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_rule_child_if_atom(
-        &self,
-    ) -> impl '_ + Iterator<Item = (IfAtomNode, RuleChildNode)> {
-        self.rule_child_if_atom.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `rule_child_if_atom(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_rule_child_if_atom(&mut self, arg0: IfAtomNode, result: RuleChildNode) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_rule_child_if_atom
-            .push(RuleChildIfAtom(arg0, result));
-    }
-
-    /// Evaluates `rule_child_then_atom(arg0)`.
-    #[allow(dead_code)]
-    pub fn rule_child_then_atom(&self, mut arg0: ThenAtomNode) -> Option<RuleChildNode> {
-        arg0 = self.root_then_atom_node(arg0);
-        self.rule_child_then_atom
+        self.rule_descendant_if_atom
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_then_atom(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_if_atom(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_then_atom(&mut self, mut arg0: ThenAtomNode) -> RuleChildNode {
-        arg0 = self.root_then_atom_node(arg0);
-        if let Some(t) = self.rule_child_then_atom.iter_all_0(arg0).next() {
+    pub fn define_rule_descendant_if_atom(&mut self, mut arg0: IfAtomNode) -> RuleDescendantNode {
+        arg0 = self.root_if_atom_node(arg0);
+        if let Some(t) = self.rule_descendant_if_atom.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_then_atom(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_if_atom(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_then_atom` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_if_atom` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_then_atom(
+    pub fn iter_rule_descendant_if_atom(
         &self,
-    ) -> impl '_ + Iterator<Item = (ThenAtomNode, RuleChildNode)> {
-        self.rule_child_then_atom.iter_all().map(|t| (t.0, t.1))
+    ) -> impl '_ + Iterator<Item = (IfAtomNode, RuleDescendantNode)> {
+        self.rule_descendant_if_atom.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_then_atom(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_if_atom(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_then_atom(&mut self, arg0: ThenAtomNode, result: RuleChildNode) {
+    pub fn insert_rule_descendant_if_atom(&mut self, arg0: IfAtomNode, result: RuleDescendantNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_then_atom
-            .push(RuleChildThenAtom(arg0, result));
+            .new_rule_descendant_if_atom
+            .push(RuleDescendantIfAtom(arg0, result));
     }
 
-    /// Evaluates `rule_child_match_case(arg0)`.
+    /// Evaluates `rule_descendant_then_atom(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_match_case(&self, mut arg0: MatchCaseNode) -> Option<RuleChildNode> {
-        arg0 = self.root_match_case_node(arg0);
-        self.rule_child_match_case
+    pub fn rule_descendant_then_atom(&self, mut arg0: ThenAtomNode) -> Option<RuleDescendantNode> {
+        arg0 = self.root_then_atom_node(arg0);
+        self.rule_descendant_then_atom
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_match_case(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_then_atom(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_match_case(&mut self, mut arg0: MatchCaseNode) -> RuleChildNode {
-        arg0 = self.root_match_case_node(arg0);
-        if let Some(t) = self.rule_child_match_case.iter_all_0(arg0).next() {
+    pub fn define_rule_descendant_then_atom(
+        &mut self,
+        mut arg0: ThenAtomNode,
+    ) -> RuleDescendantNode {
+        arg0 = self.root_then_atom_node(arg0);
+        if let Some(t) = self.rule_descendant_then_atom.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_match_case(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_then_atom(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_match_case` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_then_atom` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_match_case(
+    pub fn iter_rule_descendant_then_atom(
         &self,
-    ) -> impl '_ + Iterator<Item = (MatchCaseNode, RuleChildNode)> {
-        self.rule_child_match_case.iter_all().map(|t| (t.0, t.1))
+    ) -> impl '_ + Iterator<Item = (ThenAtomNode, RuleDescendantNode)> {
+        self.rule_descendant_then_atom
+            .iter_all()
+            .map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_match_case(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_then_atom(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_match_case(&mut self, arg0: MatchCaseNode, result: RuleChildNode) {
+    pub fn insert_rule_descendant_then_atom(
+        &mut self,
+        arg0: ThenAtomNode,
+        result: RuleDescendantNode,
+    ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_match_case
-            .push(RuleChildMatchCase(arg0, result));
+            .new_rule_descendant_then_atom
+            .push(RuleDescendantThenAtom(arg0, result));
     }
 
-    /// Evaluates `rule_child_match_case_list(arg0)`.
+    /// Evaluates `rule_descendant_match_case(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_match_case_list(&self, mut arg0: MatchCaseListNode) -> Option<RuleChildNode> {
+    pub fn rule_descendant_match_case(
+        &self,
+        mut arg0: MatchCaseNode,
+    ) -> Option<RuleDescendantNode> {
+        arg0 = self.root_match_case_node(arg0);
+        self.rule_descendant_match_case
+            .iter_all_0(arg0)
+            .next()
+            .map(|t| t.1)
+    }
+    /// Enforces that `rule_descendant_match_case(arg0)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_rule_descendant_match_case(
+        &mut self,
+        mut arg0: MatchCaseNode,
+    ) -> RuleDescendantNode {
+        arg0 = self.root_match_case_node(arg0);
+        if let Some(t) = self.rule_descendant_match_case.iter_all_0(arg0).next() {
+            return t.1;
+        }
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_match_case(arg0, result);
+        result
+    }
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_match_case` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_rule_descendant_match_case(
+        &self,
+    ) -> impl '_ + Iterator<Item = (MatchCaseNode, RuleDescendantNode)> {
+        self.rule_descendant_match_case
+            .iter_all()
+            .map(|t| (t.0, t.1))
+    }
+    /// Makes the equation `rule_descendant_match_case(arg0) = result` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_rule_descendant_match_case(
+        &mut self,
+        arg0: MatchCaseNode,
+        result: RuleDescendantNode,
+    ) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_rule_descendant_match_case
+            .push(RuleDescendantMatchCase(arg0, result));
+    }
+
+    /// Evaluates `rule_descendant_match_case_list(arg0)`.
+    #[allow(dead_code)]
+    pub fn rule_descendant_match_case_list(
+        &self,
+        mut arg0: MatchCaseListNode,
+    ) -> Option<RuleDescendantNode> {
         arg0 = self.root_match_case_list_node(arg0);
-        self.rule_child_match_case_list
+        self.rule_descendant_match_case_list
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_match_case_list(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_match_case_list(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_match_case_list(
+    pub fn define_rule_descendant_match_case_list(
         &mut self,
         mut arg0: MatchCaseListNode,
-    ) -> RuleChildNode {
+    ) -> RuleDescendantNode {
         arg0 = self.root_match_case_list_node(arg0);
-        if let Some(t) = self.rule_child_match_case_list.iter_all_0(arg0).next() {
+        if let Some(t) = self.rule_descendant_match_case_list.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_match_case_list(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_match_case_list(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_match_case_list` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_match_case_list` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_match_case_list(
+    pub fn iter_rule_descendant_match_case_list(
         &self,
-    ) -> impl '_ + Iterator<Item = (MatchCaseListNode, RuleChildNode)> {
-        self.rule_child_match_case_list
+    ) -> impl '_ + Iterator<Item = (MatchCaseListNode, RuleDescendantNode)> {
+        self.rule_descendant_match_case_list
             .iter_all()
             .map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_match_case_list(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_match_case_list(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_match_case_list(
+    pub fn insert_rule_descendant_match_case_list(
         &mut self,
         arg0: MatchCaseListNode,
-        result: RuleChildNode,
+        result: RuleDescendantNode,
     ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_match_case_list
-            .push(RuleChildMatchCaseList(arg0, result));
+            .new_rule_descendant_match_case_list
+            .push(RuleDescendantMatchCaseList(arg0, result));
     }
 
-    /// Evaluates `rule_child_stmt(arg0)`.
+    /// Evaluates `rule_descendant_stmt(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_stmt(&self, mut arg0: StmtNode) -> Option<RuleChildNode> {
+    pub fn rule_descendant_stmt(&self, mut arg0: StmtNode) -> Option<RuleDescendantNode> {
         arg0 = self.root_stmt_node(arg0);
-        self.rule_child_stmt.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Enforces that `rule_child_stmt(arg0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_rule_child_stmt(&mut self, mut arg0: StmtNode) -> RuleChildNode {
-        arg0 = self.root_stmt_node(arg0);
-        if let Some(t) = self.rule_child_stmt.iter_all_0(arg0).next() {
-            return t.1;
-        }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_stmt(arg0, result);
-        result
-    }
-    /// Returns an iterator over tuples in the graph of the `rule_child_stmt` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_rule_child_stmt(&self) -> impl '_ + Iterator<Item = (StmtNode, RuleChildNode)> {
-        self.rule_child_stmt.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `rule_child_stmt(arg0) = result` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_rule_child_stmt(&mut self, arg0: StmtNode, result: RuleChildNode) {
-        self.delta
-            .as_mut()
-            .unwrap()
-            .new_rule_child_stmt
-            .push(RuleChildStmt(arg0, result));
-    }
-
-    /// Evaluates `rule_child_stmt_list(arg0)`.
-    #[allow(dead_code)]
-    pub fn rule_child_stmt_list(&self, mut arg0: StmtListNode) -> Option<RuleChildNode> {
-        arg0 = self.root_stmt_list_node(arg0);
-        self.rule_child_stmt_list
+        self.rule_descendant_stmt
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_stmt_list(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_stmt(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_stmt_list(&mut self, mut arg0: StmtListNode) -> RuleChildNode {
-        arg0 = self.root_stmt_list_node(arg0);
-        if let Some(t) = self.rule_child_stmt_list.iter_all_0(arg0).next() {
+    pub fn define_rule_descendant_stmt(&mut self, mut arg0: StmtNode) -> RuleDescendantNode {
+        arg0 = self.root_stmt_node(arg0);
+        if let Some(t) = self.rule_descendant_stmt.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_stmt_list(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_stmt(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_stmt_list` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_stmt` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_stmt_list(
+    pub fn iter_rule_descendant_stmt(
         &self,
-    ) -> impl '_ + Iterator<Item = (StmtListNode, RuleChildNode)> {
-        self.rule_child_stmt_list.iter_all().map(|t| (t.0, t.1))
+    ) -> impl '_ + Iterator<Item = (StmtNode, RuleDescendantNode)> {
+        self.rule_descendant_stmt.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_stmt_list(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_stmt(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_stmt_list(&mut self, arg0: StmtListNode, result: RuleChildNode) {
+    pub fn insert_rule_descendant_stmt(&mut self, arg0: StmtNode, result: RuleDescendantNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_stmt_list
-            .push(RuleChildStmtList(arg0, result));
+            .new_rule_descendant_stmt
+            .push(RuleDescendantStmt(arg0, result));
     }
 
-    /// Evaluates `rule_child_stmt_block_list(arg0)`.
+    /// Evaluates `rule_descendant_stmt_list(arg0)`.
     #[allow(dead_code)]
-    pub fn rule_child_stmt_block_list(&self, mut arg0: StmtBlockListNode) -> Option<RuleChildNode> {
-        arg0 = self.root_stmt_block_list_node(arg0);
-        self.rule_child_stmt_block_list
+    pub fn rule_descendant_stmt_list(&self, mut arg0: StmtListNode) -> Option<RuleDescendantNode> {
+        arg0 = self.root_stmt_list_node(arg0);
+        self.rule_descendant_stmt_list
             .iter_all_0(arg0)
             .next()
             .map(|t| t.1)
     }
-    /// Enforces that `rule_child_stmt_block_list(arg0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `rule_descendant_stmt_list(arg0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_rule_child_stmt_block_list(
+    pub fn define_rule_descendant_stmt_list(
         &mut self,
-        mut arg0: StmtBlockListNode,
-    ) -> RuleChildNode {
-        arg0 = self.root_stmt_block_list_node(arg0);
-        if let Some(t) = self.rule_child_stmt_block_list.iter_all_0(arg0).next() {
+        mut arg0: StmtListNode,
+    ) -> RuleDescendantNode {
+        arg0 = self.root_stmt_list_node(arg0);
+        if let Some(t) = self.rule_descendant_stmt_list.iter_all_0(arg0).next() {
             return t.1;
         }
-        let result = self.new_rule_child_node();
-        self.insert_rule_child_stmt_block_list(arg0, result);
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_stmt_list(arg0, result);
         result
     }
-    /// Returns an iterator over tuples in the graph of the `rule_child_stmt_block_list` function.
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_stmt_list` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child_stmt_block_list(
+    pub fn iter_rule_descendant_stmt_list(
         &self,
-    ) -> impl '_ + Iterator<Item = (StmtBlockListNode, RuleChildNode)> {
-        self.rule_child_stmt_block_list
+    ) -> impl '_ + Iterator<Item = (StmtListNode, RuleDescendantNode)> {
+        self.rule_descendant_stmt_list
             .iter_all()
             .map(|t| (t.0, t.1))
     }
-    /// Makes the equation `rule_child_stmt_block_list(arg0) = result` hold.
+    /// Makes the equation `rule_descendant_stmt_list(arg0) = result` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child_stmt_block_list(
+    pub fn insert_rule_descendant_stmt_list(
         &mut self,
-        arg0: StmtBlockListNode,
-        result: RuleChildNode,
+        arg0: StmtListNode,
+        result: RuleDescendantNode,
     ) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child_stmt_block_list
-            .push(RuleChildStmtBlockList(arg0, result));
+            .new_rule_descendant_stmt_list
+            .push(RuleDescendantStmtList(arg0, result));
+    }
+
+    /// Evaluates `rule_descendant_stmt_block_list(arg0)`.
+    #[allow(dead_code)]
+    pub fn rule_descendant_stmt_block_list(
+        &self,
+        mut arg0: StmtBlockListNode,
+    ) -> Option<RuleDescendantNode> {
+        arg0 = self.root_stmt_block_list_node(arg0);
+        self.rule_descendant_stmt_block_list
+            .iter_all_0(arg0)
+            .next()
+            .map(|t| t.1)
+    }
+    /// Enforces that `rule_descendant_stmt_block_list(arg0)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_rule_descendant_stmt_block_list(
+        &mut self,
+        mut arg0: StmtBlockListNode,
+    ) -> RuleDescendantNode {
+        arg0 = self.root_stmt_block_list_node(arg0);
+        if let Some(t) = self.rule_descendant_stmt_block_list.iter_all_0(arg0).next() {
+            return t.1;
+        }
+        let result = self.new_rule_descendant_node();
+        self.insert_rule_descendant_stmt_block_list(arg0, result);
+        result
+    }
+    /// Returns an iterator over tuples in the graph of the `rule_descendant_stmt_block_list` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_rule_descendant_stmt_block_list(
+        &self,
+    ) -> impl '_ + Iterator<Item = (StmtBlockListNode, RuleDescendantNode)> {
+        self.rule_descendant_stmt_block_list
+            .iter_all()
+            .map(|t| (t.0, t.1))
+    }
+    /// Makes the equation `rule_descendant_stmt_block_list(arg0) = result` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_rule_descendant_stmt_block_list(
+        &mut self,
+        arg0: StmtBlockListNode,
+        result: RuleDescendantNode,
+    ) {
+        self.delta
+            .as_mut()
+            .unwrap()
+            .new_rule_descendant_stmt_block_list
+            .push(RuleDescendantStmtBlockList(arg0, result));
     }
 
     /// Evaluates `ctor_enum(arg0)`.
@@ -54985,28 +55105,30 @@ impl Eqlog {
             .push(DeclsModuleNode(arg0, arg1));
     }
 
-    /// Returns `true` if `rule_child(arg0, arg1)` holds.
+    /// Returns `true` if `rule_descendant(arg0, arg1)` holds.
     #[allow(dead_code)]
-    pub fn rule_child(&self, mut arg0: RuleChildNode, mut arg1: RuleDeclNode) -> bool {
-        arg0 = self.root_rule_child_node(arg0);
+    pub fn rule_descendant(&self, mut arg0: RuleDescendantNode, mut arg1: RuleDeclNode) -> bool {
+        arg0 = self.root_rule_descendant_node(arg0);
         arg1 = self.root_rule_decl_node(arg1);
-        self.rule_child.contains(RuleChild(arg0, arg1))
+        self.rule_descendant.contains(RuleDescendant(arg0, arg1))
     }
-    /// Returns an iterator over tuples of elements satisfying the `rule_child` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `rule_descendant` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_rule_child(&self) -> impl '_ + Iterator<Item = (RuleChildNode, RuleDeclNode)> {
-        self.rule_child.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_rule_descendant(
+        &self,
+    ) -> impl '_ + Iterator<Item = (RuleDescendantNode, RuleDeclNode)> {
+        self.rule_descendant.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes `rule_child(arg0, arg1)` hold.
+    /// Makes `rule_descendant(arg0, arg1)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_rule_child(&mut self, arg0: RuleChildNode, arg1: RuleDeclNode) {
+    pub fn insert_rule_descendant(&mut self, arg0: RuleDescendantNode, arg1: RuleDeclNode) {
         self.delta
             .as_mut()
             .unwrap()
-            .new_rule_child
-            .push(RuleChild(arg0, arg1));
+            .new_rule_descendant
+            .push(RuleDescendant(arg0, arg1));
     }
 
     /// Returns `true` if `pred_app(arg0, arg1)` holds.
@@ -56709,7 +56831,7 @@ impl Eqlog {
             || self.nil_decl_list_node.is_dirty()
             || self.cons_decl_list_node.is_dirty()
             || self.decls_module_node.is_dirty()
-            || self.rule_child.is_dirty()
+            || self.rule_descendant.is_dirty()
             || self.pred_app.is_dirty()
             || self.el_type.is_dirty()
             || self.el_types.is_dirty()
@@ -56797,16 +56919,16 @@ impl Eqlog {
             || self.decl_node_loc.is_dirty()
             || self.decl_list_node_loc.is_dirty()
             || self.module_node_loc.is_dirty()
-            || self.rule_child_term.is_dirty()
-            || self.rule_child_term_list.is_dirty()
-            || self.rule_child_opt_term.is_dirty()
-            || self.rule_child_if_atom.is_dirty()
-            || self.rule_child_then_atom.is_dirty()
-            || self.rule_child_match_case.is_dirty()
-            || self.rule_child_match_case_list.is_dirty()
-            || self.rule_child_stmt.is_dirty()
-            || self.rule_child_stmt_list.is_dirty()
-            || self.rule_child_stmt_block_list.is_dirty()
+            || self.rule_descendant_term.is_dirty()
+            || self.rule_descendant_term_list.is_dirty()
+            || self.rule_descendant_opt_term.is_dirty()
+            || self.rule_descendant_if_atom.is_dirty()
+            || self.rule_descendant_then_atom.is_dirty()
+            || self.rule_descendant_match_case.is_dirty()
+            || self.rule_descendant_match_case_list.is_dirty()
+            || self.rule_descendant_stmt.is_dirty()
+            || self.rule_descendant_stmt_list.is_dirty()
+            || self.rule_descendant_stmt_block_list.is_dirty()
             || self.ctor_enum.is_dirty()
             || self.ctors_enum.is_dirty()
             || self.cases_match_stmt.is_dirty()
@@ -56881,7 +57003,7 @@ impl Eqlog {
             || !self.decl_list_node_dirty.is_empty()
             || !self.module_node_dirty.is_empty()
             || !self.loc_dirty.is_empty()
-            || !self.rule_child_node_dirty.is_empty()
+            || !self.rule_descendant_node_dirty.is_empty()
             || !self.type_dirty.is_empty()
             || !self.type_list_dirty.is_empty()
             || !self.pred_dirty.is_empty()
@@ -57202,142 +57324,204 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_22(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_22(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_term(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_term(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildTerm(tm0, tm1) in self.rule_child_term.iter_all() {
+        for RuleDescendantTerm(tm0, tm1) in self.rule_descendant_term.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
+            for RuleDescendantTerm(_, tm2) in self.rule_descendant_term.iter_all_0(tm0) {
                 self.record_action_22(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_23(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_23(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_term_list(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_term_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildTermList(tm0, tm1) in self.rule_child_term_list.iter_all() {
+        for RuleDescendantTermList(tm0, tm1) in self.rule_descendant_term_list.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildTermList(_, tm2) in self.rule_child_term_list.iter_all_0(tm0) {
+            for RuleDescendantTermList(_, tm2) in self.rule_descendant_term_list.iter_all_0(tm0) {
                 self.record_action_23(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_24(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_24(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_opt_term(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_opt_term(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildOptTerm(tm0, tm1) in self.rule_child_opt_term.iter_all() {
+        for RuleDescendantOptTerm(tm0, tm1) in self.rule_descendant_opt_term.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
+            for RuleDescendantOptTerm(_, tm2) in self.rule_descendant_opt_term.iter_all_0(tm0) {
                 self.record_action_24(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_25(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_25(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_if_atom(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_if_atom(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildIfAtom(tm0, tm1) in self.rule_child_if_atom.iter_all() {
+        for RuleDescendantIfAtom(tm0, tm1) in self.rule_descendant_if_atom.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
+            for RuleDescendantIfAtom(_, tm2) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                 self.record_action_25(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_26(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_26(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_then_atom(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_then_atom(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildThenAtom(tm0, tm1) in self.rule_child_then_atom.iter_all() {
+        for RuleDescendantThenAtom(tm0, tm1) in self.rule_descendant_then_atom.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildThenAtom(_, tm2) in self.rule_child_then_atom.iter_all_0(tm0) {
+            for RuleDescendantThenAtom(_, tm2) in self.rule_descendant_then_atom.iter_all_0(tm0) {
                 self.record_action_26(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_27(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_27(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_match_case(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_match_case(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildMatchCase(tm0, tm1) in self.rule_child_match_case.iter_all() {
+        for RuleDescendantMatchCase(tm0, tm1) in self.rule_descendant_match_case.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildMatchCase(_, tm2) in self.rule_child_match_case.iter_all_0(tm0) {
+            for RuleDescendantMatchCase(_, tm2) in self.rule_descendant_match_case.iter_all_0(tm0) {
                 self.record_action_27(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_28(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_28(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_match_case_list(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_match_case_list(
+        &self,
+        delta: &mut ModelDelta,
+    ) {
         #[allow(unused_variables)]
-        for RuleChildMatchCaseList(tm0, tm1) in self.rule_child_match_case_list.iter_all() {
+        for RuleDescendantMatchCaseList(tm0, tm1) in self.rule_descendant_match_case_list.iter_all()
+        {
             #[allow(unused_variables)]
-            for RuleChildMatchCaseList(_, tm2) in self.rule_child_match_case_list.iter_all_0(tm0) {
+            for RuleDescendantMatchCaseList(_, tm2) in
+                self.rule_descendant_match_case_list.iter_all_0(tm0)
+            {
                 self.record_action_28(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_29(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_29(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_stmt(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_stmt(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildStmt(tm0, tm1) in self.rule_child_stmt.iter_all() {
+        for RuleDescendantStmt(tm0, tm1) in self.rule_descendant_stmt.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+            for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                 self.record_action_29(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_30(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_30(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_stmt_list(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_stmt_list(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
-        for RuleChildStmtList(tm0, tm1) in self.rule_child_stmt_list.iter_all() {
+        for RuleDescendantStmtList(tm0, tm1) in self.rule_descendant_stmt_list.iter_all() {
             #[allow(unused_variables)]
-            for RuleChildStmtList(_, tm2) in self.rule_child_stmt_list.iter_all_0(tm0) {
+            for RuleDescendantStmtList(_, tm2) in self.rule_descendant_stmt_list.iter_all_0(tm0) {
                 self.record_action_30(delta, tm1, tm2);
             }
         }
     }
-    fn record_action_31(&self, delta: &mut ModelDelta, tm1: RuleChildNode, tm2: RuleChildNode) {
+    fn record_action_31(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
         if tm1 != tm2 {
-            delta.new_rule_child_node_equalities.push((tm1, tm2));
+            delta.new_rule_descendant_node_equalities.push((tm1, tm2));
         }
     }
-    fn query_and_record_functionality_rule_child_stmt_block_list(&self, delta: &mut ModelDelta) {
+    fn query_and_record_functionality_rule_descendant_stmt_block_list(
+        &self,
+        delta: &mut ModelDelta,
+    ) {
         #[allow(unused_variables)]
-        for RuleChildStmtBlockList(tm0, tm1) in self.rule_child_stmt_block_list.iter_all() {
+        for RuleDescendantStmtBlockList(tm0, tm1) in self.rule_descendant_stmt_block_list.iter_all()
+        {
             #[allow(unused_variables)]
-            for RuleChildStmtBlockList(_, tm2) in self.rule_child_stmt_block_list.iter_all_0(tm0) {
+            for RuleDescendantStmtBlockList(_, tm2) in
+                self.rule_descendant_stmt_block_list.iter_all_0(tm0)
+            {
                 self.record_action_31(delta, tm1, tm2);
             }
         }
@@ -58082,220 +58266,226 @@ impl Eqlog {
         }
     }
     fn record_action_83(&self, delta: &mut ModelDelta, tm0: TermNode) {
-        let existing_row = self.rule_child_term.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_term.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildTerm(_, tm1)) => (tm1,),
+            Some(RuleDescendantTerm(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
-                delta.new_rule_child_term.push(RuleChildTerm(tm0, tm1));
+                let tm1 = delta.new_rule_descendant_node(self);
+                delta
+                    .new_rule_descendant_term
+                    .push(RuleDescendantTerm(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_term_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_term_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_node_dirty.iter().copied() {
             self.record_action_83(delta, tm0);
         }
     }
     fn record_action_84(&self, delta: &mut ModelDelta, tm0: TermListNode) {
-        let existing_row = self.rule_child_term_list.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_term_list.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildTermList(_, tm1)) => (tm1,),
+            Some(RuleDescendantTermList(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_term_list
-                    .push(RuleChildTermList(tm0, tm1));
+                    .new_rule_descendant_term_list
+                    .push(RuleDescendantTermList(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_term_list_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_term_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.term_list_node_dirty.iter().copied() {
             self.record_action_84(delta, tm0);
         }
     }
     fn record_action_85(&self, delta: &mut ModelDelta, tm0: OptTermNode) {
-        let existing_row = self.rule_child_opt_term.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_opt_term.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildOptTerm(_, tm1)) => (tm1,),
+            Some(RuleDescendantOptTerm(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_opt_term
-                    .push(RuleChildOptTerm(tm0, tm1));
+                    .new_rule_descendant_opt_term
+                    .push(RuleDescendantOptTerm(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_opt_term_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_opt_term_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.opt_term_node_dirty.iter().copied() {
             self.record_action_85(delta, tm0);
         }
     }
     fn record_action_86(&self, delta: &mut ModelDelta, tm0: IfAtomNode) {
-        let existing_row = self.rule_child_if_atom.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_if_atom.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildIfAtom(_, tm1)) => (tm1,),
+            Some(RuleDescendantIfAtom(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
-                delta.new_rule_child_if_atom.push(RuleChildIfAtom(tm0, tm1));
+                let tm1 = delta.new_rule_descendant_node(self);
+                delta
+                    .new_rule_descendant_if_atom
+                    .push(RuleDescendantIfAtom(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_if_atom_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_if_atom_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.if_atom_node_dirty.iter().copied() {
             self.record_action_86(delta, tm0);
         }
     }
     fn record_action_87(&self, delta: &mut ModelDelta, tm0: ThenAtomNode) {
-        let existing_row = self.rule_child_then_atom.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_then_atom.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildThenAtom(_, tm1)) => (tm1,),
+            Some(RuleDescendantThenAtom(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_then_atom
-                    .push(RuleChildThenAtom(tm0, tm1));
+                    .new_rule_descendant_then_atom
+                    .push(RuleDescendantThenAtom(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_then_atom_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_then_atom_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.then_atom_node_dirty.iter().copied() {
             self.record_action_87(delta, tm0);
         }
     }
     fn record_action_88(&self, delta: &mut ModelDelta, tm0: MatchCaseNode) {
-        let existing_row = self.rule_child_match_case.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_match_case.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildMatchCase(_, tm1)) => (tm1,),
+            Some(RuleDescendantMatchCase(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_match_case
-                    .push(RuleChildMatchCase(tm0, tm1));
+                    .new_rule_descendant_match_case
+                    .push(RuleDescendantMatchCase(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_match_case_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_match_case_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.match_case_node_dirty.iter().copied() {
             self.record_action_88(delta, tm0);
         }
     }
     fn record_action_89(&self, delta: &mut ModelDelta, tm0: MatchCaseListNode) {
-        let existing_row = self.rule_child_match_case_list.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_match_case_list.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildMatchCaseList(_, tm1)) => (tm1,),
+            Some(RuleDescendantMatchCaseList(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_match_case_list
-                    .push(RuleChildMatchCaseList(tm0, tm1));
+                    .new_rule_descendant_match_case_list
+                    .push(RuleDescendantMatchCaseList(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_match_case_list_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_match_case_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.match_case_list_node_dirty.iter().copied() {
             self.record_action_89(delta, tm0);
         }
     }
     fn record_action_90(&self, delta: &mut ModelDelta, tm0: StmtNode) {
-        let existing_row = self.rule_child_stmt.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_stmt.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildStmt(_, tm1)) => (tm1,),
+            Some(RuleDescendantStmt(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
-                delta.new_rule_child_stmt.push(RuleChildStmt(tm0, tm1));
+                let tm1 = delta.new_rule_descendant_node(self);
+                delta
+                    .new_rule_descendant_stmt
+                    .push(RuleDescendantStmt(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_stmt_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_node_dirty.iter().copied() {
             self.record_action_90(delta, tm0);
         }
     }
     fn record_action_91(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
-        let existing_row = self.rule_child_stmt_list.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_stmt_list.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildStmtList(_, tm1)) => (tm1,),
+            Some(RuleDescendantStmtList(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_stmt_list
-                    .push(RuleChildStmtList(tm0, tm1));
+                    .new_rule_descendant_stmt_list
+                    .push(RuleDescendantStmtList(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_stmt_list_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_list_node_dirty.iter().copied() {
             self.record_action_91(delta, tm0);
         }
     }
     fn record_action_92(&self, delta: &mut ModelDelta, tm0: StmtBlockListNode) {
-        let existing_row = self.rule_child_stmt_block_list.iter_all_0(tm0).next();
+        let existing_row = self.rule_descendant_stmt_block_list.iter_all_0(tm0).next();
         #[allow(unused_variables)]
         let (tm1,) = match existing_row {
-            Some(RuleChildStmtBlockList(_, tm1)) => (tm1,),
+            Some(RuleDescendantStmtBlockList(_, tm1)) => (tm1,),
             None => {
-                let tm1 = delta.new_rule_child_node(self);
+                let tm1 = delta.new_rule_descendant_node(self);
                 delta
-                    .new_rule_child_stmt_block_list
-                    .push(RuleChildStmtBlockList(tm0, tm1));
+                    .new_rule_descendant_stmt_block_list
+                    .push(RuleDescendantStmtBlockList(tm0, tm1));
                 (tm1,)
             }
         };
     }
-    fn query_and_record_rule_child_stmt_block_list_total(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_block_list_total(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for tm0 in self.stmt_block_list_node_dirty.iter().copied() {
             self.record_action_92(delta, tm0);
         }
     }
-    fn record_action_93(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm2: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm2, tm0).next();
+    fn record_action_93(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm2: RuleDescendantNode) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm2, tm0).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm2, tm0));
+                delta.new_rule_descendant.push(RuleDescendant(tm2, tm0));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_rule_decl(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_rule_decl(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmtList(_, tm2) in self.rule_child_stmt_list.iter_all_0(tm1) {
+            for RuleDescendantStmtList(_, tm2) in self.rule_descendant_stmt_list.iter_all_0(tm1) {
                 self.record_action_93(delta, tm0, tm2);
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtList(tm1, tm2) in self.rule_child_stmt_list.iter_dirty() {
+        for RuleDescendantStmtList(tm1, tm2) in self.rule_descendant_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
             for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
                 self.record_action_93(delta, tm0, tm2);
@@ -58306,39 +58496,41 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_stmts_cons(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmts_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtListNode(tm0, tm1, tm2) in self.cons_stmt_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+            for RuleDescendantStmtList(_, tm6) in self.rule_descendant_stmt_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                for RuleDescendantStmt(_, tm5) in self.rule_descendant_stmt.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
+                    for RuleDescendantStmtList(_, tm3) in
+                        self.rule_descendant_stmt_list.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_94(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58346,15 +58538,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmtList(tm0, _) in self.rule_child_stmt_list.iter_all_1(tm3) {
+            for RuleDescendantStmtList(tm0, _) in self.rule_descendant_stmt_list.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                    for RuleDescendantStmtList(_, tm6) in
+                        self.rule_descendant_stmt_list.iter_all_0(tm2)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                        for RuleDescendantStmt(_, tm5) in self.rule_descendant_stmt.iter_all_0(tm1)
+                        {
                             self.record_action_94(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58362,15 +58557,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmt(tm1, tm5) in self.rule_child_stmt.iter_dirty() {
+        for RuleDescendantStmt(tm1, tm5) in self.rule_descendant_stmt.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
+                for RuleDescendantStmtList(_, tm3) in self.rule_descendant_stmt_list.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                        for RuleDescendantStmtList(_, tm6) in
+                            self.rule_descendant_stmt_list.iter_all_0(tm2)
+                        {
                             self.record_action_94(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58378,15 +58576,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtList(tm2, tm6) in self.rule_child_stmt_list.iter_dirty() {
+        for RuleDescendantStmtList(tm2, tm6) in self.rule_descendant_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, tm1, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                for RuleDescendantStmt(_, tm5) in self.rule_descendant_stmt.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm3) in self.rule_child_stmt_list.iter_all_0(tm0) {
+                    for RuleDescendantStmtList(_, tm3) in
+                        self.rule_descendant_stmt_list.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_94(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58394,15 +58594,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtList(tm0, tm3) in self.rule_child_stmt_list.iter_dirty() {
+        for RuleDescendantStmtList(tm0, tm3) in self.rule_descendant_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                    for RuleDescendantStmtList(_, tm6) in
+                        self.rule_descendant_stmt_list.iter_all_0(tm2)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildStmt(_, tm5) in self.rule_child_stmt.iter_all_0(tm1) {
+                        for RuleDescendantStmt(_, tm5) in self.rule_descendant_stmt.iter_all_0(tm1)
+                        {
                             self.record_action_94(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58414,41 +58617,44 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_stmt_blocks_cons(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_blocks_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsStmtBlockListNode(tm0, tm1, tm2) in self.cons_stmt_block_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmtBlockList(_, tm6) in self.rule_child_stmt_block_list.iter_all_0(tm2) {
+            for RuleDescendantStmtBlockList(_, tm6) in
+                self.rule_descendant_stmt_block_list.iter_all_0(tm2)
+            {
                 #[allow(unused_variables)]
-                for RuleChildStmtList(_, tm5) in self.rule_child_stmt_list.iter_all_0(tm1) {
+                for RuleDescendantStmtList(_, tm5) in self.rule_descendant_stmt_list.iter_all_0(tm1)
+                {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm3) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm0)
+                    for RuleDescendantStmtBlockList(_, tm3) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm0)
                     {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_95(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58456,39 +58662,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmtBlockList(tm0, _) in self.rule_child_stmt_block_list.iter_all_1(tm3) {
+            for RuleDescendantStmtBlockList(tm0, _) in
+                self.rule_descendant_stmt_block_list.iter_all_1(tm3)
+            {
                 #[allow(unused_variables)]
                 for ConsStmtBlockListNode(_, tm1, tm2) in
                     self.cons_stmt_block_list_node.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm6) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm2)
+                    for RuleDescendantStmtBlockList(_, tm6) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm2)
                     {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, tm5) in self.rule_child_stmt_list.iter_all_0(tm1) {
-                            self.record_action_95(delta, tm4, tm5, tm6);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for RuleChildStmtList(tm1, tm5) in self.rule_child_stmt_list.iter_dirty() {
-            #[allow(unused_variables)]
-            for ConsStmtBlockListNode(tm0, _, tm2) in self.cons_stmt_block_list_node.iter_all_1(tm1)
-            {
-                #[allow(unused_variables)]
-                for RuleChildStmtBlockList(_, tm3) in
-                    self.rule_child_stmt_block_list.iter_all_0(tm0)
-                {
-                    #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        #[allow(unused_variables)]
-                        for RuleChildStmtBlockList(_, tm6) in
-                            self.rule_child_stmt_block_list.iter_all_0(tm2)
+                        for RuleDescendantStmtList(_, tm5) in
+                            self.rule_descendant_stmt_list.iter_all_0(tm1)
                         {
                             self.record_action_95(delta, tm4, tm5, tm6);
                         }
@@ -58497,18 +58686,20 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtBlockList(tm2, tm6) in self.rule_child_stmt_block_list.iter_dirty() {
+        for RuleDescendantStmtList(tm1, tm5) in self.rule_descendant_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
-            for ConsStmtBlockListNode(tm0, tm1, _) in self.cons_stmt_block_list_node.iter_all_2(tm2)
+            for ConsStmtBlockListNode(tm0, _, tm2) in self.cons_stmt_block_list_node.iter_all_1(tm1)
             {
                 #[allow(unused_variables)]
-                for RuleChildStmtList(_, tm5) in self.rule_child_stmt_list.iter_all_0(tm1) {
+                for RuleDescendantStmtBlockList(_, tm3) in
+                    self.rule_descendant_stmt_block_list.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm3) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm0)
-                    {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendantStmtBlockList(_, tm6) in
+                            self.rule_descendant_stmt_block_list.iter_all_0(tm2)
+                        {
                             self.record_action_95(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58516,19 +58707,45 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtBlockList(tm0, tm3) in self.rule_child_stmt_block_list.iter_dirty() {
+        for RuleDescendantStmtBlockList(tm2, tm6) in
+            self.rule_descendant_stmt_block_list.iter_dirty()
+        {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for ConsStmtBlockListNode(tm0, tm1, _) in self.cons_stmt_block_list_node.iter_all_2(tm2)
+            {
+                #[allow(unused_variables)]
+                for RuleDescendantStmtList(_, tm5) in self.rule_descendant_stmt_list.iter_all_0(tm1)
+                {
+                    #[allow(unused_variables)]
+                    for RuleDescendantStmtBlockList(_, tm3) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm0)
+                    {
+                        #[allow(unused_variables)]
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
+                            self.record_action_95(delta, tm4, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for RuleDescendantStmtBlockList(tm0, tm3) in
+            self.rule_descendant_stmt_block_list.iter_dirty()
+        {
+            #[allow(unused_variables)]
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for ConsStmtBlockListNode(_, tm1, tm2) in
                     self.cons_stmt_block_list_node.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm6) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm2)
+                    for RuleDescendantStmtBlockList(_, tm6) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm2)
                     {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, tm5) in self.rule_child_stmt_list.iter_all_0(tm1) {
+                        for RuleDescendantStmtList(_, tm5) in
+                            self.rule_descendant_stmt_list.iter_all_0(tm1)
+                        {
                             self.record_action_95(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58536,157 +58753,163 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_96(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
+    fn record_action_96(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleDescendantNode) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm4, tm3));
+                delta.new_rule_descendant.push(RuleDescendant(tm4, tm3));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_stmt_if(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_if(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for IfStmtNode(tm0, tm1) in self.if_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
+            for RuleDescendantIfAtom(_, tm4) in self.rule_descendant_if_atom.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+                for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_96(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm2, tm3) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm2) {
+            for RuleDescendantStmt(tm0, _) in self.rule_descendant_stmt.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
+                    for RuleDescendantIfAtom(_, tm4) in self.rule_descendant_if_atom.iter_all_0(tm1)
+                    {
                         self.record_action_96(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildIfAtom(tm1, tm4) in self.rule_child_if_atom.iter_dirty() {
+        for RuleDescendantIfAtom(tm1, tm4) in self.rule_descendant_if_atom.iter_dirty() {
             #[allow(unused_variables)]
             for IfStmtNode(tm0, _) in self.if_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+                for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_96(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmt(tm0, tm2) in self.rule_child_stmt.iter_dirty() {
+        for RuleDescendantStmt(tm0, tm2) in self.rule_descendant_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+            for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, tm4) in self.rule_child_if_atom.iter_all_0(tm1) {
+                    for RuleDescendantIfAtom(_, tm4) in self.rule_descendant_if_atom.iter_all_0(tm1)
+                    {
                         self.record_action_96(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_97(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
+    fn record_action_97(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleDescendantNode) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm4, tm3));
+                delta.new_rule_descendant.push(RuleDescendant(tm4, tm3));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_stmt_then(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_then(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ThenStmtNode(tm0, tm1) in self.then_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
+            for RuleDescendantThenAtom(_, tm4) in self.rule_descendant_then_atom.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+                for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_97(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm2, tm3) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm2) {
+            for RuleDescendantStmt(tm0, _) in self.rule_descendant_stmt.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
+                    for RuleDescendantThenAtom(_, tm4) in
+                        self.rule_descendant_then_atom.iter_all_0(tm1)
+                    {
                         self.record_action_97(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildThenAtom(tm1, tm4) in self.rule_child_then_atom.iter_dirty() {
+        for RuleDescendantThenAtom(tm1, tm4) in self.rule_descendant_then_atom.iter_dirty() {
             #[allow(unused_variables)]
             for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+                for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_97(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmt(tm0, tm2) in self.rule_child_stmt.iter_dirty() {
+        for RuleDescendantStmt(tm0, tm2) in self.rule_descendant_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+            for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, tm4) in self.rule_child_then_atom.iter_all_0(tm1) {
+                    for RuleDescendantThenAtom(_, tm4) in
+                        self.rule_descendant_then_atom.iter_all_0(tm1)
+                    {
                         self.record_action_97(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_98(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
+    fn record_action_98(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleDescendantNode) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm4, tm3));
+                delta.new_rule_descendant.push(RuleDescendant(tm4, tm3));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_stmt_branch(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_branch(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for BranchStmtNode(tm0, tm1) in self.branch_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+            for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm4) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm1)
+                    for RuleDescendantStmtBlockList(_, tm4) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm1)
                     {
                         self.record_action_98(delta, tm3, tm4);
                     }
@@ -58694,14 +58917,14 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm2, tm3) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm2) {
+            for RuleDescendantStmt(tm0, _) in self.rule_descendant_stmt.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm4) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm1)
+                    for RuleDescendantStmtBlockList(_, tm4) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm1)
                     {
                         self.record_action_98(delta, tm3, tm4);
                     }
@@ -58709,14 +58932,14 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmt(tm0, tm2) in self.rule_child_stmt.iter_dirty() {
+        for RuleDescendantStmt(tm0, tm2) in self.rule_descendant_stmt.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+            for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtBlockList(_, tm4) in
-                        self.rule_child_stmt_block_list.iter_all_0(tm1)
+                    for RuleDescendantStmtBlockList(_, tm4) in
+                        self.rule_descendant_stmt_block_list.iter_all_0(tm1)
                     {
                         self.record_action_98(delta, tm3, tm4);
                     }
@@ -58724,13 +58947,15 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtBlockList(tm1, tm4) in self.rule_child_stmt_block_list.iter_dirty() {
+        for RuleDescendantStmtBlockList(tm1, tm4) in
+            self.rule_descendant_stmt_block_list.iter_dirty()
+        {
             #[allow(unused_variables)]
             for BranchStmtNode(tm0, _) in self.branch_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmt(_, tm2) in self.rule_child_stmt.iter_all_0(tm0) {
+                for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_98(delta, tm3, tm4);
                     }
                 }
@@ -58741,39 +58966,41 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_stmt_match(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_stmt_match(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MatchStmtNode(tm0, tm1, tm2) in self.match_stmt_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildMatchCaseList(_, tm6) in self.rule_child_match_case_list.iter_all_0(tm2) {
+            for RuleDescendantMatchCaseList(_, tm6) in
+                self.rule_descendant_match_case_list.iter_all_0(tm2)
+            {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, tm3) in self.rule_child_stmt.iter_all_0(tm0) {
+                    for RuleDescendantStmt(_, tm3) in self.rule_descendant_stmt.iter_all_0(tm0) {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_99(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58781,34 +59008,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildStmt(tm0, _) in self.rule_child_stmt.iter_all_1(tm3) {
+            for RuleDescendantStmt(tm0, _) in self.rule_descendant_stmt.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCaseList(_, tm6) in
-                        self.rule_child_match_case_list.iter_all_0(tm2)
+                    for RuleDescendantMatchCaseList(_, tm6) in
+                        self.rule_descendant_match_case_list.iter_all_0(tm2)
                     {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
-                            self.record_action_99(delta, tm4, tm5, tm6);
-                        }
-                    }
-                }
-            }
-        }
-        #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm5) in self.rule_child_term.iter_dirty() {
-            #[allow(unused_variables)]
-            for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
-                #[allow(unused_variables)]
-                for RuleChildStmt(_, tm3) in self.rule_child_stmt.iter_all_0(tm0) {
-                    #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
-                        #[allow(unused_variables)]
-                        for RuleChildMatchCaseList(_, tm6) in
-                            self.rule_child_match_case_list.iter_all_0(tm2)
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1)
                         {
                             self.record_action_99(delta, tm4, tm5, tm6);
                         }
@@ -58817,15 +59027,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildMatchCaseList(tm2, tm6) in self.rule_child_match_case_list.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
-            for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+            for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleDescendantStmt(_, tm3) in self.rule_descendant_stmt.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmt(_, tm3) in self.rule_child_stmt.iter_all_0(tm0) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendantMatchCaseList(_, tm6) in
+                            self.rule_descendant_match_case_list.iter_all_0(tm2)
+                        {
                             self.record_action_99(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58833,17 +59045,36 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmt(tm0, tm3) in self.rule_child_stmt.iter_dirty() {
+        for RuleDescendantMatchCaseList(tm2, tm6) in
+            self.rule_descendant_match_case_list.iter_dirty()
+        {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                #[allow(unused_variables)]
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for RuleDescendantStmt(_, tm3) in self.rule_descendant_stmt.iter_all_0(tm0) {
+                        #[allow(unused_variables)]
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
+                            self.record_action_99(delta, tm4, tm5, tm6);
+                        }
+                    }
+                }
+            }
+        }
+        #[allow(unused_variables)]
+        for RuleDescendantStmt(tm0, tm3) in self.rule_descendant_stmt.iter_dirty() {
+            #[allow(unused_variables)]
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCaseList(_, tm6) in
-                        self.rule_child_match_case_list.iter_all_0(tm2)
+                    for RuleDescendantMatchCaseList(_, tm6) in
+                        self.rule_descendant_match_case_list.iter_all_0(tm2)
                     {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_99(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58855,39 +59086,40 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_if_atom_equal(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_if_atom_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualIfAtomNode(tm0, tm1, tm2) in self.equal_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+            for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                    for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_100(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58895,15 +59127,16 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm3) {
+            for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2)
+                        {
                             self.record_action_100(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58911,15 +59144,16 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm2, tm5) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm2, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, tm1, _) in self.equal_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_100(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58927,15 +59161,16 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm6) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm6) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                    for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_100(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58943,15 +59178,16 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildIfAtom(tm0, tm3) in self.rule_child_if_atom.iter_dirty() {
+        for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2)
+                        {
                             self.record_action_100(delta, tm4, tm5, tm6);
                         }
                     }
@@ -58959,195 +59195,214 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_101(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
+    fn record_action_101(
+        &self,
+        delta: &mut ModelDelta,
+        tm3: RuleDeclNode,
+        tm4: RuleDescendantNode,
+    ) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm4, tm3));
+                delta.new_rule_descendant.push(RuleDescendant(tm4, tm3));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_if_atom_defined(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_if_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedIfAtomNode(tm0, tm1) in self.defined_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+            for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm2) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_101(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm2, tm3) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm2) {
+            for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
                         self.record_action_101(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm4) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedIfAtomNode(tm0, _) in self.defined_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm2) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm2) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_101(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildIfAtom(tm0, tm2) in self.rule_child_if_atom.iter_dirty() {
+        for RuleDescendantIfAtom(tm0, tm2) in self.rule_descendant_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+            for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
                         self.record_action_101(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_102(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+    fn record_action_102(
+        &self,
+        delta: &mut ModelDelta,
+        tm4: RuleDeclNode,
+        tm5: RuleDescendantNode,
+    ) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_if_atom_pred(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_if_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+            for RuleDescendantTermList(_, tm5) in self.rule_descendant_term_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_102(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm3) {
+            for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_102(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTermList(tm2, tm5) in self.rule_child_term_list.iter_dirty() {
+        for RuleDescendantTermList(tm2, tm5) in self.rule_descendant_term_list.iter_dirty() {
             #[allow(unused_variables)]
             for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_102(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildIfAtom(tm0, tm3) in self.rule_child_if_atom.iter_dirty() {
+        for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_102(delta, tm4, tm5);
                     }
                 }
             }
         }
     }
-    fn record_action_103(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+    fn record_action_103(
+        &self,
+        delta: &mut ModelDelta,
+        tm4: RuleDeclNode,
+        tm5: RuleDescendantNode,
+    ) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_if_atom_var(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_if_atom_var(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+            for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_103(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildIfAtom(tm0, _) in self.rule_child_if_atom.iter_all_1(tm3) {
+            for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                         self.record_action_103(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm5) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for VarIfAtomNode(tm0, _, tm2) in self.var_if_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildIfAtom(_, tm3) in self.rule_child_if_atom.iter_all_0(tm0) {
+                for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_103(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildIfAtom(tm0, tm3) in self.rule_child_if_atom.iter_dirty() {
+        for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                         self.record_action_103(delta, tm4, tm5);
                     }
                 }
@@ -59158,39 +59413,41 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_then_atom_equal(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_then_atom_equal(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for EqualThenAtomNode(tm0, tm1, tm2) in self.equal_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+            for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                    for RuleDescendantThenAtom(_, tm3) in
+                        self.rule_descendant_then_atom.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_104(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59198,15 +59455,16 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildThenAtom(tm0, _) in self.rule_child_then_atom.iter_all_1(tm3) {
+            for RuleDescendantThenAtom(tm0, _) in self.rule_descendant_then_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2)
+                        {
                             self.record_action_104(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59214,15 +59472,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm2, tm5) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm2, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, tm1, _) in self.equal_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_104(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59230,15 +59490,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm6) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm6) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                    for RuleDescendantThenAtom(_, tm3) in
+                        self.rule_descendant_then_atom.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_104(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59246,15 +59508,16 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildThenAtom(tm0, tm3) in self.rule_child_then_atom.iter_dirty() {
+        for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm6) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm6) in self.rule_descendant_term.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2)
+                        {
                             self.record_action_104(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59266,39 +59529,41 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_then_atom_defined(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_then_atom_defined(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for DefinedThenAtomNode(tm0, tm1, tm2) in self.defined_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+            for RuleDescendantOptTerm(_, tm6) in self.rule_descendant_opt_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                    for RuleDescendantThenAtom(_, tm3) in
+                        self.rule_descendant_then_atom.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_105(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59306,16 +59571,19 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildThenAtom(tm0, _) in self.rule_child_then_atom.iter_all_1(tm3) {
+            for RuleDescendantThenAtom(tm0, _) in self.rule_descendant_then_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+                    for RuleDescendantOptTerm(_, tm6) in
+                        self.rule_descendant_opt_term.iter_all_0(tm1)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2)
+                        {
                             self.record_action_105(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59323,15 +59591,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm2, tm5) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm2, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+                        for RuleDescendantOptTerm(_, tm6) in
+                            self.rule_descendant_opt_term.iter_all_0(tm1)
+                        {
                             self.record_action_105(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59339,15 +59610,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildOptTerm(tm1, tm6) in self.rule_child_opt_term.iter_dirty() {
+        for RuleDescendantOptTerm(tm1, tm6) in self.rule_descendant_opt_term.iter_dirty() {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                    for RuleDescendantThenAtom(_, tm3) in
+                        self.rule_descendant_then_atom.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_105(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59355,16 +59628,19 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildThenAtom(tm0, tm3) in self.rule_child_then_atom.iter_dirty() {
+        for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChildOptTerm(_, tm6) in self.rule_child_opt_term.iter_all_0(tm1) {
+                    for RuleDescendantOptTerm(_, tm6) in
+                        self.rule_descendant_opt_term.iter_all_0(tm1)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm2) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2)
+                        {
                             self.record_action_105(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59372,65 +59648,76 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_106(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+    fn record_action_106(
+        &self,
+        delta: &mut ModelDelta,
+        tm4: RuleDeclNode,
+        tm5: RuleDescendantNode,
+    ) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_then_atom_pred(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_then_atom_pred(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+            for RuleDescendantTermList(_, tm5) in self.rule_descendant_term_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_106(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildThenAtom(tm0, _) in self.rule_child_then_atom.iter_all_1(tm3) {
+            for RuleDescendantThenAtom(tm0, _) in self.rule_descendant_then_atom.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_106(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTermList(tm2, tm5) in self.rule_child_term_list.iter_dirty() {
+        for RuleDescendantTermList(tm2, tm5) in self.rule_descendant_term_list.iter_dirty() {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildThenAtom(_, tm3) in self.rule_child_then_atom.iter_all_0(tm0) {
+                for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_106(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildThenAtom(tm0, tm3) in self.rule_child_then_atom.iter_dirty() {
+        for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_106(delta, tm4, tm5);
                     }
                 }
@@ -59441,39 +59728,41 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_match_case_children(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_match_case_descendantren(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for MatchCase(tm0, tm1, tm2) in self.match_case.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildMatchCase(_, tm3) in self.rule_child_match_case.iter_all_0(tm0) {
+            for RuleDescendantMatchCase(_, tm3) in self.rule_descendant_match_case.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                        for RuleDescendantStmtList(_, tm6) in
+                            self.rule_descendant_stmt_list.iter_all_0(tm2)
+                        {
                             self.record_action_107(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59481,15 +59770,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildMatchCase(tm0, _) in self.rule_child_match_case.iter_all_1(tm3) {
+            for RuleDescendantMatchCase(tm0, _) in self.rule_descendant_match_case.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                    for RuleDescendantStmtList(_, tm6) in
+                        self.rule_descendant_stmt_list.iter_all_0(tm2)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_107(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59497,15 +59789,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm5) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                for RuleDescendantStmtList(_, tm6) in self.rule_descendant_stmt_list.iter_all_0(tm2)
+                {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCase(_, tm3) in self.rule_child_match_case.iter_all_0(tm0) {
+                    for RuleDescendantMatchCase(_, tm3) in
+                        self.rule_descendant_match_case.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_107(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59513,15 +59808,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildMatchCase(tm0, tm3) in self.rule_child_match_case.iter_dirty() {
+        for RuleDescendantMatchCase(tm0, tm3) in self.rule_descendant_match_case.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildStmtList(_, tm6) in self.rule_child_stmt_list.iter_all_0(tm2) {
+                    for RuleDescendantStmtList(_, tm6) in
+                        self.rule_descendant_stmt_list.iter_all_0(tm2)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_107(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59529,15 +59827,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildStmtList(tm2, tm6) in self.rule_child_stmt_list.iter_dirty() {
+        for RuleDescendantStmtList(tm2, tm6) in self.rule_descendant_stmt_list.iter_dirty() {
             #[allow(unused_variables)]
             for MatchCase(tm0, tm1, _) in self.match_case.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCase(_, tm3) in self.rule_child_match_case.iter_all_0(tm0) {
+                    for RuleDescendantMatchCase(_, tm3) in
+                        self.rule_descendant_match_case.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_107(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59549,41 +59849,45 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_match_case_list_cons(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_match_case_list_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsMatchCaseListNode(tm0, tm1, tm2) in self.cons_match_case_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildMatchCaseList(_, tm6) in self.rule_child_match_case_list.iter_all_0(tm2) {
+            for RuleDescendantMatchCaseList(_, tm6) in
+                self.rule_descendant_match_case_list.iter_all_0(tm2)
+            {
                 #[allow(unused_variables)]
-                for RuleChildMatchCase(_, tm5) in self.rule_child_match_case.iter_all_0(tm1) {
+                for RuleDescendantMatchCase(_, tm5) in
+                    self.rule_descendant_match_case.iter_all_0(tm1)
+                {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCaseList(_, tm3) in
-                        self.rule_child_match_case_list.iter_all_0(tm0)
+                    for RuleDescendantMatchCaseList(_, tm3) in
+                        self.rule_descendant_match_case_list.iter_all_0(tm0)
                     {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_108(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59591,19 +59895,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildMatchCaseList(tm0, _) in self.rule_child_match_case_list.iter_all_1(tm3) {
+            for RuleDescendantMatchCaseList(tm0, _) in
+                self.rule_descendant_match_case_list.iter_all_1(tm3)
+            {
                 #[allow(unused_variables)]
                 for ConsMatchCaseListNode(_, tm1, tm2) in
                     self.cons_match_case_list_node.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCaseList(_, tm6) in
-                        self.rule_child_match_case_list.iter_all_0(tm2)
+                    for RuleDescendantMatchCaseList(_, tm6) in
+                        self.rule_descendant_match_case_list.iter_all_0(tm2)
                     {
                         #[allow(unused_variables)]
-                        for RuleChildMatchCase(_, tm5) in self.rule_child_match_case.iter_all_0(tm1)
+                        for RuleDescendantMatchCase(_, tm5) in
+                            self.rule_descendant_match_case.iter_all_0(tm1)
                         {
                             self.record_action_108(delta, tm4, tm5, tm6);
                         }
@@ -59612,19 +59919,19 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildMatchCase(tm1, tm5) in self.rule_child_match_case.iter_dirty() {
+        for RuleDescendantMatchCase(tm1, tm5) in self.rule_descendant_match_case.iter_dirty() {
             #[allow(unused_variables)]
             for ConsMatchCaseListNode(tm0, _, tm2) in self.cons_match_case_list_node.iter_all_1(tm1)
             {
                 #[allow(unused_variables)]
-                for RuleChildMatchCaseList(_, tm3) in
-                    self.rule_child_match_case_list.iter_all_0(tm0)
+                for RuleDescendantMatchCaseList(_, tm3) in
+                    self.rule_descendant_match_case_list.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildMatchCaseList(_, tm6) in
-                            self.rule_child_match_case_list.iter_all_0(tm2)
+                        for RuleDescendantMatchCaseList(_, tm6) in
+                            self.rule_descendant_match_case_list.iter_all_0(tm2)
                         {
                             self.record_action_108(delta, tm4, tm5, tm6);
                         }
@@ -59633,18 +59940,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildMatchCaseList(tm2, tm6) in self.rule_child_match_case_list.iter_dirty() {
+        for RuleDescendantMatchCaseList(tm2, tm6) in
+            self.rule_descendant_match_case_list.iter_dirty()
+        {
             #[allow(unused_variables)]
             for ConsMatchCaseListNode(tm0, tm1, _) in self.cons_match_case_list_node.iter_all_2(tm2)
             {
                 #[allow(unused_variables)]
-                for RuleChildMatchCase(_, tm5) in self.rule_child_match_case.iter_all_0(tm1) {
+                for RuleDescendantMatchCase(_, tm5) in
+                    self.rule_descendant_match_case.iter_all_0(tm1)
+                {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCaseList(_, tm3) in
-                        self.rule_child_match_case_list.iter_all_0(tm0)
+                    for RuleDescendantMatchCaseList(_, tm3) in
+                        self.rule_descendant_match_case_list.iter_all_0(tm0)
                     {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_108(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59652,19 +59963,22 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildMatchCaseList(tm0, tm3) in self.rule_child_match_case_list.iter_dirty() {
+        for RuleDescendantMatchCaseList(tm0, tm3) in
+            self.rule_descendant_match_case_list.iter_dirty()
+        {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for ConsMatchCaseListNode(_, tm1, tm2) in
                     self.cons_match_case_list_node.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for RuleChildMatchCaseList(_, tm6) in
-                        self.rule_child_match_case_list.iter_all_0(tm2)
+                    for RuleDescendantMatchCaseList(_, tm6) in
+                        self.rule_descendant_match_case_list.iter_all_0(tm2)
                     {
                         #[allow(unused_variables)]
-                        for RuleChildMatchCase(_, tm5) in self.rule_child_match_case.iter_all_0(tm1)
+                        for RuleDescendantMatchCase(_, tm5) in
+                            self.rule_descendant_match_case.iter_all_0(tm1)
                         {
                             self.record_action_108(delta, tm4, tm5, tm6);
                         }
@@ -59677,39 +59991,41 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm4: RuleDeclNode,
-        tm5: RuleChildNode,
-        tm6: RuleChildNode,
+        tm5: RuleDescendantNode,
+        tm6: RuleDescendantNode,
     ) {
-        let existing_row = self.rule_child.iter_all_0_1(tm6, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm6, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm6, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm6, tm4));
                 ()
             }
         };
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_terms_cons(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_terms_cons(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+            for RuleDescendantTermList(_, tm6) in self.rule_descendant_term_list.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
+                    for RuleDescendantTermList(_, tm3) in
+                        self.rule_descendant_term_list.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_109(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59717,15 +60033,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTermList(tm0, _) in self.rule_child_term_list.iter_all_1(tm3) {
+            for RuleDescendantTermList(tm0, _) in self.rule_descendant_term_list.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm6) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_109(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59733,15 +60052,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm5) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm5) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, _, tm2) in self.cons_term_list_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
+                for RuleDescendantTermList(_, tm3) in self.rule_descendant_term_list.iter_all_0(tm0)
+                {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         #[allow(unused_variables)]
-                        for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+                        for RuleDescendantTermList(_, tm6) in
+                            self.rule_descendant_term_list.iter_all_0(tm2)
+                        {
                             self.record_action_109(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59749,15 +60071,17 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTermList(tm2, tm6) in self.rule_child_term_list.iter_dirty() {
+        for RuleDescendantTermList(tm2, tm6) in self.rule_descendant_term_list.iter_dirty() {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, _) in self.cons_term_list_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm3) in self.rule_child_term_list.iter_all_0(tm0) {
+                    for RuleDescendantTermList(_, tm3) in
+                        self.rule_descendant_term_list.iter_all_0(tm0)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                        for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                             self.record_action_109(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59765,15 +60089,18 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTermList(tm0, tm3) in self.rule_child_term_list.iter_dirty() {
+        for RuleDescendantTermList(tm0, tm3) in self.rule_descendant_term_list.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm6) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm6) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         #[allow(unused_variables)]
-                        for RuleChildTerm(_, tm5) in self.rule_child_term.iter_all_0(tm1) {
+                        for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm1)
+                        {
                             self.record_action_109(delta, tm4, tm5, tm6);
                         }
                     }
@@ -59781,130 +60108,146 @@ impl Eqlog {
             }
         }
     }
-    fn record_action_110(&self, delta: &mut ModelDelta, tm3: RuleDeclNode, tm4: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm4, tm3).next();
+    fn record_action_110(
+        &self,
+        delta: &mut ModelDelta,
+        tm3: RuleDeclNode,
+        tm4: RuleDescendantNode,
+    ) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm4, tm3).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm4, tm3));
+                delta.new_rule_descendant.push(RuleDescendant(tm4, tm3));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_opt_term_some(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_opt_term_some(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for SomeTermNode(tm0, tm1) in self.some_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+            for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
+                for RuleDescendantOptTerm(_, tm2) in self.rule_descendant_opt_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_110(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm2, tm3) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildOptTerm(tm0, _) in self.rule_child_opt_term.iter_all_1(tm2) {
+            for RuleDescendantOptTerm(tm0, _) in self.rule_descendant_opt_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
                         self.record_action_110(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm1, tm4) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
             for SomeTermNode(tm0, _) in self.some_term_node.iter_all_1(tm1) {
                 #[allow(unused_variables)]
-                for RuleChildOptTerm(_, tm2) in self.rule_child_opt_term.iter_all_0(tm0) {
+                for RuleDescendantOptTerm(_, tm2) in self.rule_descendant_opt_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                    for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                         self.record_action_110(delta, tm3, tm4);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildOptTerm(tm0, tm2) in self.rule_child_opt_term.iter_dirty() {
+        for RuleDescendantOptTerm(tm0, tm2) in self.rule_descendant_opt_term.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+            for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTerm(_, tm4) in self.rule_child_term.iter_all_0(tm1) {
+                    for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
                         self.record_action_110(delta, tm3, tm4);
                     }
                 }
             }
         }
     }
-    fn record_action_111(&self, delta: &mut ModelDelta, tm4: RuleDeclNode, tm5: RuleChildNode) {
-        let existing_row = self.rule_child.iter_all_0_1(tm5, tm4).next();
+    fn record_action_111(
+        &self,
+        delta: &mut ModelDelta,
+        tm4: RuleDeclNode,
+        tm5: RuleDescendantNode,
+    ) {
+        let existing_row = self.rule_descendant.iter_all_0_1(tm5, tm4).next();
         #[allow(unused_variables)]
         let () = match existing_row {
-            Some(RuleChild(_, _)) => (),
+            Some(RuleDescendant(_, _)) => (),
             None => {
-                delta.new_rule_child.push(RuleChild(tm5, tm4));
+                delta.new_rule_descendant.push(RuleDescendant(tm5, tm4));
                 ()
             }
         };
     }
-    fn query_and_record_rule_child_term_app(&self, delta: &mut ModelDelta) {
+    fn query_and_record_rule_descendant_term_app(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm3) in self.rule_child_term.iter_all_0(tm0) {
+            for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_111(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm3, tm4) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm3, tm4) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm3) {
+            for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm3) {
                 #[allow(unused_variables)]
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_111(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm0, tm3) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm0, tm3) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+            for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                 #[allow(unused_variables)]
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChildTermList(_, tm5) in self.rule_child_term_list.iter_all_0(tm2) {
+                    for RuleDescendantTermList(_, tm5) in
+                        self.rule_descendant_term_list.iter_all_0(tm2)
+                    {
                         self.record_action_111(delta, tm4, tm5);
                     }
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTermList(tm2, tm5) in self.rule_child_term_list.iter_dirty() {
+        for RuleDescendantTermList(tm2, tm5) in self.rule_descendant_term_list.iter_dirty() {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
                 #[allow(unused_variables)]
-                for RuleChildTerm(_, tm3) in self.rule_child_term.iter_all_0(tm0) {
+                for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for RuleChild(_, tm4) in self.rule_child.iter_all_0(tm3) {
+                    for RuleDescendant(_, tm4) in self.rule_descendant.iter_all_0(tm3) {
                         self.record_action_111(delta, tm4, tm5);
                     }
                 }
@@ -66933,21 +67276,21 @@ impl Eqlog {
             }
         };
     }
-    fn query_and_record_var_term_in_rule_child(&self, delta: &mut ModelDelta) {
+    fn query_and_record_var_term_in_rule_descendant(&self, delta: &mut ModelDelta) {
         #[allow(unused_variables)]
         for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(_, tm2) in self.rule_child_term.iter_all_0(tm0) {
+            for RuleDescendantTerm(_, tm2) in self.rule_descendant_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+                for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                     self.record_action_298(delta, tm0, tm1, tm3);
                 }
             }
         }
         #[allow(unused_variables)]
-        for RuleChild(tm2, tm3) in self.rule_child.iter_dirty() {
+        for RuleDescendant(tm2, tm3) in self.rule_descendant.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChildTerm(tm0, _) in self.rule_child_term.iter_all_1(tm2) {
+            for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     self.record_action_298(delta, tm0, tm1, tm3);
@@ -66955,9 +67298,9 @@ impl Eqlog {
             }
         }
         #[allow(unused_variables)]
-        for RuleChildTerm(tm0, tm2) in self.rule_child_term.iter_dirty() {
+        for RuleDescendantTerm(tm0, tm2) in self.rule_descendant_term.iter_dirty() {
             #[allow(unused_variables)]
-            for RuleChild(_, tm3) in self.rule_child.iter_all_0(tm2) {
+            for RuleDescendant(_, tm3) in self.rule_descendant.iter_all_0(tm2) {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     self.record_action_298(delta, tm0, tm1, tm3);
@@ -68139,7 +68482,7 @@ impl Eqlog {
         self.nil_decl_list_node.drop_dirt();
         self.cons_decl_list_node.drop_dirt();
         self.decls_module_node.drop_dirt();
-        self.rule_child.drop_dirt();
+        self.rule_descendant.drop_dirt();
         self.pred_app.drop_dirt();
         self.el_type.drop_dirt();
         self.el_types.drop_dirt();
@@ -68227,16 +68570,16 @@ impl Eqlog {
         self.decl_node_loc.drop_dirt();
         self.decl_list_node_loc.drop_dirt();
         self.module_node_loc.drop_dirt();
-        self.rule_child_term.drop_dirt();
-        self.rule_child_term_list.drop_dirt();
-        self.rule_child_opt_term.drop_dirt();
-        self.rule_child_if_atom.drop_dirt();
-        self.rule_child_then_atom.drop_dirt();
-        self.rule_child_match_case.drop_dirt();
-        self.rule_child_match_case_list.drop_dirt();
-        self.rule_child_stmt.drop_dirt();
-        self.rule_child_stmt_list.drop_dirt();
-        self.rule_child_stmt_block_list.drop_dirt();
+        self.rule_descendant_term.drop_dirt();
+        self.rule_descendant_term_list.drop_dirt();
+        self.rule_descendant_opt_term.drop_dirt();
+        self.rule_descendant_if_atom.drop_dirt();
+        self.rule_descendant_then_atom.drop_dirt();
+        self.rule_descendant_match_case.drop_dirt();
+        self.rule_descendant_match_case_list.drop_dirt();
+        self.rule_descendant_stmt.drop_dirt();
+        self.rule_descendant_stmt_list.drop_dirt();
+        self.rule_descendant_stmt_block_list.drop_dirt();
         self.ctor_enum.drop_dirt();
         self.ctors_enum.drop_dirt();
         self.cases_match_stmt.drop_dirt();
@@ -68312,7 +68655,7 @@ impl Eqlog {
         self.decl_list_node_dirty.clear();
         self.module_node_dirty.clear();
         self.loc_dirty.clear();
-        self.rule_child_node_dirty.clear();
+        self.rule_descendant_node_dirty.clear();
         self.type_dirty.clear();
         self.type_list_dirty.clear();
         self.pred_dirty.clear();
@@ -68373,7 +68716,7 @@ impl Eqlog {
         self.nil_decl_list_node.retire_dirt();
         self.cons_decl_list_node.retire_dirt();
         self.decls_module_node.retire_dirt();
-        self.rule_child.retire_dirt();
+        self.rule_descendant.retire_dirt();
         self.pred_app.retire_dirt();
         self.el_type.retire_dirt();
         self.el_types.retire_dirt();
@@ -68461,16 +68804,16 @@ impl Eqlog {
         self.decl_node_loc.retire_dirt();
         self.decl_list_node_loc.retire_dirt();
         self.module_node_loc.retire_dirt();
-        self.rule_child_term.retire_dirt();
-        self.rule_child_term_list.retire_dirt();
-        self.rule_child_opt_term.retire_dirt();
-        self.rule_child_if_atom.retire_dirt();
-        self.rule_child_then_atom.retire_dirt();
-        self.rule_child_match_case.retire_dirt();
-        self.rule_child_match_case_list.retire_dirt();
-        self.rule_child_stmt.retire_dirt();
-        self.rule_child_stmt_list.retire_dirt();
-        self.rule_child_stmt_block_list.retire_dirt();
+        self.rule_descendant_term.retire_dirt();
+        self.rule_descendant_term_list.retire_dirt();
+        self.rule_descendant_opt_term.retire_dirt();
+        self.rule_descendant_if_atom.retire_dirt();
+        self.rule_descendant_then_atom.retire_dirt();
+        self.rule_descendant_match_case.retire_dirt();
+        self.rule_descendant_match_case_list.retire_dirt();
+        self.rule_descendant_stmt.retire_dirt();
+        self.rule_descendant_stmt_list.retire_dirt();
+        self.rule_descendant_stmt_block_list.retire_dirt();
         self.ctor_enum.retire_dirt();
         self.ctors_enum.retire_dirt();
         self.cases_match_stmt.retire_dirt();
@@ -68681,13 +69024,13 @@ impl Eqlog {
         std::mem::swap(&mut loc_dirty_tmp, &mut self.loc_dirty);
         self.loc_dirty_prev.push(loc_dirty_tmp);
 
-        let mut rule_child_node_dirty_tmp = BTreeSet::new();
+        let mut rule_descendant_node_dirty_tmp = BTreeSet::new();
         std::mem::swap(
-            &mut rule_child_node_dirty_tmp,
-            &mut self.rule_child_node_dirty,
+            &mut rule_descendant_node_dirty_tmp,
+            &mut self.rule_descendant_node_dirty,
         );
-        self.rule_child_node_dirty_prev
-            .push(rule_child_node_dirty_tmp);
+        self.rule_descendant_node_dirty_prev
+            .push(rule_descendant_node_dirty_tmp);
 
         let mut type_dirty_tmp = BTreeSet::new();
         std::mem::swap(&mut type_dirty_tmp, &mut self.type_dirty);
@@ -68906,9 +69249,9 @@ impl Eqlog {
             &mut self.decl_list_node_equalities,
             &mut self.module_node_equalities,
         );
-        self.rule_child.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant.recall_previous_dirt(
             &mut self.rule_decl_node_equalities,
+            &mut self.rule_descendant_node_equalities,
         );
         self.pred_app
             .recall_previous_dirt(&mut self.el_list_equalities, &mut self.pred_equalities);
@@ -69197,44 +69540,44 @@ impl Eqlog {
         );
         self.module_node_loc
             .recall_previous_dirt(&mut self.loc_equalities, &mut self.module_node_equalities);
-        self.rule_child_term.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant_term.recall_previous_dirt(
+            &mut self.rule_descendant_node_equalities,
             &mut self.term_node_equalities,
         );
-        self.rule_child_term_list.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant_term_list.recall_previous_dirt(
+            &mut self.rule_descendant_node_equalities,
             &mut self.term_list_node_equalities,
         );
-        self.rule_child_opt_term.recall_previous_dirt(
+        self.rule_descendant_opt_term.recall_previous_dirt(
             &mut self.opt_term_node_equalities,
-            &mut self.rule_child_node_equalities,
+            &mut self.rule_descendant_node_equalities,
         );
-        self.rule_child_if_atom.recall_previous_dirt(
+        self.rule_descendant_if_atom.recall_previous_dirt(
             &mut self.if_atom_node_equalities,
-            &mut self.rule_child_node_equalities,
+            &mut self.rule_descendant_node_equalities,
         );
-        self.rule_child_then_atom.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant_then_atom.recall_previous_dirt(
+            &mut self.rule_descendant_node_equalities,
             &mut self.then_atom_node_equalities,
         );
-        self.rule_child_match_case.recall_previous_dirt(
+        self.rule_descendant_match_case.recall_previous_dirt(
             &mut self.match_case_node_equalities,
-            &mut self.rule_child_node_equalities,
+            &mut self.rule_descendant_node_equalities,
         );
-        self.rule_child_match_case_list.recall_previous_dirt(
+        self.rule_descendant_match_case_list.recall_previous_dirt(
             &mut self.match_case_list_node_equalities,
-            &mut self.rule_child_node_equalities,
+            &mut self.rule_descendant_node_equalities,
         );
-        self.rule_child_stmt.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant_stmt.recall_previous_dirt(
+            &mut self.rule_descendant_node_equalities,
             &mut self.stmt_node_equalities,
         );
-        self.rule_child_stmt_list.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant_stmt_list.recall_previous_dirt(
+            &mut self.rule_descendant_node_equalities,
             &mut self.stmt_list_node_equalities,
         );
-        self.rule_child_stmt_block_list.recall_previous_dirt(
-            &mut self.rule_child_node_equalities,
+        self.rule_descendant_stmt_block_list.recall_previous_dirt(
+            &mut self.rule_descendant_node_equalities,
             &mut self.stmt_block_list_node_equalities,
         );
         self.ctor_enum.recall_previous_dirt(
@@ -69663,15 +70006,15 @@ impl Eqlog {
             .filter(|el| self.loc_equalities.root(*el) == *el)
             .collect();
 
-        let mut rule_child_node_dirty_prev_tmp = Vec::new();
+        let mut rule_descendant_node_dirty_prev_tmp = Vec::new();
         std::mem::swap(
-            &mut rule_child_node_dirty_prev_tmp,
-            &mut self.rule_child_node_dirty_prev,
+            &mut rule_descendant_node_dirty_prev_tmp,
+            &mut self.rule_descendant_node_dirty_prev,
         );
-        self.rule_child_node_dirty = rule_child_node_dirty_prev_tmp
+        self.rule_descendant_node_dirty = rule_descendant_node_dirty_prev_tmp
             .into_iter()
             .flatten()
-            .filter(|el| self.rule_child_node_equalities.root(*el) == *el)
+            .filter(|el| self.rule_descendant_node_equalities.root(*el) == *el)
             .collect();
 
         let mut type_dirty_prev_tmp = Vec::new();
@@ -70019,9 +70362,9 @@ impl fmt::Display for Eqlog {
                     .header_intersection('┬'),
             )
             .fmt(f)?;
-        self.rule_child_node_equalities
+        self.rule_descendant_node_equalities
             .class_table()
-            .with(Header("RuleChildNode"))
+            .with(Header("RuleDescendantNode"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -70175,7 +70518,7 @@ impl fmt::Display for Eqlog {
         self.nil_decl_list_node.fmt(f)?;
         self.cons_decl_list_node.fmt(f)?;
         self.decls_module_node.fmt(f)?;
-        self.rule_child.fmt(f)?;
+        self.rule_descendant.fmt(f)?;
         self.pred_app.fmt(f)?;
         self.el_type.fmt(f)?;
         self.el_types.fmt(f)?;
@@ -70263,16 +70606,16 @@ impl fmt::Display for Eqlog {
         self.decl_node_loc.fmt(f)?;
         self.decl_list_node_loc.fmt(f)?;
         self.module_node_loc.fmt(f)?;
-        self.rule_child_term.fmt(f)?;
-        self.rule_child_term_list.fmt(f)?;
-        self.rule_child_opt_term.fmt(f)?;
-        self.rule_child_if_atom.fmt(f)?;
-        self.rule_child_then_atom.fmt(f)?;
-        self.rule_child_match_case.fmt(f)?;
-        self.rule_child_match_case_list.fmt(f)?;
-        self.rule_child_stmt.fmt(f)?;
-        self.rule_child_stmt_list.fmt(f)?;
-        self.rule_child_stmt_block_list.fmt(f)?;
+        self.rule_descendant_term.fmt(f)?;
+        self.rule_descendant_term_list.fmt(f)?;
+        self.rule_descendant_opt_term.fmt(f)?;
+        self.rule_descendant_if_atom.fmt(f)?;
+        self.rule_descendant_then_atom.fmt(f)?;
+        self.rule_descendant_match_case.fmt(f)?;
+        self.rule_descendant_match_case_list.fmt(f)?;
+        self.rule_descendant_stmt.fmt(f)?;
+        self.rule_descendant_stmt_list.fmt(f)?;
+        self.rule_descendant_stmt_block_list.fmt(f)?;
         self.ctor_enum.fmt(f)?;
         self.ctors_enum.fmt(f)?;
         self.cases_match_stmt.fmt(f)?;
