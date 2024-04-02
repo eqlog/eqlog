@@ -18,3 +18,19 @@ rule branching_predicates {
     if d();
     then d_0();
 }
+
+
+type Foo;
+pred bar(Foo);
+pred baz(Foo);
+
+rule branching_same_variable_after {
+    branch {
+        if bar(x);
+        then x = x;
+    }
+    // This should bind to all possible x: Foo, regardless
+    // of how `x` was matched in the branch before.
+    if x: Foo;
+    then baz(x);
+}

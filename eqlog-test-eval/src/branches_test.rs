@@ -114,3 +114,16 @@ fn branching_predicates_acd() {
     assert!(branches.d());
     assert!(branches.d_0());
 }
+
+#[test]
+fn branching_same_variable_after_unaffected() {
+    let mut branches = Branches::new();
+
+    let a = branches.new_foo();
+    let b = branches.new_foo();
+    branches.insert_bar(a);
+
+    branches.close();
+
+    assert!(branches.baz(b));
+}

@@ -1,0 +1,22 @@
+type A;
+pred pred_a_0(A);
+pred pred_a_1(A);
+
+enum Foo {
+    Bar(),
+    Baz(A)
+}
+
+rule branching_same_variable_after {
+    if x: Foo;
+    match x {
+        Bar() => {}
+        Baz(y) => {
+            then pred_a_0(y);
+        }
+    }
+    // This should match all elements of A, so regardless of how y was matched
+    // in the match statement above.
+    if y: A;
+    then pred_a_1(y);
+}
