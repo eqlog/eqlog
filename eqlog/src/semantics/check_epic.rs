@@ -55,7 +55,10 @@ pub fn iter_variable_introduced_in_then_errors<'a>(
             }
         })?;
 
-        if eqlog.var_before_term(tm, virt_name) {
+        let descendant_tm = eqlog.rule_descendant_term(tm).unwrap();
+        let scope = eqlog.entry_scope(descendant_tm).unwrap();
+
+        if eqlog.var_in_scope(virt_name, scope) {
             return None;
         }
 
@@ -117,7 +120,10 @@ pub fn iter_then_defined_variable_errors<'a>(
                 Some(name) => name,
             };
 
-            if eqlog.var_before_term(var_term, var_name) {
+            let scope = eqlog
+                .entry_scope(eqlog.rule_descendant_term(var_term).unwrap())
+                .unwrap();
+            if eqlog.var_in_scope(var_name, scope) {
                 return Some(CompileError::ThenDefinedVarNotNew { location });
             }
 

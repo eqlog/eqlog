@@ -19,10 +19,21 @@ pub fn iter_vars<'a>(
     structure: Structure,
     eqlog: &'a Eqlog,
 ) -> impl 'a + Iterator<Item = (Ident, El)> {
-    eqlog.iter_var().filter_map(move |(strct, virt_ident, el)| {
+    eqlog.iter_var().filter_map(move |(strct, el_name, el)| {
         if !eqlog.are_equal_structure(strct, structure) {
             return None;
         }
+
+        let virt_ident = eqlog
+            .iter_semantic_name()
+            .find_map(|(virt_ident, _, el_name0)| {
+                if eqlog.are_equal_el_name(el_name0, el_name) {
+                    Some(virt_ident)
+                } else {
+                    None
+                }
+            })?;
+
         let ident = eqlog.iter_real_virt_ident().find_map(|(ident, vrt_id)| {
             if eqlog.are_equal_virt_ident(vrt_id, virt_ident) {
                 Some(ident)

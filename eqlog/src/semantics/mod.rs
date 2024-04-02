@@ -153,32 +153,39 @@ pub fn iter_variable_occurs_twice<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    let mut var_tms: BTreeMap<(RuleDeclNode, Ident), BTreeSet<TermNode>> = BTreeMap::new();
+    eqlog.iter_var_term_node().filter_map(|(tm, virt_ident)| {
+        let scope = eqlog
+            .exit_scope(eqlog.rule_descendant_term(tm).unwrap())
+            .unwrap();
+        let el_name = eqlog.semantic_name(virt_ident, scope).unwrap();
 
-    for (tm, virt_ident, rule) in eqlog.iter_var_term_in_rule() {
-        let ident = match eqlog.virt_real_ident(virt_ident) {
-            None => {
-                continue;
-            }
-            Some(ident) => ident,
-        };
-        var_tms
-            .entry((rule, ident))
-            .or_insert(BTreeSet::new())
-            .insert(tm);
-    }
+        let has_second_occurrence = eqlog
+            .iter_var_term_node()
+            .find(|(tm0, virt_ident0)| {
+                if eqlog.are_equal_term_node(tm, *tm0) {
+                    return false;
+                }
 
-    var_tms.into_iter().filter_map(|((_, ident), var_tms)| {
-        if var_tms.len() >= 2 {
+                let scope0 = eqlog
+                    .exit_scope(eqlog.rule_descendant_term(*tm0).unwrap())
+                    .unwrap();
+                let el_name0 = eqlog.semantic_name(*virt_ident0, scope0).unwrap();
+                eqlog.are_equal_el_name(el_name, el_name0)
+            })
+            .is_some();
+
+        if has_second_occurrence {
             return None;
         }
 
-        assert!(var_tms.len() == 1);
-        let var_tm = var_tms.into_iter().next().unwrap();
+        let ident = eqlog.virt_real_ident(virt_ident)?;
+        // TODO: This doesn't actually hold; we're ignoring occurs-only-once errors at the
+        // moment if they arise from purely virtual identifiers. But why does it not hold?
+        //.expect("Desugaring should never result in compilation errors");
 
         let name: &str = identifiers.get(&ident).unwrap().as_str();
 
-        let loc = eqlog.term_node_loc(var_tm).unwrap();
+        let loc = eqlog.term_node_loc(tm).unwrap();
         let location = *locations.get(&loc).unwrap();
 
         Some(CompileError::VariableOccursOnlyOnce {

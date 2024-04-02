@@ -144,10 +144,10 @@ func module_node_loc(ModuleNode) -> Loc;
 // ### Descendant nodes of rules
 //
 // Every node that can appear as a descendant of a `RuleDeclNode` can be
-// coerced into a `RuleDescendantNode`. This can then be used to query the rule that
-// a given node belongs to.
+// coerced into a `RuleDescendantNode`.
 type RuleDescendantNode;
 
+func rule_descendant_rule(RuleDeclNode) -> RuleDescendantNode;
 func rule_descendant_term(TermNode) -> RuleDescendantNode;
 func rule_descendant_term_list(TermListNode) -> RuleDescendantNode;
 func rule_descendant_opt_term(OptTermNode) -> RuleDescendantNode;
@@ -159,6 +159,10 @@ func rule_descendant_stmt(StmtNode) -> RuleDescendantNode;
 func rule_descendant_stmt_list(StmtListNode) -> RuleDescendantNode;
 func rule_descendant_stmt_block_list(StmtBlockListNode) -> RuleDescendantNode;
 
+rule rule_descendant_rule_total {
+    if rul: RuleDeclNode;
+    then rule_descendant_rule(rul)!;
+}
 rule rule_descendant_term_total {
     if tm: TermNode;
     then rule_descendant_term(tm)!;
@@ -200,177 +204,203 @@ rule rule_descendant_stmt_block_list_total {
     then rule_descendant_stmt_block_list(blocks)!;
 }
 
-pred is_ordered_sibling(left: RuleDescendantNode, right: RuleDescendantNode);
-pred is_child(child: RuleDescendantNode, parent: RuleDescendantNode);
+/// ### Scopes
 
-rule rule_descendant_rule_decl {
-    if rule_decl(rul, stmts);
-    if descendant = rule_descendant_stmt_list(stmts);
-    then is_rule_descendant(descendant, rul);
+type Scope;
+
+pred var_in_scope(VirtIdent, Scope);
+pred scope_extension(smaller: Scope, larger: Scope);
+
+rule scope_extension_vars {
+    if var_in_scope(ident, scope);
+    if scope_extension(scope, extension);
+    then var_in_scope(ident, extension);
 }
 
-rule rule_descendant_stmts_cons {
+func entry_scope(RuleDescendantNode) -> Scope;
+func exit_scope(RuleDescendantNode) -> Scope;
+
+rule entry_exit_scope_total {
+    if descendant: RuleDescendantNode;
+    then entry_scope(descendant)!;
+    then exit_scope(descendant)!;
+}
+rule exit_scope_extends_entry_scope {
+    if node: RuleDescendantNode;
+    if entry = entry_scope(node);
+    if exit = exit_scope(node);
+    then scope_extension(entry, exit);
+}
+
+pred scope_single_child(child: RuleDescendantNode, parent: RuleDescendantNode);
+pred scope_extension_siblings(first_child: RuleDescendantNode, second_child: RuleDescendantNode, parent: RuleDescendantNode);
+
+rule scope_single_child_scopes {
+    if scope_single_child(child, parent);
+    if parent_entry = entry_scope(parent);
+    if parent_exit = exit_scope(parent);
+    then entry_scope(child) = parent_entry;
+    then exit_scope(child) = parent_exit;
+}
+
+rule scope_extension_siblings_scopes {
+    if scope_extension_siblings(first_child, second_child, parent);
+    if parent_entry = entry_scope(parent);
+    if parent_exit = exit_scope(parent);
+    if first_child_exit = exit_scope(first_child);
+
+    then entry_scope(first_child) = parent_entry;
+    then entry_scope(second_child) = first_child_exit;
+    then exit_scope(second_child) = parent_exit;
+}
+
+rule scopes_rule {
+    if rule_decl(rul, stmts);
+
+    if descendant_rule = rule_descendant_rule(rul);
+    if descendant_stmts = rule_descendant_stmt_list(stmts);
+
+    then scope_single_child(descendant_stmts, descendant_rule);
+}
+
+rule scopes_stmt_list_cons {
     if cons_stmt_list_node(stmts, head, tail);
+
     if descendant_stmts = rule_descendant_stmt_list(stmts);
     if descendant_head = rule_descendant_stmt(head);
     if descendant_tail = rule_descendant_stmt_list(tail);
 
-    then is_child(descendant_head, descendant_stmts);
-    then is_child(descendant_tail, descendant_stmts);
-    then is_ordered_sibling(descendant_head, descendant_tail);
+    then scope_extension_siblings(descendant_head, descendant_tail, descendant_stmts);
 }
 
-rule rule_descendant_stmt_blocks_cons {
-    if cons_stmt_block_list_node(block, head, tail);
-    if descendant_block = rule_descendant_stmt_block_list(block);
+rule scopes_stmt_block_list_cons {
+    if cons_stmt_block_list_node(blocks, head, tail);
+    if descendant_blocks = rule_descendant_stmt_block_list(blocks);
     if descendant_head = rule_descendant_stmt_list(head);
     if descendant_tail = rule_descendant_stmt_block_list(tail);
 
-    then is_child(descendant_head, descendant_block);
-    then is_child(descendant_tail, descendant_block);
-    then is_ordered_sibling(descendant_head, descendant_tail);
+    if blocks_entry = entry_scope(descendant_blocks);
+
+    then blocks_entry = entry_scope(descendant_head);
+    then blocks_entry = entry_scope(descendant_tail);
 }
 
-rule rule_descendant_stmt_if {
+rule scopes_stmt_if {
     if if_stmt_node(stmt, atom);
     if descendant_stmt = rule_descendant_stmt(stmt);
     if descendant_atom = rule_descendant_if_atom(atom);
-    then is_child(descendant_atom, descendant_stmt);
+
+    then scope_single_child(descendant_atom, descendant_stmt);
 }
-rule rule_descendant_stmt_then {
+rule scopes_stmt_then {
     if then_stmt_node(stmt, atom);
     if descendant_stmt = rule_descendant_stmt(stmt);
     if descendant_atom = rule_descendant_then_atom(atom);
-    then is_child(descendant_atom, descendant_stmt);
+
+    then scope_single_child(descendant_atom, descendant_stmt);
 }
-rule rule_descendant_stmt_branch {
+rule scopes_stmt_branch {
     if branch_stmt_node(stmt, blocks);
     if descendant_stmt = rule_descendant_stmt(stmt);
     if descendant_block_list = rule_descendant_stmt_block_list(blocks);
-    then is_child(descendant_block_list, descendant_stmt);
+
+    then scope_single_child(descendant_block_list, descendant_stmt);
 }
-rule rule_descendant_stmt_match {
+rule scopes_stmt_match {
     if match_stmt_node(stmt, term, cases);
     if stmt_descendant = rule_descendant_stmt(stmt);
     if descendant_term = rule_descendant_term(term);
     if descendant_cases = rule_descendant_match_case_list(cases);
 
-    then is_child(descendant_term, stmt_descendant);
-    then is_child(descendant_cases, stmt_descendant);
-    then is_ordered_sibling(descendant_term, descendant_cases);
+    then scope_extension_siblings(descendant_term, descendant_cases, stmt_descendant);
 }
 
-rule rule_descendant_if_atom_equal {
+rule scopes_if_atom_equal {
     if equal_if_atom_node(atom, lhs, rhs);
-    if atom_dsescendant = rule_descendant_if_atom(atom);
+    if atom_descendant = rule_descendant_if_atom(atom);
     if descendant_lhs = rule_descendant_term(lhs);
     if descendant_rhs = rule_descendant_term(rhs);
-    then is_child(descendant_lhs, atom_dsescendant);
-    then is_child(descendant_rhs, atom_dsescendant);
-    then is_ordered_sibling(descendant_lhs, descendant_rhs);
+
+    then scope_extension_siblings(descendant_lhs, descendant_rhs, atom_descendant);
 }
-rule rule_descendant_if_atom_defined {
+rule scopes_if_atom_defined {
     if defined_if_atom_node(atom, tm);
     if atom_descendant = rule_descendant_if_atom(atom);
     if descendant_tm = rule_descendant_term(tm);
-    then is_child(descendant_tm, atom_descendant);
+
+    then scope_single_child(descendant_tm, atom_descendant);
 }
-rule rule_descendant_if_atom_pred {
+rule scopes_if_atom_pred {
     if pred_if_atom_node(atom, _, tms);
     if atom_descendant = rule_descendant_if_atom(atom);
-    if descendant_tms = rule_descendant_term_list(tms);
-    then is_child(descendant_tms, atom_descendant);
+    if tms_descendant = rule_descendant_term_list(tms);
+
+    then scope_single_child(tms_descendant, atom_descendant);
 }
-rule rule_descendant_if_atom_var {
+rule scopes_if_atom_var {
     if var_if_atom_node(atom, tm, _);
     if atom_descendant = rule_descendant_if_atom(atom);
     if tm_descendant = rule_descendant_term(tm);
-    then is_child(tm_descendant, atom_descendant);
+
+    then scope_single_child(tm_descendant, atom_descendant);
 }
 
-rule rule_descendant_then_atom_equal {
+rule scopes_then_atom_equal {
     if equal_then_atom_node(atom, lhs, rhs);
+
     if atom_descendant = rule_descendant_then_atom(atom);
     if lhs_descendant = rule_descendant_term(lhs);
     if rhs_descendant = rule_descendant_term(rhs);
 
-    then is_child(lhs_descendant, atom_descendant);
-    then is_child(rhs_descendant, atom_descendant);
-    then is_ordered_sibling(lhs_descendant, rhs_descendant);
+    then scope_extension_siblings(lhs_descendant, rhs_descendant, atom_descendant);
 }
-rule rule_descendant_then_atom_defined {
+rule scopes_then_atom_defined {
     if defined_then_atom_node(atom, var_tm, tm);
     if atom_descendant = rule_descendant_then_atom(atom);
     if var_tm_descendant = rule_descendant_opt_term(var_tm);
     if tm_descendant = rule_descendant_term(tm);
-    then is_child(var_tm_descendant, atom_descendant);
-    then is_child(tm_descendant, atom_descendant);
-    then is_ordered_sibling(var_tm_descendant, tm_descendant);
+
+    then scope_extension_siblings(var_tm_descendant, tm_descendant, atom_descendant);
 }
-rule rule_descendant_then_atom_pred {
+rule scopes_then_atom_pred {
     if pred_then_atom_node(atom, _, tms);
     if atom_descendant = rule_descendant_then_atom(atom);
     if tms_descendant = rule_descendant_term_list(tms);
-    then is_child(tms_descendant, atom_descendant);
+
+    then scope_extension_siblings(atom_descendant, tms_descendant, atom_descendant);
 }
 
-rule rule_descendant_match_case_defined {
-    if match_case(case, pattern, body);
-    if case_descendant = rule_descendant_match_case(case);
-    if pattern_descendant = rule_descendant_term(pattern);
-    if body_descendant = rule_descendant_stmt_list(body);
+// No rules for match case nodes -- they're taken care of by desugaring to BlockListNodes.
 
-    then is_child(pattern_descendant, case_descendant);
-    then is_child(body_descendant, case_descendant);
-    then is_ordered_sibling(pattern_descendant, body_descendant);
-}
-
-rule rule_descendant_match_case_list_cons {
-    if cons_match_case_list_node(cases, head_case, tail_cases);
-    if case_descendant = rule_descendant_match_case_list(cases);
-    if head_descendant = rule_descendant_match_case(head_case);
-    if tail_descendant = rule_descendant_match_case_list(tail_cases);
-
-    then is_child(head_descendant, case_descendant);
-    then is_child(tail_descendant, case_descendant);
-    then is_ordered_sibling(head_descendant, tail_descendant);
-}
-
-rule rule_descendant_terms_cons {
+rule scopes_term_list_cons {
     if cons_term_list_node(tms, head, tail);
     if tms_descendant = rule_descendant_term_list(tms);
     if head_descendant = rule_descendant_term(head);
     if tail_descendant = rule_descendant_term_list(tail);
 
-    then is_child(head_descendant, tms_descendant);
-    then is_child(tail_descendant, tms_descendant);
-    then is_ordered_sibling(head_descendant, tail_descendant);
+    then scope_extension_siblings(head_descendant, tail_descendant, tms_descendant);
 }
-rule rule_descendant_opt_term_some {
+rule scopes_opt_term_some {
     if some_term_node(opt_tm, tm);
     if opt_tm_descendant = rule_descendant_opt_term(opt_tm);
     if tm_descendant = rule_descendant_term(tm);
-    then is_child(tm_descendant, opt_tm_descendant);
+
+    then scope_single_child(tm_descendant, opt_tm_descendant);
 }
-rule rule_descendant_term_app {
+rule scopes_term_app {
     if app_term_node(tm, _, args);
     if tm_descendant = rule_descendant_term(tm);
     if args_descendant = rule_descendant_term_list(args);
-    then is_child(args_descendant, tm_descendant);
-}
 
-pred is_rule_descendant(RuleDescendantNode, RuleDeclNode);
-rule rule_child_stmts_descendant {
-    if rule_decl(rul, stmts);
-    if stmts_descendant = rule_descendant_stmt_list(stmts);
-    then is_rule_descendant(stmts_descendant, rul);
+    then scope_single_child(args_descendant, tm_descendant);
 }
-rule descendant_child_is_rule_descendant {
-    if is_child(child, parent);
-    if is_rule_descendant(parent, rul);
-    then is_rule_descendant(child, rul);
-}
+rule scopes_term_var {
+    if var_term_node(tm, virt_ident);
+    if tm_descendant = rule_descendant_term(tm);
+    if tm_exit = exit_scope(tm_descendant);
 
+    then var_in_scope(virt_ident, tm_exit);
+}
 
 // ### The enum constructor belong to
 
@@ -461,6 +491,32 @@ rule desugared_case_blocks {
     if desugared_tail_blocks = desugared_case_block_list(tail_cases);
 
     then cons_stmt_block_list_node(desugared_blocks, desugared_head_block, desugared_tail_blocks);
+}
+
+rule scopes_desugared_case {
+    if block = desugared_case_block(case);
+
+    if descendant_block = rule_descendant_stmt_list(block);
+    if descendant_case = rule_descendant_match_case(case);
+
+    if entry = entry_scope(descendant_case);
+    if exit = exit_scope(descendant_case);
+
+    then entry_scope(descendant_block) = entry;
+    then exit_scope(descendant_block) = exit;
+}
+
+rule scopes_desugared_case_list {
+    if blocks = desugared_case_block_list(cases);
+
+    if descendant_blocks = rule_descendant_stmt_block_list(blocks);
+    if descendant_cases = rule_descendant_match_case_list(cases);
+
+    if entry = entry_scope(descendant_cases);
+    if exit = exit_scope(descendant_cases);
+
+    then entry_scope(descendant_blocks) = entry;
+    then exit_scope(descendant_blocks) = exit;
 }
 
 // ## Semantic types, predicates and functions
@@ -579,7 +635,8 @@ func func_app(Func, ElList) -> El;
 
 pred pred_app(Pred, ElList);
 
-func var(Structure, VirtIdent) -> El;
+type ElName;
+func var(Structure, ElName) -> El;
 
 // ### The structure that elements belong to
 func el_structure(El) -> Structure;
@@ -1276,6 +1333,21 @@ rule app_term_structure {
 
 // ### Populate associated structures
 
+// #### Variables, scopes and named elements
+
+func semantic_name(VirtIdent, Scope) -> ElName;
+
+rule semantic_name_defined {
+    if var_in_scope(ident, scope);
+    then semantic_name(ident, scope)!;
+}
+rule semantic_name_extension_scope {
+    if scope_extension(smaller_scope, larger_scope);
+    if name_smaller = semantic_name(ident, smaller_scope);
+    if name_larger = semantic_name(ident, larger_scope);
+    then name_smaller = name_larger;
+}
+
 func semantic_el(TermNode, Structure) -> El;
 rule semantic_el_defined {
     if el: TermNode;
@@ -1324,19 +1396,21 @@ rule app_term_semantics {
 }
 
 rule var_term_semantics {
-    if var_term_node(term, name);
+    if var_term_node(term, ident);
+    if scope = exit_scope(rule_descendant_term(term));
+    if name = semantic_name(ident, scope);
     if el = semantic_el(term, structure);
     then el = var(structure, name);
 }
 
-func wildcard_virt_ident(TermNode) -> VirtIdent;
-rule wildcard_virt_ident_defined {
+func wildcard_name(TermNode) -> ElName;
+rule wildcard_name_defined {
     if wildcard_term_node(term);
-    then wildcard_virt_ident(term)!;
+    then wildcard_name(term)!;
 }
 rule wildcard_term_semantics {
     if wildcard_term_node(term);
-    if name = wildcard_virt_ident(term);
+    if name = wildcard_name(term);
     if el = semantic_el(term, structure);
     then el = var(structure, name);
 }
@@ -1384,268 +1458,6 @@ rule pred_then_atom_semantics {
 }
 
 // ## Epic check
-
-// ### Bound variables
-//
-// These predicates track which variables have been
-// introduced in *statements* prior to the one in which
-// the AST node appears.
-pred var_before_term(TermNode, VirtIdent);
-pred var_before_terms(TermListNode, VirtIdent);
-pred var_before_opt_term(OptTermNode, VirtIdent);
-pred var_before_if_atom(IfAtomNode, VirtIdent);
-pred var_before_then_atom(ThenAtomNode, VirtIdent);
-pred var_before_stmt(StmtNode, VirtIdent);
-pred var_before_stmts(StmtListNode, VirtIdent);
-pred var_before_stmt_blocks(StmtBlockListNode, VirtIdent);
-
-// These predicates track which variables appear in the
-// respective AST node.
-pred var_in_term(TermNode, VirtIdent);
-pred var_in_terms(TermListNode, VirtIdent);
-pred var_in_opt_term(OptTermNode, VirtIdent);
-pred var_in_if_atom(IfAtomNode, VirtIdent);
-pred var_in_then_atom(ThenAtomNode, VirtIdent);
-pred var_in_stmt(StmtNode, VirtIdent);
-pred var_in_stmts(StmtListNode, VirtIdent);
-// This predicate is not quite analogous to the ones above, since it tracks
-// whether the variable occurs in *each* of the blocks in a statement block
-// list node, not just whether it occurs in some of the blocks.
-pred var_in_all_stmt_blocks(StmtBlockListNode, VirtIdent);
-
-// #### Propagate var_before_X downwards
-rule var_before_stmt_blocks_cons {
-    if var_before_stmt_blocks(blocks, name);
-    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    then var_before_stmts(head_block, name);
-    then var_before_stmt_blocks(tail_blocks, name);
-}
-rule var_before_stmts_cons {
-    if var_before_stmts(stmts, name);
-    if cons_stmt_list_node(stmts, stmt, stmts_tail);
-    then var_before_stmt(stmt, name);
-    then var_before_stmts(stmts_tail, name);
-}
-rule var_before_stmt_if {
-    if var_before_stmt(stmt, name);
-    if if_stmt_node(stmt, atom);
-    then var_before_if_atom(atom, name);
-}
-rule var_before_stmt_then {
-    if var_before_stmt(stmt, name);
-    if then_stmt_node(stmt, atom);
-    then var_before_then_atom(atom, name);
-}
-rule var_before_stmt_branch {
-    if var_before_stmt(stmt, name);
-    if branch_stmt_node(stmt, blocks);
-    then var_before_stmt_blocks(blocks, name);
-}
-rule var_before_stmt_case {
-    if var_before_stmt(stmt, name);
-    if match_stmt_node(stmt, _, cases);
-    if blocks = desugared_case_block_list(cases);
-    then var_before_stmt_blocks(blocks, name);
-}
-rule desugared_var_before_stmt_case {
-    if match_stmt_node(stmt, _, cases);
-    if term_identifier = desugared_match_term_identifier(stmt);
-    if blocks = desugared_case_block_list(cases);
-    then var_before_stmt_blocks(blocks, term_identifier);
-}
-
-rule var_before_if_atom_equal {
-    if var_before_if_atom(atom, name);
-    if equal_if_atom_node(atom, lhs, rhs);
-    then var_before_term(lhs, name);
-    then var_before_term(rhs, name);
-}
-rule var_before_if_atom_defined {
-    if var_before_if_atom(atom, name);
-    if defined_if_atom_node(atom, tm);
-    then var_before_term(tm, name);
-}
-rule var_before_if_atom_pred {
-    if var_before_if_atom(atom, name);
-    if pred_if_atom_node(atom, _, args);
-    then var_before_terms(args, name);
-}
-rule var_before_if_atom_var {
-    if var_before_if_atom(atom, name);
-    if var_if_atom_node(atom, var_term, _);
-    then var_before_term(var_term, name);
-}
-
-rule var_before_then_atom_equal {
-    if var_before_then_atom(atom, name);
-    if equal_then_atom_node(atom, lhs, rhs);
-    then var_before_term(lhs, name);
-    then var_before_term(rhs, name);
-}
-rule var_before_then_atom_defined {
-    if var_before_then_atom(atom, name);
-    if defined_then_atom_node(atom, var_term, tm);
-    then var_before_opt_term(var_term, name);
-    then var_before_term(tm, name);
-}
-rule var_before_then_atom_pred {
-    if var_before_then_atom(atom, name);
-    if pred_then_atom_node(atom, _, args);
-    then var_before_terms(args, name);
-}
-
-rule var_before_terms_cons {
-    if var_before_terms(tms, name);
-    if cons_term_list_node(tms, head, tail);
-    then var_before_term(head, name);
-    then var_before_terms(tail, name);
-}
-
-rule var_before_opt_term_some {
-    if var_before_opt_term(opt_term, name);
-    if some_term_node(opt_term, term);
-    then var_before_term(term, name);
-}
-
-rule var_before_term_app {
-    if var_before_term(tm, name);
-    if app_term_node(tm, _, args);
-    then var_before_terms(args, name);
-}
-
-// #### Propagate var_in_X upwards
-rule var_in_term_var {
-    if var_term_node(tm, ident);
-    then var_in_term(tm, ident);
-}
-rule var_in_term_wildcard {
-    if wildcard_term_node(tm);
-    if name = wildcard_virt_ident(tm);
-    then var_in_term(tm, name);
-}
-rule var_in_term_app {
-    if app_term_node(tm, _, args);
-    if var_in_terms(args, name);
-    then var_in_term(tm, name);
-}
-
-rule var_in_terms_cons_head {
-    if cons_term_list_node(tms, head, _);
-    if var_in_term(head, name);
-    then var_in_terms(tms, name);
-}
-rule var_in_terms_cons_tail {
-    if cons_term_list_node(tms, _, tail);
-    if var_in_terms(tail, name);
-    then var_in_terms(tms, name);
-}
-
-rule var_in_opt_terms {
-    if some_term_node(opt_term, term);
-    if var_in_term(term, name);
-    then var_in_opt_term(opt_term, name);
-}
-
-rule var_in_if_atom_equal_lhs {
-    if equal_if_atom_node(atom, lhs, _);
-    if var_in_term(lhs, name);
-    then var_in_if_atom(atom, name);
-}
-rule var_in_if_atom_equal_rhs {
-    if equal_if_atom_node(atom, _, rhs);
-    if var_in_term(rhs, name);
-    then var_in_if_atom(atom, name);
-}
-rule var_in_if_atom_defined {
-    if defined_if_atom_node(atom, tm);
-    if var_in_term(tm, name);
-    then var_in_if_atom(atom, name);
-}
-rule var_in_if_atom_pred {
-    if pred_if_atom_node(atom, _, args);
-    if var_in_terms(args, name);
-    then var_in_if_atom(atom, name);
-}
-rule var_in_if_atom_var {
-    if var_if_atom_node(atom, var_term, _);
-    if var_in_term(var_term, name);
-    then var_in_if_atom(atom, name);
-}
-
-rule var_in_then_atom_equal_lhs {
-    if equal_then_atom_node(atom, lhs, _);
-    if var_in_term(lhs, name);
-    then var_in_then_atom(atom, name);
-}
-rule var_in_then_atom_equal_rhs {
-    if equal_then_atom_node(atom, _, rhs);
-    if var_in_term(rhs, name);
-    then var_in_then_atom(atom, name);
-}
-rule var_in_then_atom_defined_var_term {
-    if defined_then_atom_node(atom, var_term, _);
-    if var_in_opt_term(var_term, name);
-    then var_in_then_atom(atom, name);
-}
-rule var_in_then_atom_defined_term {
-    if defined_then_atom_node(atom, _, tm);
-    if var_in_term(tm, name);
-    then var_in_then_atom(atom, name);
-}
-rule var_in_then_atom_pred {
-    if pred_then_atom_node(atom, _, args);
-    if var_in_terms(args, name);
-    then var_in_then_atom(atom, name);
-}
-
-rule var_in_stmt_if {
-    if if_stmt_node(stmt, atom);
-    if var_in_if_atom(atom, name);
-    then var_in_stmt(stmt, name);
-}
-rule var_in_stmt_then {
-    if then_stmt_node(stmt, atom);
-    if var_in_then_atom(atom, name);
-    then var_in_stmt(stmt, name);
-}
-// TODO: These rules seem to be not enough to make a variable defined after a branch/match statement in which it is introduced in each branch.
-rule var_in_stmt_branch {
-    if branch_stmt_node(stmt, blocks);
-    if var_in_all_stmt_blocks(blocks, name);
-    then var_in_stmt(stmt, name);
-}
-rule var_in_match_branch {
-    if match_stmt_node(stmt, _, cases);
-    if blocks = desugared_case_block_list(cases);
-    if var_in_all_stmt_blocks(blocks, name);
-    then var_in_stmt(stmt, name);
-}
-
-rule var_in_stmts_cons_head {
-    if cons_stmt_list_node(stmts, head_stmt, _);
-    if var_in_stmt(head_stmt, name);
-    then var_in_stmts(stmts, name);
-}
-rule var_in_stmts_cons_tail {
-    if cons_stmt_list_node(stmts, _, tail_stmts);
-    if var_in_stmts(tail_stmts, name);
-    then var_in_stmts(stmts, name);
-}
-
-rule var_in_all_stmt_blocks_cons {
-    if cons_stmt_block_list_node(blocks, head_block, tail_blocks);
-    if var_in_stmts(head_block, name);
-    if var_in_all_stmt_blocks(tail_blocks, name);
-    then var_in_all_stmt_blocks(blocks, name);
-}
-
-// #### Connect var_before_X and var_in_X
-
-rule var_in_var_before {
-    if cons_stmt_list_node(_, stmt, tail);
-    if var_in_stmt(stmt, name);
-    then var_before_stmts(tail, name);
-}
 
 // ### Terms that should need epic checking
 //
@@ -1713,18 +1525,9 @@ rule surjective_exempted_then_defined_term {
     then el_is_surjective_ok(el);
 }
 
-// ## Variable occurs twice check
-
-pred var_term_in_rule(TermNode, VirtIdent, RuleDeclNode);
-rule var_term_in_rule_descendant {
-    if var_term_node(tm, ident);
-    if is_rule_descendant(rule_descendant_term(tm), rul);
-    then var_term_in_rule(tm, ident, rul);
-}
-
-pred should_be_obtained_by_ctor(TermNode, EnumDeclNode);
 
 // ## Enum constructor surjectivity check
+pred should_be_obtained_by_ctor(TermNode, EnumDeclNode);
 rule defined_then_should_be_given_by_ctor {
     if defined_then_atom_node(_, _, tm);
     if el = semantic_el(tm, _);
@@ -1823,7 +1626,8 @@ pred pattern_ctor_arg_var_is_not_fresh(Loc);
 rule pattern_ctor_arg_var_is_not_fresh_defined {
     if is_pattern_ctor_arg(arg);
     if var_term_node(arg, ident);
-    if var_before_term(arg, ident);
+    if scope = entry_scope(rule_descendant_term(arg));
+    if var_in_scope(ident, scope);
     if loc = term_node_loc(arg);
     then pattern_ctor_arg_var_is_not_fresh(loc);
 }
