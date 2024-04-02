@@ -11,7 +11,7 @@ highlight default link eqlogComment Comment
 syntax match eqlogIdentifier "\%([^[:cntrl:][:space:][:punct:][:digit:]]\|_\)\%([^[:cntrl:][:punct:][:space:]]\|_\)*" display contained
 highlight default link eqlogIdentifier Identifier
 
-syntax match eqlogOperator "=\|!\|->"
+syntax match eqlogOperator "=\|!\|->\|=>"
 highlight default link eqlogOperator Operator
 
 syntax keyword eqlogDecl
@@ -27,6 +27,8 @@ syntax keyword eqlogConditional
   \ then
   \ branch
   \ along
+  \ enum
+  \ match
 highlight default link eqlogConditional Conditional
 
 let b:current_syntax = "eqlog"
