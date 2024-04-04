@@ -1,4 +1,4 @@
-// src-digest: BF338DBCE38C67904EB945C19BB5450A759DD9D04814956860B3BB68A5DC5F5D
+// src-digest: 24060B6E5A0791DB50A96EA27A2735072DBC0D0048562E2228F2E375A1C7C252
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -25998,16 +25998,16 @@ impl fmt::Display for SemanticPredTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Arity(pub Pred, pub TypeList);
+struct PredArity(pub Pred, pub TypeList);
 #[derive(Clone, Hash, Debug)]
-struct ArityTable {
+struct PredArityTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
     index_all_1_0: BTreeSet<(u32, u32)>,
-    element_index_pred: BTreeMap<Pred, Vec<Arity>>,
-    element_index_type_list: BTreeMap<TypeList, Vec<Arity>>,
+    element_index_pred: BTreeMap<Pred, Vec<PredArity>>,
+    element_index_type_list: BTreeMap<TypeList, Vec<PredArity>>,
 }
-impl ArityTable {
+impl PredArityTable {
     #[allow(unused)]
     const WEIGHT: usize = 8;
     fn new() -> Self {
@@ -26020,7 +26020,7 @@ impl ArityTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: Arity) -> bool {
+    fn insert(&mut self, t: PredArity) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
             self.index_all_1_0.insert(Self::permute_1_0(t));
@@ -26045,7 +26045,7 @@ impl ArityTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: Arity) -> bool {
+    fn contains(&self, t: PredArity) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -26055,23 +26055,23 @@ impl ArityTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: Arity) -> (u32, u32) {
+    fn permute_0_1(t: PredArity) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> Arity {
-        Arity(Pred::from(t.0), TypeList::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> PredArity {
+        PredArity(Pred::from(t.0), TypeList::from(t.1))
     }
     #[allow(unused)]
-    fn permute_1_0(t: Arity) -> (u32, u32) {
+    fn permute_1_0(t: PredArity) -> (u32, u32) {
         (t.1.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> Arity {
-        Arity(Pred::from(t.1), TypeList::from(t.0))
+    fn permute_inverse_1_0(t: (u32, u32)) -> PredArity {
+        PredArity(Pred::from(t.1), TypeList::from(t.0))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = Arity> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = PredArity> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -26080,7 +26080,7 @@ impl ArityTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = Arity> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = PredArity> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -26089,7 +26089,7 @@ impl ArityTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = Arity> {
+    fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredArity> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -26099,7 +26099,7 @@ impl ArityTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Pred, arg1: TypeList) -> impl '_ + Iterator<Item = Arity> {
+    fn iter_all_0_1(&self, arg0: Pred, arg1: TypeList) -> impl '_ + Iterator<Item = PredArity> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -26110,7 +26110,7 @@ impl ArityTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = Arity> {
+    fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = PredArity> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN);
         let max = (arg1, u32::MAX);
@@ -26120,7 +26120,7 @@ impl ArityTable {
             .map(Self::permute_inverse_1_0)
     }
     #[allow(dead_code)]
-    fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<Arity> {
+    fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<PredArity> {
         let mut ts = match self.element_index_pred.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -26141,7 +26141,7 @@ impl ArityTable {
         ts
     }
     #[allow(dead_code)]
-    fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<Arity> {
+    fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<PredArity> {
         let mut ts = match self.element_index_type_list.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -26162,11 +26162,11 @@ impl ArityTable {
         ts
     }
 }
-impl fmt::Display for ArityTable {
+impl fmt::Display for PredArityTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("arity"))
+            .with(Header("pred_arity"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -32216,7 +32216,7 @@ struct SemanticArgTypesArgs(pub ArgDeclListNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticPredArgs(pub Ident);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ArityArgs(pub Pred);
+struct PredArityArgs(pub Pred);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticFuncArgs(pub Ident);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -32435,7 +32435,7 @@ struct ModelDelta {
     new_semantic_type: Vec<SemanticType>,
     new_semantic_arg_types: Vec<SemanticArgTypes>,
     new_semantic_pred: Vec<SemanticPred>,
-    new_arity: Vec<Arity>,
+    new_pred_arity: Vec<PredArity>,
     new_semantic_func: Vec<SemanticFunc>,
     new_domain: Vec<Domain>,
     new_codomain: Vec<Codomain>,
@@ -32558,7 +32558,7 @@ struct ModelDelta {
     new_semantic_type_def: Vec<SemanticTypeArgs>,
     new_semantic_arg_types_def: Vec<SemanticArgTypesArgs>,
     new_semantic_pred_def: Vec<SemanticPredArgs>,
-    new_arity_def: Vec<ArityArgs>,
+    new_pred_arity_def: Vec<PredArityArgs>,
     new_semantic_func_def: Vec<SemanticFuncArgs>,
     new_domain_def: Vec<DomainArgs>,
     new_codomain_def: Vec<CodomainArgs>,
@@ -32973,7 +32973,7 @@ pub struct Eqlog {
     semantic_type: SemanticTypeTable,
     semantic_arg_types: SemanticArgTypesTable,
     semantic_pred: SemanticPredTable,
-    arity: ArityTable,
+    pred_arity: PredArityTable,
     semantic_func: SemanticFuncTable,
     domain: DomainTable,
     codomain: CodomainTable,
@@ -33162,7 +33162,7 @@ impl ModelDelta {
             new_semantic_type: Vec::new(),
             new_semantic_arg_types: Vec::new(),
             new_semantic_pred: Vec::new(),
-            new_arity: Vec::new(),
+            new_pred_arity: Vec::new(),
             new_semantic_func: Vec::new(),
             new_domain: Vec::new(),
             new_codomain: Vec::new(),
@@ -33336,7 +33336,7 @@ impl ModelDelta {
 
             new_semantic_pred_def: Vec::new(),
 
-            new_arity_def: Vec::new(),
+            new_pred_arity_def: Vec::new(),
 
             new_semantic_func_def: Vec::new(),
 
@@ -34174,8 +34174,8 @@ impl ModelDelta {
             model.insert_semantic_pred(tm0, tm1);
         }
 
-        for Arity(tm0, tm1) in self.new_arity.drain(..) {
-            model.insert_arity(tm0, tm1);
+        for PredArity(tm0, tm1) in self.new_pred_arity.drain(..) {
+            model.insert_pred_arity(tm0, tm1);
         }
 
         for SemanticFunc(tm0, tm1) in self.new_semantic_func.drain(..) {
@@ -34528,8 +34528,8 @@ impl ModelDelta {
             model.define_semantic_pred(tm0);
         }
 
-        for ArityArgs(tm0) in self.new_arity_def.drain(..) {
-            model.define_arity(tm0);
+        for PredArityArgs(tm0) in self.new_pred_arity_def.drain(..) {
+            model.define_pred_arity(tm0);
         }
 
         for SemanticFuncArgs(tm0) in self.new_semantic_func_def.drain(..) {
@@ -35010,7 +35010,7 @@ impl Eqlog {
             semantic_type: SemanticTypeTable::new(),
             semantic_arg_types: SemanticArgTypesTable::new(),
             semantic_pred: SemanticPredTable::new(),
-            arity: ArityTable::new(),
+            pred_arity: PredArityTable::new(),
             semantic_func: SemanticFuncTable::new(),
             domain: DomainTable::new(),
             codomain: CodomainTable::new(),
@@ -35210,7 +35210,7 @@ impl Eqlog {
                 self.semantic_arg_types_nil_0(&mut delta);
                 self.semantic_arg_types_cons_0(&mut delta);
                 self.semantic_decl_pred_0(&mut delta);
-                self.arity_decl_0(&mut delta);
+                self.pred_arity_decl_0(&mut delta);
                 self.semantic_decl_func_0(&mut delta);
                 self.semantic_decl_func_ctor_0(&mut delta);
                 self.func_decl_domain_codomain_0(&mut delta);
@@ -39536,31 +39536,31 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `arity(arg0)`.
+    /// Evaluates `pred_arity(arg0)`.
     #[allow(dead_code)]
-    pub fn arity(&self, mut arg0: Pred) -> Option<TypeList> {
+    pub fn pred_arity(&self, mut arg0: Pred) -> Option<TypeList> {
         arg0 = self.root_pred(arg0);
-        self.arity.iter_all_0(arg0).next().map(|t| t.1)
+        self.pred_arity.iter_all_0(arg0).next().map(|t| t.1)
     }
-    /// Returns an iterator over tuples in the graph of the `arity` function.
+    /// Returns an iterator over tuples in the graph of the `pred_arity` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_arity(&self) -> impl '_ + Iterator<Item = (Pred, TypeList)> {
-        self.arity.iter_all().map(|t| (t.0, t.1))
+    pub fn iter_pred_arity(&self) -> impl '_ + Iterator<Item = (Pred, TypeList)> {
+        self.pred_arity.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `arity(tm0) = tm1` hold.
+    /// Makes the equation `pred_arity(tm0) = tm1` hold.
 
     #[allow(dead_code)]
-    pub fn insert_arity(&mut self, mut tm0: Pred, mut tm1: TypeList) {
+    pub fn insert_pred_arity(&mut self, mut tm0: Pred, mut tm1: TypeList) {
         tm0 = self.pred_equalities.root(tm0);
         tm1 = self.type_list_equalities.root(tm1);
-        if self.arity.insert(Arity(tm0, tm1)) {
+        if self.pred_arity.insert(PredArity(tm0, tm1)) {
             let weight0 = &mut self.pred_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(ArityTable::WEIGHT);
+            *weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
 
             let weight1 = &mut self.type_list_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(ArityTable::WEIGHT);
+            *weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
         }
     }
 
@@ -41227,14 +41227,14 @@ impl Eqlog {
             }
         }
     }
-    /// Enforces that `arity(tm0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `pred_arity(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_arity(&mut self, tm0: Pred) -> TypeList {
-        match self.arity(tm0) {
+    pub fn define_pred_arity(&mut self, tm0: Pred) -> TypeList {
+        match self.pred_arity(tm0) {
             Some(result) => result,
             None => {
                 let tm1 = self.new_type_list_internal();
-                self.insert_arity(tm0, tm1);
+                self.insert_pred_arity(tm0, tm1);
                 tm1
             }
         }
@@ -51301,42 +51301,42 @@ impl Eqlog {
         }
 
         for el in self.pred_uprooted.iter().copied() {
-            let ts = self.arity.drain_with_element_pred(el);
+            let ts = self.pred_arity.drain_with_element_pred(el);
             for mut t in ts {
                 let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(ArityTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(PredArityTable::WEIGHT);
 
                 let weight1 = &mut self.type_list_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(ArityTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(PredArityTable::WEIGHT);
 
                 t.0 = self.root_pred(t.0);
                 t.1 = self.root_type_list(t.1);
-                if self.arity.insert(t) {
+                if self.pred_arity.insert(t) {
                     let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(ArityTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
 
                     let weight1 = &mut self.type_list_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(ArityTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
                 }
             }
         }
         for el in self.type_list_uprooted.iter().copied() {
-            let ts = self.arity.drain_with_element_type_list(el);
+            let ts = self.pred_arity.drain_with_element_type_list(el);
             for mut t in ts {
                 let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(ArityTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(PredArityTable::WEIGHT);
 
                 let weight1 = &mut self.type_list_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(ArityTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(PredArityTable::WEIGHT);
 
                 t.0 = self.root_pred(t.0);
                 t.1 = self.root_type_list(t.1);
-                if self.arity.insert(t) {
+                if self.pred_arity.insert(t) {
                     let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(ArityTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
 
                     let weight1 = &mut self.type_list_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(ArityTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
                 }
             }
         }
@@ -53057,7 +53057,7 @@ impl Eqlog {
             || self.semantic_type.is_dirty()
             || self.semantic_arg_types.is_dirty()
             || self.semantic_pred.is_dirty()
-            || self.arity.is_dirty()
+            || self.pred_arity.is_dirty()
             || self.semantic_func.is_dirty()
             || self.domain.is_dirty()
             || self.codomain.is_dirty()
@@ -53853,9 +53853,9 @@ impl Eqlog {
     fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Arity(tm0, tm1) in self.arity.iter_dirty() {
+            for PredArity(tm0, tm1) in self.pred_arity.iter_dirty() {
                 #[allow(unused_variables)]
-                for Arity(_, tm2) in self.arity.iter_all_0(tm0) {
+                for PredArity(_, tm2) in self.pred_arity.iter_all_0(tm0) {
                     delta.new_type_list_equalities.push((tm1, tm2));
                 }
             }
@@ -60085,32 +60085,32 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_0(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.arity_decl_1(delta);
-            self.arity_decl_2(delta);
-            self.arity_decl_4(delta);
-            self.arity_decl_6(delta);
+            self.pred_arity_decl_1(delta);
+            self.pred_arity_decl_2(delta);
+            self.pred_arity_decl_4(delta);
+            self.pred_arity_decl_6(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_1(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_2(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_dirty() {
-                self.arity_decl_3(delta, tm0, tm1, tm2);
+                self.pred_arity_decl_3(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_3(
+    fn pred_arity_decl_3(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -60120,26 +60120,26 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                self.arity_decl_5(delta, tm0, tm2, tm1, tm3);
+                self.pred_arity_decl_5(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_4(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredDecl(tm0, _, tm2) in self.pred_decl.iter_all_1(tm1) {
-                    self.arity_decl_5(delta, tm0, tm2, tm1, tm3);
+                    self.pred_arity_decl_5(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_5(
+    fn pred_arity_decl_5(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -60150,13 +60150,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(_, tm4) in self.semantic_arg_types.iter_all_0(tm2) {
-                self.arity_decl_7(delta, tm0, tm1, tm3, tm2, tm4);
+                self.pred_arity_decl_7(delta, tm0, tm1, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_6(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm2, tm4) in self.semantic_arg_types.iter_dirty() {
@@ -60164,7 +60164,7 @@ impl Eqlog {
                 for SemanticPred(tm1, tm3) in self.semantic_pred.iter_all() {
                     #[allow(unused_variables)]
                     for PredDecl(tm0, _, _) in self.pred_decl.iter_all_1_2(tm1, tm2) {
-                        self.arity_decl_7(delta, tm0, tm1, tm3, tm2, tm4);
+                        self.pred_arity_decl_7(delta, tm0, tm1, tm3, tm2, tm4);
                     }
                 }
             }
@@ -60172,7 +60172,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_decl_7(
+    fn pred_arity_decl_7(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -60182,9 +60182,9 @@ impl Eqlog {
         tm4: TypeList,
     ) {
         for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm3, tm4).next().is_some();
+            let exists_already = self.pred_arity.iter_all_0_1(tm3, tm4).next().is_some();
             if !exists_already {
-                delta.new_arity.push(Arity(tm3, tm4));
+                delta.new_pred_arity.push(PredArity(tm3, tm4));
             }
         }
     }
@@ -61520,7 +61520,7 @@ impl Eqlog {
     fn pred_app_types_3(&self, delta: &mut ModelDelta, tm0: Pred, tm1: ElList) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Arity(_, tm2) in self.arity.iter_all_0(tm0) {
+            for PredArity(_, tm2) in self.pred_arity.iter_all_0(tm0) {
                 self.pred_app_types_5(delta, tm1, tm0, tm2);
             }
         }
@@ -61530,7 +61530,7 @@ impl Eqlog {
     fn pred_app_types_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Arity(tm0, tm2) in self.arity.iter_dirty() {
+            for PredArity(tm0, tm2) in self.pred_arity.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredApp(_, tm1) in self.pred_app.iter_all_0(tm0) {
                     self.pred_app_types_5(delta, tm1, tm0, tm2);
@@ -65201,7 +65201,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         self.pred_if_atom_arg_num_should_match_9(
@@ -65219,7 +65219,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm4) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
-                for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         #[allow(unused_variables)]
@@ -65243,7 +65243,7 @@ impl Eqlog {
     fn pred_if_atom_arg_num_should_match_7(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Arity(tm4, tm5) in self.arity.iter_dirty() {
+            for PredArity(tm4, tm5) in self.pred_arity.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                     #[allow(unused_variables)]
@@ -65271,7 +65271,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
                 #[allow(unused_variables)]
-                for Arity(tm4, _) in self.arity.iter_all_1(tm5) {
+                for PredArity(tm4, _) in self.pred_arity.iter_all_1(tm5) {
                     #[allow(unused_variables)]
                     for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm4) {
                         #[allow(unused_variables)]
@@ -65325,7 +65325,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                             #[allow(unused_variables)]
-                            for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                            for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
                                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                     self.pred_if_atom_arg_num_should_match_11(
@@ -65437,7 +65437,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         self.pred_then_atom_arg_num_should_match_9(
@@ -65455,7 +65455,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm4) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
-                for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                         #[allow(unused_variables)]
@@ -65479,7 +65479,7 @@ impl Eqlog {
     fn pred_then_atom_arg_num_should_match_7(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Arity(tm4, tm5) in self.arity.iter_dirty() {
+            for PredArity(tm4, tm5) in self.pred_arity.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                     #[allow(unused_variables)]
@@ -65507,7 +65507,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
                 #[allow(unused_variables)]
-                for Arity(tm4, _) in self.arity.iter_all_1(tm5) {
+                for PredArity(tm4, _) in self.pred_arity.iter_all_1(tm5) {
                     #[allow(unused_variables)]
                     for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm4) {
                         #[allow(unused_variables)]
@@ -65563,7 +65563,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for SemanticPred(_, tm4) in self.semantic_pred.iter_all_0(tm1) {
                             #[allow(unused_variables)]
-                            for Arity(_, tm5) in self.arity.iter_all_0(tm4) {
+                            for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
                                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
                                     self.pred_then_atom_arg_num_should_match_11(
@@ -74441,7 +74441,7 @@ impl Eqlog {
         self.semantic_type.drop_dirt();
         self.semantic_arg_types.drop_dirt();
         self.semantic_pred.drop_dirt();
-        self.arity.drop_dirt();
+        self.pred_arity.drop_dirt();
         self.semantic_func.drop_dirt();
         self.domain.drop_dirt();
         self.codomain.drop_dirt();
@@ -75047,7 +75047,7 @@ impl fmt::Display for Eqlog {
         self.semantic_type.fmt(f)?;
         self.semantic_arg_types.fmt(f)?;
         self.semantic_pred.fmt(f)?;
-        self.arity.fmt(f)?;
+        self.pred_arity.fmt(f)?;
         self.semantic_func.fmt(f)?;
         self.domain.fmt(f)?;
         self.codomain.fmt(f)?;

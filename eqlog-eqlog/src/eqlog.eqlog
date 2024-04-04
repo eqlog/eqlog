@@ -568,12 +568,12 @@ rule semantic_decl_pred {
 }
 
 
-func arity(Pred) -> TypeList;
-rule arity_decl {
+func pred_arity(Pred) -> TypeList;
+rule pred_arity_decl {
     if pred_decl(_, pred_name, arg_decls);
     if predicate = semantic_pred(pred_name);
     if arg_types = semantic_arg_types(arg_decls);
-    then arity(predicate) = arg_types;
+    then pred_arity(predicate) = arg_types;
 }
 
 type Func;
@@ -696,7 +696,7 @@ rule func_app_types {
 
 rule pred_app_types {
     if pred_app(predicate, args);
-    if arity(predicate) = ar;
+    if pred_arity(predicate) = ar;
     then el_types(args, ar);
 }
 
@@ -1000,14 +1000,14 @@ pred func_arg_num_should_match(
 rule pred_if_atom_arg_num_should_match {
     if pred_if_atom_node(atom, name, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(arity(semantic_pred(name)));
+    if expected_len = type_list_len(pred_arity(semantic_pred(name)));
     if loc = if_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 rule pred_then_atom_arg_num_should_match {
     if pred_then_atom_node(atom, name, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(arity(semantic_pred(name)));
+    if expected_len = type_list_len(pred_arity(semantic_pred(name)));
     if loc = then_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
