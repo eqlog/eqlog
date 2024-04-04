@@ -611,6 +611,49 @@ rule ctor_decl_codomain {
     then codomain(function) = semantic_enum_type;
 }
 
+enum Rel {
+    PredRel(Pred),
+    FuncRel(Func),
+    NegatedPredRel(Pred),
+    UndefinedFuncRel(Func)
+}
+
+rule rel_constructors_pred_total {
+    if predicate: Pred;
+    then PredRel(predicate)!;
+    then NegatedPredRel(predicate)!;
+}
+rule rel_constructors_func_total {
+    if function: Func;
+    then FuncRel(function)!;
+    then UndefinedFuncRel(function)!;
+}
+
+func arity(Rel) -> TypeList;
+rule arity_laws {
+    if rel: Rel;
+    match rel {
+        PredRel(predicate) => {
+            if tys = pred_arity(predicate);
+            then arity(rel) = tys;
+        }
+        FuncRel(function) => {
+            if dom = domain(function);
+            if cod = codomain(function);
+            then tys := cons_type_list(cod, dom)!;
+            then arity(rel) = tys;
+        }
+        NegatedPredRel(predicate) => {
+            if tys = pred_arity(predicate);
+            then arity(rel) = tys;
+        }
+        UndefinedFuncRel(function) => {
+            if tys = domain(function);
+            then arity(rel) = tys;
+        }
+    }
+}
+
 // ## Structures
 
 type Structure;
@@ -631,9 +674,19 @@ rule el_list_cons_nil {
     then absurd();
 }
 
-func func_app(Func, ElList) -> El;
+pred rel_app(Rel, ElList);
 
-pred pred_app(Pred, ElList);
+func func_app(Func, ElList) -> El;
+rule func_rel_app {
+    if result = func_app(function, args);
+    then rel_args := cons_el_list(result, args)!;
+    if rel = FuncRel(function);
+    then rel_app(rel, rel_args);
+}
+rule rel_func_app {
+    if rel_app(FuncRel(function), cons_el_list(result, args));
+    then func_app(function, args) = result;
+}
 
 type ElName;
 func var(Structure, ElName) -> El;
@@ -686,18 +739,10 @@ rule cons_el_types_reverse {
     then el_types(tail, tail_types);
 }
 
-rule func_app_types {
-    if result = func_app(function, args);
-    if domain(function) = dom;
-    if codomain(function) = cod;
-    then el_types(args, dom);
-    then el_type(result, cod);
-}
-
-rule pred_app_types {
-    if pred_app(predicate, args);
-    if pred_arity(predicate) = ar;
-    then el_types(args, ar);
+rule rel_app_types {
+    if rel_app(rel, els);
+    if arity(rel) = ar;
+    then el_types(els, ar);
 }
 
 // ### Constrained elements
@@ -707,13 +752,8 @@ rule pred_app_types {
 // application of a predicate.
 pred constrained_el(El);
 pred constrained_els(ElList);
-rule func_app_constrained {
-    if result = func_app(_, args);
-    then constrained_els(args);
-    then constrained_el(result);
-}
-rule pred_app_constrained {
-    if pred_app(_, args);
+rule rel_app_constrained {
+    if rel_app(_, args);
     then constrained_els(args);
 }
 rule constrained_head_tail {
@@ -777,23 +817,17 @@ rule map_cons_els {
     then mapped = cons_el_list(map_el(mor, head), map_els(mor, tail));
 }
 
-// Morphisms commute with function application, preserve
-// variables and are compatible with predicates.
-rule map_app_func {
-    if mapped_result = map_el(mor, func_app(function, args));
-    if mapped_args = map_els(mor, args);
-    then mapped_result = func_app(function, mapped_args);
-}
+// Morphisms commute with relations and variables.
 rule map_var {
     if el = var(_, name);
     if mapped_el = map_el(morph, el);
     if cod(morph) = cod_structure;
     then mapped_el = var(cod_structure, name);
 }
-rule map_pred_app {
-    if pred_app(predicate, args);
+rule map_rel_app {
+    if rel_app(rel, args);
     if mapped_args = map_els(_, args);
-    then pred_app(predicate, mapped_args);
+    then rel_app(rel, mapped_args);
 }
 
 // Morphisms preserve and reflect types.
@@ -823,18 +857,11 @@ rule el_in_img_rule {
     then el_in_img(morph, el);
 }
 
-pred pred_tuple_in_img(Morphism, Pred, ElList);
-rule pred_tuple_in_img_rule {
-    if map_els(morphism, dom_els) = cod_els;
-    if pred_app(predicate, dom_els);
-    then pred_tuple_in_img(morphism, predicate, cod_els);
-}
-
-pred func_app_in_img(Morphism, Func, args: ElList);
-rule func_app_in_img_rule {
-    if map_els(morphism, dom_els) = cod_els;
-    if func_app(function, dom_els)!;
-    then func_app_in_img(morphism, function, cod_els);
+pred rel_tuple_in_img(Morphism, Rel, ElList);
+rule rel_tuple_in_img_law {
+    if rel_app(rel, dom_els);
+    if cod_els = map_els(morphism, dom_els);
+    then rel_tuple_in_img(morphism, rel, cod_els);
 }
 
 // ## Symbol checks
@@ -1425,9 +1452,9 @@ rule equal_if_atom_semantics {
 // No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
 rule pred_if_atom_semantics {
     if pred_if_atom_node(_, predicate_name, arg_terms);
-    if predicate = semantic_pred(predicate_name);
+    if rel = PredRel(semantic_pred(predicate_name));
     if arg_els = semantic_els(arg_terms, _);
-    then pred_app(predicate, arg_els);
+    then rel_app(rel, arg_els);
 }
 rule var_if_atom_semantics {
     if var_if_atom_node(_, var_term, type_name);
@@ -1452,9 +1479,9 @@ rule defined_then_atom_semantics {
 }
 rule pred_then_atom_semantics {
     if pred_then_atom_node(_, predicate_name, arg_terms);
-    if predicate = semantic_pred(predicate_name);
+    if rel = PredRel(semantic_pred(predicate_name));
     if arg_els = semantic_els(arg_terms, _);
-    then pred_app(predicate, arg_els);
+    then rel_app(rel, arg_els);
 }
 
 // ## Epic check
