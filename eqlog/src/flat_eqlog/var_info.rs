@@ -2,6 +2,7 @@
 
 use super::ast::*;
 use by_address::ByAddress;
+use eqlog_eqlog::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -43,12 +44,6 @@ pub fn fixed_vars<'a>(
     all_fixed_vars
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub enum Quantifier {
-    All,
-    Any,
-}
-
 /// Annotation of a [FlatIfStmt] that takes the context of the statement into account.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelationInfo {
@@ -64,10 +59,6 @@ pub struct RelationInfo {
     /// The list of new (i.e., not already fixed) variables among arguments. A [FlatVar] must not
     /// occur twice; in case of a diagonal any one entry should be in the map.
     pub out_projections: BTreeMap<usize, FlatVar>,
-
-    /// Whether it suffices to consider one match of the variables in the rel statement
-    /// ([Quantifier::Any]), or if all matches must be considered ([Quantifier::All]).
-    pub quantifier: Quantifier,
 }
 
 fn diagonals(args: &[FlatVar]) -> BTreeSet<BTreeSet<usize>> {
@@ -107,31 +98,6 @@ pub enum CanAssumeFunctionality {
     No,
 }
 
-fn quantifier(
-    rel: Rel,
-    args: &[FlatVar],
-    can_assume_functionality: CanAssumeFunctionality,
-    fixed_vars: &BTreeSet<FlatVar>,
-) -> Quantifier {
-    let all_args_fixed = args.iter().all(|arg| fixed_vars.contains(&arg));
-    if all_args_fixed {
-        return Quantifier::Any;
-    }
-
-    if can_assume_functionality == CanAssumeFunctionality::Yes && matches!(rel, Rel::Func(_)) {
-        assert!(
-            args.len() >= 1,
-            "A function relation must have at least one argument"
-        );
-        let func_args = &args[0..args.len() - 1];
-        let all_func_args_fixed = func_args.iter().all(|arg| fixed_vars.contains(&arg));
-        if all_func_args_fixed {
-            return Quantifier::Any;
-        }
-    }
-    return Quantifier::All;
-}
-
 pub fn relation_info_rec<'a>(
     stmts: &'a [FlatStmt],
     can_assume_functionality: CanAssumeFunctionality,
@@ -156,12 +122,6 @@ pub fn relation_info_rec<'a>(
                         diagonals: diagonals(args.as_slice()),
                         in_projections: in_projections(args.as_slice(), fixed_vars),
                         out_projections: out_projections(args.as_slice(), fixed_vars),
-                        quantifier: quantifier(
-                            *rel,
-                            args.as_slice(),
-                            can_assume_functionality,
-                            fixed_vars,
-                        ),
                     };
                     infos.insert(ByAddress(rel_if_stmt), info);
                 }

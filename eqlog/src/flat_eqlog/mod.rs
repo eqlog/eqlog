@@ -16,7 +16,7 @@ use eqlog_eqlog::*;
 pub use index_selection::*;
 pub use sort_if_stmts::sort_if_stmts;
 use var_info::*;
-pub use var_info::{CanAssumeFunctionality, Quantifier, RelationInfo};
+pub use var_info::{CanAssumeFunctionality, RelationInfo};
 
 pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     if let None = eqlog.domain(func) {
@@ -28,7 +28,7 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
     let codomain = eqlog.codomain(func).expect("codomain should be total");
 
-    let rel = Rel::Func(func);
+    let rel = eqlog.func_rel(func).unwrap();
     let func_args: Vec<FlatVar> = (0..domain.len()).map(FlatVar).collect();
     let result0 = FlatVar(domain.len());
     let result1 = FlatVar(domain.len() + 1);

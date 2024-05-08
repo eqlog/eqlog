@@ -97,6 +97,19 @@ fn make_var_type_map(el_vars: &BTreeMap<El, FlatVar>, eqlog: &Eqlog) -> BTreeMap
         .collect()
 }
 
+fn iter_rel_app<'a>(
+    strct: Structure,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = (Rel, ElList)> {
+    eqlog.iter_rel_app().filter_map(move |(rel, els)| {
+        if eqlog.are_equal_structure(eqlog.els_structure(els).unwrap(), strct) {
+            Some((rel, els))
+        } else {
+            None
+        }
+    })
+}
+
 /// Returns a list of if statements which match the delta given by `morphism` with arbitrary (not
 /// necessarily fresh) data.
 ///
@@ -118,37 +131,12 @@ fn flatten_if_arbitrary(
 
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
-    for (pred, els) in iter_pred_app(cod, eqlog) {
-        if !eqlog.pred_tuple_in_img(morphism, pred, els) {
+    for (rel, els) in iter_rel_app(cod, eqlog) {
+        if !eqlog.rel_tuple_in_img(morphism, rel, els) {
             let args: Vec<FlatVar> = el_list_vec(els, eqlog)
                 .into_iter()
                 .map(|el| *el_vars.get(&el).unwrap())
                 .collect();
-            let rel = Rel::Pred(pred);
-            let only_dirty = false;
-            stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
-                rel,
-                args,
-                only_dirty,
-            })));
-        }
-    }
-
-    for (func, args, result) in iter_func_app(cod, eqlog) {
-        if !eqlog.func_app_in_img(morphism, func, args) {
-            let func_args: Vec<FlatVar> = el_list_vec(args, eqlog)
-                .into_iter()
-                .map(|el| *el_vars.get(&el).unwrap())
-                .collect();
-            let result = *el_vars.get(&result).unwrap();
-
-            let args = {
-                let mut a = func_args;
-                a.push(result);
-                a
-            };
-
-            let rel = Rel::Func(func);
             let only_dirty = false;
             stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
@@ -189,36 +177,13 @@ fn flatten_if_fresh(
 
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
-    for (pred, els) in iter_pred_app(cod, eqlog) {
+    for (rel, els) in iter_rel_app(cod, eqlog) {
         let args: Vec<FlatVar> = el_list_vec(els, eqlog)
             .into_iter()
             .map(|el| *el_vars.get(&el).unwrap())
             .collect();
-        let rel = Rel::Pred(pred);
 
-        if eqlog.pred_tuple_in_img(morphism, pred, els) {
-            arbitrary_rel_tuples.push((rel, args));
-        } else {
-            fresh_rel_tuples.push((rel, args));
-        }
-    }
-
-    for (func, args, result) in iter_func_app(cod, eqlog) {
-        let in_img = eqlog.func_app_in_img(morphism, func, args);
-        let func_args: Vec<FlatVar> = el_list_vec(args, eqlog)
-            .into_iter()
-            .map(|el| *el_vars.get(&el).unwrap())
-            .collect();
-        let result = *el_vars.get(&result).unwrap();
-
-        let args = {
-            let mut a = func_args;
-            a.push(result);
-            a
-        };
-        let rel = Rel::Func(func);
-
-        if in_img {
+        if eqlog.rel_tuple_in_img(morphism, rel, els) {
             arbitrary_rel_tuples.push((rel, args));
         } else {
             fresh_rel_tuples.push((rel, args));
@@ -327,34 +292,12 @@ fn flatten_surj_then(
 
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
-    for (pred, els) in iter_pred_app(cod, eqlog) {
-        if !eqlog.pred_tuple_in_img(morphism, pred, els) {
+    for (rel, els) in iter_rel_app(cod, eqlog) {
+        if !eqlog.rel_tuple_in_img(morphism, rel, els) {
             let args: Vec<FlatVar> = el_list_vec(els, eqlog)
                 .into_iter()
                 .map(|el| *el_vars.get(&el).unwrap())
                 .collect();
-            let rel = Rel::Pred(pred);
-            stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
-                FlatSurjThenStmtRelation { rel, args },
-            )));
-        }
-    }
-
-    for (func, args, result) in iter_func_app(cod, eqlog) {
-        if !eqlog.func_app_in_img(morphism, func, args) {
-            let func_args: Vec<FlatVar> = el_list_vec(args, eqlog)
-                .into_iter()
-                .map(|el| *el_vars.get(&el).unwrap())
-                .collect();
-            let result = *el_vars.get(&result).unwrap();
-
-            let args = {
-                let mut a = func_args;
-                a.push(result);
-                a
-            };
-
-            let rel = Rel::Func(func);
             stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
                 FlatSurjThenStmtRelation { rel, args },
             )));

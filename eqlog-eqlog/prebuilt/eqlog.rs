@@ -1,4 +1,4 @@
-// src-digest: 10B668EFC83378158203D3ABB260049FFF88CEEE617F7462E4B47960906AC20E
+// src-digest: 42CFA9BF36A5BE000856BBA538A3C859EE81B8FBD43AF364976B9563101941D9
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -28125,243 +28125,6 @@ impl fmt::Display for ConsElListTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct FuncApp(pub Func, pub ElList, pub El);
-#[derive(Clone, Hash, Debug)]
-struct FuncAppTable {
-    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
-    element_index_el: BTreeMap<El, Vec<FuncApp>>,
-    element_index_el_list: BTreeMap<ElList, Vec<FuncApp>>,
-    element_index_func: BTreeMap<Func, Vec<FuncApp>>,
-}
-impl FuncAppTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 12;
-    fn new() -> Self {
-        Self {
-            index_all_0_1_2: BTreeSet::new(),
-            index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_2_0: BTreeSet::new(),
-            element_index_el: BTreeMap::new(),
-            element_index_el_list: BTreeMap::new(),
-            element_index_func: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: FuncApp) -> bool {
-        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
-            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_2_0.insert(Self::permute_1_2_0(t));
-
-            match self.element_index_func.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_func.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_el_list.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_el_list.insert(t.1, vec![t]);
-                }
-            };
-
-            match self.element_index_el.get_mut(&t.2) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_el.insert(t.2, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: FuncApp) -> bool {
-        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1_2.clear();
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1_2.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1_2(t: FuncApp) -> (u32, u32, u32) {
-        (t.0.into(), t.1.into(), t.2.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> FuncApp {
-        FuncApp(Func::from(t.0), ElList::from(t.1), El::from(t.2))
-    }
-    #[allow(unused)]
-    fn permute_1_2_0(t: FuncApp) -> (u32, u32, u32) {
-        (t.1.into(), t.2.into(), t.0.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> FuncApp {
-        FuncApp(Func::from(t.2), ElList::from(t.0), El::from(t.1))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = FuncApp> {
-        let min = (u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = FuncApp> {
-        let min = (u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_dirty_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = FuncApp> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN, u32::MIN);
-        let max = (arg0, u32::MAX, u32::MAX);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Func, arg1: ElList) -> impl '_ + Iterator<Item = FuncApp> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1, u32::MIN);
-        let max = (arg0, arg1, u32::MAX);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1_2(
-        &self,
-        arg0: Func,
-        arg1: ElList,
-        arg2: El,
-    ) -> impl '_ + Iterator<Item = FuncApp> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let arg2 = arg2.0;
-        let min = (arg0, arg1, arg2);
-        let max = (arg0, arg1, arg2);
-        self.index_all_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: ElList) -> impl '_ + Iterator<Item = FuncApp> {
-        let arg1 = arg1.0;
-        let min = (arg1, u32::MIN, u32::MIN);
-        let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_2_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_2_0)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1_2(&self, arg1: ElList, arg2: El) -> impl '_ + Iterator<Item = FuncApp> {
-        let arg1 = arg1.0;
-        let arg2 = arg2.0;
-        let min = (arg1, arg2, u32::MIN);
-        let max = (arg1, arg2, u32::MAX);
-        self.index_all_1_2_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_2_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_el(&mut self, tm: El) -> Vec<FuncApp> {
-        let mut ts = match self.element_index_el.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_el_list(&mut self, tm: ElList) -> Vec<FuncApp> {
-        let mut ts = match self.element_index_el_list.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_func(&mut self, tm: Func) -> Vec<FuncApp> {
-        let mut ts = match self.element_index_func.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-}
-impl fmt::Display for FuncAppTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("func_app"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ElStructure(pub El, pub Structure);
 #[derive(Clone, Hash, Debug)]
 struct ElStructureTable {
@@ -28714,6 +28477,198 @@ impl fmt::Display for ElsStructureTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("els_structure"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct FuncApp(pub Func, pub ElList, pub El);
+#[derive(Clone, Hash, Debug)]
+struct FuncAppTable {
+    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    element_index_el: BTreeMap<El, Vec<FuncApp>>,
+    element_index_el_list: BTreeMap<ElList, Vec<FuncApp>>,
+    element_index_func: BTreeMap<Func, Vec<FuncApp>>,
+}
+impl FuncAppTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 9;
+    fn new() -> Self {
+        Self {
+            index_all_0_1_2: BTreeSet::new(),
+            index_dirty_0_1_2: BTreeSet::new(),
+            element_index_el: BTreeMap::new(),
+            element_index_el_list: BTreeMap::new(),
+            element_index_func: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: FuncApp) -> bool {
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
+            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+
+            match self.element_index_func.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_func.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_el_list.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el_list.insert(t.1, vec![t]);
+                }
+            };
+
+            match self.element_index_el.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el.insert(t.2, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: FuncApp) -> bool {
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1_2.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1_2.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1_2(t: FuncApp) -> (u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> FuncApp {
+        FuncApp(Func::from(t.0), ElList::from(t.1), El::from(t.2))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = FuncApp> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = FuncApp> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(&self, arg0: Func, arg1: ElList) -> impl '_ + Iterator<Item = FuncApp> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1, u32::MIN);
+        let max = (arg0, arg1, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1_2(
+        &self,
+        arg0: Func,
+        arg1: ElList,
+        arg2: El,
+    ) -> impl '_ + Iterator<Item = FuncApp> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let arg2 = arg2.0;
+        let min = (arg0, arg1, arg2);
+        let max = (arg0, arg1, arg2);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_el(&mut self, tm: El) -> Vec<FuncApp> {
+        let mut ts = match self.element_index_el.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_el_list(&mut self, tm: ElList) -> Vec<FuncApp> {
+        let mut ts = match self.element_index_el_list.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_func(&mut self, tm: Func) -> Vec<FuncApp> {
+        let mut ts = match self.element_index_func.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for FuncAppTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("func_app"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -31865,6 +31820,17 @@ impl SemanticElTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
+    fn iter_all_0_2(&self, arg0: TermNode, arg2: El) -> impl '_ + Iterator<Item = SemanticEl> {
+        let arg0 = arg0.0;
+        let arg2 = arg2.0;
+        let min = (arg2, arg0, u32::MIN);
+        let max = (arg2, arg0, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
+    }
+    #[allow(dead_code)]
     fn iter_all_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = SemanticEl> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
@@ -32867,11 +32833,11 @@ struct NilElListArgs(pub Structure);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ConsElListArgs(pub El, pub ElList);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct FuncAppArgs(pub Func, pub ElList);
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ElStructureArgs(pub El);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ElsStructureArgs(pub ElList);
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct FuncAppArgs(pub Func, pub ElList);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct MapElArgs(pub Morphism, pub El);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -33082,9 +33048,9 @@ struct ModelDelta {
     new_cod: Vec<Cod>,
     new_nil_el_list: Vec<NilElList>,
     new_cons_el_list: Vec<ConsElList>,
-    new_func_app: Vec<FuncApp>,
     new_el_structure: Vec<ElStructure>,
     new_els_structure: Vec<ElsStructure>,
+    new_func_app: Vec<FuncApp>,
     new_map_el: Vec<MapEl>,
     new_map_els: Vec<MapEls>,
     new_type_symbol: Vec<TypeSymbol>,
@@ -33211,9 +33177,9 @@ struct ModelDelta {
     new_cod_def: Vec<CodArgs>,
     new_nil_el_list_def: Vec<NilElListArgs>,
     new_cons_el_list_def: Vec<ConsElListArgs>,
-    new_func_app_def: Vec<FuncAppArgs>,
     new_el_structure_def: Vec<ElStructureArgs>,
     new_els_structure_def: Vec<ElsStructureArgs>,
+    new_func_app_def: Vec<FuncAppArgs>,
     new_map_el_def: Vec<MapElArgs>,
     new_map_els_def: Vec<MapElsArgs>,
     new_type_symbol_def: Vec<TypeSymbolArgs>,
@@ -33636,9 +33602,9 @@ pub struct Eqlog {
     cod: CodTable,
     nil_el_list: NilElListTable,
     cons_el_list: ConsElListTable,
-    func_app: FuncAppTable,
     el_structure: ElStructureTable,
     els_structure: ElsStructureTable,
+    func_app: FuncAppTable,
     map_el: MapElTable,
     map_els: MapElsTable,
     type_symbol: TypeSymbolTable,
@@ -33829,9 +33795,9 @@ impl ModelDelta {
             new_cod: Vec::new(),
             new_nil_el_list: Vec::new(),
             new_cons_el_list: Vec::new(),
-            new_func_app: Vec::new(),
             new_el_structure: Vec::new(),
             new_els_structure: Vec::new(),
+            new_func_app: Vec::new(),
             new_map_el: Vec::new(),
             new_map_els: Vec::new(),
             new_type_symbol: Vec::new(),
@@ -34022,11 +33988,11 @@ impl ModelDelta {
 
             new_cons_el_list_def: Vec::new(),
 
-            new_func_app_def: Vec::new(),
-
             new_el_structure_def: Vec::new(),
 
             new_els_structure_def: Vec::new(),
+
+            new_func_app_def: Vec::new(),
 
             new_map_el_def: Vec::new(),
 
@@ -34896,16 +34862,16 @@ impl ModelDelta {
             model.insert_cons_el_list(tm0, tm1, tm2);
         }
 
-        for FuncApp(tm0, tm1, tm2) in self.new_func_app.drain(..) {
-            model.insert_func_app(tm0, tm1, tm2);
-        }
-
         for ElStructure(tm0, tm1) in self.new_el_structure.drain(..) {
             model.insert_el_structure(tm0, tm1);
         }
 
         for ElsStructure(tm0, tm1) in self.new_els_structure.drain(..) {
             model.insert_els_structure(tm0, tm1);
+        }
+
+        for FuncApp(tm0, tm1, tm2) in self.new_func_app.drain(..) {
+            model.insert_func_app(tm0, tm1, tm2);
         }
 
         for MapEl(tm0, tm1, tm2) in self.new_map_el.drain(..) {
@@ -35270,16 +35236,16 @@ impl ModelDelta {
             model.define_cons_el_list(tm0, tm1);
         }
 
-        for FuncAppArgs(tm0, tm1) in self.new_func_app_def.drain(..) {
-            model.define_func_app(tm0, tm1);
-        }
-
         for ElStructureArgs(tm0) in self.new_el_structure_def.drain(..) {
             model.define_el_structure(tm0);
         }
 
         for ElsStructureArgs(tm0) in self.new_els_structure_def.drain(..) {
             model.define_els_structure(tm0);
+        }
+
+        for FuncAppArgs(tm0, tm1) in self.new_func_app_def.drain(..) {
+            model.define_func_app(tm0, tm1);
         }
 
         for MapElArgs(tm0, tm1) in self.new_map_el_def.drain(..) {
@@ -35737,9 +35703,9 @@ impl Eqlog {
             cod: CodTable::new(),
             nil_el_list: NilElListTable::new(),
             cons_el_list: ConsElListTable::new(),
-            func_app: FuncAppTable::new(),
             el_structure: ElStructureTable::new(),
             els_structure: ElsStructureTable::new(),
+            func_app: FuncAppTable::new(),
             map_el: MapElTable::new(),
             map_els: MapElsTable::new(),
             type_symbol: TypeSymbolTable::new(),
@@ -35942,19 +35908,18 @@ impl Eqlog {
                 self.ctor_decl_codomain_0(&mut delta);
                 self.rel_constructors_pred_total_0(&mut delta);
                 self.rel_constructors_func_total_0(&mut delta);
-                self.arity_laws_0(&mut delta);
+                self.pred_rel_arity_0(&mut delta);
+                self.func_rel_arity_0(&mut delta);
                 self.el_list_cons_injective_0(&mut delta);
                 self.el_list_cons_nil_0(&mut delta);
-                self.func_rel_app_0(&mut delta);
-                self.rel_func_app_0(&mut delta);
                 self.nil_els_structure_0(&mut delta);
                 self.cons_els_structure_0(&mut delta);
-                self.func_app_structure_0(&mut delta);
                 self.var_structure_0(&mut delta);
                 self.nil_el_types_0(&mut delta);
                 self.cons_el_types_0(&mut delta);
                 self.cons_el_types_reverse_0(&mut delta);
                 self.rel_app_types_0(&mut delta);
+                self.rel_app_func_app_0(&mut delta);
                 self.rel_app_constrained_0(&mut delta);
                 self.constrained_head_tail_0(&mut delta);
                 self.dom_total_0(&mut delta);
@@ -35972,7 +35937,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_94_0(&mut delta);
+                self.anonymous_rule_93_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -40702,39 +40667,6 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `func_app(arg0, arg1)`.
-    #[allow(dead_code)]
-    pub fn func_app(&self, mut arg0: Func, mut arg1: ElList) -> Option<El> {
-        arg0 = self.root_func(arg0);
-        arg1 = self.root_el_list(arg1);
-        self.func_app.iter_all_0_1(arg0, arg1).next().map(|t| t.2)
-    }
-    /// Returns an iterator over tuples in the graph of the `func_app` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_func_app(&self) -> impl '_ + Iterator<Item = (Func, ElList, El)> {
-        self.func_app.iter_all().map(|t| (t.0, t.1, t.2))
-    }
-    /// Makes the equation `func_app(tm0, tm1) = tm2` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_func_app(&mut self, mut tm0: Func, mut tm1: ElList, mut tm2: El) {
-        tm0 = self.func_equalities.root(tm0);
-        tm1 = self.el_list_equalities.root(tm1);
-        tm2 = self.el_equalities.root(tm2);
-        if self.func_app.insert(FuncApp(tm0, tm1, tm2)) {
-            let weight0 = &mut self.func_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
-
-            let weight1 = &mut self.el_list_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
-
-            let weight2 = &mut self.el_weights[tm2.0 as usize];
-            *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
-        }
-    }
-
     /// Evaluates `el_structure(arg0)`.
     #[allow(dead_code)]
     pub fn el_structure(&self, mut arg0: El) -> Option<Structure> {
@@ -40788,6 +40720,39 @@ impl Eqlog {
 
             let weight1 = &mut self.structure_weights[tm1.0 as usize];
             *weight1 = weight1.saturating_add(ElsStructureTable::WEIGHT);
+        }
+    }
+
+    /// Evaluates `func_app(arg0, arg1)`.
+    #[allow(dead_code)]
+    pub fn func_app(&self, mut arg0: Func, mut arg1: ElList) -> Option<El> {
+        arg0 = self.root_func(arg0);
+        arg1 = self.root_el_list(arg1);
+        self.func_app.iter_all_0_1(arg0, arg1).next().map(|t| t.2)
+    }
+    /// Returns an iterator over tuples in the graph of the `func_app` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_func_app(&self) -> impl '_ + Iterator<Item = (Func, ElList, El)> {
+        self.func_app.iter_all().map(|t| (t.0, t.1, t.2))
+    }
+    /// Makes the equation `func_app(tm0, tm1) = tm2` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_func_app(&mut self, mut tm0: Func, mut tm1: ElList, mut tm2: El) {
+        tm0 = self.func_equalities.root(tm0);
+        tm1 = self.el_list_equalities.root(tm1);
+        tm2 = self.el_equalities.root(tm2);
+        if self.func_app.insert(FuncApp(tm0, tm1, tm2)) {
+            let weight0 = &mut self.func_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
+
+            let weight1 = &mut self.el_list_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
+
+            let weight2 = &mut self.el_weights[tm2.0 as usize];
+            *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
         }
     }
 
@@ -42245,18 +42210,6 @@ impl Eqlog {
             }
         }
     }
-    /// Enforces that `func_app(tm0, tm1)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_func_app(&mut self, tm0: Func, tm1: ElList) -> El {
-        match self.func_app(tm0, tm1) {
-            Some(result) => result,
-            None => {
-                let tm2 = self.new_el_internal();
-                self.insert_func_app(tm0, tm1, tm2);
-                tm2
-            }
-        }
-    }
     /// Enforces that `var(tm0, tm1)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
     pub fn define_var(&mut self, tm0: Structure, tm1: ElName) -> El {
@@ -42290,6 +42243,18 @@ impl Eqlog {
                 let tm1 = self.new_structure_internal();
                 self.insert_els_structure(tm0, tm1);
                 tm1
+            }
+        }
+    }
+    /// Enforces that `func_app(tm0, tm1)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_func_app(&mut self, tm0: Func, tm1: ElList) -> El {
+        match self.func_app(tm0, tm1) {
+            Some(result) => result,
+            None => {
+                let tm2 = self.new_el_internal();
+                self.insert_func_app(tm0, tm1, tm2);
+                tm2
             }
         }
     }
@@ -52726,88 +52691,6 @@ impl Eqlog {
         }
 
         for el in self.el_uprooted.iter().copied() {
-            let ts = self.func_app.drain_with_element_el(el);
-            for mut t in ts {
-                let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(FuncAppTable::WEIGHT);
-
-                let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(FuncAppTable::WEIGHT);
-
-                let weight2 = &mut self.el_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(FuncAppTable::WEIGHT);
-
-                t.0 = self.root_func(t.0);
-                t.1 = self.root_el_list(t.1);
-                t.2 = self.root_el(t.2);
-                if self.func_app.insert(t) {
-                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
-
-                    let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
-
-                    let weight2 = &mut self.el_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.el_list_uprooted.iter().copied() {
-            let ts = self.func_app.drain_with_element_el_list(el);
-            for mut t in ts {
-                let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(FuncAppTable::WEIGHT);
-
-                let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(FuncAppTable::WEIGHT);
-
-                let weight2 = &mut self.el_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(FuncAppTable::WEIGHT);
-
-                t.0 = self.root_func(t.0);
-                t.1 = self.root_el_list(t.1);
-                t.2 = self.root_el(t.2);
-                if self.func_app.insert(t) {
-                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
-
-                    let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
-
-                    let weight2 = &mut self.el_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.func_uprooted.iter().copied() {
-            let ts = self.func_app.drain_with_element_func(el);
-            for mut t in ts {
-                let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(FuncAppTable::WEIGHT);
-
-                let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(FuncAppTable::WEIGHT);
-
-                let weight2 = &mut self.el_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(FuncAppTable::WEIGHT);
-
-                t.0 = self.root_func(t.0);
-                t.1 = self.root_el_list(t.1);
-                t.2 = self.root_el(t.2);
-                if self.func_app.insert(t) {
-                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
-
-                    let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
-
-                    let weight2 = &mut self.el_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
-                }
-            }
-        }
-
-        for el in self.el_uprooted.iter().copied() {
             let ts = self.el_structure.drain_with_element_el(el);
             for mut t in ts {
                 let weight0 = &mut self.el_weights[t.0 .0 as usize];
@@ -52885,6 +52768,88 @@ impl Eqlog {
 
                     let weight1 = &mut self.structure_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(ElsStructureTable::WEIGHT);
+                }
+            }
+        }
+
+        for el in self.el_uprooted.iter().copied() {
+            let ts = self.func_app.drain_with_element_el(el);
+            for mut t in ts {
+                let weight0 = &mut self.func_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(FuncAppTable::WEIGHT);
+
+                let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(FuncAppTable::WEIGHT);
+
+                let weight2 = &mut self.el_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(FuncAppTable::WEIGHT);
+
+                t.0 = self.root_func(t.0);
+                t.1 = self.root_el_list(t.1);
+                t.2 = self.root_el(t.2);
+                if self.func_app.insert(t) {
+                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
+
+                    let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
+
+                    let weight2 = &mut self.el_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.el_list_uprooted.iter().copied() {
+            let ts = self.func_app.drain_with_element_el_list(el);
+            for mut t in ts {
+                let weight0 = &mut self.func_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(FuncAppTable::WEIGHT);
+
+                let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(FuncAppTable::WEIGHT);
+
+                let weight2 = &mut self.el_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(FuncAppTable::WEIGHT);
+
+                t.0 = self.root_func(t.0);
+                t.1 = self.root_el_list(t.1);
+                t.2 = self.root_el(t.2);
+                if self.func_app.insert(t) {
+                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
+
+                    let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
+
+                    let weight2 = &mut self.el_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.func_uprooted.iter().copied() {
+            let ts = self.func_app.drain_with_element_func(el);
+            for mut t in ts {
+                let weight0 = &mut self.func_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(FuncAppTable::WEIGHT);
+
+                let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(FuncAppTable::WEIGHT);
+
+                let weight2 = &mut self.el_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(FuncAppTable::WEIGHT);
+
+                t.0 = self.root_func(t.0);
+                t.1 = self.root_el_list(t.1);
+                t.2 = self.root_el(t.2);
+                if self.func_app.insert(t) {
+                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(FuncAppTable::WEIGHT);
+
+                    let weight1 = &mut self.el_list_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(FuncAppTable::WEIGHT);
+
+                    let weight2 = &mut self.el_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(FuncAppTable::WEIGHT);
                 }
             }
         }
@@ -54153,9 +54118,9 @@ impl Eqlog {
             || self.cod.is_dirty()
             || self.nil_el_list.is_dirty()
             || self.cons_el_list.is_dirty()
-            || self.func_app.is_dirty()
             || self.el_structure.is_dirty()
             || self.els_structure.is_dirty()
+            || self.func_app.is_dirty()
             || self.map_el.is_dirty()
             || self.map_els.is_dirty()
             || self.type_symbol.is_dirty()
@@ -55034,19 +54999,6 @@ impl Eqlog {
     fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncApp(_, _, tm3) in self.func_app.iter_all_0_1(tm0, tm1) {
-                    delta.new_el_equalities.push((tm2, tm3));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
             for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
                 #[allow(unused_variables)]
                 for Var(_, _, tm3) in self.var.iter_all_0_1(tm0, tm1) {
@@ -55057,7 +55009,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
@@ -55070,13 +55022,26 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for ElsStructure(_, tm2) in self.els_structure.iter_all_0(tm0) {
                     delta.new_structure_equalities.push((tm1, tm2));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncApp(_, _, tm3) in self.func_app.iter_all_0_1(tm0, tm1) {
+                    delta.new_el_equalities.push((tm2, tm3));
                 }
             }
         }
@@ -62094,195 +62059,131 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_0(&self, delta: &mut ModelDelta) {
+    fn pred_rel_arity_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.arity_laws_1(delta);
-            self.arity_laws_2(delta);
-            self.arity_laws_5(delta);
-            self.arity_laws_7(delta);
-            self.arity_laws_9(delta);
-            self.arity_laws_11(delta);
-            self.arity_laws_13(delta);
-            self.arity_laws_15(delta);
-            self.arity_laws_17(delta);
-            self.arity_laws_19(delta);
-            self.arity_laws_21(delta);
-            self.arity_laws_23(delta);
+            self.pred_rel_arity_1(delta);
+            self.pred_rel_arity_2(delta);
+            self.pred_rel_arity_4(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_1(&self, delta: &mut ModelDelta) {
+    fn pred_rel_arity_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_2(&self, delta: &mut ModelDelta) {
+    fn pred_rel_arity_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for tm0 in self.rel_dirty.iter().copied() {
-                self.arity_laws_3(delta, tm0);
+            for PredRel(tm0, tm1) in self.pred_rel.iter_dirty() {
+                self.pred_rel_arity_3(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_3(&self, delta: &mut ModelDelta, tm0: Rel) {
+    fn pred_rel_arity_3(&self, delta: &mut ModelDelta, tm0: Pred, tm1: Rel) {
         for _ in [()] {
-            self.arity_laws_4(delta, tm0);
+            #[allow(unused_variables)]
+            for PredArity(_, tm2) in self.pred_arity.iter_all_0(tm0) {
+                self.pred_rel_arity_5(delta, tm1, tm0, tm2);
+            }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_4(&self, delta: &mut ModelDelta, tm0: Rel) {
+    fn pred_rel_arity_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredRel(tm1, tm2) in self.pred_rel.iter_all() {
-                self.arity_laws_6(delta, tm0, tm1, tm2);
+            for PredArity(tm0, tm2) in self.pred_arity.iter_dirty() {
                 #[allow(unused_variables)]
-                for FuncRel(tm3, tm4) in self.func_rel.iter_all() {
-                    self.arity_laws_8(delta, tm0, tm3, tm4);
-                    #[allow(unused_variables)]
-                    for NegatedPredRel(tm5, tm6) in self.negated_pred_rel.iter_all() {
-                        self.arity_laws_10(delta, tm0, tm5, tm6);
-                        #[allow(unused_variables)]
-                        for UndefinedFuncRel(tm7, tm8) in self.undefined_func_rel.iter_all() {
-                            self.arity_laws_12(delta, tm0, tm7, tm8);
-                        }
-                    }
+                for PredRel(_, tm1) in self.pred_rel.iter_all_0(tm0) {
+                    self.pred_rel_arity_5(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_5(&self, delta: &mut ModelDelta) {
+    fn pred_rel_arity_5(&self, delta: &mut ModelDelta, tm1: Rel, tm0: Pred, tm2: TypeList) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for PredRel(tm1, tm2) in self.pred_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    self.arity_laws_6(delta, tm0, tm1, tm2);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_6(&self, delta: &mut ModelDelta, tm0: Rel, tm1: Pred, tm2: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredArity(_, tm9) in self.pred_arity.iter_all_0(tm1) {
-                self.arity_laws_14(delta, tm0, tm2, tm1, tm9);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_7(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for FuncRel(tm3, tm4) in self.func_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    self.arity_laws_8(delta, tm0, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_8(&self, delta: &mut ModelDelta, tm0: Rel, tm3: Func, tm4: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Domain(_, tm10) in self.domain.iter_all_0(tm3) {
-                self.arity_laws_16(delta, tm0, tm4, tm3, tm10);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_9(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for NegatedPredRel(tm5, tm6) in self.negated_pred_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    self.arity_laws_10(delta, tm0, tm5, tm6);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_10(&self, delta: &mut ModelDelta, tm0: Rel, tm5: Pred, tm6: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredArity(_, tm11) in self.pred_arity.iter_all_0(tm5) {
-                self.arity_laws_18(delta, tm0, tm6, tm5, tm11);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_11(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for UndefinedFuncRel(tm7, tm8) in self.undefined_func_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    self.arity_laws_12(delta, tm0, tm7, tm8);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_12(&self, delta: &mut ModelDelta, tm0: Rel, tm7: Func, tm8: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Domain(_, tm12) in self.domain.iter_all_0(tm7) {
-                self.arity_laws_20(delta, tm0, tm8, tm7, tm12);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_13(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredArity(tm1, tm9) in self.pred_arity.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    #[allow(unused_variables)]
-                    for PredRel(_, tm2) in self.pred_rel.iter_all_0(tm1) {
-                        self.arity_laws_14(delta, tm0, tm2, tm1, tm9);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_14(&self, delta: &mut ModelDelta, tm0: Rel, tm2: Rel, tm1: Pred, tm9: TypeList) {
-        for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm9).next().is_some();
+            let exists_already = self.arity.iter_all_0_1(tm1, tm2).next().is_some();
             if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm9));
+                delta.new_arity.push(Arity(tm1, tm2));
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_15(&self, delta: &mut ModelDelta) {
+    fn func_rel_arity_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.func_rel_arity_1(delta);
+            self.func_rel_arity_2(delta);
+            self.func_rel_arity_4(delta);
+            self.func_rel_arity_6(delta);
+            self.func_rel_arity_8(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_rel_arity_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn func_rel_arity_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Domain(tm3, tm10) in self.domain.iter_dirty() {
+            for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
+                self.func_rel_arity_3(delta, tm0, tm1);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_rel_arity_3(&self, delta: &mut ModelDelta, tm0: Func, tm1: Rel) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Domain(_, tm2) in self.domain.iter_all_0(tm0) {
+                self.func_rel_arity_5(delta, tm1, tm0, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_rel_arity_4(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Domain(tm0, tm2) in self.domain.iter_dirty() {
                 #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
+                for FuncRel(_, tm1) in self.func_rel.iter_all_0(tm0) {
+                    self.func_rel_arity_5(delta, tm1, tm0, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_rel_arity_5(&self, delta: &mut ModelDelta, tm1: Rel, tm0: Func, tm2: TypeList) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Codomain(_, tm3) in self.codomain.iter_all_0(tm0) {
+                self.func_rel_arity_7(delta, tm1, tm2, tm0, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_rel_arity_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Codomain(tm0, tm3) in self.codomain.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncRel(_, tm1) in self.func_rel.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for FuncRel(_, tm4) in self.func_rel.iter_all_0(tm3) {
-                        self.arity_laws_16(delta, tm0, tm4, tm3, tm10);
+                    for Domain(_, tm2) in self.domain.iter_all_0(tm0) {
+                        self.func_rel_arity_7(delta, tm1, tm2, tm0, tm3);
                     }
                 }
             }
@@ -62290,126 +62191,41 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_16(&self, delta: &mut ModelDelta, tm0: Rel, tm4: Rel, tm3: Func, tm10: TypeList) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Codomain(_, tm13) in self.codomain.iter_all_0(tm3) {
-                self.arity_laws_22(delta, tm0, tm4, tm10, tm3, tm13);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_17(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredArity(tm5, tm11) in self.pred_arity.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    #[allow(unused_variables)]
-                    for NegatedPredRel(_, tm6) in self.negated_pred_rel.iter_all_0(tm5) {
-                        self.arity_laws_18(delta, tm0, tm6, tm5, tm11);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_18(&self, delta: &mut ModelDelta, tm0: Rel, tm6: Rel, tm5: Pred, tm11: TypeList) {
-        for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm11).next().is_some();
-            if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm11));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_19(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Domain(tm7, tm12) in self.domain.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    #[allow(unused_variables)]
-                    for UndefinedFuncRel(_, tm8) in self.undefined_func_rel.iter_all_0(tm7) {
-                        self.arity_laws_20(delta, tm0, tm8, tm7, tm12);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_20(&self, delta: &mut ModelDelta, tm0: Rel, tm8: Rel, tm7: Func, tm12: TypeList) {
-        for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm12).next().is_some();
-            if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm12));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_21(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Codomain(tm3, tm13) in self.codomain.iter_dirty() {
-                #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
-                    #[allow(unused_variables)]
-                    for Domain(_, tm10) in self.domain.iter_all_0(tm3) {
-                        #[allow(unused_variables)]
-                        for FuncRel(_, tm4) in self.func_rel.iter_all_0(tm3) {
-                            self.arity_laws_22(delta, tm0, tm4, tm10, tm3, tm13);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_22(
+    fn func_rel_arity_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: Rel,
-        tm4: Rel,
-        tm10: TypeList,
-        tm3: Func,
-        tm13: Type,
+        tm1: Rel,
+        tm2: TypeList,
+        tm0: Func,
+        tm3: Type,
     ) {
         for _ in [()] {
-            let tm14 = match self.cons_type_list.iter_all_0_1(tm13, tm10).next() {
+            let tm4 = match self.cons_type_list.iter_all_0_1(tm3, tm2).next() {
                 Some(ConsTypeList(_, _, res)) => res,
                 None => {
                     delta
                         .new_cons_type_list_def
-                        .push(ConsTypeListArgs(tm13, tm10));
+                        .push(ConsTypeListArgs(tm3, tm2));
                     break;
                 }
             };
 
-            self.arity_laws_24(delta, tm0, tm4, tm10, tm3, tm13, tm14);
+            self.func_rel_arity_9(delta, tm1, tm2, tm0, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_23(&self, delta: &mut ModelDelta) {
+    fn func_rel_arity_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ConsTypeList(tm13, tm10, tm14) in self.cons_type_list.iter_dirty() {
+            for ConsTypeList(tm3, tm2, tm4) in self.cons_type_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for tm0 in self.rel_all.iter().copied() {
+                for Codomain(tm0, _) in self.codomain.iter_all_1(tm3) {
                     #[allow(unused_variables)]
-                    for Domain(tm3, _) in self.domain.iter_all_1(tm10) {
+                    for Domain(_, _) in self.domain.iter_all_0_1(tm0, tm2) {
                         #[allow(unused_variables)]
-                        for Codomain(_, _) in self.codomain.iter_all_0_1(tm3, tm13) {
-                            #[allow(unused_variables)]
-                            for FuncRel(_, tm4) in self.func_rel.iter_all_0(tm3) {
-                                self.arity_laws_24(delta, tm0, tm4, tm10, tm3, tm13, tm14);
-                            }
+                        for FuncRel(_, tm1) in self.func_rel.iter_all_0(tm0) {
+                            self.func_rel_arity_9(delta, tm1, tm2, tm0, tm3, tm4);
                         }
                     }
                 }
@@ -62418,20 +62234,19 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_24(
+    fn func_rel_arity_9(
         &self,
         delta: &mut ModelDelta,
-        tm0: Rel,
-        tm4: Rel,
-        tm10: TypeList,
-        tm3: Func,
-        tm13: Type,
-        tm14: TypeList,
+        tm1: Rel,
+        tm2: TypeList,
+        tm0: Func,
+        tm3: Type,
+        tm4: TypeList,
     ) {
         for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm14).next().is_some();
+            let exists_already = self.arity.iter_all_0_1(tm1, tm4).next().is_some();
             if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm14));
+                delta.new_arity.push(Arity(tm1, tm4));
             }
         }
     }
@@ -62555,184 +62370,6 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn func_rel_app_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.func_rel_app_1(delta);
-            self.func_rel_app_2(delta);
-            self.func_rel_app_4(delta);
-            self.func_rel_app_6(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
-                self.func_rel_app_3(delta, tm0, tm1, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_3(&self, delta: &mut ModelDelta, tm0: Func, tm1: ElList, tm2: El) {
-        for _ in [()] {
-            let tm3 = match self.cons_el_list.iter_all_0_1(tm2, tm1).next() {
-                Some(ConsElList(_, _, res)) => res,
-                None => {
-                    delta.new_cons_el_list_def.push(ConsElListArgs(tm2, tm1));
-                    break;
-                }
-            };
-
-            self.func_rel_app_5(delta, tm0, tm2, tm1, tm3);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_4(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm2, tm1, tm3) in self.cons_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncApp(tm0, _, _) in self.func_app.iter_all_1_2(tm1, tm2) {
-                    self.func_rel_app_5(delta, tm0, tm2, tm1, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_5(&self, delta: &mut ModelDelta, tm0: Func, tm2: El, tm1: ElList, tm3: ElList) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for FuncRel(_, tm4) in self.func_rel.iter_all_0(tm0) {
-                self.func_rel_app_7(delta, tm2, tm1, tm3, tm0, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for FuncRel(tm0, tm4) in self.func_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncApp(_, tm1, tm2) in self.func_app.iter_all_0(tm0) {
-                    #[allow(unused_variables)]
-                    for ConsElList(_, _, tm3) in self.cons_el_list.iter_all_0_1(tm2, tm1) {
-                        self.func_rel_app_7(delta, tm2, tm1, tm3, tm0, tm4);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_rel_app_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: El,
-        tm1: ElList,
-        tm3: ElList,
-        tm0: Func,
-        tm4: Rel,
-    ) {
-        for _ in [()] {
-            let exists_already = self.rel_app.iter_all_0_1(tm4, tm3).next().is_some();
-            if !exists_already {
-                delta.new_rel_app.push(RelApp(tm4, tm3));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_func_app_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.rel_func_app_1(delta);
-            self.rel_func_app_2(delta);
-            self.rel_func_app_3(delta);
-            self.rel_func_app_4(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_func_app_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn rel_func_app_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for RelApp(tm1, tm4) in self.rel_app.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncRel(tm0, _) in self.func_rel.iter_all_1(tm1) {
-                    #[allow(unused_variables)]
-                    for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm4) {
-                        self.rel_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_func_app_3(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm2, tm3, tm4) in self.cons_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for RelApp(tm1, _) in self.rel_app.iter_all_1(tm4) {
-                    #[allow(unused_variables)]
-                    for FuncRel(tm0, _) in self.func_rel.iter_all_1(tm1) {
-                        self.rel_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_func_app_4(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for RelApp(_, tm4) in self.rel_app.iter_all_0(tm1) {
-                    #[allow(unused_variables)]
-                    for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm4) {
-                        self.rel_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_func_app_5(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: Func,
-        tm1: Rel,
-        tm2: El,
-        tm3: ElList,
-        tm4: ElList,
-    ) {
-        for _ in [()] {
-            let exists_already = self.func_app.iter_all_0_1_2(tm0, tm3, tm2).next().is_some();
-            if !exists_already {
-                delta.new_func_app.push(FuncApp(tm0, tm3, tm2));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
     fn nil_els_structure_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.nil_els_structure_1(delta);
@@ -62830,70 +62467,6 @@ impl Eqlog {
             let exists_already = self.els_structure.iter_all_0_1(tm1, tm3).next().is_some();
             if !exists_already {
                 delta.new_els_structure.push(ElsStructure(tm1, tm3));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_app_structure_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.func_app_structure_1(delta);
-            self.func_app_structure_2(delta);
-            self.func_app_structure_4(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_app_structure_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn func_app_structure_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
-                self.func_app_structure_3(delta, tm0, tm1, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_app_structure_3(&self, delta: &mut ModelDelta, tm0: Func, tm1: ElList, tm2: El) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ElsStructure(_, tm3) in self.els_structure.iter_all_0(tm1) {
-                self.func_app_structure_5(delta, tm0, tm2, tm1, tm3);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_app_structure_4(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ElsStructure(tm1, tm3) in self.els_structure.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncApp(tm0, _, tm2) in self.func_app.iter_all_1(tm1) {
-                    self.func_app_structure_5(delta, tm0, tm2, tm1, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn func_app_structure_5(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: Func,
-        tm2: El,
-        tm1: ElList,
-        tm3: Structure,
-    ) {
-        for _ in [()] {
-            let exists_already = self.el_structure.iter_all_0_1(tm2, tm3).next().is_some();
-            if !exists_already {
-                delta.new_el_structure.push(ElStructure(tm2, tm3));
             }
         }
     }
@@ -63285,6 +62858,87 @@ impl Eqlog {
             let exists_already = self.el_types.iter_all_0_1(tm1, tm2).next().is_some();
             if !exists_already {
                 delta.new_el_types.push(ElTypes(tm1, tm2));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_func_app_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.rel_app_func_app_1(delta);
+            self.rel_app_func_app_2(delta);
+            self.rel_app_func_app_3(delta);
+            self.rel_app_func_app_4(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_func_app_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_func_app_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RelApp(tm1, tm4) in self.rel_app.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncRel(tm0, _) in self.func_rel.iter_all_1(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm4) {
+                        self.rel_app_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_func_app_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm2, tm3, tm4) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for RelApp(tm1, _) in self.rel_app.iter_all_1(tm4) {
+                    #[allow(unused_variables)]
+                    for FuncRel(tm0, _) in self.func_rel.iter_all_1(tm1) {
+                        self.rel_app_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_func_app_4(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
+                #[allow(unused_variables)]
+                for RelApp(_, tm4) in self.rel_app.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm4) {
+                        self.rel_app_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_func_app_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Func,
+        tm1: Rel,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            let exists_already = self.func_app.iter_all_0_1_2(tm0, tm3, tm2).next().is_some();
+            if !exists_already {
+                delta.new_func_app.push(FuncApp(tm0, tm3, tm2));
             }
         }
     }
@@ -64481,20 +64135,20 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_94_1(delta);
-            self.anonymous_rule_94_2(delta);
-            self.anonymous_rule_94_4(delta);
-            self.anonymous_rule_94_6(delta);
-            self.anonymous_rule_94_8(delta);
-            self.anonymous_rule_94_10(delta);
-            self.anonymous_rule_94_12(delta);
+            self.anonymous_rule_93_1(delta);
+            self.anonymous_rule_93_2(delta);
+            self.anonymous_rule_93_4(delta);
+            self.anonymous_rule_93_6(delta);
+            self.anonymous_rule_93_8(delta);
+            self.anonymous_rule_93_10(delta);
+            self.anonymous_rule_93_12(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -64504,22 +64158,22 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_94_3(delta, tm0);
+            self.anonymous_rule_93_3(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_94_3(delta, tm0);
+                self.anonymous_rule_93_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_3(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_93_3(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -64529,25 +64183,25 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_94_5(delta, tm0, tm1);
+            self.anonymous_rule_93_5(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_4(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_94_5(delta, tm0, tm1);
+                    self.anonymous_rule_93_5(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_5(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_93_5(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -64557,12 +64211,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_94_7(delta, tm0, tm1, tm2);
+            self.anonymous_rule_93_7(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -64570,7 +64224,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_94_7(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_93_7(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -64578,7 +64232,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_7(
+    fn anonymous_rule_93_7(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -64594,12 +64248,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_94_9(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_93_9(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_8(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -64609,7 +64263,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_94_9(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_93_9(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -64618,7 +64272,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_9(
+    fn anonymous_rule_93_9(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -64635,12 +64289,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_94_11(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_93_11(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_10(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_10(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -64652,7 +64306,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_94_11(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_93_11(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -64662,7 +64316,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_11(
+    fn anonymous_rule_93_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -64680,12 +64334,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_94_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_93_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_93_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -64699,7 +64353,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_94_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_93_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -64710,7 +64364,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_94_13(
+    fn anonymous_rule_93_13(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -71514,6 +71168,8 @@ impl Eqlog {
             self.app_term_semantics_4(delta);
             self.app_term_semantics_6(delta);
             self.app_term_semantics_8(delta);
+            self.app_term_semantics_9(delta);
+            self.app_term_semantics_11(delta);
         }
     }
 
@@ -71609,7 +71265,10 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
-                self.app_term_semantics_9(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6);
+                #[allow(unused_variables)]
+                for FuncRel(_, tm7) in self.func_rel.iter_all_0(tm6) {
+                    self.app_term_semantics_10(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7);
+                }
             }
         }
     }
@@ -71620,12 +71279,17 @@ impl Eqlog {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm6) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
-                for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
+                for FuncRel(_, tm7) in self.func_rel.iter_all_0(tm6) {
                     #[allow(unused_variables)]
-                    for SemanticEls(_, tm3, tm5) in self.semantic_els.iter_all_0(tm2) {
+                    for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
                         #[allow(unused_variables)]
-                        for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm0, tm3) {
-                            self.app_term_semantics_9(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6);
+                        for SemanticEls(_, tm3, tm5) in self.semantic_els.iter_all_0(tm2) {
+                            #[allow(unused_variables)]
+                            for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm0, tm3) {
+                                self.app_term_semantics_10(
+                                    delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7,
+                                );
+                            }
                         }
                     }
                 }
@@ -71634,7 +71298,31 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_9(
+    fn app_term_semantics_9(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncRel(tm6, tm7) in self.func_rel.iter_dirty() {
+                #[allow(unused_variables)]
+                for SemanticFunc(tm1, _) in self.semantic_func.iter_all_1(tm6) {
+                    #[allow(unused_variables)]
+                    for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
+                        #[allow(unused_variables)]
+                        for SemanticEls(_, tm3, tm5) in self.semantic_els.iter_all_0(tm2) {
+                            #[allow(unused_variables)]
+                            for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm0, tm3) {
+                                self.app_term_semantics_10(
+                                    delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_10(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -71644,11 +71332,68 @@ impl Eqlog {
         tm5: ElList,
         tm1: Ident,
         tm6: Func,
+        tm7: Rel,
     ) {
         for _ in [()] {
-            let exists_already = self.func_app.iter_all_0_1_2(tm6, tm5, tm4).next().is_some();
+            let tm8 = match self.cons_el_list.iter_all_0_1(tm4, tm5).next() {
+                Some(ConsElList(_, _, res)) => res,
+                None => {
+                    delta.new_cons_el_list_def.push(ConsElListArgs(tm4, tm5));
+                    break;
+                }
+            };
+
+            self.app_term_semantics_12(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7, tm8);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm4, tm5, tm8) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncRel(tm6, tm7) in self.func_rel.iter_all() {
+                    #[allow(unused_variables)]
+                    for SemanticFunc(tm1, _) in self.semantic_func.iter_all_1(tm6) {
+                        #[allow(unused_variables)]
+                        for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
+                            #[allow(unused_variables)]
+                            for SemanticEl(_, tm3, _) in self.semantic_el.iter_all_0_2(tm0, tm4) {
+                                #[allow(unused_variables)]
+                                for SemanticEls(_, _, _) in
+                                    self.semantic_els.iter_all_0_1_2(tm2, tm3, tm5)
+                                {
+                                    self.app_term_semantics_12(
+                                        delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7, tm8,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm4: El,
+        tm2: TermListNode,
+        tm3: Structure,
+        tm5: ElList,
+        tm1: Ident,
+        tm6: Func,
+        tm7: Rel,
+        tm8: ElList,
+    ) {
+        for _ in [()] {
+            let exists_already = self.rel_app.iter_all_0_1(tm7, tm8).next().is_some();
             if !exists_already {
-                delta.new_func_app.push(FuncApp(tm6, tm5, tm4));
+                delta.new_rel_app.push(RelApp(tm7, tm8));
             }
         }
     }
@@ -76040,9 +75785,9 @@ impl Eqlog {
         self.cod.drop_dirt();
         self.nil_el_list.drop_dirt();
         self.cons_el_list.drop_dirt();
-        self.func_app.drop_dirt();
         self.el_structure.drop_dirt();
         self.els_structure.drop_dirt();
+        self.func_app.drop_dirt();
         self.map_el.drop_dirt();
         self.map_els.drop_dirt();
         self.type_symbol.drop_dirt();
@@ -76661,9 +76406,9 @@ impl fmt::Display for Eqlog {
         self.cod.fmt(f)?;
         self.nil_el_list.fmt(f)?;
         self.cons_el_list.fmt(f)?;
-        self.func_app.fmt(f)?;
         self.el_structure.fmt(f)?;
         self.els_structure.fmt(f)?;
+        self.func_app.fmt(f)?;
         self.map_el.fmt(f)?;
         self.map_els.fmt(f)?;
         self.type_symbol.fmt(f)?;

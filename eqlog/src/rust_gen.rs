@@ -1478,7 +1478,6 @@ fn display_if_stmt_header<'a>(
                     diagonals,
                     in_projections,
                     out_projections,
-                    quantifier: _,
                 } = analysis
                     .if_stmt_rel_infos
                     .get(&ByAddress(rel_stmt))
@@ -1489,7 +1488,7 @@ fn display_if_stmt_header<'a>(
                     projections: in_projections.keys().copied().collect(),
                     only_dirty: *only_dirty,
                 };
-                let relation = format!("{}", rel.display(eqlog, identifiers));
+                let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
                 let relation_camel = relation.to_case(UpperCamel);
                 write!(f, "#[allow(unused_variables)]\n")?;
                 write!(f, "for {relation_camel}(")?;
@@ -1554,8 +1553,9 @@ fn display_surj_then<'a>(
             FlatSurjThenStmt::Relation(rel_stmt) => {
                 let FlatSurjThenStmtRelation { rel, args } = rel_stmt;
                 let relation_camel =
-                    format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
-                let relation_snake = format!("{}", rel.display(eqlog, identifiers)).to_case(Snake);
+                    format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(UpperCamel);
+                let relation_snake =
+                    format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(Snake);
                 let args0 = args
                     .iter()
                     .copied()
@@ -1596,9 +1596,10 @@ fn display_non_surj_then<'a>(
             func_args,
             result,
         } = stmt;
-        let rel = Rel::Func(*func);
-        let relation_camel = format!("{}", rel.display(eqlog, identifiers)).to_case(UpperCamel);
-        let relation_snake = format!("{}", rel.display(eqlog, identifiers)).to_case(Snake);
+        let rel = eqlog.func_rel(*func).unwrap();
+        let relation_camel =
+            format!("{}", display_rel(rel, eqlog, identifiers)).to_case(UpperCamel);
+        let relation_snake = format!("{}", display_rel(rel, eqlog, identifiers)).to_case(Snake);
 
         let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
         let iter_name = IterName(relation_camel.as_str(), &eval_func_spec);

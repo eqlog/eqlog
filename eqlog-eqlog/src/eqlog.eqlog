@@ -630,29 +630,41 @@ rule rel_constructors_func_total {
 }
 
 func arity(Rel) -> TypeList;
-rule arity_laws {
-    if rel: Rel;
-    match rel {
-        PredRel(predicate) => {
-            if tys = pred_arity(predicate);
-            then arity(rel) = tys;
-        }
-        FuncRel(function) => {
-            if dom = domain(function);
-            if cod = codomain(function);
-            then tys := cons_type_list(cod, dom)!;
-            then arity(rel) = tys;
-        }
-        NegatedPredRel(predicate) => {
-            if tys = pred_arity(predicate);
-            then arity(rel) = tys;
-        }
-        UndefinedFuncRel(function) => {
-            if tys = domain(function);
-            then arity(rel) = tys;
-        }
-    }
+rule pred_rel_arity {
+    if rel = PredRel(predicate);
+    if tys = pred_arity(predicate);
+    then arity(rel) = tys;
 }
+rule func_rel_arity {
+    if rel = FuncRel(function);
+    if dom = domain(function);
+    if cod = codomain(function);
+    then tys := cons_type_list(cod, dom)!;
+    then arity(rel) = tys;
+}
+//rule arity_laws {
+//    if rel: Rel;
+//    match rel {
+//        PredRel(predicate) => {
+//            if tys = pred_arity(predicate);
+//            then arity(rel) = tys;
+//        }
+//        FuncRel(function) => {
+//            if dom = domain(function);
+//            if cod = codomain(function);
+//            then tys := cons_type_list(cod, dom)!;
+//            then arity(rel) = tys;
+//        }
+//        NegatedPredRel(predicate) => {
+//            if tys = pred_arity(predicate);
+//            then arity(rel) = tys;
+//        }
+//        UndefinedFuncRel(function) => {
+//            if tys = domain(function);
+//            then arity(rel) = tys;
+//        }
+//    }
+//}
 
 // ## Structures
 
@@ -676,18 +688,6 @@ rule el_list_cons_nil {
 
 pred rel_app(Rel, ElList);
 
-func func_app(Func, ElList) -> El;
-rule func_rel_app {
-    if result = func_app(function, args);
-    then rel_args := cons_el_list(result, args)!;
-    if rel = FuncRel(function);
-    then rel_app(rel, rel_args);
-}
-rule rel_func_app {
-    if rel_app(FuncRel(function), cons_el_list(result, args));
-    then func_app(function, args) = result;
-}
-
 type ElName;
 func var(Structure, ElName) -> El;
 
@@ -703,12 +703,6 @@ rule cons_els_structure {
     if head_structure = el_structure(head);
     then head_structure = els_structure(els);
     then head_structure = els_structure(tail);
-}
-
-rule func_app_structure {
-    if result = func_app(_, args);
-    if structure = els_structure(args);
-    then structure = el_structure(result);
 }
 
 rule var_structure {
@@ -743,6 +737,15 @@ rule rel_app_types {
     if rel_app(rel, els);
     if arity(rel) = ar;
     then el_types(els, ar);
+}
+
+// This is only used from Rust. If it's removed we need to
+// add an explicit functionality law for rel_app of
+// FuncRel relations though.
+func func_app(function: Func, args: ElList) -> El;
+rule rel_app_func_app {
+    if rel_app(FuncRel(function), cons_el_list(result, args));
+    then result = func_app(function, args);
 }
 
 // ### Constrained elements
@@ -1417,9 +1420,10 @@ rule semantic_els_struct {
 rule app_term_semantics {
     if app_term_node(result_term, func_name, arg_terms);
     if result_el = semantic_el(result_term, structure);
-    if arg_els = semantic_els(arg_terms, structure);
-    if function = semantic_func(func_name);
-    then result_el = func_app(function, arg_els);
+    if func_arg_els = semantic_els(arg_terms, structure);
+    if func_rel = FuncRel(semantic_func(func_name));
+    then rel_arg_els := cons_el_list(result_el, func_arg_els)!;
+    then rel_app(func_rel, rel_arg_els);
 }
 
 rule var_term_semantics {

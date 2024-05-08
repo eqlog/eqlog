@@ -46,35 +46,6 @@ pub fn iter_vars<'a>(
     })
 }
 
-pub fn iter_pred_app<'a>(
-    structure: Structure,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (Pred, ElList)> {
-    eqlog.iter_pred_app().filter_map(move |(pred, args)| {
-        if !eqlog.are_equal_structure(eqlog.els_structure(args).unwrap(), structure) {
-            return None;
-        }
-
-        Some((pred, args))
-    })
-}
-
-pub fn iter_func_app<'a>(
-    structure: Structure,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (Func, ElList, El)> {
-    eqlog
-        .iter_func_app()
-        .filter_map(move |(func, args, result)| {
-            if !eqlog.are_equal_structure(eqlog.els_structure(args).unwrap(), structure) {
-                return None;
-            }
-            assert!(eqlog.are_equal_structure(eqlog.el_structure(result).unwrap(), structure));
-
-            Some((func, args, result))
-        })
-}
-
 pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
     let mut result = Vec::new();
     loop {
@@ -339,6 +310,44 @@ fn assign_el_names(
     names
 }
 
+pub fn display_rel<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let pred = eqlog.iter_pred_rel().find_map(|(pred, rel0)| {
+        if eqlog.are_equal_rel(rel0, rel) {
+            Some(pred)
+        } else {
+            None
+        }
+    });
+    if let Some(pred) = pred {
+        let ident = eqlog
+            .iter_semantic_pred()
+            .find_map(|(ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
+            .expect("semantic_pred should be surjective");
+        return identifiers.get(&ident).unwrap().as_str();
+    }
+
+    let func = eqlog.iter_func_rel().find_map(|(func, rel0)| {
+        if eqlog.are_equal_rel(rel0, rel) {
+            Some(func)
+        } else {
+            None
+        }
+    });
+    if let Some(func) = func {
+        let ident = eqlog
+            .iter_semantic_func()
+            .find_map(|(ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident))
+            .expect("semantic_func should be surjective");
+        return identifiers.get(&ident).unwrap().as_str();
+    }
+
+    panic!("Rel should be either pred or func")
+}
+
 impl<'a> Display for StructureDisplay<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let Self {
@@ -353,34 +362,18 @@ impl<'a> Display for StructureDisplay<'a> {
             writeln!(f, "- {name}")?;
         }
 
-        writeln!(f, "Predicates:")?;
-        for (pred, args) in iter_pred_app(*structure, eqlog) {
+        writeln!(f, "Relations:")?;
+        for (rel, args) in eqlog.iter_rel_app() {
+            let structure0 = eqlog.els_structure(args).unwrap();
+            if !eqlog.are_equal_structure(structure0, *structure) {
+                continue;
+            }
             let args = el_list_vec(args, eqlog)
                 .into_iter()
                 .map(|arg| el_names.get(&arg).unwrap())
                 .format(", ");
-            let pred_ident = eqlog
-                .iter_semantic_pred()
-                .find_map(|(ident, prd)| eqlog.are_equal_pred(prd, pred).then_some(ident))
-                .unwrap();
-            let pred_name: &str = identifiers.get(&pred_ident).unwrap().as_str();
-            writeln!(f, "- {pred_name}({args})")?;
-        }
-
-        writeln!(f, "Functions:")?;
-        for (func, args, result) in iter_func_app(*structure, eqlog) {
-            let args = el_list_vec(args, eqlog)
-                .into_iter()
-                .map(|arg| el_names.get(&arg).unwrap())
-                .format(", ");
-            let result = el_names.get(&result).unwrap();
-
-            let func_ident = eqlog
-                .iter_semantic_func()
-                .find_map(|(ident, fnc)| eqlog.are_equal_func(fnc, func).then_some(ident))
-                .unwrap();
-            let func_name: &str = identifiers.get(&func_ident).unwrap().as_str();
-            writeln!(f, "- {func_name}({args}) = {result}")?;
+            let rel = display_rel(rel, eqlog, identifiers);
+            writeln!(f, "- {rel}({args})")?;
         }
         Ok(())
     }

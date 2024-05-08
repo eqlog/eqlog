@@ -35,15 +35,8 @@ impl QuerySpec {
     }
     /// The [QuerySpec] to query for one specific tuple in a relation.
     pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
-        let arity_len = match rel {
-            Rel::Pred(p) => {
-                type_list_vec(eqlog.arity(p).expect("arity should be total"), eqlog).len()
-            }
-            Rel::Func(f) => {
-                let dom_len = type_list_vec(eqlog.domain(f).expect("should be total"), eqlog).len();
-                dom_len + 1
-            }
-        };
+        let arity_len =
+            type_list_vec(eqlog.arity(rel).expect("arity should be total"), eqlog).len();
         QuerySpec {
             projections: (0..arity_len).collect(),
             diagonals: BTreeSet::new(),
@@ -142,13 +135,11 @@ pub fn select_indices<'a>(
     // Every relation needs a QuerySpec for all tuples, and a QuerySpec for one specific tuple.
     // TODO: Can't we do without the QuerySpec for all dirty tuples though?
     let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> = eqlog
-        .iter_func()
-        .map(Rel::Func)
-        .chain(eqlog.iter_pred().map(Rel::Pred))
+        .iter_rel()
         .map(|rel| {
             let min_spec_set =
                 btreeset! {QuerySpec::all(), QuerySpec::one(rel, eqlog), QuerySpec::all_dirty()};
-            let rel = format!("{}", rel.display(eqlog, identifiers));
+            let rel = format!("{}", display_rel(rel, eqlog, identifiers));
             (rel, min_spec_set)
         })
         .collect();
@@ -156,7 +147,10 @@ pub fn select_indices<'a>(
     // Every func needs in addition a QuerySpec for the arguments to the functino to generate
     // the public eval function and for non surjective then statements.
     for func in eqlog.iter_func() {
-        let rel = format!("{}", Rel::Func(func).display(eqlog, identifiers));
+        let rel = format!(
+            "{}",
+            display_rel(eqlog.func_rel(func).unwrap(), eqlog, identifiers)
+        );
         let spec = QuerySpec::eval_func(func, eqlog);
         query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
     }
@@ -168,12 +162,11 @@ pub fn select_indices<'a>(
             args: _,
             only_dirty,
         } = if_stmt_rel;
-        let rel = format!("{}", rel.display(eqlog, identifiers));
+        let rel = format!("{}", display_rel(*rel, eqlog, identifiers));
         let RelationInfo {
             diagonals,
             in_projections,
             out_projections: _,
-            quantifier: _,
         } = info;
         let spec = QuerySpec {
             diagonals: diagonals.clone(),
