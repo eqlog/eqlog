@@ -87,6 +87,8 @@ pub struct FlatRuleAnalysis<'a> {
     pub var_types: &'a BTreeMap<FlatVar, Type>,
     /// A map that assigns to each suffix of consecutive statements in a rule the set of variables
     /// that are already bound before those statements.
+    // TODO: Why isn't this ever used?
+    #[allow(unused)]
     pub fixed_vars: BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
     /// A map that assigns to each [FlatIfStmtRelation] in a rule some additional information.
     pub if_stmt_rel_infos: BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,

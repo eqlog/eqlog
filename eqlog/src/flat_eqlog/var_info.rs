@@ -2,7 +2,6 @@
 
 use super::ast::*;
 use by_address::ByAddress;
-use eqlog_eqlog::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -100,7 +99,8 @@ pub enum CanAssumeFunctionality {
 
 pub fn relation_info_rec<'a>(
     stmts: &'a [FlatStmt],
-    can_assume_functionality: CanAssumeFunctionality,
+    // TODO: Why isn't this used?
+    _can_assume_functionality: CanAssumeFunctionality,
     infos: &mut BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
     fixed_vars: &BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
 ) {
@@ -113,7 +113,7 @@ pub fn relation_info_rec<'a>(
                 FlatIfStmt::Relation(rel_if_stmt) => {
                     let fixed_vars = fixed_vars.get(&ByAddress(tail)).unwrap();
                     let FlatIfStmtRelation {
-                        rel,
+                        rel: _,
                         args,
                         only_dirty: _,
                     } = rel_if_stmt;
