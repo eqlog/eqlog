@@ -391,3 +391,46 @@ pub fn display_structure<'a>(
         identifiers,
     }
 }
+
+/// A breadth-first traversal of the morphisms of a rule.
+pub fn iter_rule_morphisms<'a>(
+    rule: RuleDeclNode,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = Vec<Morphism>> {
+    let first_dom = eqlog.before_rule_structure(rule).unwrap();
+
+    let first_morphisms: Vec<Morphism> = eqlog
+        .iter_dom()
+        .filter_map(|(morph, dom)| {
+            if eqlog.are_equal_structure(dom, first_dom) {
+                Some(morph)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    successors(
+        (!first_morphisms.is_empty()).then_some(first_morphisms),
+        |prev_morphisms| {
+            let prev_cods: BTreeSet<Structure> = prev_morphisms
+                .iter()
+                .copied()
+                .map(|morph| eqlog.cod(morph).unwrap())
+                .collect();
+
+            let next_morphisms: Vec<Morphism> = eqlog
+                .iter_dom()
+                .filter_map(|(morph, dom)| {
+                    if prev_cods.contains(&dom) {
+                        Some(morph)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            (!next_morphisms.is_empty()).then_some(next_morphisms)
+        },
+    )
+}

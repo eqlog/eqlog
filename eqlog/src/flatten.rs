@@ -5,50 +5,6 @@ use maplit::btreemap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::iter::once;
-use std::iter::successors;
-
-/// A breadth-first traversal of the morphisms of a rule.
-fn iter_rule_morphisms<'a>(
-    rule: RuleDeclNode,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = Vec<Morphism>> {
-    let first_dom = eqlog.before_rule_structure(rule).unwrap();
-
-    let first_morphisms: Vec<Morphism> = eqlog
-        .iter_dom()
-        .filter_map(|(morph, dom)| {
-            if eqlog.are_equal_structure(dom, first_dom) {
-                Some(morph)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    successors(
-        (!first_morphisms.is_empty()).then_some(first_morphisms),
-        |prev_morphisms| {
-            let prev_cods: BTreeSet<Structure> = prev_morphisms
-                .iter()
-                .copied()
-                .map(|morph| eqlog.cod(morph).unwrap())
-                .collect();
-
-            let next_morphisms: Vec<Morphism> = eqlog
-                .iter_dom()
-                .filter_map(|(morph, dom)| {
-                    if prev_cods.contains(&dom) {
-                        Some(morph)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            (!next_morphisms.is_empty()).then_some(next_morphisms)
-        },
-    )
-}
 
 /// Assign compatible [FlatTerm]s to the [El]s in the codomains of a list of morphisms.
 ///
