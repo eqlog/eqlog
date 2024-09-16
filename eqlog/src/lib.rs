@@ -4,6 +4,8 @@ mod semantics;
 use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(grammar);
 mod build;
+#[allow(dead_code)]
+mod debug;
 mod error;
 mod flat_eqlog;
 mod flatten;
