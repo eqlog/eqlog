@@ -626,41 +626,41 @@ rule rel_constructors_func_total {
 }
 
 func arity(Rel) -> TypeList;
-rule pred_rel_arity {
-    if rel = PredRel(predicate);
-    if tys = pred_arity(predicate);
-    then arity(rel) = tys;
-}
-rule func_rel_arity {
-    if rel = FuncRel(function);
-    if dom = domain(function);
-    if cod = codomain(function);
-    then tys := cons_type_list(cod, dom)!;
-    then arity(rel) = tys;
-}
-//rule arity_laws {
-//    if rel: Rel;
-//    match rel {
-//        PredRel(predicate) => {
-//            if tys = pred_arity(predicate);
-//            then arity(rel) = tys;
-//        }
-//        FuncRel(function) => {
-//            if dom = domain(function);
-//            if cod = codomain(function);
-//            then tys := cons_type_list(cod, dom)!;
-//            then arity(rel) = tys;
-//        }
-//        NegatedPredRel(predicate) => {
-//            if tys = pred_arity(predicate);
-//            then arity(rel) = tys;
-//        }
-//        UndefinedFuncRel(function) => {
-//            if tys = domain(function);
-//            then arity(rel) = tys;
-//        }
-//    }
+//rule pred_rel_arity {
+//    if rel = PredRel(predicate);
+//    if tys = pred_arity(predicate);
+//    then arity(rel) = tys;
 //}
+//rule func_rel_arity {
+//    if rel = FuncRel(function);
+//    if dom = domain(function);
+//    if cod = codomain(function);
+//    then tys := cons_type_list(cod, dom)!;
+//    then arity(rel) = tys;
+//}
+rule arity_laws {
+    if rel: Rel;
+    match rel {
+        PredRel(predicate) => {
+            if tys = pred_arity(predicate);
+            then arity(rel) = tys;
+        }
+        FuncRel(function) => {
+            if dom = domain(function);
+            if cod = codomain(function);
+            then tys := cons_type_list(cod, dom)!;
+            then arity(rel) = tys;
+        }
+        NegatedPredRel(predicate) => {
+            if tys = pred_arity(predicate);
+            then arity(rel) = tys;
+        }
+        UndefinedFuncRel(function) => {
+            if tys = domain(function);
+            then arity(rel) = tys;
+        }
+    }
+}
 
 // ## Structures
 
