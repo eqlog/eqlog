@@ -17,7 +17,7 @@ convert_case = ">= 0"
 indoc = ">= 0"
 sha2 = ">= 0"
 base16ct = { version = ">= 0", features = ["alloc"] }
-eqlog-eqlog = { path = "../eqlog-eqlog", version = "= 0.7.1" }
+eqlog-eqlog = { path = "../eqlog-eqlog", version = "= 0.7.2" }
 clap = { version = ">= 0", features = ["derive"] }
 by_address = ">= 0"
 
