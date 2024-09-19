@@ -437,22 +437,40 @@ pub fn flatten(
         let matching_func_index = *matching_func_indices
             .get(&eqlog.dom(morphism).unwrap())
             .unwrap();
+        let should_match_all_data = matching_func_index != 1;
 
         let cod_flat_vars: Vec<FlatVar> = iter_els(eqlog.cod(morphism).unwrap(), eqlog)
             .map(|el| *el_vars.get(&el).unwrap())
             .collect();
 
         if eqlog.if_morphism(morphism) {
-            // If active_func_index == 1, then no data has been matched so far. It follows that we
-            // only need to match the delta of this if morphism with new data, i.e. at least one
-            // atom in the codomain must be new.
-            let should_match_all_data = matching_func_index != 1;
-            if should_match_all_data {
-                funcs[matching_func_index]
-                    .body
-                    .extend(flatten_if_arbitrary(morphism, &el_vars, eqlog));
-            }
+            let old_if_func_index: Option<usize> = if should_match_all_data {
+                // Create a new function that, given a match of the domain of `morphism`, matches the
+                // codomain with arbitrary (potentially old) data. We call this function at the end of
+                // the function that matches the domain of `morphism` with new data.
+                let old_if_func_index = funcs.len();
+                let old_if_func_args: Vec<_> = iter_els(eqlog.dom(morphism).unwrap(), eqlog)
+                    .map(|el| *el_vars.get(&el).unwrap())
+                    .collect();
+                let old_if_func = FlatFunc {
+                    name: FlatFuncName(funcs.len()),
+                    args: old_if_func_args.clone(),
+                    body: flatten_if_arbitrary(morphism, &el_vars, eqlog),
+                };
+                funcs.push(old_if_func);
+                funcs[matching_func_index].body.push(FlatStmt::Call {
+                    func_name: FlatFuncName(old_if_func_index),
+                    args: old_if_func_args,
+                });
+                Some(old_if_func_index)
+            } else {
+                None
+            };
 
+            // Create functions that match the codomain of `morphism` with new data relative to
+            // to the domain if `morphism`.
+            // These functions don't take any arguments, and we call them at the entry point, i.e.
+            // funcs[0].
             let before_fresh_if_func_len = funcs.len();
             funcs.extend(
                 flatten_if_fresh(morphism, &el_vars, eqlog)
@@ -466,16 +484,6 @@ pub fn flatten(
             );
             let after_fresh_if_func_len = funcs.len();
 
-            let joined_func = FlatFunc {
-                name: FlatFuncName(funcs.len()),
-                args: iter_els(eqlog.cod(morphism).unwrap(), eqlog)
-                    .map(|el| *el_vars.get(&el).unwrap())
-                    .collect(),
-                body: Vec::new(),
-            };
-            let joined_func_name = joined_func.name;
-            funcs.push(joined_func);
-
             for i in before_fresh_if_func_len..after_fresh_if_func_len {
                 funcs[0].body.push(FlatStmt::Call {
                     func_name: FlatFuncName(i),
@@ -483,13 +491,22 @@ pub fn flatten(
                 });
             }
 
-            for func_index in should_match_all_data
-                .then_some(matching_func_index)
+            // A function that is called from all the matching functions we've created so far.
+            let joined_func_index = funcs.len();
+            let joined_func = FlatFunc {
+                name: FlatFuncName(joined_func_index),
+                args: cod_flat_vars.clone(),
+                body: Vec::new(),
+            };
+            let joined_func_name = joined_func.name;
+            funcs.push(joined_func);
+
+            for func_index in old_if_func_index
                 .into_iter()
                 .chain(before_fresh_if_func_len..after_fresh_if_func_len)
             {
                 let call = FlatStmt::Call {
-                    func_name: joined_func_name,
+                    func_name: FlatFuncName(joined_func_index),
                     args: cod_flat_vars.clone(),
                 };
                 funcs[func_index].body.push(call);
