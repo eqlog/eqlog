@@ -1,0 +1,22 @@
+type Pred;
+type Func;
+
+enum Rel {
+    PredRel(Pred),
+    FuncRel(Func)
+}
+
+pred is_pred(rel: Rel);
+pred is_func(rel: Rel);
+
+rule arity_laws {
+    if rel: Rel;
+    match rel {
+        PredRel(_) => {
+            then is_pred(rel);
+        }
+        FuncRel(_) => {
+            then is_func(rel);
+        }
+    }
+}

@@ -1,4 +1,4 @@
-// src-digest: 42CFA9BF36A5BE000856BBA538A3C859EE81B8FBD43AF364976B9563101941D9
+// src-digest: D99ACFF75871290FC7CC199080A2217ACDC6497FC2EEE2465F3ABDA87492B86D
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -4270,6 +4270,21 @@ impl MatchCaseTable {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN, u32::MIN);
         let max = (arg0, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: MatchCaseNode,
+        arg1: TermNode,
+    ) -> impl '_ + Iterator<Item = MatchCase> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1, u32::MIN);
+        let max = (arg0, arg1, u32::MAX);
         self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
@@ -23585,15 +23600,15 @@ impl fmt::Display for CtorsEnumTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CasesMatchStmt(pub MatchCaseListNode, pub StmtNode);
+struct CasesDiscriminee(pub MatchCaseListNode, pub TermNode);
 #[derive(Clone, Hash, Debug)]
-struct CasesMatchStmtTable {
+struct CasesDiscrimineeTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
-    element_index_match_case_list_node: BTreeMap<MatchCaseListNode, Vec<CasesMatchStmt>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CasesMatchStmt>>,
+    element_index_match_case_list_node: BTreeMap<MatchCaseListNode, Vec<CasesDiscriminee>>,
+    element_index_term_node: BTreeMap<TermNode, Vec<CasesDiscriminee>>,
 }
-impl CasesMatchStmtTable {
+impl CasesDiscrimineeTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -23601,11 +23616,11 @@ impl CasesMatchStmtTable {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
             element_index_match_case_list_node: BTreeMap::new(),
-            element_index_stmt_node: BTreeMap::new(),
+            element_index_term_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: CasesMatchStmt) -> bool {
+    fn insert(&mut self, t: CasesDiscriminee) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -23616,10 +23631,10 @@ impl CasesMatchStmtTable {
                 }
             };
 
-            match self.element_index_stmt_node.get_mut(&t.1) {
+            match self.element_index_term_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_stmt_node.insert(t.1, vec![t]);
+                    self.element_index_term_node.insert(t.1, vec![t]);
                 }
             };
 
@@ -23629,7 +23644,7 @@ impl CasesMatchStmtTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: CasesMatchStmt) -> bool {
+    fn contains(&self, t: CasesDiscriminee) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -23639,15 +23654,15 @@ impl CasesMatchStmtTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: CasesMatchStmt) -> (u32, u32) {
+    fn permute_0_1(t: CasesDiscriminee) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CasesMatchStmt {
-        CasesMatchStmt(MatchCaseListNode::from(t.0), StmtNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CasesDiscriminee {
+        CasesDiscriminee(MatchCaseListNode::from(t.0), TermNode::from(t.1))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CasesMatchStmt> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CasesDiscriminee> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -23656,7 +23671,7 @@ impl CasesMatchStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CasesMatchStmt> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CasesDiscriminee> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -23665,7 +23680,7 @@ impl CasesMatchStmtTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: MatchCaseListNode) -> impl '_ + Iterator<Item = CasesMatchStmt> {
+    fn iter_all_0(&self, arg0: MatchCaseListNode) -> impl '_ + Iterator<Item = CasesDiscriminee> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -23678,8 +23693,8 @@ impl CasesMatchStmtTable {
     fn iter_all_0_1(
         &self,
         arg0: MatchCaseListNode,
-        arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = CasesMatchStmt> {
+        arg1: TermNode,
+    ) -> impl '_ + Iterator<Item = CasesDiscriminee> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -23693,7 +23708,7 @@ impl CasesMatchStmtTable {
     fn drain_with_element_match_case_list_node(
         &mut self,
         tm: MatchCaseListNode,
-    ) -> Vec<CasesMatchStmt> {
+    ) -> Vec<CasesDiscriminee> {
         let mut ts = match self.element_index_match_case_list_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -23713,8 +23728,8 @@ impl CasesMatchStmtTable {
         ts
     }
     #[allow(dead_code)]
-    fn drain_with_element_stmt_node(&mut self, tm: StmtNode) -> Vec<CasesMatchStmt> {
-        let mut ts = match self.element_index_stmt_node.remove(&tm) {
+    fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<CasesDiscriminee> {
+        let mut ts = match self.element_index_term_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
         };
@@ -23733,11 +23748,11 @@ impl CasesMatchStmtTable {
         ts
     }
 }
-impl fmt::Display for CasesMatchStmtTable {
+impl fmt::Display for CasesDiscrimineeTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cases_match_stmt"))
+            .with(Header("cases_discriminee"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -23748,364 +23763,15 @@ impl fmt::Display for CasesMatchStmtTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CaseMatchStmt(pub MatchCaseNode, pub StmtNode);
+struct CaseDiscriminee(pub MatchCaseNode, pub TermNode);
 #[derive(Clone, Hash, Debug)]
-struct CaseMatchStmtTable {
+struct CaseDiscrimineeTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
-    index_all_1_0: BTreeSet<(u32, u32)>,
-    element_index_match_case_node: BTreeMap<MatchCaseNode, Vec<CaseMatchStmt>>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<CaseMatchStmt>>,
+    element_index_match_case_node: BTreeMap<MatchCaseNode, Vec<CaseDiscriminee>>,
+    element_index_term_node: BTreeMap<TermNode, Vec<CaseDiscriminee>>,
 }
-impl CaseMatchStmtTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 8;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_all_1_0: BTreeSet::new(),
-            element_index_match_case_node: BTreeMap::new(),
-            element_index_stmt_node: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: CaseMatchStmt) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-            self.index_all_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_match_case_node.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_match_case_node.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_stmt_node.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_stmt_node.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: CaseMatchStmt) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: CaseMatchStmt) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> CaseMatchStmt {
-        CaseMatchStmt(MatchCaseNode::from(t.0), StmtNode::from(t.1))
-    }
-    #[allow(unused)]
-    fn permute_1_0(t: CaseMatchStmt) -> (u32, u32) {
-        (t.1.into(), t.0.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> CaseMatchStmt {
-        CaseMatchStmt(MatchCaseNode::from(t.1), StmtNode::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = CaseMatchStmt> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CaseMatchStmt> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: MatchCaseNode) -> impl '_ + Iterator<Item = CaseMatchStmt> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: MatchCaseNode,
-        arg1: StmtNode,
-    ) -> impl '_ + Iterator<Item = CaseMatchStmt> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: StmtNode) -> impl '_ + Iterator<Item = CaseMatchStmt> {
-        let arg1 = arg1.0;
-        let min = (arg1, u32::MIN);
-        let max = (arg1, u32::MAX);
-        self.index_all_1_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_match_case_node(&mut self, tm: MatchCaseNode) -> Vec<CaseMatchStmt> {
-        let mut ts = match self.element_index_match_case_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                self.index_all_1_0.remove(&Self::permute_1_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_stmt_node(&mut self, tm: StmtNode) -> Vec<CaseMatchStmt> {
-        let mut ts = match self.element_index_stmt_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                self.index_all_1_0.remove(&Self::permute_1_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-}
-impl fmt::Display for CaseMatchStmtTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("case_match_stmt"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DesugaredMatchTermIdentifier(pub StmtNode, pub VirtIdent);
-#[derive(Clone, Hash, Debug)]
-struct DesugaredMatchTermIdentifierTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-    element_index_stmt_node: BTreeMap<StmtNode, Vec<DesugaredMatchTermIdentifier>>,
-    element_index_virt_ident: BTreeMap<VirtIdent, Vec<DesugaredMatchTermIdentifier>>,
-}
-impl DesugaredMatchTermIdentifierTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 6;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            element_index_stmt_node: BTreeMap::new(),
-            element_index_virt_ident: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: DesugaredMatchTermIdentifier) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-
-            match self.element_index_stmt_node.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_stmt_node.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_virt_ident.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_virt_ident.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: DesugaredMatchTermIdentifier) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: DesugaredMatchTermIdentifier) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> DesugaredMatchTermIdentifier {
-        DesugaredMatchTermIdentifier(StmtNode::from(t.0), VirtIdent::from(t.1))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = DesugaredMatchTermIdentifier> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = DesugaredMatchTermIdentifier> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(
-        &self,
-        arg0: StmtNode,
-    ) -> impl '_ + Iterator<Item = DesugaredMatchTermIdentifier> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(
-        &self,
-        arg0: StmtNode,
-        arg1: VirtIdent,
-    ) -> impl '_ + Iterator<Item = DesugaredMatchTermIdentifier> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_stmt_node(&mut self, tm: StmtNode) -> Vec<DesugaredMatchTermIdentifier> {
-        let mut ts = match self.element_index_stmt_node.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_virt_ident(
-        &mut self,
-        tm: VirtIdent,
-    ) -> Vec<DesugaredMatchTermIdentifier> {
-        let mut ts = match self.element_index_virt_ident.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-}
-impl fmt::Display for DesugaredMatchTermIdentifierTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("desugared_match_term_identifier"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DesugaredCaseTermVariable(pub MatchCaseNode, pub TermNode);
-#[derive(Clone, Hash, Debug)]
-struct DesugaredCaseTermVariableTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-    element_index_match_case_node: BTreeMap<MatchCaseNode, Vec<DesugaredCaseTermVariable>>,
-    element_index_term_node: BTreeMap<TermNode, Vec<DesugaredCaseTermVariable>>,
-}
-impl DesugaredCaseTermVariableTable {
+impl CaseDiscrimineeTable {
     #[allow(unused)]
     const WEIGHT: usize = 6;
     fn new() -> Self {
@@ -24117,7 +23783,7 @@ impl DesugaredCaseTermVariableTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: DesugaredCaseTermVariable) -> bool {
+    fn insert(&mut self, t: CaseDiscriminee) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
 
@@ -24141,7 +23807,7 @@ impl DesugaredCaseTermVariableTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: DesugaredCaseTermVariable) -> bool {
+    fn contains(&self, t: CaseDiscriminee) -> bool {
         self.index_all_0_1.contains(&Self::permute_0_1(t))
     }
     fn drop_dirt(&mut self) {
@@ -24151,15 +23817,15 @@ impl DesugaredCaseTermVariableTable {
         !self.index_dirty_0_1.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1(t: DesugaredCaseTermVariable) -> (u32, u32) {
+    fn permute_0_1(t: CaseDiscriminee) -> (u32, u32) {
         (t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> DesugaredCaseTermVariable {
-        DesugaredCaseTermVariable(MatchCaseNode::from(t.0), TermNode::from(t.1))
+    fn permute_inverse_0_1(t: (u32, u32)) -> CaseDiscriminee {
+        CaseDiscriminee(MatchCaseNode::from(t.0), TermNode::from(t.1))
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = DesugaredCaseTermVariable> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = CaseDiscriminee> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_all_0_1
@@ -24168,7 +23834,7 @@ impl DesugaredCaseTermVariableTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = DesugaredCaseTermVariable> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = CaseDiscriminee> {
         let min = (u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX);
         self.index_dirty_0_1
@@ -24177,10 +23843,7 @@ impl DesugaredCaseTermVariableTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_0(
-        &self,
-        arg0: MatchCaseNode,
-    ) -> impl '_ + Iterator<Item = DesugaredCaseTermVariable> {
+    fn iter_all_0(&self, arg0: MatchCaseNode) -> impl '_ + Iterator<Item = CaseDiscriminee> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN);
         let max = (arg0, u32::MAX);
@@ -24194,7 +23857,7 @@ impl DesugaredCaseTermVariableTable {
         &self,
         arg0: MatchCaseNode,
         arg1: TermNode,
-    ) -> impl '_ + Iterator<Item = DesugaredCaseTermVariable> {
+    ) -> impl '_ + Iterator<Item = CaseDiscriminee> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let min = (arg0, arg1);
@@ -24205,10 +23868,7 @@ impl DesugaredCaseTermVariableTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
-    fn drain_with_element_match_case_node(
-        &mut self,
-        tm: MatchCaseNode,
-    ) -> Vec<DesugaredCaseTermVariable> {
+    fn drain_with_element_match_case_node(&mut self, tm: MatchCaseNode) -> Vec<CaseDiscriminee> {
         let mut ts = match self.element_index_match_case_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -24228,7 +23888,7 @@ impl DesugaredCaseTermVariableTable {
         ts
     }
     #[allow(dead_code)]
-    fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<DesugaredCaseTermVariable> {
+    fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<CaseDiscriminee> {
         let mut ts = match self.element_index_term_node.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -24248,11 +23908,11 @@ impl DesugaredCaseTermVariableTable {
         ts
     }
 }
-impl fmt::Display for DesugaredCaseTermVariableTable {
+impl fmt::Display for CaseDiscrimineeTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("desugared_case_term_variable"))
+            .with(Header("case_discriminee"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -32781,13 +32441,9 @@ struct CtorEnumArgs(pub CtorDeclNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct CtorsEnumArgs(pub CtorDeclListNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CasesMatchStmtArgs(pub MatchCaseListNode);
+struct CasesDiscrimineeArgs(pub MatchCaseListNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CaseMatchStmtArgs(pub MatchCaseNode);
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DesugaredMatchTermIdentifierArgs(pub StmtNode);
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DesugaredCaseTermVariableArgs(pub MatchCaseNode);
+struct CaseDiscrimineeArgs(pub MatchCaseNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct DesugaredCaseEqualityAtomArgs(pub MatchCaseNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -33022,10 +32678,8 @@ struct ModelDelta {
     new_exit_scope: Vec<ExitScope>,
     new_ctor_enum: Vec<CtorEnum>,
     new_ctors_enum: Vec<CtorsEnum>,
-    new_cases_match_stmt: Vec<CasesMatchStmt>,
-    new_case_match_stmt: Vec<CaseMatchStmt>,
-    new_desugared_match_term_identifier: Vec<DesugaredMatchTermIdentifier>,
-    new_desugared_case_term_variable: Vec<DesugaredCaseTermVariable>,
+    new_cases_discriminee: Vec<CasesDiscriminee>,
+    new_case_discriminee: Vec<CaseDiscriminee>,
     new_desugared_case_equality_atom: Vec<DesugaredCaseEqualityAtom>,
     new_desugared_case_equality_stmt: Vec<DesugaredCaseEqualityStmt>,
     new_desugared_case_block: Vec<DesugaredCaseBlock>,
@@ -33151,10 +32805,8 @@ struct ModelDelta {
     new_exit_scope_def: Vec<ExitScopeArgs>,
     new_ctor_enum_def: Vec<CtorEnumArgs>,
     new_ctors_enum_def: Vec<CtorsEnumArgs>,
-    new_cases_match_stmt_def: Vec<CasesMatchStmtArgs>,
-    new_case_match_stmt_def: Vec<CaseMatchStmtArgs>,
-    new_desugared_match_term_identifier_def: Vec<DesugaredMatchTermIdentifierArgs>,
-    new_desugared_case_term_variable_def: Vec<DesugaredCaseTermVariableArgs>,
+    new_cases_discriminee_def: Vec<CasesDiscrimineeArgs>,
+    new_case_discriminee_def: Vec<CaseDiscrimineeArgs>,
     new_desugared_case_equality_atom_def: Vec<DesugaredCaseEqualityAtomArgs>,
     new_desugared_case_equality_stmt_def: Vec<DesugaredCaseEqualityStmtArgs>,
     new_desugared_case_block_def: Vec<DesugaredCaseBlockArgs>,
@@ -33576,10 +33228,8 @@ pub struct Eqlog {
     exit_scope: ExitScopeTable,
     ctor_enum: CtorEnumTable,
     ctors_enum: CtorsEnumTable,
-    cases_match_stmt: CasesMatchStmtTable,
-    case_match_stmt: CaseMatchStmtTable,
-    desugared_match_term_identifier: DesugaredMatchTermIdentifierTable,
-    desugared_case_term_variable: DesugaredCaseTermVariableTable,
+    cases_discriminee: CasesDiscrimineeTable,
+    case_discriminee: CaseDiscrimineeTable,
     desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,
     desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,
     desugared_case_block: DesugaredCaseBlockTable,
@@ -33769,10 +33419,8 @@ impl ModelDelta {
             new_exit_scope: Vec::new(),
             new_ctor_enum: Vec::new(),
             new_ctors_enum: Vec::new(),
-            new_cases_match_stmt: Vec::new(),
-            new_case_match_stmt: Vec::new(),
-            new_desugared_match_term_identifier: Vec::new(),
-            new_desugared_case_term_variable: Vec::new(),
+            new_cases_discriminee: Vec::new(),
+            new_case_discriminee: Vec::new(),
             new_desugared_case_equality_atom: Vec::new(),
             new_desugared_case_equality_stmt: Vec::new(),
             new_desugared_case_block: Vec::new(),
@@ -33936,13 +33584,9 @@ impl ModelDelta {
 
             new_ctors_enum_def: Vec::new(),
 
-            new_cases_match_stmt_def: Vec::new(),
+            new_cases_discriminee_def: Vec::new(),
 
-            new_case_match_stmt_def: Vec::new(),
-
-            new_desugared_match_term_identifier_def: Vec::new(),
-
-            new_desugared_case_term_variable_def: Vec::new(),
+            new_case_discriminee_def: Vec::new(),
 
             new_desugared_case_equality_atom_def: Vec::new(),
 
@@ -34756,22 +34400,12 @@ impl ModelDelta {
             model.insert_ctors_enum(tm0, tm1);
         }
 
-        for CasesMatchStmt(tm0, tm1) in self.new_cases_match_stmt.drain(..) {
-            model.insert_cases_match_stmt(tm0, tm1);
+        for CasesDiscriminee(tm0, tm1) in self.new_cases_discriminee.drain(..) {
+            model.insert_cases_discriminee(tm0, tm1);
         }
 
-        for CaseMatchStmt(tm0, tm1) in self.new_case_match_stmt.drain(..) {
-            model.insert_case_match_stmt(tm0, tm1);
-        }
-
-        for DesugaredMatchTermIdentifier(tm0, tm1) in
-            self.new_desugared_match_term_identifier.drain(..)
-        {
-            model.insert_desugared_match_term_identifier(tm0, tm1);
-        }
-
-        for DesugaredCaseTermVariable(tm0, tm1) in self.new_desugared_case_term_variable.drain(..) {
-            model.insert_desugared_case_term_variable(tm0, tm1);
+        for CaseDiscriminee(tm0, tm1) in self.new_case_discriminee.drain(..) {
+            model.insert_case_discriminee(tm0, tm1);
         }
 
         for DesugaredCaseEqualityAtom(tm0, tm1) in self.new_desugared_case_equality_atom.drain(..) {
@@ -35124,24 +34758,12 @@ impl ModelDelta {
             model.define_ctors_enum(tm0);
         }
 
-        for CasesMatchStmtArgs(tm0) in self.new_cases_match_stmt_def.drain(..) {
-            model.define_cases_match_stmt(tm0);
+        for CasesDiscrimineeArgs(tm0) in self.new_cases_discriminee_def.drain(..) {
+            model.define_cases_discriminee(tm0);
         }
 
-        for CaseMatchStmtArgs(tm0) in self.new_case_match_stmt_def.drain(..) {
-            model.define_case_match_stmt(tm0);
-        }
-
-        for DesugaredMatchTermIdentifierArgs(tm0) in
-            self.new_desugared_match_term_identifier_def.drain(..)
-        {
-            model.define_desugared_match_term_identifier(tm0);
-        }
-
-        for DesugaredCaseTermVariableArgs(tm0) in
-            self.new_desugared_case_term_variable_def.drain(..)
-        {
-            model.define_desugared_case_term_variable(tm0);
+        for CaseDiscrimineeArgs(tm0) in self.new_case_discriminee_def.drain(..) {
+            model.define_case_discriminee(tm0);
         }
 
         for DesugaredCaseEqualityAtomArgs(tm0) in
@@ -35677,10 +35299,8 @@ impl Eqlog {
             exit_scope: ExitScopeTable::new(),
             ctor_enum: CtorEnumTable::new(),
             ctors_enum: CtorsEnumTable::new(),
-            cases_match_stmt: CasesMatchStmtTable::new(),
-            case_match_stmt: CaseMatchStmtTable::new(),
-            desugared_match_term_identifier: DesugaredMatchTermIdentifierTable::new(),
-            desugared_case_term_variable: DesugaredCaseTermVariableTable::new(),
+            cases_discriminee: CasesDiscrimineeTable::new(),
+            case_discriminee: CaseDiscrimineeTable::new(),
             desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),
             desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),
             desugared_case_block: DesugaredCaseBlockTable::new(),
@@ -35842,8 +35462,6 @@ impl Eqlog {
                 self.implicit_functionality_85_0(&mut delta);
                 self.implicit_functionality_86_0(&mut delta);
                 self.implicit_functionality_87_0(&mut delta);
-                self.implicit_functionality_88_0(&mut delta);
-                self.implicit_functionality_89_0(&mut delta);
                 self.real_virt_ident_total_0(&mut delta);
                 self.virt_real_ident_retraction_0(&mut delta);
                 self.rule_descendant_rule_total_0(&mut delta);
@@ -35882,12 +35500,11 @@ impl Eqlog {
                 self.scopes_term_var_0(&mut delta);
                 self.enum_ctors_0(&mut delta);
                 self.enum_ctors_cons_0(&mut delta);
-                self.match_stmt_case_list_0(&mut delta);
+                self.match_stmt_cases_discriminee_0(&mut delta);
                 self.cases_match_stmt_cons_0(&mut delta);
-                self.desugared_match_term_identifier_defined_0(&mut delta);
+                self.desugared_case_equality_stmt_loc_0(&mut delta);
                 self.desugared_case_defined_0(&mut delta);
                 self.desugared_case_block_list_defined_0(&mut delta);
-                self.desugared_case_term_variable_identifier_0(&mut delta);
                 self.desugared_case_equality_atom_stmt_0(&mut delta);
                 self.desugared_case_block_structure_0(&mut delta);
                 self.desugared_case_blocks_0(&mut delta);
@@ -35937,7 +35554,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_93_0(&mut delta);
+                self.anonymous_rule_92_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -39843,145 +39460,61 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `cases_match_stmt(arg0)`.
+    /// Evaluates `cases_discriminee(arg0)`.
     #[allow(dead_code)]
-    pub fn cases_match_stmt(&self, mut arg0: MatchCaseListNode) -> Option<StmtNode> {
+    pub fn cases_discriminee(&self, mut arg0: MatchCaseListNode) -> Option<TermNode> {
         arg0 = self.root_match_case_list_node(arg0);
-        self.cases_match_stmt.iter_all_0(arg0).next().map(|t| t.1)
+        self.cases_discriminee.iter_all_0(arg0).next().map(|t| t.1)
     }
-    /// Returns an iterator over tuples in the graph of the `cases_match_stmt` function.
+    /// Returns an iterator over tuples in the graph of the `cases_discriminee` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
-    pub fn iter_cases_match_stmt(
+    pub fn iter_cases_discriminee(
         &self,
-    ) -> impl '_ + Iterator<Item = (MatchCaseListNode, StmtNode)> {
-        self.cases_match_stmt.iter_all().map(|t| (t.0, t.1))
+    ) -> impl '_ + Iterator<Item = (MatchCaseListNode, TermNode)> {
+        self.cases_discriminee.iter_all().map(|t| (t.0, t.1))
     }
-    /// Makes the equation `cases_match_stmt(tm0) = tm1` hold.
+    /// Makes the equation `cases_discriminee(tm0) = tm1` hold.
 
     #[allow(dead_code)]
-    pub fn insert_cases_match_stmt(&mut self, mut tm0: MatchCaseListNode, mut tm1: StmtNode) {
+    pub fn insert_cases_discriminee(&mut self, mut tm0: MatchCaseListNode, mut tm1: TermNode) {
         tm0 = self.match_case_list_node_equalities.root(tm0);
-        tm1 = self.stmt_node_equalities.root(tm1);
-        if self.cases_match_stmt.insert(CasesMatchStmt(tm0, tm1)) {
-            let weight0 = &mut self.match_case_list_node_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(CasesMatchStmtTable::WEIGHT);
-
-            let weight1 = &mut self.stmt_node_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(CasesMatchStmtTable::WEIGHT);
-        }
-    }
-
-    /// Evaluates `case_match_stmt(arg0)`.
-    #[allow(dead_code)]
-    pub fn case_match_stmt(&self, mut arg0: MatchCaseNode) -> Option<StmtNode> {
-        arg0 = self.root_match_case_node(arg0);
-        self.case_match_stmt.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Returns an iterator over tuples in the graph of the `case_match_stmt` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_case_match_stmt(&self) -> impl '_ + Iterator<Item = (MatchCaseNode, StmtNode)> {
-        self.case_match_stmt.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `case_match_stmt(tm0) = tm1` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_case_match_stmt(&mut self, mut tm0: MatchCaseNode, mut tm1: StmtNode) {
-        tm0 = self.match_case_node_equalities.root(tm0);
-        tm1 = self.stmt_node_equalities.root(tm1);
-        if self.case_match_stmt.insert(CaseMatchStmt(tm0, tm1)) {
-            let weight0 = &mut self.match_case_node_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(CaseMatchStmtTable::WEIGHT);
-
-            let weight1 = &mut self.stmt_node_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(CaseMatchStmtTable::WEIGHT);
-        }
-    }
-
-    /// Evaluates `desugared_match_term_identifier(arg0)`.
-    #[allow(dead_code)]
-    pub fn desugared_match_term_identifier(&self, mut arg0: StmtNode) -> Option<VirtIdent> {
-        arg0 = self.root_stmt_node(arg0);
-        self.desugared_match_term_identifier
-            .iter_all_0(arg0)
-            .next()
-            .map(|t| t.1)
-    }
-    /// Returns an iterator over tuples in the graph of the `desugared_match_term_identifier` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_desugared_match_term_identifier(
-        &self,
-    ) -> impl '_ + Iterator<Item = (StmtNode, VirtIdent)> {
-        self.desugared_match_term_identifier
-            .iter_all()
-            .map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `desugared_match_term_identifier(tm0) = tm1` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_desugared_match_term_identifier(
-        &mut self,
-        mut tm0: StmtNode,
-        mut tm1: VirtIdent,
-    ) {
-        tm0 = self.stmt_node_equalities.root(tm0);
-        tm1 = self.virt_ident_equalities.root(tm1);
-        if self
-            .desugared_match_term_identifier
-            .insert(DesugaredMatchTermIdentifier(tm0, tm1))
-        {
-            let weight0 = &mut self.stmt_node_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-            let weight1 = &mut self.virt_ident_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(DesugaredMatchTermIdentifierTable::WEIGHT);
-        }
-    }
-
-    /// Evaluates `desugared_case_term_variable(arg0)`.
-    #[allow(dead_code)]
-    pub fn desugared_case_term_variable(&self, mut arg0: MatchCaseNode) -> Option<TermNode> {
-        arg0 = self.root_match_case_node(arg0);
-        self.desugared_case_term_variable
-            .iter_all_0(arg0)
-            .next()
-            .map(|t| t.1)
-    }
-    /// Returns an iterator over tuples in the graph of the `desugared_case_term_variable` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_desugared_case_term_variable(
-        &self,
-    ) -> impl '_ + Iterator<Item = (MatchCaseNode, TermNode)> {
-        self.desugared_case_term_variable
-            .iter_all()
-            .map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `desugared_case_term_variable(tm0) = tm1` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_desugared_case_term_variable(
-        &mut self,
-        mut tm0: MatchCaseNode,
-        mut tm1: TermNode,
-    ) {
-        tm0 = self.match_case_node_equalities.root(tm0);
         tm1 = self.term_node_equalities.root(tm1);
-        if self
-            .desugared_case_term_variable
-            .insert(DesugaredCaseTermVariable(tm0, tm1))
-        {
-            let weight0 = &mut self.match_case_node_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(DesugaredCaseTermVariableTable::WEIGHT);
+        if self.cases_discriminee.insert(CasesDiscriminee(tm0, tm1)) {
+            let weight0 = &mut self.match_case_list_node_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(CasesDiscrimineeTable::WEIGHT);
 
             let weight1 = &mut self.term_node_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(DesugaredCaseTermVariableTable::WEIGHT);
+            *weight1 = weight1.saturating_add(CasesDiscrimineeTable::WEIGHT);
+        }
+    }
+
+    /// Evaluates `case_discriminee(arg0)`.
+    #[allow(dead_code)]
+    pub fn case_discriminee(&self, mut arg0: MatchCaseNode) -> Option<TermNode> {
+        arg0 = self.root_match_case_node(arg0);
+        self.case_discriminee.iter_all_0(arg0).next().map(|t| t.1)
+    }
+    /// Returns an iterator over tuples in the graph of the `case_discriminee` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_case_discriminee(&self) -> impl '_ + Iterator<Item = (MatchCaseNode, TermNode)> {
+        self.case_discriminee.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes the equation `case_discriminee(tm0) = tm1` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_case_discriminee(&mut self, mut tm0: MatchCaseNode, mut tm1: TermNode) {
+        tm0 = self.match_case_node_equalities.root(tm0);
+        tm1 = self.term_node_equalities.root(tm1);
+        if self.case_discriminee.insert(CaseDiscriminee(tm0, tm1)) {
+            let weight0 = &mut self.match_case_node_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(CaseDiscrimineeTable::WEIGHT);
+
+            let weight1 = &mut self.term_node_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(CaseDiscrimineeTable::WEIGHT);
         }
     }
 
@@ -41967,50 +41500,26 @@ impl Eqlog {
             }
         }
     }
-    /// Enforces that `cases_match_stmt(tm0)` is defined, adjoining a new element if necessary.
+    /// Enforces that `cases_discriminee(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
-    pub fn define_cases_match_stmt(&mut self, tm0: MatchCaseListNode) -> StmtNode {
-        match self.cases_match_stmt(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_stmt_node_internal();
-                self.insert_cases_match_stmt(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `case_match_stmt(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_case_match_stmt(&mut self, tm0: MatchCaseNode) -> StmtNode {
-        match self.case_match_stmt(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_stmt_node_internal();
-                self.insert_case_match_stmt(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `desugared_match_term_identifier(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_desugared_match_term_identifier(&mut self, tm0: StmtNode) -> VirtIdent {
-        match self.desugared_match_term_identifier(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_virt_ident_internal();
-                self.insert_desugared_match_term_identifier(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `desugared_case_term_variable(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_desugared_case_term_variable(&mut self, tm0: MatchCaseNode) -> TermNode {
-        match self.desugared_case_term_variable(tm0) {
+    pub fn define_cases_discriminee(&mut self, tm0: MatchCaseListNode) -> TermNode {
+        match self.cases_discriminee(tm0) {
             Some(result) => result,
             None => {
                 let tm1 = self.new_term_node_internal();
-                self.insert_desugared_case_term_variable(tm0, tm1);
+                self.insert_cases_discriminee(tm0, tm1);
+                tm1
+            }
+        }
+    }
+    /// Enforces that `case_discriminee(tm0)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_case_discriminee(&mut self, tm0: MatchCaseNode) -> TermNode {
+        match self.case_discriminee(tm0) {
+            Some(result) => result,
+            None => {
+                let tm1 = self.new_term_node_internal();
+                self.insert_case_discriminee(tm0, tm1);
                 tm1
             }
         }
@@ -51597,174 +51106,84 @@ impl Eqlog {
 
         for el in self.match_case_list_node_uprooted.iter().copied() {
             let ts = self
-                .cases_match_stmt
+                .cases_discriminee
                 .drain_with_element_match_case_list_node(el);
             for mut t in ts {
                 let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(CasesMatchStmtTable::WEIGHT);
-
-                let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(CasesMatchStmtTable::WEIGHT);
-
-                t.0 = self.root_match_case_list_node(t.0);
-                t.1 = self.root_stmt_node(t.1);
-                if self.cases_match_stmt.insert(t) {
-                    let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(CasesMatchStmtTable::WEIGHT);
-
-                    let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(CasesMatchStmtTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.stmt_node_uprooted.iter().copied() {
-            let ts = self.cases_match_stmt.drain_with_element_stmt_node(el);
-            for mut t in ts {
-                let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(CasesMatchStmtTable::WEIGHT);
-
-                let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(CasesMatchStmtTable::WEIGHT);
-
-                t.0 = self.root_match_case_list_node(t.0);
-                t.1 = self.root_stmt_node(t.1);
-                if self.cases_match_stmt.insert(t) {
-                    let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(CasesMatchStmtTable::WEIGHT);
-
-                    let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(CasesMatchStmtTable::WEIGHT);
-                }
-            }
-        }
-
-        for el in self.match_case_node_uprooted.iter().copied() {
-            let ts = self.case_match_stmt.drain_with_element_match_case_node(el);
-            for mut t in ts {
-                let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(CaseMatchStmtTable::WEIGHT);
-
-                let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(CaseMatchStmtTable::WEIGHT);
-
-                t.0 = self.root_match_case_node(t.0);
-                t.1 = self.root_stmt_node(t.1);
-                if self.case_match_stmt.insert(t) {
-                    let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(CaseMatchStmtTable::WEIGHT);
-
-                    let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(CaseMatchStmtTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.stmt_node_uprooted.iter().copied() {
-            let ts = self.case_match_stmt.drain_with_element_stmt_node(el);
-            for mut t in ts {
-                let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(CaseMatchStmtTable::WEIGHT);
-
-                let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(CaseMatchStmtTable::WEIGHT);
-
-                t.0 = self.root_match_case_node(t.0);
-                t.1 = self.root_stmt_node(t.1);
-                if self.case_match_stmt.insert(t) {
-                    let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(CaseMatchStmtTable::WEIGHT);
-
-                    let weight1 = &mut self.stmt_node_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(CaseMatchStmtTable::WEIGHT);
-                }
-            }
-        }
-
-        for el in self.stmt_node_uprooted.iter().copied() {
-            let ts = self
-                .desugared_match_term_identifier
-                .drain_with_element_stmt_node(el);
-            for mut t in ts {
-                let weight0 = &mut self.stmt_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-                let weight1 = &mut self.virt_ident_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-                t.0 = self.root_stmt_node(t.0);
-                t.1 = self.root_virt_ident(t.1);
-                if self.desugared_match_term_identifier.insert(t) {
-                    let weight0 = &mut self.stmt_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-                    let weight1 = &mut self.virt_ident_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DesugaredMatchTermIdentifierTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.virt_ident_uprooted.iter().copied() {
-            let ts = self
-                .desugared_match_term_identifier
-                .drain_with_element_virt_ident(el);
-            for mut t in ts {
-                let weight0 = &mut self.stmt_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-                let weight1 = &mut self.virt_ident_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-                t.0 = self.root_stmt_node(t.0);
-                t.1 = self.root_virt_ident(t.1);
-                if self.desugared_match_term_identifier.insert(t) {
-                    let weight0 = &mut self.stmt_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DesugaredMatchTermIdentifierTable::WEIGHT);
-
-                    let weight1 = &mut self.virt_ident_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DesugaredMatchTermIdentifierTable::WEIGHT);
-                }
-            }
-        }
-
-        for el in self.match_case_node_uprooted.iter().copied() {
-            let ts = self
-                .desugared_case_term_variable
-                .drain_with_element_match_case_node(el);
-            for mut t in ts {
-                let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DesugaredCaseTermVariableTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(CasesDiscrimineeTable::WEIGHT);
 
                 let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DesugaredCaseTermVariableTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(CasesDiscrimineeTable::WEIGHT);
 
-                t.0 = self.root_match_case_node(t.0);
+                t.0 = self.root_match_case_list_node(t.0);
                 t.1 = self.root_term_node(t.1);
-                if self.desugared_case_term_variable.insert(t) {
-                    let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DesugaredCaseTermVariableTable::WEIGHT);
+                if self.cases_discriminee.insert(t) {
+                    let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(CasesDiscrimineeTable::WEIGHT);
 
                     let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DesugaredCaseTermVariableTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(CasesDiscrimineeTable::WEIGHT);
                 }
             }
         }
         for el in self.term_node_uprooted.iter().copied() {
-            let ts = self
-                .desugared_case_term_variable
-                .drain_with_element_term_node(el);
+            let ts = self.cases_discriminee.drain_with_element_term_node(el);
             for mut t in ts {
-                let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DesugaredCaseTermVariableTable::WEIGHT);
+                let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(CasesDiscrimineeTable::WEIGHT);
 
                 let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DesugaredCaseTermVariableTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(CasesDiscrimineeTable::WEIGHT);
+
+                t.0 = self.root_match_case_list_node(t.0);
+                t.1 = self.root_term_node(t.1);
+                if self.cases_discriminee.insert(t) {
+                    let weight0 = &mut self.match_case_list_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(CasesDiscrimineeTable::WEIGHT);
+
+                    let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(CasesDiscrimineeTable::WEIGHT);
+                }
+            }
+        }
+
+        for el in self.match_case_node_uprooted.iter().copied() {
+            let ts = self.case_discriminee.drain_with_element_match_case_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(CaseDiscrimineeTable::WEIGHT);
+
+                let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(CaseDiscrimineeTable::WEIGHT);
 
                 t.0 = self.root_match_case_node(t.0);
                 t.1 = self.root_term_node(t.1);
-                if self.desugared_case_term_variable.insert(t) {
+                if self.case_discriminee.insert(t) {
                     let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DesugaredCaseTermVariableTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(CaseDiscrimineeTable::WEIGHT);
 
                     let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DesugaredCaseTermVariableTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(CaseDiscrimineeTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.term_node_uprooted.iter().copied() {
+            let ts = self.case_discriminee.drain_with_element_term_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(CaseDiscrimineeTable::WEIGHT);
+
+                let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(CaseDiscrimineeTable::WEIGHT);
+
+                t.0 = self.root_match_case_node(t.0);
+                t.1 = self.root_term_node(t.1);
+                if self.case_discriminee.insert(t) {
+                    let weight0 = &mut self.match_case_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(CaseDiscrimineeTable::WEIGHT);
+
+                    let weight1 = &mut self.term_node_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(CaseDiscrimineeTable::WEIGHT);
                 }
             }
         }
@@ -54092,10 +53511,8 @@ impl Eqlog {
             || self.exit_scope.is_dirty()
             || self.ctor_enum.is_dirty()
             || self.ctors_enum.is_dirty()
-            || self.cases_match_stmt.is_dirty()
-            || self.case_match_stmt.is_dirty()
-            || self.desugared_match_term_identifier.is_dirty()
-            || self.desugared_case_term_variable.is_dirty()
+            || self.cases_discriminee.is_dirty()
+            || self.case_discriminee.is_dirty()
             || self.desugared_case_equality_atom.is_dirty()
             || self.desugared_case_equality_stmt.is_dirty()
             || self.desugared_case_block.is_dirty()
@@ -54722,10 +54139,10 @@ impl Eqlog {
     fn implicit_functionality_37_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CasesMatchStmt(tm0, tm1) in self.cases_match_stmt.iter_dirty() {
+            for CasesDiscriminee(tm0, tm1) in self.cases_discriminee.iter_dirty() {
                 #[allow(unused_variables)]
-                for CasesMatchStmt(_, tm2) in self.cases_match_stmt.iter_all_0(tm0) {
-                    delta.new_stmt_node_equalities.push((tm1, tm2));
+                for CasesDiscriminee(_, tm2) in self.cases_discriminee.iter_all_0(tm0) {
+                    delta.new_term_node_equalities.push((tm1, tm2));
                 }
             }
         }
@@ -54735,43 +54152,9 @@ impl Eqlog {
     fn implicit_functionality_38_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CaseMatchStmt(tm0, tm1) in self.case_match_stmt.iter_dirty() {
+            for CaseDiscriminee(tm0, tm1) in self.case_discriminee.iter_dirty() {
                 #[allow(unused_variables)]
-                for CaseMatchStmt(_, tm2) in self.case_match_stmt.iter_all_0(tm0) {
-                    delta.new_stmt_node_equalities.push((tm1, tm2));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_39_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for DesugaredMatchTermIdentifier(tm0, tm1) in
-                self.desugared_match_term_identifier.iter_dirty()
-            {
-                #[allow(unused_variables)]
-                for DesugaredMatchTermIdentifier(_, tm2) in
-                    self.desugared_match_term_identifier.iter_all_0(tm0)
-                {
-                    delta.new_virt_ident_equalities.push((tm1, tm2));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_40_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for DesugaredCaseTermVariable(tm0, tm1) in
-                self.desugared_case_term_variable.iter_dirty()
-            {
-                #[allow(unused_variables)]
-                for DesugaredCaseTermVariable(_, tm2) in
-                    self.desugared_case_term_variable.iter_all_0(tm0)
-                {
+                for CaseDiscriminee(_, tm2) in self.case_discriminee.iter_all_0(tm0) {
                     delta.new_term_node_equalities.push((tm1, tm2));
                 }
             }
@@ -54779,7 +54162,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_41_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_39_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityAtom(tm0, tm1) in
@@ -54796,7 +54179,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_42_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_40_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm1) in
@@ -54813,7 +54196,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_41_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(tm0, tm1) in self.desugared_case_block.iter_dirty() {
@@ -54826,7 +54209,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_42_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm0, tm1) in self.desugared_case_block_list.iter_dirty() {
@@ -54840,7 +54223,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
@@ -54853,7 +54236,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
@@ -54866,7 +54249,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm0, tm1) in self.semantic_type.iter_dirty() {
@@ -54879,7 +54262,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm0, tm1) in self.semantic_arg_types.iter_dirty() {
@@ -54892,7 +54275,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm0, tm1) in self.semantic_pred.iter_dirty() {
@@ -54905,7 +54288,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm0, tm1) in self.pred_arity.iter_dirty() {
@@ -54918,7 +54301,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm0, tm1) in self.semantic_func.iter_dirty() {
@@ -54931,7 +54314,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Domain(tm0, tm1) in self.domain.iter_dirty() {
@@ -54944,7 +54327,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm0, tm1) in self.codomain.iter_dirty() {
@@ -54957,7 +54340,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Arity(tm0, tm1) in self.arity.iter_dirty() {
@@ -54970,7 +54353,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
@@ -54983,7 +54366,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
@@ -54996,7 +54379,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
@@ -55009,7 +54392,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
@@ -55022,7 +54405,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
@@ -55035,7 +54418,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
@@ -55048,7 +54431,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Dom(tm0, tm1) in self.dom.iter_dirty() {
@@ -55061,7 +54444,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm1) in self.cod.iter_dirty() {
@@ -55074,7 +54457,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
@@ -55087,7 +54470,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm1, tm2) in self.map_els.iter_dirty() {
@@ -55100,7 +54483,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
@@ -55113,7 +54496,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm0) in self.pred_symbol.iter_dirty() {
@@ -55126,7 +54509,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm0) in self.func_symbol.iter_dirty() {
@@ -55139,7 +54522,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm0) in self.rule_symbol.iter_dirty() {
@@ -55152,7 +54535,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm0) in self.enum_symbol.iter_dirty() {
@@ -55165,7 +54548,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm0) in self.ctor_symbol.iter_dirty() {
@@ -55178,7 +54561,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Zero(tm0) in self.zero.iter_dirty() {
@@ -55191,7 +54574,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Succ(tm0, tm1) in self.succ.iter_dirty() {
@@ -55204,7 +54587,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
@@ -55217,7 +54600,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
@@ -55230,7 +54613,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm1) in self.before_rule_structure.iter_dirty() {
@@ -55243,7 +54626,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm0, tm1, tm2) in self.if_atom_morphism.iter_dirty() {
@@ -55256,7 +54639,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm0, tm1, tm2) in self.then_atom_morphism.iter_dirty() {
@@ -55269,7 +54652,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BranchStmtMorphism(tm0, tm1, tm2) in self.branch_stmt_morphism.iter_dirty() {
@@ -55284,7 +54667,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtMorphism(tm0, tm1, tm2) in self.match_stmt_morphism.iter_dirty() {
@@ -55298,7 +54681,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm0, tm1, tm2) in self.semantic_name.iter_dirty() {
@@ -55311,7 +54694,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
@@ -55324,7 +54707,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
@@ -55337,7 +54720,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
@@ -55350,7 +54733,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm0, tm1) in self.match_case_pattern_ctor.iter_dirty() {
@@ -55363,7 +54746,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm0, tm1) in self.cases_determined_enum.iter_dirty() {
@@ -55376,7 +54759,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredRel(tm0, tm1) in self.pred_rel.iter_dirty() {
@@ -55389,7 +54772,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
@@ -55402,7 +54785,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_88_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NegatedPredRel(tm0, tm1) in self.negated_pred_rel.iter_dirty() {
@@ -55415,7 +54798,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_89_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for UndefinedFuncRel(tm0, tm1) in self.undefined_func_rel.iter_dirty() {
@@ -59143,30 +58526,30 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_case_list_0(&self, delta: &mut ModelDelta) {
+    fn match_stmt_cases_discriminee_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.match_stmt_case_list_1(delta);
-            self.match_stmt_case_list_2(delta);
+            self.match_stmt_cases_discriminee_1(delta);
+            self.match_stmt_cases_discriminee_2(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_case_list_1(&self, delta: &mut ModelDelta) {
+    fn match_stmt_cases_discriminee_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_case_list_2(&self, delta: &mut ModelDelta) {
+    fn match_stmt_cases_discriminee_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtNode(tm0, tm1, tm2) in self.match_stmt_node.iter_dirty() {
-                self.match_stmt_case_list_3(delta, tm0, tm1, tm2);
+                self.match_stmt_cases_discriminee_3(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_case_list_3(
+    fn match_stmt_cases_discriminee_3(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -59175,12 +58558,12 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .cases_match_stmt
-                .iter_all_0_1(tm2, tm0)
+                .cases_discriminee
+                .iter_all_0_1(tm2, tm1)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_cases_match_stmt.push(CasesMatchStmt(tm2, tm0));
+                delta.new_cases_discriminee.push(CasesDiscriminee(tm2, tm1));
             }
         }
     }
@@ -59203,7 +58586,7 @@ impl Eqlog {
     fn cases_match_stmt_cons_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CasesMatchStmt(tm0, tm1) in self.cases_match_stmt.iter_dirty() {
+            for CasesDiscriminee(tm0, tm1) in self.cases_discriminee.iter_dirty() {
                 self.cases_match_stmt_cons_3(delta, tm0, tm1);
             }
         }
@@ -59214,7 +58597,7 @@ impl Eqlog {
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
-        tm1: StmtNode,
+        tm1: TermNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
@@ -59232,7 +58615,7 @@ impl Eqlog {
             for ConsMatchCaseListNode(tm0, tm2, tm3) in self.cons_match_case_list_node.iter_dirty()
             {
                 #[allow(unused_variables)]
-                for CasesMatchStmt(_, tm1) in self.cases_match_stmt.iter_all_0(tm0) {
+                for CasesDiscriminee(_, tm1) in self.cases_discriminee.iter_all_0(tm0) {
                     self.cases_match_stmt_cons_5(delta, tm1, tm0, tm2, tm3);
                 }
             }
@@ -59243,100 +58626,139 @@ impl Eqlog {
     fn cases_match_stmt_cons_5(
         &self,
         delta: &mut ModelDelta,
-        tm1: StmtNode,
+        tm1: TermNode,
         tm0: MatchCaseListNode,
         tm2: MatchCaseNode,
         tm3: MatchCaseListNode,
     ) {
         for _ in [()] {
-            let exists_already = self.case_match_stmt.iter_all_0_1(tm2, tm1).next().is_some();
+            let exists_already = self
+                .case_discriminee
+                .iter_all_0_1(tm2, tm1)
+                .next()
+                .is_some();
             if !exists_already {
-                delta.new_case_match_stmt.push(CaseMatchStmt(tm2, tm1));
+                delta.new_case_discriminee.push(CaseDiscriminee(tm2, tm1));
             }
 
             let exists_already = self
-                .cases_match_stmt
+                .cases_discriminee
                 .iter_all_0_1(tm3, tm1)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_cases_match_stmt.push(CasesMatchStmt(tm3, tm1));
+                delta.new_cases_discriminee.push(CasesDiscriminee(tm3, tm1));
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_match_term_identifier_defined_0(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_stmt_loc_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.desugared_match_term_identifier_defined_1(delta);
-            self.desugared_match_term_identifier_defined_2(delta);
-            self.desugared_match_term_identifier_defined_4(delta);
+            self.desugared_case_equality_stmt_loc_1(delta);
+            self.desugared_case_equality_stmt_loc_2(delta);
+            self.desugared_case_equality_stmt_loc_4(delta);
+            self.desugared_case_equality_stmt_loc_6(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_match_term_identifier_defined_1(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_stmt_loc_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn desugared_match_term_identifier_defined_2(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_stmt_loc_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for MatchStmtNode(tm0, tm1, tm2) in self.match_stmt_node.iter_dirty() {
-                self.desugared_match_term_identifier_defined_3(delta, tm0, tm1, tm2);
+            for MatchCase(tm0, tm1, tm2) in self.match_case.iter_dirty() {
+                self.desugared_case_equality_stmt_loc_3(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_match_term_identifier_defined_3(
+    fn desugared_case_equality_stmt_loc_3(
         &self,
         delta: &mut ModelDelta,
-        tm0: StmtNode,
+        tm0: MatchCaseNode,
         tm1: TermNode,
-        tm2: MatchCaseListNode,
+        tm2: StmtListNode,
     ) {
         for _ in [()] {
-            let tm3 = match self.desugared_match_term_identifier.iter_all_0(tm0).next() {
-                Some(DesugaredMatchTermIdentifier(_, res)) => res,
-                None => {
-                    delta
-                        .new_desugared_match_term_identifier_def
-                        .push(DesugaredMatchTermIdentifierArgs(tm0));
-                    break;
-                }
-            };
-
-            self.desugared_match_term_identifier_defined_5(delta, tm1, tm2, tm0, tm3);
+            #[allow(unused_variables)]
+            for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm1) {
+                self.desugared_case_equality_stmt_loc_5(delta, tm0, tm2, tm1, tm3);
+            }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_match_term_identifier_defined_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_stmt_loc_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DesugaredMatchTermIdentifier(tm0, tm3) in
-                self.desugared_match_term_identifier.iter_dirty()
+            for TermNodeLoc(tm1, tm3) in self.term_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
+                    self.desugared_case_equality_stmt_loc_5(delta, tm0, tm2, tm1, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_stmt_loc_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm1: TermNode,
+        tm3: Loc,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for DesugaredCaseEqualityStmt(_, tm4) in
+                self.desugared_case_equality_stmt.iter_all_0(tm0)
+            {
+                self.desugared_case_equality_stmt_loc_7(delta, tm2, tm1, tm3, tm0, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_stmt_loc_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for DesugaredCaseEqualityStmt(tm0, tm4) in
+                self.desugared_case_equality_stmt.iter_dirty()
             {
                 #[allow(unused_variables)]
-                for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                    self.desugared_match_term_identifier_defined_5(delta, tm1, tm2, tm0, tm3);
+                for TermNodeLoc(tm1, tm3) in self.term_node_loc.iter_all() {
+                    #[allow(unused_variables)]
+                    for MatchCase(_, _, tm2) in self.match_case.iter_all_0_1(tm0, tm1) {
+                        self.desugared_case_equality_stmt_loc_7(delta, tm2, tm1, tm3, tm0, tm4);
+                    }
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_match_term_identifier_defined_5(
+    fn desugared_case_equality_stmt_loc_7(
         &self,
         delta: &mut ModelDelta,
+        tm2: StmtListNode,
         tm1: TermNode,
-        tm2: MatchCaseListNode,
-        tm0: StmtNode,
-        tm3: VirtIdent,
+        tm3: Loc,
+        tm0: MatchCaseNode,
+        tm4: StmtNode,
     ) {
-        for _ in [()] {}
+        for _ in [()] {
+            let exists_already = self.stmt_node_loc.iter_all_0_1(tm4, tm3).next().is_some();
+            if !exists_already {
+                delta.new_stmt_node_loc.push(StmtNodeLoc(tm4, tm3));
+            }
+        }
     }
 
     #[allow(unused_variables)]
@@ -59347,7 +58769,6 @@ impl Eqlog {
             self.desugared_case_defined_4(delta);
             self.desugared_case_defined_6(delta);
             self.desugared_case_defined_8(delta);
-            self.desugared_case_defined_10(delta);
         }
     }
 
@@ -59375,12 +58796,12 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
-            let tm3 = match self.desugared_case_term_variable.iter_all_0(tm0).next() {
-                Some(DesugaredCaseTermVariable(_, res)) => res,
+            let tm3 = match self.desugared_case_equality_atom.iter_all_0(tm0).next() {
+                Some(DesugaredCaseEqualityAtom(_, res)) => res,
                 None => {
                     delta
-                        .new_desugared_case_term_variable_def
-                        .push(DesugaredCaseTermVariableArgs(tm0));
+                        .new_desugared_case_equality_atom_def
+                        .push(DesugaredCaseEqualityAtomArgs(tm0));
                     break;
                 }
             };
@@ -59393,8 +58814,8 @@ impl Eqlog {
     fn desugared_case_defined_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DesugaredCaseTermVariable(tm0, tm3) in
-                self.desugared_case_term_variable.iter_dirty()
+            for DesugaredCaseEqualityAtom(tm0, tm3) in
+                self.desugared_case_equality_atom.iter_dirty()
             {
                 #[allow(unused_variables)]
                 for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
@@ -59411,15 +58832,15 @@ impl Eqlog {
         tm1: TermNode,
         tm2: StmtListNode,
         tm0: MatchCaseNode,
-        tm3: TermNode,
+        tm3: IfAtomNode,
     ) {
         for _ in [()] {
-            let tm4 = match self.desugared_case_equality_atom.iter_all_0(tm0).next() {
-                Some(DesugaredCaseEqualityAtom(_, res)) => res,
+            let tm4 = match self.desugared_case_equality_stmt.iter_all_0(tm0).next() {
+                Some(DesugaredCaseEqualityStmt(_, res)) => res,
                 None => {
                     delta
-                        .new_desugared_case_equality_atom_def
-                        .push(DesugaredCaseEqualityAtomArgs(tm0));
+                        .new_desugared_case_equality_stmt_def
+                        .push(DesugaredCaseEqualityStmtArgs(tm0));
                     break;
                 }
             };
@@ -59432,12 +58853,12 @@ impl Eqlog {
     fn desugared_case_defined_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DesugaredCaseEqualityAtom(tm0, tm4) in
-                self.desugared_case_equality_atom.iter_dirty()
+            for DesugaredCaseEqualityStmt(tm0, tm4) in
+                self.desugared_case_equality_stmt.iter_dirty()
             {
                 #[allow(unused_variables)]
-                for DesugaredCaseTermVariable(_, tm3) in
-                    self.desugared_case_term_variable.iter_all_0(tm0)
+                for DesugaredCaseEqualityAtom(_, tm3) in
+                    self.desugared_case_equality_atom.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
                     for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
@@ -59454,17 +58875,17 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm1: TermNode,
         tm2: StmtListNode,
-        tm3: TermNode,
+        tm3: IfAtomNode,
         tm0: MatchCaseNode,
-        tm4: IfAtomNode,
+        tm4: StmtNode,
     ) {
         for _ in [()] {
-            let tm5 = match self.desugared_case_equality_stmt.iter_all_0(tm0).next() {
-                Some(DesugaredCaseEqualityStmt(_, res)) => res,
+            let tm5 = match self.desugared_case_block.iter_all_0(tm0).next() {
+                Some(DesugaredCaseBlock(_, res)) => res,
                 None => {
                     delta
-                        .new_desugared_case_equality_stmt_def
-                        .push(DesugaredCaseEqualityStmtArgs(tm0));
+                        .new_desugared_case_block_def
+                        .push(DesugaredCaseBlockArgs(tm0));
                     break;
                 }
             };
@@ -59477,16 +58898,14 @@ impl Eqlog {
     fn desugared_case_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DesugaredCaseEqualityStmt(tm0, tm5) in
-                self.desugared_case_equality_stmt.iter_dirty()
-            {
+            for DesugaredCaseBlock(tm0, tm5) in self.desugared_case_block.iter_dirty() {
                 #[allow(unused_variables)]
-                for DesugaredCaseEqualityAtom(_, tm4) in
-                    self.desugared_case_equality_atom.iter_all_0(tm0)
+                for DesugaredCaseEqualityStmt(_, tm4) in
+                    self.desugared_case_equality_stmt.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for DesugaredCaseTermVariable(_, tm3) in
-                        self.desugared_case_term_variable.iter_all_0(tm0)
+                    for DesugaredCaseEqualityAtom(_, tm3) in
+                        self.desugared_case_equality_atom.iter_all_0(tm0)
                     {
                         #[allow(unused_variables)]
                         for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
@@ -59504,67 +58923,10 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm1: TermNode,
         tm2: StmtListNode,
-        tm3: TermNode,
-        tm4: IfAtomNode,
+        tm3: IfAtomNode,
+        tm4: StmtNode,
         tm0: MatchCaseNode,
-        tm5: StmtNode,
-    ) {
-        for _ in [()] {
-            let tm6 = match self.desugared_case_block.iter_all_0(tm0).next() {
-                Some(DesugaredCaseBlock(_, res)) => res,
-                None => {
-                    delta
-                        .new_desugared_case_block_def
-                        .push(DesugaredCaseBlockArgs(tm0));
-                    break;
-                }
-            };
-
-            self.desugared_case_defined_11(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_defined_10(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for DesugaredCaseBlock(tm0, tm6) in self.desugared_case_block.iter_dirty() {
-                #[allow(unused_variables)]
-                for DesugaredCaseEqualityStmt(_, tm5) in
-                    self.desugared_case_equality_stmt.iter_all_0(tm0)
-                {
-                    #[allow(unused_variables)]
-                    for DesugaredCaseEqualityAtom(_, tm4) in
-                        self.desugared_case_equality_atom.iter_all_0(tm0)
-                    {
-                        #[allow(unused_variables)]
-                        for DesugaredCaseTermVariable(_, tm3) in
-                            self.desugared_case_term_variable.iter_all_0(tm0)
-                        {
-                            #[allow(unused_variables)]
-                            for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
-                                self.desugared_case_defined_11(
-                                    delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_defined_11(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: TermNode,
-        tm2: StmtListNode,
-        tm3: TermNode,
-        tm4: IfAtomNode,
-        tm5: StmtNode,
-        tm0: MatchCaseNode,
-        tm6: StmtListNode,
+        tm5: StmtListNode,
     ) {
         for _ in [()] {}
     }
@@ -59631,118 +58993,6 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.desugared_case_term_variable_identifier_1(delta);
-            self.desugared_case_term_variable_identifier_2(delta);
-            self.desugared_case_term_variable_identifier_4(delta);
-            self.desugared_case_term_variable_identifier_6(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for DesugaredCaseTermVariable(tm0, tm1) in
-                self.desugared_case_term_variable.iter_dirty()
-            {
-                self.desugared_case_term_variable_identifier_3(delta, tm0, tm1);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_3(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: MatchCaseNode,
-        tm1: TermNode,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for CaseMatchStmt(_, tm2) in self.case_match_stmt.iter_all_0(tm0) {
-                self.desugared_case_term_variable_identifier_5(delta, tm1, tm0, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_4(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for CaseMatchStmt(tm0, tm2) in self.case_match_stmt.iter_dirty() {
-                #[allow(unused_variables)]
-                for DesugaredCaseTermVariable(_, tm1) in
-                    self.desugared_case_term_variable.iter_all_0(tm0)
-                {
-                    self.desugared_case_term_variable_identifier_5(delta, tm1, tm0, tm2);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_5(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: TermNode,
-        tm0: MatchCaseNode,
-        tm2: StmtNode,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for DesugaredMatchTermIdentifier(_, tm3) in
-                self.desugared_match_term_identifier.iter_all_0(tm2)
-            {
-                self.desugared_case_term_variable_identifier_7(delta, tm1, tm0, tm2, tm3);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for DesugaredMatchTermIdentifier(tm2, tm3) in
-                self.desugared_match_term_identifier.iter_dirty()
-            {
-                #[allow(unused_variables)]
-                for CaseMatchStmt(tm0, _) in self.case_match_stmt.iter_all_1(tm2) {
-                    #[allow(unused_variables)]
-                    for DesugaredCaseTermVariable(_, tm1) in
-                        self.desugared_case_term_variable.iter_all_0(tm0)
-                    {
-                        self.desugared_case_term_variable_identifier_7(delta, tm1, tm0, tm2, tm3);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn desugared_case_term_variable_identifier_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: TermNode,
-        tm0: MatchCaseNode,
-        tm2: StmtNode,
-        tm3: VirtIdent,
-    ) {
-        for _ in [()] {
-            let exists_already = self.var_term_node.iter_all_0_1(tm1, tm3).next().is_some();
-            if !exists_already {
-                delta.new_var_term_node.push(VarTermNode(tm1, tm3));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
     fn desugared_case_equality_atom_stmt_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.desugared_case_equality_atom_stmt_1(delta);
@@ -59762,9 +59012,7 @@ impl Eqlog {
     fn desugared_case_equality_atom_stmt_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DesugaredCaseTermVariable(tm0, tm1) in
-                self.desugared_case_term_variable.iter_dirty()
-            {
+            for CaseDiscriminee(tm0, tm1) in self.case_discriminee.iter_dirty() {
                 self.desugared_case_equality_atom_stmt_3(delta, tm0, tm1);
             }
         }
@@ -59791,9 +59039,7 @@ impl Eqlog {
             #[allow(unused_variables)]
             for MatchCase(tm0, tm2, tm3) in self.match_case.iter_dirty() {
                 #[allow(unused_variables)]
-                for DesugaredCaseTermVariable(_, tm1) in
-                    self.desugared_case_term_variable.iter_all_0(tm0)
-                {
+                for CaseDiscriminee(_, tm1) in self.case_discriminee.iter_all_0(tm0) {
                     self.desugared_case_equality_atom_stmt_5(delta, tm1, tm0, tm2, tm3);
                 }
             }
@@ -59827,9 +59073,7 @@ impl Eqlog {
                 self.desugared_case_equality_atom.iter_dirty()
             {
                 #[allow(unused_variables)]
-                for DesugaredCaseTermVariable(_, tm1) in
-                    self.desugared_case_term_variable.iter_all_0(tm0)
-                {
+                for CaseDiscriminee(_, tm1) in self.case_discriminee.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for MatchCase(_, tm2, tm3) in self.match_case.iter_all_0(tm0) {
                         self.desugared_case_equality_atom_stmt_7(delta, tm1, tm2, tm3, tm0, tm4);
@@ -59871,9 +59115,7 @@ impl Eqlog {
                     self.desugared_case_equality_atom.iter_all_0(tm0)
                 {
                     #[allow(unused_variables)]
-                    for DesugaredCaseTermVariable(_, tm1) in
-                        self.desugared_case_term_variable.iter_all_0(tm0)
-                    {
+                    for CaseDiscriminee(_, tm1) in self.case_discriminee.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for MatchCase(_, tm2, tm3) in self.match_case.iter_all_0(tm0) {
                             self.desugared_case_equality_atom_stmt_9(
@@ -64135,20 +63377,20 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_93_1(delta);
-            self.anonymous_rule_93_2(delta);
-            self.anonymous_rule_93_4(delta);
-            self.anonymous_rule_93_6(delta);
-            self.anonymous_rule_93_8(delta);
-            self.anonymous_rule_93_10(delta);
-            self.anonymous_rule_93_12(delta);
+            self.anonymous_rule_92_1(delta);
+            self.anonymous_rule_92_2(delta);
+            self.anonymous_rule_92_4(delta);
+            self.anonymous_rule_92_6(delta);
+            self.anonymous_rule_92_8(delta);
+            self.anonymous_rule_92_10(delta);
+            self.anonymous_rule_92_12(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -64158,22 +63400,22 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_93_3(delta, tm0);
+            self.anonymous_rule_92_3(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_93_3(delta, tm0);
+                self.anonymous_rule_92_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_3(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_92_3(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -64183,25 +63425,25 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_93_5(delta, tm0, tm1);
+            self.anonymous_rule_92_5(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_4(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_4(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_93_5(delta, tm0, tm1);
+                    self.anonymous_rule_92_5(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_5(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_92_5(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -64211,12 +63453,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_93_7(delta, tm0, tm1, tm2);
+            self.anonymous_rule_92_7(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -64224,7 +63466,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_93_7(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_92_7(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -64232,7 +63474,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_7(
+    fn anonymous_rule_92_7(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -64248,12 +63490,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_93_9(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_92_9(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_8(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -64263,7 +63505,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_93_9(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_92_9(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -64272,7 +63514,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_9(
+    fn anonymous_rule_92_9(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -64289,12 +63531,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_93_11(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_92_11(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_10(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_10(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -64306,7 +63548,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_93_11(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_92_11(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -64316,7 +63558,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_11(
+    fn anonymous_rule_92_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -64334,12 +63576,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_93_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_92_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_92_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -64353,7 +63595,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_93_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_92_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -64364,7 +63606,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_93_13(
+    fn anonymous_rule_92_13(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -75759,10 +75001,8 @@ impl Eqlog {
         self.exit_scope.drop_dirt();
         self.ctor_enum.drop_dirt();
         self.ctors_enum.drop_dirt();
-        self.cases_match_stmt.drop_dirt();
-        self.case_match_stmt.drop_dirt();
-        self.desugared_match_term_identifier.drop_dirt();
-        self.desugared_case_term_variable.drop_dirt();
+        self.cases_discriminee.drop_dirt();
+        self.case_discriminee.drop_dirt();
         self.desugared_case_equality_atom.drop_dirt();
         self.desugared_case_equality_stmt.drop_dirt();
         self.desugared_case_block.drop_dirt();
@@ -76380,10 +75620,8 @@ impl fmt::Display for Eqlog {
         self.exit_scope.fmt(f)?;
         self.ctor_enum.fmt(f)?;
         self.ctors_enum.fmt(f)?;
-        self.cases_match_stmt.fmt(f)?;
-        self.case_match_stmt.fmt(f)?;
-        self.desugared_match_term_identifier.fmt(f)?;
-        self.desugared_case_term_variable.fmt(f)?;
+        self.cases_discriminee.fmt(f)?;
+        self.case_discriminee.fmt(f)?;
         self.desugared_case_equality_atom.fmt(f)?;
         self.desugared_case_equality_stmt.fmt(f)?;
         self.desugared_case_block.fmt(f)?;

@@ -209,7 +209,13 @@ impl Ord for CompileError {
             (BadSymbolKind { .. }, BadSymbolKind { .. }) => loc_cmp,
             (BadSymbolKind { .. }, _) => Ordering::Less,
             (UndeterminedTermType { .. }, UndeterminedTermType { .. }) => loc_cmp,
-            (UndeterminedTermType { .. }, _) => Ordering::Greater,
+            // TODO: Is that what we want necessarily? This is here because when there are
+            // conflicting enum constructors in a match statement, then we necessarily infer
+            // different types for the discriminee (it must be equal to both enums). The root cause
+            // is the conflicting enum constructors though, so it's better to report that one. But
+            // if the ConflictingTermType is not the discriminee but something unrelated, then it'd
+            // be better to compare by location.
+            (ConflictingTermType { .. }, MatchConflictingEnum { .. }) => Ordering::Greater,
             (_, _) => loc_cmp,
         }
     }
