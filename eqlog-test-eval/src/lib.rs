@@ -18,6 +18,7 @@ eqlog_mod!(reduction_from_nullary);
 eqlog_mod!(branches);
 eqlog_mod!(nat);
 eqlog_mod!(matches);
+eqlog_mod!(matches_rel);
 
 mod category_mod;
 #[cfg(test)]
@@ -38,6 +39,8 @@ mod monoid_test;
 mod branches_test;
 #[cfg(test)]
 mod inference_test;
+#[cfg(test)]
+mod matches_rel_test;
 #[cfg(test)]
 mod matches_test;
 #[cfg(test)]
