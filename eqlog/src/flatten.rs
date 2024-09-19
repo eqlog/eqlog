@@ -4,7 +4,6 @@ use eqlog_eqlog::*;
 use maplit::btreemap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::iter::once;
 
 /// Assign compatible [FlatTerm]s to the [El]s in the codomains of a list of morphisms.
 ///
@@ -525,9 +524,13 @@ pub fn flatten(
                 .extend(flatten_surj_then(morphism, &el_vars, eqlog));
             matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else if eqlog.non_surj_then_morphism(morphism) {
-            // TODO: We should only execute this unconditionally if should_match_all_data is true.
-            // Otherwise, we should only execute it in the first iteration of the first `close`
-            // call, i.e. when the empty join is dirty/fresh.
+            let dom_vars: Vec<FlatVar> = iter_els(eqlog.dom(morphism).unwrap(), eqlog)
+                .map(|el| *el_vars.get(&el).unwrap())
+                .collect();
+            let cod_vars: Vec<FlatVar> = iter_els(eqlog.cod(morphism).unwrap(), eqlog)
+                .map(|el| *el_vars.get(&el).unwrap())
+                .collect();
+
             let non_surj_then_stmt = match flatten_non_surj_then(morphism, &el_vars, eqlog) {
                 Some(non_surj_then_stmt) => non_surj_then_stmt,
                 None => {
@@ -536,43 +539,75 @@ pub fn flatten(
                 }
             };
 
-            let stmt = FlatStmt::NonSurjThen(non_surj_then_stmt);
-            funcs[matching_func_index].body.push(stmt);
-
-            let fresh_if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog);
-            assert_eq!(
-                fresh_if_blocks.len(),
-                1,
-                "A non surjective then should only require one block to match"
-            );
-            let fresh_if_func = FlatFunc {
-                name: FlatFuncName(funcs.len()),
-                args: Vec::new(),
-                body: fresh_if_blocks.into_iter().next().unwrap(),
+            // Create a function that, given a match of the domain of `morphism`, either
+            //
+            // 1. adjoins the new element to the model so that the codomain matches if no match
+            //    is possible (i.e. the new element in the codomain can't be matched), or
+            // 2. if a match is possible, matches the codomain with arbitrary (potentially old)
+            //    data.
+            //
+            // This is precisely what the non surjective then statement is supposed to do, so
+            // that's the only statement in the body of the function.
+            //
+            // TODO: We should only execute this unconditionally if should_match_all_data is true.
+            // Otherwise, we should only execute it in the first iteration of the first `close`
+            // call, i.e. when the empty join is dirty/fresh.
+            let non_surj_then_stmt = FlatStmt::NonSurjThen(non_surj_then_stmt);
+            let non_surj_then_func_index = funcs.len();
+            let non_surj_then_func = FlatFunc {
+                name: FlatFuncName(non_surj_then_func_index),
+                args: dom_vars.clone(),
+                body: vec![non_surj_then_stmt],
             };
+            funcs.push(non_surj_then_func);
+            funcs[matching_func_index].body.push(FlatStmt::Call {
+                func_name: FlatFuncName(non_surj_then_func_index),
+                args: dom_vars,
+            });
+
+            // Create a function that matches the codomain of `morphism` with fresh data relative
+            // to the domain. Since a non-surjective statement is given by at most one new tuple in
+            // a relation, it should be possible to match it with fresh data in just one function.
+            let mut fresh_if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog).into_iter();
+            let fresh_if_block = fresh_if_blocks
+                .next()
+                .expect("There should be at least one block");
+            assert!(
+                fresh_if_blocks.next().is_none(),
+                "There should be at most one block"
+            );
+
             let fresh_if_func_index = funcs.len();
+            let fresh_if_func = FlatFunc {
+                name: FlatFuncName(fresh_if_func_index),
+                args: Vec::new(),
+                body: fresh_if_block,
+            };
+            funcs.push(fresh_if_func);
             funcs[0].body.push(FlatStmt::Call {
-                func_name: fresh_if_func.name,
+                func_name: FlatFuncName(fresh_if_func_index),
                 args: Vec::new(),
             });
-            funcs.push(fresh_if_func);
 
+            // Finally, create a single function that's called from both the non-surjective then
+            // function and the fresh if function we've just created. This will serve as the
+            // function that matches the codomain of `morphism` with new data.
+            let cont_func_index = funcs.len();
             let cont_func = FlatFunc {
-                name: FlatFuncName(funcs.len()),
-                args: cod_flat_vars.clone(),
+                name: FlatFuncName(cont_func_index),
+                args: cod_vars.clone(),
                 body: Vec::new(),
             };
-            let cont_func_name = cont_func.name;
             funcs.push(cont_func);
 
-            for func_index in once(matching_func_index).chain(once(fresh_if_func_index)) {
+            for func_index in [non_surj_then_func_index, fresh_if_func_index] {
                 funcs[func_index].body.push(FlatStmt::Call {
-                    func_name: cont_func_name,
-                    args: cod_flat_vars.clone(),
+                    func_name: FlatFuncName(cont_func_index),
+                    args: cod_vars.clone(),
                 });
             }
 
-            matching_func_indices.insert(eqlog.cod(morphism).unwrap(), cont_func_name.0);
+            matching_func_indices.insert(eqlog.cod(morphism).unwrap(), cont_func_index);
         } else if eqlog.noop_morphism(morphism) {
             matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else {
