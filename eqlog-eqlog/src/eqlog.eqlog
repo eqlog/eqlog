@@ -420,38 +420,40 @@ rule enum_ctors_cons {
 
 // ## Desugaring MatchCase nodes
 
-// ### The match statement that a mach case (list) node belongs to.
-func cases_match_stmt(MatchCaseListNode) -> StmtNode;
-func case_match_stmt(MatchCaseNode) -> StmtNode;
+// ### The discriminee of a match case (list) node.
+//
+// I.e., the term that is being matched on in the match statement that a match
+// case node belongs to.
+func cases_discriminee(MatchCaseListNode) -> TermNode;
+func case_discriminee(MatchCaseNode) -> TermNode;
 
-rule match_stmt_case_list {
-    if match_stmt_node(stmt, _, cases);
-    then cases_match_stmt(cases) = stmt;
+rule match_stmt_cases_discriminee {
+    if match_stmt_node(_, discriminee, cases);
+    then cases_discriminee(cases) = discriminee;
 }
 rule cases_match_stmt_cons {
-    if cases_match_stmt(cases) = stmt;
+    if cases_discriminee(cases) = discriminee;
     if cons_match_case_list_node(cases, head_case, tail_cases);
-    then case_match_stmt(head_case) = stmt;
-    then cases_match_stmt(tail_cases) = stmt;
+    then case_discriminee(head_case) = discriminee;
+    then cases_discriminee(tail_cases) = discriminee;
 }
 
 // ### Desugared AST nodes
-func desugared_match_term_identifier(StmtNode) -> VirtIdent;
-rule desugared_match_term_identifier_defined {
-    if match_stmt_node(stmt, _, _);
-    then desugared_match_term_identifier(stmt)!;
-}
-
-func desugared_case_term_variable(MatchCaseNode) -> TermNode;
 func desugared_case_equality_atom(MatchCaseNode) -> IfAtomNode;
 func desugared_case_equality_stmt(MatchCaseNode) -> StmtNode;
 func desugared_case_block(MatchCaseNode) -> StmtListNode;
 func desugared_case_block_list(MatchCaseListNode) -> StmtBlockListNode;
 
+rule desugared_case_equality_stmt_loc {
+    if match_case(case_node, pattern, _);
+    if pattern_loc = term_node_loc(pattern);
+    if stmt_node = desugared_case_equality_stmt(case_node);
+    then stmt_node_loc(stmt_node) = pattern_loc;
+}
+
 rule desugared_case_defined {
     if match_case(case_node, _, _);
 
-    then desugared_case_term_variable(case_node)!;
     then desugared_case_equality_atom(case_node)!;
     then desugared_case_equality_stmt(case_node)!;
     then desugared_case_block(case_node)!;
@@ -461,19 +463,13 @@ rule desugared_case_block_list_defined {
     then desugared_case_block_list(cases)!;
 }
 
-rule desugared_case_term_variable_identifier {
-    if tm = desugared_case_term_variable(case_node);
-    if match_stmt = case_match_stmt(case_node);
-    if desugared_match_term_identifier(match_stmt) = ident;
-    then var_term_node(tm, ident);
-}
 rule desugared_case_equality_atom_stmt {
-    if var_term = desugared_case_term_variable(case_node);
+    if discriminee = case_discriminee(case_node);
     if match_case(case_node, pattern, _);
     if atom = desugared_case_equality_atom(case_node);
     if stmt = desugared_case_equality_stmt(case_node);
 
-    then equal_if_atom_node(atom, var_term, pattern);
+    then equal_if_atom_node(atom, discriminee, pattern);
     then if_stmt_node(stmt, atom);
 }
 rule desugared_case_block_structure {
