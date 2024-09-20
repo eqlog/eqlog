@@ -1,4 +1,4 @@
-// src-digest: 2C8BCB5F61D0B5031124B5FE568635A13AF18E06A514E100104EF25BC3EDB5AC
+// src-digest: CD0CDAB6EB90B9E808BCF9F19FEA64B1531E5973551D624B2A2189E3193E005C
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -717,8 +717,6 @@ impl fmt::Display for Nat {
 pub enum RelEnum {
     PredRel(Pred),
     FuncRel(Func),
-    NegatedPredRel(Pred),
-    UndefinedFuncRel(Func),
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -24960,6 +24958,209 @@ impl fmt::Display for ConsTypeListTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct SnocTypeList(pub TypeList, pub Type, pub TypeList);
+#[derive(Clone, Hash, Debug)]
+struct SnocTypeListTable {
+    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    element_index_type: BTreeMap<Type, Vec<SnocTypeList>>,
+    element_index_type_list: BTreeMap<TypeList, Vec<SnocTypeList>>,
+}
+impl SnocTypeListTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 12;
+    fn new() -> Self {
+        Self {
+            index_all_0_1_2: BTreeSet::new(),
+            index_dirty_0_1_2: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
+            element_index_type: BTreeMap::new(),
+            element_index_type_list: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: SnocTypeList) -> bool {
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
+            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
+
+            match self.element_index_type_list.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_type_list.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_type.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_type.insert(t.1, vec![t]);
+                }
+            };
+
+            match self.element_index_type_list.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_type_list.insert(t.2, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: SnocTypeList) -> bool {
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1_2.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1_2.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1_2(t: SnocTypeList) -> (u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> SnocTypeList {
+        SnocTypeList(TypeList::from(t.0), Type::from(t.1), TypeList::from(t.2))
+    }
+    #[allow(unused)]
+    fn permute_1_0_2(t: SnocTypeList) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> SnocTypeList {
+        SnocTypeList(TypeList::from(t.1), Type::from(t.0), TypeList::from(t.2))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: TypeList) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN, u32::MIN);
+        let max = (arg0, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(&self, arg0: TypeList, arg1: Type) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1, u32::MIN);
+        let max = (arg0, arg1, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1_2(
+        &self,
+        arg0: TypeList,
+        arg1: Type,
+        arg2: TypeList,
+    ) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let arg2 = arg2.0;
+        let min = (arg0, arg1, arg2);
+        let max = (arg0, arg1, arg2);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN, u32::MIN);
+        let max = (arg1, u32::MAX, u32::MAX);
+        self.index_all_1_0_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0_2)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_type(&mut self, tm: Type) -> Vec<SnocTypeList> {
+        let mut ts = match self.element_index_type.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<SnocTypeList> {
+        let mut ts = match self.element_index_type_list.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for SnocTypeListTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("snoc_type_list"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticType(pub Ident, pub Type);
 #[derive(Clone, Hash, Debug)]
 struct SemanticTypeTable {
@@ -26578,364 +26779,6 @@ impl fmt::Display for FuncRelTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct NegatedPredRel(pub Pred, pub Rel);
-#[derive(Clone, Hash, Debug)]
-struct NegatedPredRelTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-    index_all_1_0: BTreeSet<(u32, u32)>,
-    element_index_pred: BTreeMap<Pred, Vec<NegatedPredRel>>,
-    element_index_rel: BTreeMap<Rel, Vec<NegatedPredRel>>,
-}
-impl NegatedPredRelTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 8;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_all_1_0: BTreeSet::new(),
-            element_index_pred: BTreeMap::new(),
-            element_index_rel: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: NegatedPredRel) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-            self.index_all_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_pred.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_pred.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_rel.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_rel.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: NegatedPredRel) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: NegatedPredRel) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> NegatedPredRel {
-        NegatedPredRel(Pred::from(t.0), Rel::from(t.1))
-    }
-    #[allow(unused)]
-    fn permute_1_0(t: NegatedPredRel) -> (u32, u32) {
-        (t.1.into(), t.0.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> NegatedPredRel {
-        NegatedPredRel(Pred::from(t.1), Rel::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = NegatedPredRel> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = NegatedPredRel> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = NegatedPredRel> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Pred, arg1: Rel) -> impl '_ + Iterator<Item = NegatedPredRel> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = NegatedPredRel> {
-        let arg1 = arg1.0;
-        let min = (arg1, u32::MIN);
-        let max = (arg1, u32::MAX);
-        self.index_all_1_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<NegatedPredRel> {
-        let mut ts = match self.element_index_pred.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                self.index_all_1_0.remove(&Self::permute_1_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<NegatedPredRel> {
-        let mut ts = match self.element_index_rel.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                self.index_all_1_0.remove(&Self::permute_1_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-}
-impl fmt::Display for NegatedPredRelTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("NegatedPredRel"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct UndefinedFuncRel(pub Func, pub Rel);
-#[derive(Clone, Hash, Debug)]
-struct UndefinedFuncRelTable {
-    index_all_0_1: BTreeSet<(u32, u32)>,
-    index_dirty_0_1: BTreeSet<(u32, u32)>,
-    index_all_1_0: BTreeSet<(u32, u32)>,
-    element_index_func: BTreeMap<Func, Vec<UndefinedFuncRel>>,
-    element_index_rel: BTreeMap<Rel, Vec<UndefinedFuncRel>>,
-}
-impl UndefinedFuncRelTable {
-    #[allow(unused)]
-    const WEIGHT: usize = 8;
-    fn new() -> Self {
-        Self {
-            index_all_0_1: BTreeSet::new(),
-            index_dirty_0_1: BTreeSet::new(),
-            index_all_1_0: BTreeSet::new(),
-            element_index_func: BTreeMap::new(),
-            element_index_rel: BTreeMap::new(),
-        }
-    }
-    #[allow(dead_code)]
-    fn insert(&mut self, t: UndefinedFuncRel) -> bool {
-        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
-            self.index_dirty_0_1.insert(Self::permute_0_1(t));
-            self.index_all_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_func.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_func.insert(t.0, vec![t]);
-                }
-            };
-
-            match self.element_index_rel.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => {
-                    self.element_index_rel.insert(t.1, vec![t]);
-                }
-            };
-
-            true
-        } else {
-            false
-        }
-    }
-    #[allow(dead_code)]
-    fn contains(&self, t: UndefinedFuncRel) -> bool {
-        self.index_all_0_1.contains(&Self::permute_0_1(t))
-    }
-    fn drop_dirt(&mut self) {
-        self.index_dirty_0_1.clear();
-    }
-    fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1.is_empty()
-    }
-    #[allow(unused)]
-    fn permute_0_1(t: UndefinedFuncRel) -> (u32, u32) {
-        (t.0.into(), t.1.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_0_1(t: (u32, u32)) -> UndefinedFuncRel {
-        UndefinedFuncRel(Func::from(t.0), Rel::from(t.1))
-    }
-    #[allow(unused)]
-    fn permute_1_0(t: UndefinedFuncRel) -> (u32, u32) {
-        (t.1.into(), t.0.into())
-    }
-    #[allow(unused)]
-    fn permute_inverse_1_0(t: (u32, u32)) -> UndefinedFuncRel {
-        UndefinedFuncRel(Func::from(t.1), Rel::from(t.0))
-    }
-    #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = UndefinedFuncRel> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = UndefinedFuncRel> {
-        let min = (u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX);
-        self.index_dirty_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = UndefinedFuncRel> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN);
-        let max = (arg0, u32::MAX);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_1(&self, arg0: Func, arg1: Rel) -> impl '_ + Iterator<Item = UndefinedFuncRel> {
-        let arg0 = arg0.0;
-        let arg1 = arg1.0;
-        let min = (arg0, arg1);
-        let max = (arg0, arg1);
-        self.index_all_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = UndefinedFuncRel> {
-        let arg1 = arg1.0;
-        let min = (arg1, u32::MIN);
-        let max = (arg1, u32::MAX);
-        self.index_all_1_0
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_1_0)
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_func(&mut self, tm: Func) -> Vec<UndefinedFuncRel> {
-        let mut ts = match self.element_index_func.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                self.index_all_1_0.remove(&Self::permute_1_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-    #[allow(dead_code)]
-    fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<UndefinedFuncRel> {
-        let mut ts = match self.element_index_rel.remove(&tm) {
-            None => Vec::new(),
-            Some(tuples) => tuples,
-        };
-
-        let mut i = 0;
-        while i < ts.len() {
-            let t = ts[i];
-            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
-                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
-                self.index_all_1_0.remove(&Self::permute_1_0(t));
-                i += 1;
-            } else {
-                ts.swap_remove(i);
-            }
-        }
-
-        ts
-    }
-}
-impl fmt::Display for UndefinedFuncRelTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("UndefinedFuncRel"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬'),
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct Arity(pub Rel, pub TypeList);
 #[derive(Clone, Hash, Debug)]
 struct ArityTable {
@@ -27844,6 +27687,232 @@ impl fmt::Display for ConsElListTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("cons_el_list"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct SnocElList(pub ElList, pub El, pub ElList);
+#[derive(Clone, Hash, Debug)]
+struct SnocElListTable {
+    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
+    element_index_el: BTreeMap<El, Vec<SnocElList>>,
+    element_index_el_list: BTreeMap<ElList, Vec<SnocElList>>,
+}
+impl SnocElListTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 15;
+    fn new() -> Self {
+        Self {
+            index_all_0_1_2: BTreeSet::new(),
+            index_dirty_0_1_2: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
+            index_all_2_0_1: BTreeSet::new(),
+            element_index_el: BTreeMap::new(),
+            element_index_el_list: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: SnocElList) -> bool {
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
+            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
+            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
+
+            match self.element_index_el_list.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el_list.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_el.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el.insert(t.1, vec![t]);
+                }
+            };
+
+            match self.element_index_el_list.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_el_list.insert(t.2, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: SnocElList) -> bool {
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1_2.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1_2.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1_2(t: SnocElList) -> (u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> SnocElList {
+        SnocElList(ElList::from(t.0), El::from(t.1), ElList::from(t.2))
+    }
+    #[allow(unused)]
+    fn permute_1_0_2(t: SnocElList) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> SnocElList {
+        SnocElList(ElList::from(t.1), El::from(t.0), ElList::from(t.2))
+    }
+    #[allow(unused)]
+    fn permute_2_0_1(t: SnocElList) -> (u32, u32, u32) {
+        (t.2.into(), t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_2_0_1(t: (u32, u32, u32)) -> SnocElList {
+        SnocElList(ElList::from(t.1), El::from(t.2), ElList::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = SnocElList> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = SnocElList> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: ElList) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN, u32::MIN);
+        let max = (arg0, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(&self, arg0: ElList, arg1: El) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1, u32::MIN);
+        let max = (arg0, arg1, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1_2(
+        &self,
+        arg0: ElList,
+        arg1: El,
+        arg2: ElList,
+    ) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let arg2 = arg2.0;
+        let min = (arg0, arg1, arg2);
+        let max = (arg0, arg1, arg2);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: El) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN, u32::MIN);
+        let max = (arg1, u32::MAX, u32::MAX);
+        self.index_all_1_0_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_2(&self, arg2: ElList) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg2 = arg2.0;
+        let min = (arg2, u32::MIN, u32::MIN);
+        let max = (arg2, u32::MAX, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_el(&mut self, tm: El) -> Vec<SnocElList> {
+        let mut ts = match self.element_index_el.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_el_list(&mut self, tm: ElList) -> Vec<SnocElList> {
+        let mut ts = match self.element_index_el_list.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for SnocElListTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("snoc_el_list"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -32526,6 +32595,8 @@ struct NilTypeListArgs();
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ConsTypeListArgs(pub Type, pub TypeList);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct SnocTypeListArgs(pub TypeList, pub Type);
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticTypeArgs(pub Ident);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticArgTypesArgs(pub ArgDeclListNode);
@@ -32544,10 +32615,6 @@ struct PredRelArgs(pub Pred);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct FuncRelArgs(pub Func);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct NegatedPredRelArgs(pub Pred);
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct UndefinedFuncRelArgs(pub Func);
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ArityArgs(pub Rel);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct DomArgs(pub Morphism);
@@ -32557,6 +32624,8 @@ struct CodArgs(pub Morphism);
 struct NilElListArgs(pub Structure);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ConsElListArgs(pub El, pub ElList);
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct SnocElListArgs(pub ElList, pub El);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ElStructureArgs(pub El);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -32755,6 +32824,7 @@ struct ModelDelta {
     new_desugared_case_block_list: Vec<DesugaredCaseBlockList>,
     new_nil_type_list: Vec<NilTypeList>,
     new_cons_type_list: Vec<ConsTypeList>,
+    new_snoc_type_list: Vec<SnocTypeList>,
     new_semantic_type: Vec<SemanticType>,
     new_semantic_arg_types: Vec<SemanticArgTypes>,
     new_semantic_pred: Vec<SemanticPred>,
@@ -32764,13 +32834,12 @@ struct ModelDelta {
     new_codomain: Vec<Codomain>,
     new_pred_rel: Vec<PredRel>,
     new_func_rel: Vec<FuncRel>,
-    new_negated_pred_rel: Vec<NegatedPredRel>,
-    new_undefined_func_rel: Vec<UndefinedFuncRel>,
     new_arity: Vec<Arity>,
     new_dom: Vec<Dom>,
     new_cod: Vec<Cod>,
     new_nil_el_list: Vec<NilElList>,
     new_cons_el_list: Vec<ConsElList>,
+    new_snoc_el_list: Vec<SnocElList>,
     new_el_structure: Vec<ElStructure>,
     new_els_structure: Vec<ElsStructure>,
     new_func_app: Vec<FuncApp>,
@@ -32882,6 +32951,7 @@ struct ModelDelta {
     new_desugared_case_block_list_def: Vec<DesugaredCaseBlockListArgs>,
     new_nil_type_list_def: Vec<NilTypeListArgs>,
     new_cons_type_list_def: Vec<ConsTypeListArgs>,
+    new_snoc_type_list_def: Vec<SnocTypeListArgs>,
     new_semantic_type_def: Vec<SemanticTypeArgs>,
     new_semantic_arg_types_def: Vec<SemanticArgTypesArgs>,
     new_semantic_pred_def: Vec<SemanticPredArgs>,
@@ -32891,13 +32961,12 @@ struct ModelDelta {
     new_codomain_def: Vec<CodomainArgs>,
     new_pred_rel_def: Vec<PredRelArgs>,
     new_func_rel_def: Vec<FuncRelArgs>,
-    new_negated_pred_rel_def: Vec<NegatedPredRelArgs>,
-    new_undefined_func_rel_def: Vec<UndefinedFuncRelArgs>,
     new_arity_def: Vec<ArityArgs>,
     new_dom_def: Vec<DomArgs>,
     new_cod_def: Vec<CodArgs>,
     new_nil_el_list_def: Vec<NilElListArgs>,
     new_cons_el_list_def: Vec<ConsElListArgs>,
+    new_snoc_el_list_def: Vec<SnocElListArgs>,
     new_el_structure_def: Vec<ElStructureArgs>,
     new_els_structure_def: Vec<ElsStructureArgs>,
     new_func_app_def: Vec<FuncAppArgs>,
@@ -33305,6 +33374,7 @@ pub struct Eqlog {
     desugared_case_block_list: DesugaredCaseBlockListTable,
     nil_type_list: NilTypeListTable,
     cons_type_list: ConsTypeListTable,
+    snoc_type_list: SnocTypeListTable,
     semantic_type: SemanticTypeTable,
     semantic_arg_types: SemanticArgTypesTable,
     semantic_pred: SemanticPredTable,
@@ -33314,13 +33384,12 @@ pub struct Eqlog {
     codomain: CodomainTable,
     pred_rel: PredRelTable,
     func_rel: FuncRelTable,
-    negated_pred_rel: NegatedPredRelTable,
-    undefined_func_rel: UndefinedFuncRelTable,
     arity: ArityTable,
     dom: DomTable,
     cod: CodTable,
     nil_el_list: NilElListTable,
     cons_el_list: ConsElListTable,
+    snoc_el_list: SnocElListTable,
     el_structure: ElStructureTable,
     els_structure: ElsStructureTable,
     func_app: FuncAppTable,
@@ -33496,6 +33565,7 @@ impl ModelDelta {
             new_desugared_case_block_list: Vec::new(),
             new_nil_type_list: Vec::new(),
             new_cons_type_list: Vec::new(),
+            new_snoc_type_list: Vec::new(),
             new_semantic_type: Vec::new(),
             new_semantic_arg_types: Vec::new(),
             new_semantic_pred: Vec::new(),
@@ -33505,13 +33575,12 @@ impl ModelDelta {
             new_codomain: Vec::new(),
             new_pred_rel: Vec::new(),
             new_func_rel: Vec::new(),
-            new_negated_pred_rel: Vec::new(),
-            new_undefined_func_rel: Vec::new(),
             new_arity: Vec::new(),
             new_dom: Vec::new(),
             new_cod: Vec::new(),
             new_nil_el_list: Vec::new(),
             new_cons_el_list: Vec::new(),
+            new_snoc_el_list: Vec::new(),
             new_el_structure: Vec::new(),
             new_els_structure: Vec::new(),
             new_func_app: Vec::new(),
@@ -33669,6 +33738,8 @@ impl ModelDelta {
 
             new_cons_type_list_def: Vec::new(),
 
+            new_snoc_type_list_def: Vec::new(),
+
             new_semantic_type_def: Vec::new(),
 
             new_semantic_arg_types_def: Vec::new(),
@@ -33687,10 +33758,6 @@ impl ModelDelta {
 
             new_func_rel_def: Vec::new(),
 
-            new_negated_pred_rel_def: Vec::new(),
-
-            new_undefined_func_rel_def: Vec::new(),
-
             new_arity_def: Vec::new(),
 
             new_dom_def: Vec::new(),
@@ -33700,6 +33767,8 @@ impl ModelDelta {
             new_nil_el_list_def: Vec::new(),
 
             new_cons_el_list_def: Vec::new(),
+
+            new_snoc_el_list_def: Vec::new(),
 
             new_el_structure_def: Vec::new(),
 
@@ -34501,6 +34570,10 @@ impl ModelDelta {
             model.insert_cons_type_list(tm0, tm1, tm2);
         }
 
+        for SnocTypeList(tm0, tm1, tm2) in self.new_snoc_type_list.drain(..) {
+            model.insert_snoc_type_list(tm0, tm1, tm2);
+        }
+
         for SemanticType(tm0, tm1) in self.new_semantic_type.drain(..) {
             model.insert_semantic_type(tm0, tm1);
         }
@@ -34537,14 +34610,6 @@ impl ModelDelta {
             model.insert_func_rel(tm0, tm1);
         }
 
-        for NegatedPredRel(tm0, tm1) in self.new_negated_pred_rel.drain(..) {
-            model.insert_negated_pred_rel(tm0, tm1);
-        }
-
-        for UndefinedFuncRel(tm0, tm1) in self.new_undefined_func_rel.drain(..) {
-            model.insert_undefined_func_rel(tm0, tm1);
-        }
-
         for Arity(tm0, tm1) in self.new_arity.drain(..) {
             model.insert_arity(tm0, tm1);
         }
@@ -34563,6 +34628,10 @@ impl ModelDelta {
 
         for ConsElList(tm0, tm1, tm2) in self.new_cons_el_list.drain(..) {
             model.insert_cons_el_list(tm0, tm1, tm2);
+        }
+
+        for SnocElList(tm0, tm1, tm2) in self.new_snoc_el_list.drain(..) {
+            model.insert_snoc_el_list(tm0, tm1, tm2);
         }
 
         for ElStructure(tm0, tm1) in self.new_el_structure.drain(..) {
@@ -34863,6 +34932,10 @@ impl ModelDelta {
             model.define_cons_type_list(tm0, tm1);
         }
 
+        for SnocTypeListArgs(tm0, tm1) in self.new_snoc_type_list_def.drain(..) {
+            model.define_snoc_type_list(tm0, tm1);
+        }
+
         for SemanticTypeArgs(tm0) in self.new_semantic_type_def.drain(..) {
             model.define_semantic_type(tm0);
         }
@@ -34899,14 +34972,6 @@ impl ModelDelta {
             model.define_func_rel(tm0);
         }
 
-        for NegatedPredRelArgs(tm0) in self.new_negated_pred_rel_def.drain(..) {
-            model.define_negated_pred_rel(tm0);
-        }
-
-        for UndefinedFuncRelArgs(tm0) in self.new_undefined_func_rel_def.drain(..) {
-            model.define_undefined_func_rel(tm0);
-        }
-
         for ArityArgs(tm0) in self.new_arity_def.drain(..) {
             model.define_arity(tm0);
         }
@@ -34925,6 +34990,10 @@ impl ModelDelta {
 
         for ConsElListArgs(tm0, tm1) in self.new_cons_el_list_def.drain(..) {
             model.define_cons_el_list(tm0, tm1);
+        }
+
+        for SnocElListArgs(tm0, tm1) in self.new_snoc_el_list_def.drain(..) {
+            model.define_snoc_el_list(tm0, tm1);
         }
 
         for ElStructureArgs(tm0) in self.new_el_structure_def.drain(..) {
@@ -35376,6 +35445,7 @@ impl Eqlog {
             desugared_case_block_list: DesugaredCaseBlockListTable::new(),
             nil_type_list: NilTypeListTable::new(),
             cons_type_list: ConsTypeListTable::new(),
+            snoc_type_list: SnocTypeListTable::new(),
             semantic_type: SemanticTypeTable::new(),
             semantic_arg_types: SemanticArgTypesTable::new(),
             semantic_pred: SemanticPredTable::new(),
@@ -35385,13 +35455,12 @@ impl Eqlog {
             codomain: CodomainTable::new(),
             pred_rel: PredRelTable::new(),
             func_rel: FuncRelTable::new(),
-            negated_pred_rel: NegatedPredRelTable::new(),
-            undefined_func_rel: UndefinedFuncRelTable::new(),
             arity: ArityTable::new(),
             dom: DomTable::new(),
             cod: CodTable::new(),
             nil_el_list: NilElListTable::new(),
             cons_el_list: ConsElListTable::new(),
+            snoc_el_list: SnocElListTable::new(),
             el_structure: ElStructureTable::new(),
             els_structure: ElsStructureTable::new(),
             func_app: FuncAppTable::new(),
@@ -35581,6 +35650,8 @@ impl Eqlog {
                 self.scopes_desugared_case_list_0(&mut delta);
                 self.type_list_nil_not_cons_0(&mut delta);
                 self.type_list_cons_injective_0(&mut delta);
+                self.snoc_type_list_nil_0(&mut delta);
+                self.snoc_type_list_cons_0(&mut delta);
                 self.semantic_decl_type_0(&mut delta);
                 self.semantic_decl_enum_0(&mut delta);
                 self.semantic_arg_types_nil_0(&mut delta);
@@ -35597,6 +35668,10 @@ impl Eqlog {
                 self.arity_laws_0(&mut delta);
                 self.el_list_cons_injective_0(&mut delta);
                 self.el_list_cons_nil_0(&mut delta);
+                self.snoc_cons_el_list_nil_0(&mut delta);
+                self.cons_snoc_el_list_nil_0(&mut delta);
+                self.snoc_cons_el_list_0(&mut delta);
+                self.cons_snoc_el_list_0(&mut delta);
                 self.nil_els_structure_0(&mut delta);
                 self.cons_els_structure_0(&mut delta);
                 self.var_structure_0(&mut delta);
@@ -35622,7 +35697,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_91_0(&mut delta);
+                self.anonymous_rule_97_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -38301,8 +38376,6 @@ impl Eqlog {
         match value {
             RelEnum::PredRel(tm0) => self.define_pred_rel(tm0),
             RelEnum::FuncRel(tm0) => self.define_func_rel(tm0),
-            RelEnum::NegatedPredRel(tm0) => self.define_negated_pred_rel(tm0),
-            RelEnum::UndefinedFuncRel(tm0) => self.define_undefined_func_rel(tm0),
         }
     }
     /// Evaluates `real_virt_ident(arg0)`.
@@ -39810,6 +39883,42 @@ impl Eqlog {
         }
     }
 
+    /// Evaluates `snoc_type_list(arg0, arg1)`.
+    #[allow(dead_code)]
+    pub fn snoc_type_list(&self, mut arg0: TypeList, mut arg1: Type) -> Option<TypeList> {
+        arg0 = self.root_type_list(arg0);
+        arg1 = self.root_type(arg1);
+        self.snoc_type_list
+            .iter_all_0_1(arg0, arg1)
+            .next()
+            .map(|t| t.2)
+    }
+    /// Returns an iterator over tuples in the graph of the `snoc_type_list` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_snoc_type_list(&self) -> impl '_ + Iterator<Item = (TypeList, Type, TypeList)> {
+        self.snoc_type_list.iter_all().map(|t| (t.0, t.1, t.2))
+    }
+    /// Makes the equation `snoc_type_list(tm0, tm1) = tm2` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_snoc_type_list(&mut self, mut tm0: TypeList, mut tm1: Type, mut tm2: TypeList) {
+        tm0 = self.type_list_equalities.root(tm0);
+        tm1 = self.type_equalities.root(tm1);
+        tm2 = self.type_list_equalities.root(tm2);
+        if self.snoc_type_list.insert(SnocTypeList(tm0, tm1, tm2)) {
+            let weight0 = &mut self.type_list_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(SnocTypeListTable::WEIGHT);
+
+            let weight1 = &mut self.type_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(SnocTypeListTable::WEIGHT);
+
+            let weight2 = &mut self.type_list_weights[tm2.0 as usize];
+            *weight2 = weight2.saturating_add(SnocTypeListTable::WEIGHT);
+        }
+    }
+
     /// Evaluates `semantic_type(arg0)`.
     #[allow(dead_code)]
     pub fn semantic_type(&self, mut arg0: Ident) -> Option<Type> {
@@ -40064,62 +40173,6 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `NegatedPredRel(arg0)`.
-    #[allow(dead_code)]
-    pub fn negated_pred_rel(&self, mut arg0: Pred) -> Option<Rel> {
-        arg0 = self.root_pred(arg0);
-        self.negated_pred_rel.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Returns an iterator over tuples in the graph of the `NegatedPredRel` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_negated_pred_rel(&self) -> impl '_ + Iterator<Item = (Pred, Rel)> {
-        self.negated_pred_rel.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `negated_pred_rel(tm0) = tm1` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_negated_pred_rel(&mut self, mut tm0: Pred, mut tm1: Rel) {
-        tm0 = self.pred_equalities.root(tm0);
-        tm1 = self.rel_equalities.root(tm1);
-        if self.negated_pred_rel.insert(NegatedPredRel(tm0, tm1)) {
-            let weight0 = &mut self.pred_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(NegatedPredRelTable::WEIGHT);
-
-            let weight1 = &mut self.rel_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(NegatedPredRelTable::WEIGHT);
-        }
-    }
-
-    /// Evaluates `UndefinedFuncRel(arg0)`.
-    #[allow(dead_code)]
-    pub fn undefined_func_rel(&self, mut arg0: Func) -> Option<Rel> {
-        arg0 = self.root_func(arg0);
-        self.undefined_func_rel.iter_all_0(arg0).next().map(|t| t.1)
-    }
-    /// Returns an iterator over tuples in the graph of the `UndefinedFuncRel` function.
-    /// The relation yielded by the iterator need not be functional if the model is not closed.
-
-    #[allow(dead_code)]
-    pub fn iter_undefined_func_rel(&self) -> impl '_ + Iterator<Item = (Func, Rel)> {
-        self.undefined_func_rel.iter_all().map(|t| (t.0, t.1))
-    }
-    /// Makes the equation `undefined_func_rel(tm0) = tm1` hold.
-
-    #[allow(dead_code)]
-    pub fn insert_undefined_func_rel(&mut self, mut tm0: Func, mut tm1: Rel) {
-        tm0 = self.func_equalities.root(tm0);
-        tm1 = self.rel_equalities.root(tm1);
-        if self.undefined_func_rel.insert(UndefinedFuncRel(tm0, tm1)) {
-            let weight0 = &mut self.func_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(UndefinedFuncRelTable::WEIGHT);
-
-            let weight1 = &mut self.rel_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(UndefinedFuncRelTable::WEIGHT);
-        }
-    }
-
     /// Evaluates `arity(arg0)`.
     #[allow(dead_code)]
     pub fn arity(&self, mut arg0: Rel) -> Option<TypeList> {
@@ -40265,6 +40318,42 @@ impl Eqlog {
 
             let weight2 = &mut self.el_list_weights[tm2.0 as usize];
             *weight2 = weight2.saturating_add(ConsElListTable::WEIGHT);
+        }
+    }
+
+    /// Evaluates `snoc_el_list(arg0, arg1)`.
+    #[allow(dead_code)]
+    pub fn snoc_el_list(&self, mut arg0: ElList, mut arg1: El) -> Option<ElList> {
+        arg0 = self.root_el_list(arg0);
+        arg1 = self.root_el(arg1);
+        self.snoc_el_list
+            .iter_all_0_1(arg0, arg1)
+            .next()
+            .map(|t| t.2)
+    }
+    /// Returns an iterator over tuples in the graph of the `snoc_el_list` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_snoc_el_list(&self) -> impl '_ + Iterator<Item = (ElList, El, ElList)> {
+        self.snoc_el_list.iter_all().map(|t| (t.0, t.1, t.2))
+    }
+    /// Makes the equation `snoc_el_list(tm0, tm1) = tm2` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_snoc_el_list(&mut self, mut tm0: ElList, mut tm1: El, mut tm2: ElList) {
+        tm0 = self.el_list_equalities.root(tm0);
+        tm1 = self.el_equalities.root(tm1);
+        tm2 = self.el_list_equalities.root(tm2);
+        if self.snoc_el_list.insert(SnocElList(tm0, tm1, tm2)) {
+            let weight0 = &mut self.el_list_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(SnocElListTable::WEIGHT);
+
+            let weight1 = &mut self.el_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(SnocElListTable::WEIGHT);
+
+            let weight2 = &mut self.el_list_weights[tm2.0 as usize];
+            *weight2 = weight2.saturating_add(SnocElListTable::WEIGHT);
         }
     }
 
@@ -41667,6 +41756,18 @@ impl Eqlog {
             }
         }
     }
+    /// Enforces that `snoc_type_list(tm0, tm1)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_snoc_type_list(&mut self, tm0: TypeList, tm1: Type) -> TypeList {
+        match self.snoc_type_list(tm0, tm1) {
+            Some(result) => result,
+            None => {
+                let tm2 = self.new_type_list_internal();
+                self.insert_snoc_type_list(tm0, tm1, tm2);
+                tm2
+            }
+        }
+    }
     /// Enforces that `semantic_type(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
     pub fn define_semantic_type(&mut self, tm0: Ident) -> Type {
@@ -41783,6 +41884,18 @@ impl Eqlog {
             None => {
                 let tm2 = self.new_el_list_internal();
                 self.insert_cons_el_list(tm0, tm1, tm2);
+                tm2
+            }
+        }
+    }
+    /// Enforces that `snoc_el_list(tm0, tm1)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_snoc_el_list(&mut self, tm0: ElList, tm1: El) -> ElList {
+        match self.snoc_el_list(tm0, tm1) {
+            Some(result) => result,
+            None => {
+                let tm2 = self.new_el_list_internal();
+                self.insert_snoc_el_list(tm0, tm1, tm2);
                 tm2
             }
         }
@@ -42155,30 +42268,6 @@ impl Eqlog {
             None => {
                 let tm1 = self.new_rel_internal();
                 self.insert_func_rel(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `negated_pred_rel(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_negated_pred_rel(&mut self, tm0: Pred) -> Rel {
-        match self.negated_pred_rel(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_rel_internal();
-                self.insert_negated_pred_rel(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `undefined_func_rel(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_undefined_func_rel(&mut self, tm0: Func) -> Rel {
-        match self.undefined_func_rel(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_rel_internal();
-                self.insert_undefined_func_rel(tm0, tm1);
                 tm1
             }
         }
@@ -51505,6 +51594,61 @@ impl Eqlog {
             }
         }
 
+        for el in self.type_uprooted.iter().copied() {
+            let ts = self.snoc_type_list.drain_with_element_type(el);
+            for mut t in ts {
+                let weight0 = &mut self.type_list_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(SnocTypeListTable::WEIGHT);
+
+                let weight1 = &mut self.type_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(SnocTypeListTable::WEIGHT);
+
+                let weight2 = &mut self.type_list_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(SnocTypeListTable::WEIGHT);
+
+                t.0 = self.root_type_list(t.0);
+                t.1 = self.root_type(t.1);
+                t.2 = self.root_type_list(t.2);
+                if self.snoc_type_list.insert(t) {
+                    let weight0 = &mut self.type_list_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(SnocTypeListTable::WEIGHT);
+
+                    let weight1 = &mut self.type_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(SnocTypeListTable::WEIGHT);
+
+                    let weight2 = &mut self.type_list_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(SnocTypeListTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.type_list_uprooted.iter().copied() {
+            let ts = self.snoc_type_list.drain_with_element_type_list(el);
+            for mut t in ts {
+                let weight0 = &mut self.type_list_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(SnocTypeListTable::WEIGHT);
+
+                let weight1 = &mut self.type_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(SnocTypeListTable::WEIGHT);
+
+                let weight2 = &mut self.type_list_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(SnocTypeListTable::WEIGHT);
+
+                t.0 = self.root_type_list(t.0);
+                t.1 = self.root_type(t.1);
+                t.2 = self.root_type_list(t.2);
+                if self.snoc_type_list.insert(t) {
+                    let weight0 = &mut self.type_list_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(SnocTypeListTable::WEIGHT);
+
+                    let weight1 = &mut self.type_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(SnocTypeListTable::WEIGHT);
+
+                    let weight2 = &mut self.type_list_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(SnocTypeListTable::WEIGHT);
+                }
+            }
+        }
+
         for el in self.ident_uprooted.iter().copied() {
             let ts = self.semantic_type.drain_with_element_ident(el);
             for mut t in ts {
@@ -51876,88 +52020,6 @@ impl Eqlog {
             }
         }
 
-        for el in self.pred_uprooted.iter().copied() {
-            let ts = self.negated_pred_rel.drain_with_element_pred(el);
-            for mut t in ts {
-                let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(NegatedPredRelTable::WEIGHT);
-
-                let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(NegatedPredRelTable::WEIGHT);
-
-                t.0 = self.root_pred(t.0);
-                t.1 = self.root_rel(t.1);
-                if self.negated_pred_rel.insert(t) {
-                    let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(NegatedPredRelTable::WEIGHT);
-
-                    let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(NegatedPredRelTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.rel_uprooted.iter().copied() {
-            let ts = self.negated_pred_rel.drain_with_element_rel(el);
-            for mut t in ts {
-                let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(NegatedPredRelTable::WEIGHT);
-
-                let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(NegatedPredRelTable::WEIGHT);
-
-                t.0 = self.root_pred(t.0);
-                t.1 = self.root_rel(t.1);
-                if self.negated_pred_rel.insert(t) {
-                    let weight0 = &mut self.pred_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(NegatedPredRelTable::WEIGHT);
-
-                    let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(NegatedPredRelTable::WEIGHT);
-                }
-            }
-        }
-
-        for el in self.func_uprooted.iter().copied() {
-            let ts = self.undefined_func_rel.drain_with_element_func(el);
-            for mut t in ts {
-                let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(UndefinedFuncRelTable::WEIGHT);
-
-                let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(UndefinedFuncRelTable::WEIGHT);
-
-                t.0 = self.root_func(t.0);
-                t.1 = self.root_rel(t.1);
-                if self.undefined_func_rel.insert(t) {
-                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(UndefinedFuncRelTable::WEIGHT);
-
-                    let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(UndefinedFuncRelTable::WEIGHT);
-                }
-            }
-        }
-        for el in self.rel_uprooted.iter().copied() {
-            let ts = self.undefined_func_rel.drain_with_element_rel(el);
-            for mut t in ts {
-                let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(UndefinedFuncRelTable::WEIGHT);
-
-                let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(UndefinedFuncRelTable::WEIGHT);
-
-                t.0 = self.root_func(t.0);
-                t.1 = self.root_rel(t.1);
-                if self.undefined_func_rel.insert(t) {
-                    let weight0 = &mut self.func_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(UndefinedFuncRelTable::WEIGHT);
-
-                    let weight1 = &mut self.rel_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(UndefinedFuncRelTable::WEIGHT);
-                }
-            }
-        }
-
         for el in self.rel_uprooted.iter().copied() {
             let ts = self.arity.drain_with_element_rel(el);
             for mut t in ts {
@@ -52173,6 +52235,61 @@ impl Eqlog {
 
                     let weight2 = &mut self.el_list_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ConsElListTable::WEIGHT);
+                }
+            }
+        }
+
+        for el in self.el_uprooted.iter().copied() {
+            let ts = self.snoc_el_list.drain_with_element_el(el);
+            for mut t in ts {
+                let weight0 = &mut self.el_list_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(SnocElListTable::WEIGHT);
+
+                let weight1 = &mut self.el_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(SnocElListTable::WEIGHT);
+
+                let weight2 = &mut self.el_list_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(SnocElListTable::WEIGHT);
+
+                t.0 = self.root_el_list(t.0);
+                t.1 = self.root_el(t.1);
+                t.2 = self.root_el_list(t.2);
+                if self.snoc_el_list.insert(t) {
+                    let weight0 = &mut self.el_list_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(SnocElListTable::WEIGHT);
+
+                    let weight1 = &mut self.el_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(SnocElListTable::WEIGHT);
+
+                    let weight2 = &mut self.el_list_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(SnocElListTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.el_list_uprooted.iter().copied() {
+            let ts = self.snoc_el_list.drain_with_element_el_list(el);
+            for mut t in ts {
+                let weight0 = &mut self.el_list_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(SnocElListTable::WEIGHT);
+
+                let weight1 = &mut self.el_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(SnocElListTable::WEIGHT);
+
+                let weight2 = &mut self.el_list_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(SnocElListTable::WEIGHT);
+
+                t.0 = self.root_el_list(t.0);
+                t.1 = self.root_el(t.1);
+                t.2 = self.root_el_list(t.2);
+                if self.snoc_el_list.insert(t) {
+                    let weight0 = &mut self.el_list_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(SnocElListTable::WEIGHT);
+
+                    let weight1 = &mut self.el_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(SnocElListTable::WEIGHT);
+
+                    let weight2 = &mut self.el_list_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(SnocElListTable::WEIGHT);
                 }
             }
         }
@@ -53587,6 +53704,7 @@ impl Eqlog {
             || self.desugared_case_block_list.is_dirty()
             || self.nil_type_list.is_dirty()
             || self.cons_type_list.is_dirty()
+            || self.snoc_type_list.is_dirty()
             || self.semantic_type.is_dirty()
             || self.semantic_arg_types.is_dirty()
             || self.semantic_pred.is_dirty()
@@ -53596,13 +53714,12 @@ impl Eqlog {
             || self.codomain.is_dirty()
             || self.pred_rel.is_dirty()
             || self.func_rel.is_dirty()
-            || self.negated_pred_rel.is_dirty()
-            || self.undefined_func_rel.is_dirty()
             || self.arity.is_dirty()
             || self.dom.is_dirty()
             || self.cod.is_dirty()
             || self.nil_el_list.is_dirty()
             || self.cons_el_list.is_dirty()
+            || self.snoc_el_list.is_dirty()
             || self.el_structure.is_dirty()
             || self.els_structure.is_dirty()
             || self.func_app.is_dirty()
@@ -54320,6 +54437,19 @@ impl Eqlog {
     fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
+            for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocTypeList(_, _, tm3) in self.snoc_type_list.iter_all_0_1(tm0, tm1) {
+                    delta.new_type_list_equalities.push((tm2, tm3));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
             for SemanticType(tm0, tm1) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for SemanticType(_, tm2) in self.semantic_type.iter_all_0(tm0) {
@@ -54330,7 +54460,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm0, tm1) in self.semantic_arg_types.iter_dirty() {
@@ -54343,7 +54473,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm0, tm1) in self.semantic_pred.iter_dirty() {
@@ -54356,7 +54486,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm0, tm1) in self.pred_arity.iter_dirty() {
@@ -54369,7 +54499,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm0, tm1) in self.semantic_func.iter_dirty() {
@@ -54382,7 +54512,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Domain(tm0, tm1) in self.domain.iter_dirty() {
@@ -54395,7 +54525,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm0, tm1) in self.codomain.iter_dirty() {
@@ -54408,7 +54538,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Arity(tm0, tm1) in self.arity.iter_dirty() {
@@ -54421,7 +54551,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
@@ -54434,7 +54564,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
@@ -54447,7 +54577,20 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(_, _, tm3) in self.snoc_el_list.iter_all_0_1(tm0, tm1) {
+                    delta.new_el_list_equalities.push((tm2, tm3));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
@@ -54460,7 +54603,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
@@ -54473,7 +54616,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
@@ -54486,7 +54629,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
@@ -54499,7 +54642,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Dom(tm0, tm1) in self.dom.iter_dirty() {
@@ -54512,7 +54655,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm1) in self.cod.iter_dirty() {
@@ -54525,7 +54668,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
@@ -54538,7 +54681,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm1, tm2) in self.map_els.iter_dirty() {
@@ -54551,7 +54694,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
@@ -54564,7 +54707,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm0) in self.pred_symbol.iter_dirty() {
@@ -54577,7 +54720,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm0) in self.func_symbol.iter_dirty() {
@@ -54590,7 +54733,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm0) in self.rule_symbol.iter_dirty() {
@@ -54603,7 +54746,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm0) in self.enum_symbol.iter_dirty() {
@@ -54616,7 +54759,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm0) in self.ctor_symbol.iter_dirty() {
@@ -54629,7 +54772,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Zero(tm0) in self.zero.iter_dirty() {
@@ -54642,7 +54785,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Succ(tm0, tm1) in self.succ.iter_dirty() {
@@ -54655,7 +54798,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
@@ -54668,7 +54811,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
@@ -54681,7 +54824,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm1) in self.before_rule_structure.iter_dirty() {
@@ -54694,7 +54837,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm0, tm1, tm2) in self.if_atom_morphism.iter_dirty() {
@@ -54707,7 +54850,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm0, tm1, tm2) in self.then_atom_morphism.iter_dirty() {
@@ -54720,7 +54863,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BranchStmtMorphism(tm0, tm1, tm2) in self.branch_stmt_morphism.iter_dirty() {
@@ -54735,7 +54878,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtMorphism(tm0, tm1, tm2) in self.match_stmt_morphism.iter_dirty() {
@@ -54749,7 +54892,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm0, tm1, tm2) in self.semantic_name.iter_dirty() {
@@ -54762,7 +54905,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
@@ -54775,7 +54918,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
@@ -54788,7 +54931,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
@@ -54801,7 +54944,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm0, tm1) in self.match_case_pattern_ctor.iter_dirty() {
@@ -54814,7 +54957,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm0, tm1) in self.cases_determined_enum.iter_dirty() {
@@ -54827,7 +54970,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredRel(tm0, tm1) in self.pred_rel.iter_dirty() {
@@ -54840,7 +54983,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
@@ -54853,37 +54996,11 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for NegatedPredRel(tm0, tm1) in self.negated_pred_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for NegatedPredRel(_, tm2) in self.negated_pred_rel.iter_all_0(tm0) {
-                    delta.new_rel_equalities.push((tm1, tm2));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for UndefinedFuncRel(tm0, tm1) in self.undefined_func_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for UndefinedFuncRel(_, tm2) in self.undefined_func_rel.iter_all_0(tm0) {
-                    delta.new_rel_equalities.push((tm1, tm2));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
     fn real_virt_ident_total_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.real_virt_ident_total_1(delta);
             self.real_virt_ident_total_2(delta);
-            self.real_virt_ident_total_4(delta);
+            self.real_virt_ident_total_5(delta);
         }
     }
 
@@ -54905,6 +55022,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn real_virt_ident_total_3(&self, delta: &mut ModelDelta, tm0: Ident) {
         for _ in [()] {
+            self.real_virt_ident_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn real_virt_ident_total_4(&self, delta: &mut ModelDelta, tm0: Ident) {
+        for _ in [()] {
             let tm1 = match self.real_virt_ident.iter_all_0(tm0).next() {
                 Some(RealVirtIdent(_, res)) => res,
                 None => {
@@ -54913,22 +55037,22 @@ impl Eqlog {
                 }
             };
 
-            self.real_virt_ident_total_5(delta, tm0, tm1);
+            self.real_virt_ident_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn real_virt_ident_total_4(&self, delta: &mut ModelDelta) {
+    fn real_virt_ident_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RealVirtIdent(tm0, tm1) in self.real_virt_ident.iter_dirty() {
-                self.real_virt_ident_total_5(delta, tm0, tm1);
+                self.real_virt_ident_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn real_virt_ident_total_5(&self, delta: &mut ModelDelta, tm0: Ident, tm1: VirtIdent) {
+    fn real_virt_ident_total_6(&self, delta: &mut ModelDelta, tm0: Ident, tm1: VirtIdent) {
         for _ in [()] {}
     }
 
@@ -54970,7 +55094,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_rule_total_1(delta);
             self.rule_descendant_rule_total_2(delta);
-            self.rule_descendant_rule_total_4(delta);
+            self.rule_descendant_rule_total_5(delta);
         }
     }
 
@@ -54992,6 +55116,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_rule_total_3(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
         for _ in [()] {
+            self.rule_descendant_rule_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_rule_total_4(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_rule.iter_all_0(tm0).next() {
                 Some(RuleDescendantRule(_, res)) => res,
                 None => {
@@ -55002,22 +55133,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_rule_total_5(delta, tm0, tm1);
+            self.rule_descendant_rule_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_rule_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_rule_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantRule(tm0, tm1) in self.rule_descendant_rule.iter_dirty() {
-                self.rule_descendant_rule_total_5(delta, tm0, tm1);
+                self.rule_descendant_rule_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_rule_total_5(
+    fn rule_descendant_rule_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDeclNode,
@@ -55031,7 +55162,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_term_total_1(delta);
             self.rule_descendant_term_total_2(delta);
-            self.rule_descendant_term_total_4(delta);
+            self.rule_descendant_term_total_5(delta);
         }
     }
 
@@ -55053,6 +55184,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_term_total_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.rule_descendant_term_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_term_total_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_term.iter_all_0(tm0).next() {
                 Some(RuleDescendantTerm(_, res)) => res,
                 None => {
@@ -55063,22 +55201,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_term_total_5(delta, tm0, tm1);
+            self.rule_descendant_term_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_term_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_term_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm0, tm1) in self.rule_descendant_term.iter_dirty() {
-                self.rule_descendant_term_total_5(delta, tm0, tm1);
+                self.rule_descendant_term_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_term_total_5(
+    fn rule_descendant_term_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -55092,7 +55230,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_term_list_total_1(delta);
             self.rule_descendant_term_list_total_2(delta);
-            self.rule_descendant_term_list_total_4(delta);
+            self.rule_descendant_term_list_total_5(delta);
         }
     }
 
@@ -55114,6 +55252,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_term_list_total_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.rule_descendant_term_list_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_term_list_total_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_term_list.iter_all_0(tm0).next() {
                 Some(RuleDescendantTermList(_, res)) => res,
                 None => {
@@ -55124,22 +55269,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_term_list_total_5(delta, tm0, tm1);
+            self.rule_descendant_term_list_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_term_list_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_term_list_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm0, tm1) in self.rule_descendant_term_list.iter_dirty() {
-                self.rule_descendant_term_list_total_5(delta, tm0, tm1);
+                self.rule_descendant_term_list_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_term_list_total_5(
+    fn rule_descendant_term_list_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -55153,7 +55298,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_opt_term_total_1(delta);
             self.rule_descendant_opt_term_total_2(delta);
-            self.rule_descendant_opt_term_total_4(delta);
+            self.rule_descendant_opt_term_total_5(delta);
         }
     }
 
@@ -55175,6 +55320,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_opt_term_total_3(&self, delta: &mut ModelDelta, tm0: OptTermNode) {
         for _ in [()] {
+            self.rule_descendant_opt_term_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_opt_term_total_4(&self, delta: &mut ModelDelta, tm0: OptTermNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_opt_term.iter_all_0(tm0).next() {
                 Some(RuleDescendantOptTerm(_, res)) => res,
                 None => {
@@ -55185,22 +55337,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_opt_term_total_5(delta, tm0, tm1);
+            self.rule_descendant_opt_term_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_opt_term_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_opt_term_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantOptTerm(tm0, tm1) in self.rule_descendant_opt_term.iter_dirty() {
-                self.rule_descendant_opt_term_total_5(delta, tm0, tm1);
+                self.rule_descendant_opt_term_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_opt_term_total_5(
+    fn rule_descendant_opt_term_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: OptTermNode,
@@ -55214,7 +55366,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_if_atom_total_1(delta);
             self.rule_descendant_if_atom_total_2(delta);
-            self.rule_descendant_if_atom_total_4(delta);
+            self.rule_descendant_if_atom_total_5(delta);
         }
     }
 
@@ -55236,6 +55388,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_if_atom_total_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode) {
         for _ in [()] {
+            self.rule_descendant_if_atom_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_if_atom_total_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_if_atom.iter_all_0(tm0).next() {
                 Some(RuleDescendantIfAtom(_, res)) => res,
                 None => {
@@ -55246,22 +55405,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_if_atom_total_5(delta, tm0, tm1);
+            self.rule_descendant_if_atom_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_if_atom_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_if_atom_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm0, tm1) in self.rule_descendant_if_atom.iter_dirty() {
-                self.rule_descendant_if_atom_total_5(delta, tm0, tm1);
+                self.rule_descendant_if_atom_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_if_atom_total_5(
+    fn rule_descendant_if_atom_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -55275,7 +55434,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_then_atom_total_1(delta);
             self.rule_descendant_then_atom_total_2(delta);
-            self.rule_descendant_then_atom_total_4(delta);
+            self.rule_descendant_then_atom_total_5(delta);
         }
     }
 
@@ -55297,6 +55456,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_then_atom_total_3(&self, delta: &mut ModelDelta, tm0: ThenAtomNode) {
         for _ in [()] {
+            self.rule_descendant_then_atom_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_then_atom_total_4(&self, delta: &mut ModelDelta, tm0: ThenAtomNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_then_atom.iter_all_0(tm0).next() {
                 Some(RuleDescendantThenAtom(_, res)) => res,
                 None => {
@@ -55307,22 +55473,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_then_atom_total_5(delta, tm0, tm1);
+            self.rule_descendant_then_atom_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_then_atom_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_then_atom_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(tm0, tm1) in self.rule_descendant_then_atom.iter_dirty() {
-                self.rule_descendant_then_atom_total_5(delta, tm0, tm1);
+                self.rule_descendant_then_atom_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_then_atom_total_5(
+    fn rule_descendant_then_atom_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -55336,7 +55502,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_match_case_total_1(delta);
             self.rule_descendant_match_case_total_2(delta);
-            self.rule_descendant_match_case_total_4(delta);
+            self.rule_descendant_match_case_total_5(delta);
         }
     }
 
@@ -55358,6 +55524,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_match_case_total_3(&self, delta: &mut ModelDelta, tm0: MatchCaseNode) {
         for _ in [()] {
+            self.rule_descendant_match_case_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_match_case_total_4(&self, delta: &mut ModelDelta, tm0: MatchCaseNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_match_case.iter_all_0(tm0).next() {
                 Some(RuleDescendantMatchCase(_, res)) => res,
                 None => {
@@ -55368,22 +55541,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_match_case_total_5(delta, tm0, tm1);
+            self.rule_descendant_match_case_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_match_case_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_match_case_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCase(tm0, tm1) in self.rule_descendant_match_case.iter_dirty() {
-                self.rule_descendant_match_case_total_5(delta, tm0, tm1);
+                self.rule_descendant_match_case_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_match_case_total_5(
+    fn rule_descendant_match_case_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -55397,7 +55570,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_match_case_list_total_1(delta);
             self.rule_descendant_match_case_list_total_2(delta);
-            self.rule_descendant_match_case_list_total_4(delta);
+            self.rule_descendant_match_case_list_total_5(delta);
         }
     }
 
@@ -55423,6 +55596,17 @@ impl Eqlog {
         tm0: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.rule_descendant_match_case_list_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_match_case_list_total_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_match_case_list.iter_all_0(tm0).next() {
                 Some(RuleDescendantMatchCaseList(_, res)) => res,
                 None => {
@@ -55433,24 +55617,24 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_match_case_list_total_5(delta, tm0, tm1);
+            self.rule_descendant_match_case_list_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_match_case_list_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_match_case_list_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCaseList(tm0, tm1) in
                 self.rule_descendant_match_case_list.iter_dirty()
             {
-                self.rule_descendant_match_case_list_total_5(delta, tm0, tm1);
+                self.rule_descendant_match_case_list_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_match_case_list_total_5(
+    fn rule_descendant_match_case_list_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -55464,7 +55648,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_stmt_total_1(delta);
             self.rule_descendant_stmt_total_2(delta);
-            self.rule_descendant_stmt_total_4(delta);
+            self.rule_descendant_stmt_total_5(delta);
         }
     }
 
@@ -55486,6 +55670,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_stmt_total_3(&self, delta: &mut ModelDelta, tm0: StmtNode) {
         for _ in [()] {
+            self.rule_descendant_stmt_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_stmt_total_4(&self, delta: &mut ModelDelta, tm0: StmtNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_stmt.iter_all_0(tm0).next() {
                 Some(RuleDescendantStmt(_, res)) => res,
                 None => {
@@ -55496,22 +55687,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_stmt_total_5(delta, tm0, tm1);
+            self.rule_descendant_stmt_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_stmt_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_stmt_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm0, tm1) in self.rule_descendant_stmt.iter_dirty() {
-                self.rule_descendant_stmt_total_5(delta, tm0, tm1);
+                self.rule_descendant_stmt_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_stmt_total_5(
+    fn rule_descendant_stmt_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -55525,7 +55716,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_stmt_list_total_1(delta);
             self.rule_descendant_stmt_list_total_2(delta);
-            self.rule_descendant_stmt_list_total_4(delta);
+            self.rule_descendant_stmt_list_total_5(delta);
         }
     }
 
@@ -55547,6 +55738,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rule_descendant_stmt_list_total_3(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
         for _ in [()] {
+            self.rule_descendant_stmt_list_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_stmt_list_total_4(&self, delta: &mut ModelDelta, tm0: StmtListNode) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_stmt_list.iter_all_0(tm0).next() {
                 Some(RuleDescendantStmtList(_, res)) => res,
                 None => {
@@ -55557,22 +55755,22 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_stmt_list_total_5(delta, tm0, tm1);
+            self.rule_descendant_stmt_list_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_stmt_list_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_stmt_list_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm0, tm1) in self.rule_descendant_stmt_list.iter_dirty() {
-                self.rule_descendant_stmt_list_total_5(delta, tm0, tm1);
+                self.rule_descendant_stmt_list_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_stmt_list_total_5(
+    fn rule_descendant_stmt_list_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtListNode,
@@ -55586,7 +55784,7 @@ impl Eqlog {
         for _ in [()] {
             self.rule_descendant_stmt_block_list_total_1(delta);
             self.rule_descendant_stmt_block_list_total_2(delta);
-            self.rule_descendant_stmt_block_list_total_4(delta);
+            self.rule_descendant_stmt_block_list_total_5(delta);
         }
     }
 
@@ -55612,6 +55810,17 @@ impl Eqlog {
         tm0: StmtBlockListNode,
     ) {
         for _ in [()] {
+            self.rule_descendant_stmt_block_list_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_descendant_stmt_block_list_total_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtBlockListNode,
+    ) {
+        for _ in [()] {
             let tm1 = match self.rule_descendant_stmt_block_list.iter_all_0(tm0).next() {
                 Some(RuleDescendantStmtBlockList(_, res)) => res,
                 None => {
@@ -55622,24 +55831,24 @@ impl Eqlog {
                 }
             };
 
-            self.rule_descendant_stmt_block_list_total_5(delta, tm0, tm1);
+            self.rule_descendant_stmt_block_list_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_stmt_block_list_total_4(&self, delta: &mut ModelDelta) {
+    fn rule_descendant_stmt_block_list_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(tm0, tm1) in
                 self.rule_descendant_stmt_block_list.iter_dirty()
             {
-                self.rule_descendant_stmt_block_list_total_5(delta, tm0, tm1);
+                self.rule_descendant_stmt_block_list_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_descendant_stmt_block_list_total_5(
+    fn rule_descendant_stmt_block_list_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtBlockListNode,
@@ -55653,7 +55862,7 @@ impl Eqlog {
         for _ in [()] {
             self.scope_extension_vars_1(delta);
             self.scope_extension_vars_2(delta);
-            self.scope_extension_vars_4(delta);
+            self.scope_extension_vars_5(delta);
         }
     }
 
@@ -55675,28 +55884,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scope_extension_vars_3(&self, delta: &mut ModelDelta, tm0: VirtIdent, tm1: Scope) {
         for _ in [()] {
+            self.scope_extension_vars_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_vars_4(&self, delta: &mut ModelDelta, tm0: VirtIdent, tm1: Scope) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ScopeExtension(_, tm2) in self.scope_extension.iter_all_0(tm1) {
-                self.scope_extension_vars_5(delta, tm0, tm1, tm2);
+                self.scope_extension_vars_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_vars_4(&self, delta: &mut ModelDelta) {
+    fn scope_extension_vars_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ScopeExtension(tm1, tm2) in self.scope_extension.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarInScope(tm0, _) in self.var_in_scope.iter_all_1(tm1) {
-                    self.scope_extension_vars_5(delta, tm0, tm1, tm2);
+                    self.scope_extension_vars_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_vars_5(
+    fn scope_extension_vars_6(
         &self,
         delta: &mut ModelDelta,
         tm0: VirtIdent,
@@ -55716,8 +55932,8 @@ impl Eqlog {
         for _ in [()] {
             self.entry_exit_scope_total_1(delta);
             self.entry_exit_scope_total_2(delta);
-            self.entry_exit_scope_total_4(delta);
-            self.entry_exit_scope_total_6(delta);
+            self.entry_exit_scope_total_5(delta);
+            self.entry_exit_scope_total_8(delta);
         }
     }
 
@@ -55739,6 +55955,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn entry_exit_scope_total_3(&self, delta: &mut ModelDelta, tm0: RuleDescendantNode) {
         for _ in [()] {
+            self.entry_exit_scope_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn entry_exit_scope_total_4(&self, delta: &mut ModelDelta, tm0: RuleDescendantNode) {
+        for _ in [()] {
             let tm1 = match self.entry_scope.iter_all_0(tm0).next() {
                 Some(EntryScope(_, res)) => res,
                 None => {
@@ -55747,22 +55970,34 @@ impl Eqlog {
                 }
             };
 
-            self.entry_exit_scope_total_5(delta, tm0, tm1);
+            self.entry_exit_scope_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn entry_exit_scope_total_4(&self, delta: &mut ModelDelta) {
+    fn entry_exit_scope_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm0, tm1) in self.entry_scope.iter_dirty() {
-                self.entry_exit_scope_total_5(delta, tm0, tm1);
+                self.entry_exit_scope_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn entry_exit_scope_total_5(
+    fn entry_exit_scope_total_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: Scope,
+    ) {
+        for _ in [()] {
+            self.entry_exit_scope_total_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn entry_exit_scope_total_7(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -55777,25 +56012,25 @@ impl Eqlog {
                 }
             };
 
-            self.entry_exit_scope_total_7(delta, tm1, tm0, tm2);
+            self.entry_exit_scope_total_9(delta, tm1, tm0, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn entry_exit_scope_total_6(&self, delta: &mut ModelDelta) {
+    fn entry_exit_scope_total_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm0, tm2) in self.exit_scope.iter_dirty() {
                 #[allow(unused_variables)]
                 for EntryScope(_, tm1) in self.entry_scope.iter_all_0(tm0) {
-                    self.entry_exit_scope_total_7(delta, tm1, tm0, tm2);
+                    self.entry_exit_scope_total_9(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn entry_exit_scope_total_7(
+    fn entry_exit_scope_total_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Scope,
@@ -55810,8 +56045,8 @@ impl Eqlog {
         for _ in [()] {
             self.exit_scope_extends_entry_scope_1(delta);
             self.exit_scope_extends_entry_scope_2(delta);
-            self.exit_scope_extends_entry_scope_4(delta);
-            self.exit_scope_extends_entry_scope_6(delta);
+            self.exit_scope_extends_entry_scope_5(delta);
+            self.exit_scope_extends_entry_scope_8(delta);
         }
     }
 
@@ -55833,25 +56068,44 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn exit_scope_extends_entry_scope_3(&self, delta: &mut ModelDelta, tm0: RuleDescendantNode) {
         for _ in [()] {
+            self.exit_scope_extends_entry_scope_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn exit_scope_extends_entry_scope_4(&self, delta: &mut ModelDelta, tm0: RuleDescendantNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(_, tm1) in self.entry_scope.iter_all_0(tm0) {
-                self.exit_scope_extends_entry_scope_5(delta, tm0, tm1);
+                self.exit_scope_extends_entry_scope_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn exit_scope_extends_entry_scope_4(&self, delta: &mut ModelDelta) {
+    fn exit_scope_extends_entry_scope_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm0, tm1) in self.entry_scope.iter_dirty() {
-                self.exit_scope_extends_entry_scope_5(delta, tm0, tm1);
+                self.exit_scope_extends_entry_scope_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn exit_scope_extends_entry_scope_5(
+    fn exit_scope_extends_entry_scope_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: Scope,
+    ) {
+        for _ in [()] {
+            self.exit_scope_extends_entry_scope_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn exit_scope_extends_entry_scope_7(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -55860,26 +56114,26 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(_, tm2) in self.exit_scope.iter_all_0(tm0) {
-                self.exit_scope_extends_entry_scope_7(delta, tm1, tm0, tm2);
+                self.exit_scope_extends_entry_scope_9(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn exit_scope_extends_entry_scope_6(&self, delta: &mut ModelDelta) {
+    fn exit_scope_extends_entry_scope_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm0, tm2) in self.exit_scope.iter_dirty() {
                 #[allow(unused_variables)]
                 for EntryScope(_, tm1) in self.entry_scope.iter_all_0(tm0) {
-                    self.exit_scope_extends_entry_scope_7(delta, tm1, tm0, tm2);
+                    self.exit_scope_extends_entry_scope_9(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn exit_scope_extends_entry_scope_7(
+    fn exit_scope_extends_entry_scope_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Scope,
@@ -55899,8 +56153,8 @@ impl Eqlog {
         for _ in [()] {
             self.scope_single_child_scopes_1(delta);
             self.scope_single_child_scopes_2(delta);
-            self.scope_single_child_scopes_4(delta);
-            self.scope_single_child_scopes_6(delta);
+            self.scope_single_child_scopes_5(delta);
+            self.scope_single_child_scopes_8(delta);
         }
     }
 
@@ -55927,28 +56181,53 @@ impl Eqlog {
         tm1: RuleDescendantNode,
     ) {
         for _ in [()] {
+            self.scope_single_child_scopes_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_single_child_scopes_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(_, tm2) in self.entry_scope.iter_all_0(tm1) {
-                self.scope_single_child_scopes_5(delta, tm0, tm1, tm2);
+                self.scope_single_child_scopes_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_single_child_scopes_4(&self, delta: &mut ModelDelta) {
+    fn scope_single_child_scopes_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm1, tm2) in self.entry_scope.iter_dirty() {
                 #[allow(unused_variables)]
                 for ScopeSingleChild(tm0, _) in self.scope_single_child.iter_all_1(tm1) {
-                    self.scope_single_child_scopes_5(delta, tm0, tm1, tm2);
+                    self.scope_single_child_scopes_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_single_child_scopes_5(
+    fn scope_single_child_scopes_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: Scope,
+    ) {
+        for _ in [()] {
+            self.scope_single_child_scopes_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_single_child_scopes_7(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -55958,13 +56237,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm1) {
-                self.scope_single_child_scopes_7(delta, tm0, tm2, tm1, tm3);
+                self.scope_single_child_scopes_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_single_child_scopes_6(&self, delta: &mut ModelDelta) {
+    fn scope_single_child_scopes_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm1, tm3) in self.exit_scope.iter_dirty() {
@@ -55972,7 +56251,7 @@ impl Eqlog {
                 for EntryScope(_, tm2) in self.entry_scope.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for ScopeSingleChild(tm0, _) in self.scope_single_child.iter_all_1(tm1) {
-                        self.scope_single_child_scopes_7(delta, tm0, tm2, tm1, tm3);
+                        self.scope_single_child_scopes_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -55980,7 +56259,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scope_single_child_scopes_7(
+    fn scope_single_child_scopes_9(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -56006,9 +56285,9 @@ impl Eqlog {
         for _ in [()] {
             self.scope_extension_siblings_scopes_1(delta);
             self.scope_extension_siblings_scopes_2(delta);
-            self.scope_extension_siblings_scopes_4(delta);
-            self.scope_extension_siblings_scopes_6(delta);
+            self.scope_extension_siblings_scopes_5(delta);
             self.scope_extension_siblings_scopes_8(delta);
+            self.scope_extension_siblings_scopes_11(delta);
         }
     }
 
@@ -56037,15 +56316,28 @@ impl Eqlog {
         tm2: RuleDescendantNode,
     ) {
         for _ in [()] {
+            self.scope_extension_siblings_scopes_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_scopes_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
-                self.scope_extension_siblings_scopes_5(delta, tm0, tm1, tm2, tm3);
+                self.scope_extension_siblings_scopes_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_4(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_scopes_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm2, tm3) in self.entry_scope.iter_dirty() {
@@ -56053,14 +56345,28 @@ impl Eqlog {
                 for ScopeExtensionSiblings(tm0, tm1, _) in
                     self.scope_extension_siblings.iter_all_2(tm2)
                 {
-                    self.scope_extension_siblings_scopes_5(delta, tm0, tm1, tm2, tm3);
+                    self.scope_extension_siblings_scopes_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_5(
+    fn scope_extension_siblings_scopes_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+        tm3: Scope,
+    ) {
+        for _ in [()] {
+            self.scope_extension_siblings_scopes_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_scopes_7(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -56071,13 +56377,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(_, tm4) in self.exit_scope.iter_all_0(tm2) {
-                self.scope_extension_siblings_scopes_7(delta, tm0, tm1, tm3, tm2, tm4);
+                self.scope_extension_siblings_scopes_9(delta, tm0, tm1, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_6(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_scopes_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm2, tm4) in self.exit_scope.iter_dirty() {
@@ -56087,7 +56393,7 @@ impl Eqlog {
                     for ScopeExtensionSiblings(tm0, tm1, _) in
                         self.scope_extension_siblings.iter_all_2(tm2)
                     {
-                        self.scope_extension_siblings_scopes_7(delta, tm0, tm1, tm3, tm2, tm4);
+                        self.scope_extension_siblings_scopes_9(delta, tm0, tm1, tm3, tm2, tm4);
                     }
                 }
             }
@@ -56095,7 +56401,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_7(
+    fn scope_extension_siblings_scopes_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm3: Scope,
+        tm2: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.scope_extension_siblings_scopes_10(delta, tm0, tm1, tm3, tm2, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_scopes_10(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -56107,13 +56428,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(_, tm5) in self.exit_scope.iter_all_0(tm0) {
-                self.scope_extension_siblings_scopes_9(delta, tm1, tm3, tm2, tm4, tm0, tm5);
+                self.scope_extension_siblings_scopes_12(delta, tm1, tm3, tm2, tm4, tm0, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_8(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_scopes_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm0, tm5) in self.exit_scope.iter_dirty() {
@@ -56125,7 +56446,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
-                            self.scope_extension_siblings_scopes_9(
+                            self.scope_extension_siblings_scopes_12(
                                 delta, tm1, tm3, tm2, tm4, tm0, tm5,
                             );
                         }
@@ -56136,7 +56457,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_9(
+    fn scope_extension_siblings_scopes_12(
         &self,
         delta: &mut ModelDelta,
         tm1: RuleDescendantNode,
@@ -56169,8 +56490,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_rule_1(delta);
             self.scopes_rule_2(delta);
-            self.scopes_rule_4(delta);
-            self.scopes_rule_6(delta);
+            self.scopes_rule_5(delta);
+            self.scopes_rule_8(delta);
         }
     }
 
@@ -56192,28 +56513,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_rule_3(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm1: StmtListNode) {
         for _ in [()] {
+            self.scopes_rule_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_4(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm1: StmtListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantRule(_, tm2) in self.rule_descendant_rule.iter_all_0(tm0) {
-                self.scopes_rule_5(delta, tm1, tm0, tm2);
+                self.scopes_rule_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_4(&self, delta: &mut ModelDelta) {
+    fn scopes_rule_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantRule(tm0, tm2) in self.rule_descendant_rule.iter_dirty() {
                 #[allow(unused_variables)]
                 for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                    self.scopes_rule_5(delta, tm1, tm0, tm2);
+                    self.scopes_rule_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_5(
+    fn scopes_rule_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm0: RuleDeclNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_rule_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -56223,13 +56564,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(_, tm3) in self.rule_descendant_stmt_list.iter_all_0(tm1) {
-                self.scopes_rule_7(delta, tm0, tm2, tm1, tm3);
+                self.scopes_rule_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_6(&self, delta: &mut ModelDelta) {
+    fn scopes_rule_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm1, tm3) in self.rule_descendant_stmt_list.iter_dirty() {
@@ -56237,7 +56578,7 @@ impl Eqlog {
                 for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for RuleDescendantRule(_, tm2) in self.rule_descendant_rule.iter_all_0(tm0) {
-                        self.scopes_rule_7(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_rule_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -56245,7 +56586,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_7(
+    fn scopes_rule_9(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDeclNode,
@@ -56272,9 +56613,9 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_stmt_list_cons_1(delta);
             self.scopes_stmt_list_cons_2(delta);
-            self.scopes_stmt_list_cons_4(delta);
-            self.scopes_stmt_list_cons_6(delta);
+            self.scopes_stmt_list_cons_5(delta);
             self.scopes_stmt_list_cons_8(delta);
+            self.scopes_stmt_list_cons_11(delta);
         }
     }
 
@@ -56302,28 +56643,55 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.scopes_stmt_list_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_list_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtListNode,
+        tm1: StmtNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(_, tm3) in self.rule_descendant_stmt_list.iter_all_0(tm0) {
-                self.scopes_stmt_list_cons_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_stmt_list_cons_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_list_cons_4(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_list_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm0, tm3) in self.rule_descendant_stmt_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(_, tm1, tm2) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                    self.scopes_stmt_list_cons_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_stmt_list_cons_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_list_cons_5(
+    fn scopes_stmt_list_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtNode,
+        tm2: StmtListNode,
+        tm0: StmtListNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_list_cons_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_list_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -56334,13 +56702,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(_, tm4) in self.rule_descendant_stmt.iter_all_0(tm1) {
-                self.scopes_stmt_list_cons_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_stmt_list_cons_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_list_cons_6(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_list_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm1, tm4) in self.rule_descendant_stmt.iter_dirty() {
@@ -56350,7 +56718,7 @@ impl Eqlog {
                     for ConsStmtListNode(_, _, tm2) in
                         self.cons_stmt_list_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.scopes_stmt_list_cons_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_stmt_list_cons_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -56358,7 +56726,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_list_cons_7(
+    fn scopes_stmt_list_cons_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: StmtListNode,
+        tm0: StmtListNode,
+        tm3: RuleDescendantNode,
+        tm1: StmtNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_list_cons_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_list_cons_10(
         &self,
         delta: &mut ModelDelta,
         tm2: StmtListNode,
@@ -56370,13 +56753,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(_, tm5) in self.rule_descendant_stmt_list.iter_all_0(tm2) {
-                self.scopes_stmt_list_cons_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_stmt_list_cons_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_list_cons_8(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_list_cons_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm2, tm5) in self.rule_descendant_stmt_list.iter_dirty() {
@@ -56389,7 +56772,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for RuleDescendantStmt(_, tm4) in self.rule_descendant_stmt.iter_all_0(tm1)
                         {
-                            self.scopes_stmt_list_cons_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_stmt_list_cons_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -56398,7 +56781,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_list_cons_9(
+    fn scopes_stmt_list_cons_12(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtListNode,
@@ -56427,10 +56810,10 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_stmt_block_list_cons_1(delta);
             self.scopes_stmt_block_list_cons_2(delta);
-            self.scopes_stmt_block_list_cons_4(delta);
-            self.scopes_stmt_block_list_cons_6(delta);
+            self.scopes_stmt_block_list_cons_5(delta);
             self.scopes_stmt_block_list_cons_8(delta);
-            self.scopes_stmt_block_list_cons_10(delta);
+            self.scopes_stmt_block_list_cons_11(delta);
+            self.scopes_stmt_block_list_cons_14(delta);
         }
     }
 
@@ -56459,17 +56842,30 @@ impl Eqlog {
         tm2: StmtBlockListNode,
     ) {
         for _ in [()] {
+            self.scopes_stmt_block_list_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_block_list_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtBlockListNode,
+        tm1: StmtListNode,
+        tm2: StmtBlockListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(_, tm3) in
                 self.rule_descendant_stmt_block_list.iter_all_0(tm0)
             {
-                self.scopes_stmt_block_list_cons_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_stmt_block_list_cons_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_4(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_block_list_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(tm0, tm3) in
@@ -56479,14 +56875,28 @@ impl Eqlog {
                 for ConsStmtBlockListNode(_, tm1, tm2) in
                     self.cons_stmt_block_list_node.iter_all_0(tm0)
                 {
-                    self.scopes_stmt_block_list_cons_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_stmt_block_list_cons_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_5(
+    fn scopes_stmt_block_list_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm2: StmtBlockListNode,
+        tm0: StmtBlockListNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_block_list_cons_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_block_list_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -56497,13 +56907,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(_, tm4) in self.rule_descendant_stmt_list.iter_all_0(tm1) {
-                self.scopes_stmt_block_list_cons_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_stmt_block_list_cons_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_6(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_block_list_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm1, tm4) in self.rule_descendant_stmt_list.iter_dirty() {
@@ -56515,7 +56925,7 @@ impl Eqlog {
                     for ConsStmtBlockListNode(_, _, tm2) in
                         self.cons_stmt_block_list_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.scopes_stmt_block_list_cons_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_stmt_block_list_cons_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -56523,7 +56933,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_7(
+    fn scopes_stmt_block_list_cons_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: StmtBlockListNode,
+        tm0: StmtBlockListNode,
+        tm3: RuleDescendantNode,
+        tm1: StmtListNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_block_list_cons_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_block_list_cons_10(
         &self,
         delta: &mut ModelDelta,
         tm2: StmtBlockListNode,
@@ -56537,13 +56962,13 @@ impl Eqlog {
             for RuleDescendantStmtBlockList(_, tm5) in
                 self.rule_descendant_stmt_block_list.iter_all_0(tm2)
             {
-                self.scopes_stmt_block_list_cons_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_stmt_block_list_cons_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_8(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_block_list_cons_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(tm2, tm5) in
@@ -56561,7 +56986,9 @@ impl Eqlog {
                         for RuleDescendantStmtList(_, tm4) in
                             self.rule_descendant_stmt_list.iter_all_0(tm1)
                         {
-                            self.scopes_stmt_block_list_cons_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_stmt_block_list_cons_12(
+                                delta, tm0, tm3, tm1, tm4, tm2, tm5,
+                            );
                         }
                     }
                 }
@@ -56570,7 +56997,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_9(
+    fn scopes_stmt_block_list_cons_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtBlockListNode,
+        tm3: RuleDescendantNode,
+        tm1: StmtListNode,
+        tm4: RuleDescendantNode,
+        tm2: StmtBlockListNode,
+        tm5: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_block_list_cons_13(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_block_list_cons_13(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtBlockListNode,
@@ -56583,13 +57026,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(_, tm6) in self.entry_scope.iter_all_0(tm3) {
-                self.scopes_stmt_block_list_cons_11(delta, tm0, tm3, tm1, tm4, tm2, tm5, tm6);
+                self.scopes_stmt_block_list_cons_15(delta, tm0, tm3, tm1, tm4, tm2, tm5, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_10(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_block_list_cons_14(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm3, tm6) in self.entry_scope.iter_dirty() {
@@ -56609,7 +57052,7 @@ impl Eqlog {
                             for RuleDescendantStmtList(_, tm4) in
                                 self.rule_descendant_stmt_list.iter_all_0(tm1)
                             {
-                                self.scopes_stmt_block_list_cons_11(
+                                self.scopes_stmt_block_list_cons_15(
                                     delta, tm0, tm3, tm1, tm4, tm2, tm5, tm6,
                                 );
                             }
@@ -56621,7 +57064,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_block_list_cons_11(
+    fn scopes_stmt_block_list_cons_15(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtBlockListNode,
@@ -56650,8 +57093,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_stmt_if_1(delta);
             self.scopes_stmt_if_2(delta);
-            self.scopes_stmt_if_4(delta);
-            self.scopes_stmt_if_6(delta);
+            self.scopes_stmt_if_5(delta);
+            self.scopes_stmt_if_8(delta);
         }
     }
 
@@ -56673,28 +57116,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_stmt_if_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
         for _ in [()] {
+            self.scopes_stmt_if_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_if_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                self.scopes_stmt_if_5(delta, tm1, tm0, tm2);
+                self.scopes_stmt_if_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_if_4(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_if_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm0, tm2) in self.rule_descendant_stmt.iter_dirty() {
                 #[allow(unused_variables)]
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                    self.scopes_stmt_if_5(delta, tm1, tm0, tm2);
+                    self.scopes_stmt_if_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_if_5(
+    fn scopes_stmt_if_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: IfAtomNode,
+        tm0: StmtNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_if_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_if_7(
         &self,
         delta: &mut ModelDelta,
         tm1: IfAtomNode,
@@ -56704,13 +57167,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm1) {
-                self.scopes_stmt_if_7(delta, tm0, tm2, tm1, tm3);
+                self.scopes_stmt_if_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_if_6(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_if_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm1, tm3) in self.rule_descendant_if_atom.iter_dirty() {
@@ -56718,7 +57181,7 @@ impl Eqlog {
                 for IfStmtNode(tm0, _) in self.if_stmt_node.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                        self.scopes_stmt_if_7(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_stmt_if_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -56726,7 +57189,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_if_7(
+    fn scopes_stmt_if_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -56753,8 +57216,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_stmt_then_1(delta);
             self.scopes_stmt_then_2(delta);
-            self.scopes_stmt_then_4(delta);
-            self.scopes_stmt_then_6(delta);
+            self.scopes_stmt_then_5(delta);
+            self.scopes_stmt_then_8(delta);
         }
     }
 
@@ -56776,28 +57239,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_stmt_then_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: ThenAtomNode) {
         for _ in [()] {
+            self.scopes_stmt_then_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_then_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: ThenAtomNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                self.scopes_stmt_then_5(delta, tm1, tm0, tm2);
+                self.scopes_stmt_then_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_then_4(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_then_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm0, tm2) in self.rule_descendant_stmt.iter_dirty() {
                 #[allow(unused_variables)]
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                    self.scopes_stmt_then_5(delta, tm1, tm0, tm2);
+                    self.scopes_stmt_then_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_then_5(
+    fn scopes_stmt_then_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: ThenAtomNode,
+        tm0: StmtNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_then_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_then_7(
         &self,
         delta: &mut ModelDelta,
         tm1: ThenAtomNode,
@@ -56807,13 +57290,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm1) {
-                self.scopes_stmt_then_7(delta, tm0, tm2, tm1, tm3);
+                self.scopes_stmt_then_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_then_6(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_then_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(tm1, tm3) in self.rule_descendant_then_atom.iter_dirty() {
@@ -56821,7 +57304,7 @@ impl Eqlog {
                 for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                        self.scopes_stmt_then_7(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_stmt_then_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -56829,7 +57312,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_then_7(
+    fn scopes_stmt_then_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -56856,8 +57339,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_stmt_branch_1(delta);
             self.scopes_stmt_branch_2(delta);
-            self.scopes_stmt_branch_4(delta);
-            self.scopes_stmt_branch_6(delta);
+            self.scopes_stmt_branch_5(delta);
+            self.scopes_stmt_branch_8(delta);
         }
     }
 
@@ -56879,28 +57362,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_stmt_branch_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtBlockListNode) {
         for _ in [()] {
+            self.scopes_stmt_branch_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_branch_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtBlockListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                self.scopes_stmt_branch_5(delta, tm1, tm0, tm2);
+                self.scopes_stmt_branch_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_branch_4(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_branch_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm0, tm2) in self.rule_descendant_stmt.iter_dirty() {
                 #[allow(unused_variables)]
                 for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                    self.scopes_stmt_branch_5(delta, tm1, tm0, tm2);
+                    self.scopes_stmt_branch_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_branch_5(
+    fn scopes_stmt_branch_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtBlockListNode,
+        tm0: StmtNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_branch_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_branch_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -56912,13 +57415,13 @@ impl Eqlog {
             for RuleDescendantStmtBlockList(_, tm3) in
                 self.rule_descendant_stmt_block_list.iter_all_0(tm1)
             {
-                self.scopes_stmt_branch_7(delta, tm0, tm2, tm1, tm3);
+                self.scopes_stmt_branch_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_branch_6(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_branch_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(tm1, tm3) in
@@ -56928,7 +57431,7 @@ impl Eqlog {
                 for BranchStmtNode(tm0, _) in self.branch_stmt_node.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for RuleDescendantStmt(_, tm2) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                        self.scopes_stmt_branch_7(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_stmt_branch_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -56936,7 +57439,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_branch_7(
+    fn scopes_stmt_branch_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -56963,9 +57466,9 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_stmt_match_1(delta);
             self.scopes_stmt_match_2(delta);
-            self.scopes_stmt_match_4(delta);
-            self.scopes_stmt_match_6(delta);
+            self.scopes_stmt_match_5(delta);
             self.scopes_stmt_match_8(delta);
+            self.scopes_stmt_match_11(delta);
         }
     }
 
@@ -56993,28 +57496,55 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.scopes_stmt_match_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_match_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(_, tm3) in self.rule_descendant_stmt.iter_all_0(tm0) {
-                self.scopes_stmt_match_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_stmt_match_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_match_4(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_match_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm0, tm3) in self.rule_descendant_stmt.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                    self.scopes_stmt_match_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_stmt_match_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_match_5(
+    fn scopes_stmt_match_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm0: StmtNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_match_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_match_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -57025,13 +57555,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_stmt_match_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_stmt_match_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_match_6(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_match_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
@@ -57039,7 +57569,7 @@ impl Eqlog {
                 for RuleDescendantStmt(tm0, tm3) in self.rule_descendant_stmt.iter_all() {
                     #[allow(unused_variables)]
                     for MatchStmtNode(_, _, tm2) in self.match_stmt_node.iter_all_0_1(tm0, tm1) {
-                        self.scopes_stmt_match_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_stmt_match_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -57047,7 +57577,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_match_7(
+    fn scopes_stmt_match_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: MatchCaseListNode,
+        tm0: StmtNode,
+        tm3: RuleDescendantNode,
+        tm1: TermNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_stmt_match_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_stmt_match_10(
         &self,
         delta: &mut ModelDelta,
         tm2: MatchCaseListNode,
@@ -57061,13 +57606,13 @@ impl Eqlog {
             for RuleDescendantMatchCaseList(_, tm5) in
                 self.rule_descendant_match_case_list.iter_all_0(tm2)
             {
-                self.scopes_stmt_match_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_stmt_match_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_match_8(&self, delta: &mut ModelDelta) {
+    fn scopes_stmt_match_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCaseList(tm2, tm5) in
@@ -57080,7 +57625,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1)
                         {
-                            self.scopes_stmt_match_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_stmt_match_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -57089,7 +57634,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_stmt_match_9(
+    fn scopes_stmt_match_12(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -57118,9 +57663,9 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_if_atom_equal_1(delta);
             self.scopes_if_atom_equal_2(delta);
-            self.scopes_if_atom_equal_4(delta);
-            self.scopes_if_atom_equal_6(delta);
+            self.scopes_if_atom_equal_5(delta);
             self.scopes_if_atom_equal_8(delta);
+            self.scopes_if_atom_equal_11(delta);
         }
     }
 
@@ -57148,28 +57693,55 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.scopes_if_atom_equal_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_equal_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
-                self.scopes_if_atom_equal_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_if_atom_equal_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_equal_4(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_equal_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                    self.scopes_if_atom_equal_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_if_atom_equal_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_equal_5(
+    fn scopes_if_atom_equal_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: TermNode,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_if_atom_equal_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_equal_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -57180,13 +57752,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_if_atom_equal_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_if_atom_equal_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_equal_6(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_equal_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
@@ -57195,7 +57767,7 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for EqualIfAtomNode(_, _, tm2) in self.equal_if_atom_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.scopes_if_atom_equal_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_if_atom_equal_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -57203,7 +57775,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_equal_7(
+    fn scopes_if_atom_equal_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: TermNode,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm1: TermNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_if_atom_equal_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_equal_10(
         &self,
         delta: &mut ModelDelta,
         tm2: TermNode,
@@ -57215,13 +57802,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
-                self.scopes_if_atom_equal_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_if_atom_equal_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_equal_8(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_equal_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm2, tm5) in self.rule_descendant_term.iter_dirty() {
@@ -57233,7 +57820,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1)
                         {
-                            self.scopes_if_atom_equal_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_if_atom_equal_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -57242,7 +57829,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_equal_9(
+    fn scopes_if_atom_equal_12(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -57271,8 +57858,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_if_atom_defined_1(delta);
             self.scopes_if_atom_defined_2(delta);
-            self.scopes_if_atom_defined_4(delta);
-            self.scopes_if_atom_defined_6(delta);
+            self.scopes_if_atom_defined_5(delta);
+            self.scopes_if_atom_defined_8(delta);
         }
     }
 
@@ -57294,28 +57881,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_if_atom_defined_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode) {
         for _ in [()] {
+            self.scopes_if_atom_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_defined_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(_, tm2) in self.rule_descendant_if_atom.iter_all_0(tm0) {
-                self.scopes_if_atom_defined_5(delta, tm1, tm0, tm2);
+                self.scopes_if_atom_defined_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_defined_4(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm0, tm2) in self.rule_descendant_if_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                    self.scopes_if_atom_defined_5(delta, tm1, tm0, tm2);
+                    self.scopes_if_atom_defined_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_defined_5(
+    fn scopes_if_atom_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm0: IfAtomNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_if_atom_defined_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -57325,13 +57932,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_if_atom_defined_7(delta, tm0, tm2, tm1, tm3);
+                self.scopes_if_atom_defined_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_defined_6(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm3) in self.rule_descendant_term.iter_dirty() {
@@ -57340,7 +57947,7 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for RuleDescendantIfAtom(_, tm2) in self.rule_descendant_if_atom.iter_all_0(tm0)
                     {
-                        self.scopes_if_atom_defined_7(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_if_atom_defined_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -57348,7 +57955,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_defined_7(
+    fn scopes_if_atom_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -57375,8 +57982,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_if_atom_pred_1(delta);
             self.scopes_if_atom_pred_2(delta);
-            self.scopes_if_atom_pred_4(delta);
-            self.scopes_if_atom_pred_6(delta);
+            self.scopes_if_atom_pred_5(delta);
+            self.scopes_if_atom_pred_8(delta);
         }
     }
 
@@ -57404,28 +58011,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.scopes_if_atom_pred_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_pred_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
-                self.scopes_if_atom_pred_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_if_atom_pred_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_pred_4(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                    self.scopes_if_atom_pred_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_if_atom_pred_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_pred_5(
+    fn scopes_if_atom_pred_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_if_atom_pred_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_pred_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -57436,13 +58070,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(_, tm4) in self.rule_descendant_term_list.iter_all_0(tm2) {
-                self.scopes_if_atom_pred_7(delta, tm1, tm0, tm3, tm2, tm4);
+                self.scopes_if_atom_pred_9(delta, tm1, tm0, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_pred_6(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_pred_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm2, tm4) in self.rule_descendant_term_list.iter_dirty() {
@@ -57450,7 +58084,7 @@ impl Eqlog {
                 for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_all() {
                     #[allow(unused_variables)]
                     for PredIfAtomNode(_, tm1, _) in self.pred_if_atom_node.iter_all_0_2(tm0, tm2) {
-                        self.scopes_if_atom_pred_7(delta, tm1, tm0, tm3, tm2, tm4);
+                        self.scopes_if_atom_pred_9(delta, tm1, tm0, tm3, tm2, tm4);
                     }
                 }
             }
@@ -57458,7 +58092,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_pred_7(
+    fn scopes_if_atom_pred_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -57486,8 +58120,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_if_atom_var_1(delta);
             self.scopes_if_atom_var_2(delta);
-            self.scopes_if_atom_var_4(delta);
-            self.scopes_if_atom_var_6(delta);
+            self.scopes_if_atom_var_5(delta);
+            self.scopes_if_atom_var_8(delta);
         }
     }
 
@@ -57515,28 +58149,55 @@ impl Eqlog {
         tm2: Ident,
     ) {
         for _ in [()] {
+            self.scopes_if_atom_var_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_var_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
-                self.scopes_if_atom_var_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_if_atom_var_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_var_4(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_var_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                    self.scopes_if_atom_var_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_if_atom_var_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_var_5(
+    fn scopes_if_atom_var_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_if_atom_var_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_if_atom_var_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -57547,13 +58208,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_if_atom_var_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_if_atom_var_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_var_6(&self, delta: &mut ModelDelta) {
+    fn scopes_if_atom_var_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
@@ -57561,7 +58222,7 @@ impl Eqlog {
                 for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_all() {
                     #[allow(unused_variables)]
                     for VarIfAtomNode(_, _, tm2) in self.var_if_atom_node.iter_all_0_1(tm0, tm1) {
-                        self.scopes_if_atom_var_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_if_atom_var_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -57569,7 +58230,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_if_atom_var_7(
+    fn scopes_if_atom_var_9(
         &self,
         delta: &mut ModelDelta,
         tm2: Ident,
@@ -57597,9 +58258,9 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_then_atom_equal_1(delta);
             self.scopes_then_atom_equal_2(delta);
-            self.scopes_then_atom_equal_4(delta);
-            self.scopes_then_atom_equal_6(delta);
+            self.scopes_then_atom_equal_5(delta);
             self.scopes_then_atom_equal_8(delta);
+            self.scopes_then_atom_equal_11(delta);
         }
     }
 
@@ -57627,28 +58288,55 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.scopes_then_atom_equal_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_equal_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: TermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0) {
-                self.scopes_then_atom_equal_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_then_atom_equal_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_equal_4(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_equal_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                    self.scopes_then_atom_equal_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_then_atom_equal_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_equal_5(
+    fn scopes_then_atom_equal_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: TermNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_then_atom_equal_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_equal_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -57659,13 +58347,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_then_atom_equal_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_then_atom_equal_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_equal_6(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_equal_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
@@ -57675,7 +58363,7 @@ impl Eqlog {
                     for EqualThenAtomNode(_, _, tm2) in
                         self.equal_then_atom_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.scopes_then_atom_equal_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_then_atom_equal_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -57683,7 +58371,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_equal_7(
+    fn scopes_then_atom_equal_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: TermNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+        tm1: TermNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_then_atom_equal_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_equal_10(
         &self,
         delta: &mut ModelDelta,
         tm2: TermNode,
@@ -57695,13 +58398,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
-                self.scopes_then_atom_equal_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_then_atom_equal_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_equal_8(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_equal_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm2, tm5) in self.rule_descendant_term.iter_dirty() {
@@ -57714,7 +58417,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1)
                         {
-                            self.scopes_then_atom_equal_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_then_atom_equal_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -57723,7 +58426,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_equal_9(
+    fn scopes_then_atom_equal_12(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -57752,9 +58455,9 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_then_atom_defined_1(delta);
             self.scopes_then_atom_defined_2(delta);
-            self.scopes_then_atom_defined_4(delta);
-            self.scopes_then_atom_defined_6(delta);
+            self.scopes_then_atom_defined_5(delta);
             self.scopes_then_atom_defined_8(delta);
+            self.scopes_then_atom_defined_11(delta);
         }
     }
 
@@ -57782,29 +58485,56 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.scopes_then_atom_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0) {
-                self.scopes_then_atom_defined_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_then_atom_defined_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_defined_4(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
                 {
-                    self.scopes_then_atom_defined_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_then_atom_defined_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_defined_5(
+    fn scopes_then_atom_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: OptTermNode,
+        tm2: TermNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_then_atom_defined_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -57815,13 +58545,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantOptTerm(_, tm4) in self.rule_descendant_opt_term.iter_all_0(tm1) {
-                self.scopes_then_atom_defined_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_then_atom_defined_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_defined_6(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantOptTerm(tm1, tm4) in self.rule_descendant_opt_term.iter_dirty() {
@@ -57831,7 +58561,7 @@ impl Eqlog {
                     for DefinedThenAtomNode(_, _, tm2) in
                         self.defined_then_atom_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.scopes_then_atom_defined_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_then_atom_defined_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -57839,7 +58569,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_defined_7(
+    fn scopes_then_atom_defined_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: TermNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+        tm1: OptTermNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_then_atom_defined_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_defined_10(
         &self,
         delta: &mut ModelDelta,
         tm2: TermNode,
@@ -57851,13 +58596,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm5) in self.rule_descendant_term.iter_all_0(tm2) {
-                self.scopes_then_atom_defined_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_then_atom_defined_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_defined_8(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_defined_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm2, tm5) in self.rule_descendant_term.iter_dirty() {
@@ -57871,7 +58616,7 @@ impl Eqlog {
                         for RuleDescendantOptTerm(_, tm4) in
                             self.rule_descendant_opt_term.iter_all_0(tm1)
                         {
-                            self.scopes_then_atom_defined_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_then_atom_defined_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -57880,7 +58625,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_defined_9(
+    fn scopes_then_atom_defined_12(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -57909,8 +58654,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_then_atom_pred_1(delta);
             self.scopes_then_atom_pred_2(delta);
-            self.scopes_then_atom_pred_4(delta);
-            self.scopes_then_atom_pred_6(delta);
+            self.scopes_then_atom_pred_5(delta);
+            self.scopes_then_atom_pred_8(delta);
         }
     }
 
@@ -57938,28 +58683,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.scopes_then_atom_pred_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_pred_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0) {
-                self.scopes_then_atom_pred_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_then_atom_pred_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_pred_4(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                    self.scopes_then_atom_pred_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_then_atom_pred_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_pred_5(
+    fn scopes_then_atom_pred_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_then_atom_pred_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_then_atom_pred_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -57970,13 +58742,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(_, tm4) in self.rule_descendant_term_list.iter_all_0(tm2) {
-                self.scopes_then_atom_pred_7(delta, tm1, tm0, tm3, tm2, tm4);
+                self.scopes_then_atom_pred_9(delta, tm1, tm0, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_pred_6(&self, delta: &mut ModelDelta) {
+    fn scopes_then_atom_pred_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm2, tm4) in self.rule_descendant_term_list.iter_dirty() {
@@ -57986,7 +58758,7 @@ impl Eqlog {
                     for PredThenAtomNode(_, tm1, _) in
                         self.pred_then_atom_node.iter_all_0_2(tm0, tm2)
                     {
-                        self.scopes_then_atom_pred_7(delta, tm1, tm0, tm3, tm2, tm4);
+                        self.scopes_then_atom_pred_9(delta, tm1, tm0, tm3, tm2, tm4);
                     }
                 }
             }
@@ -57994,7 +58766,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_then_atom_pred_7(
+    fn scopes_then_atom_pred_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -58022,9 +58794,9 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_term_list_cons_1(delta);
             self.scopes_term_list_cons_2(delta);
-            self.scopes_term_list_cons_4(delta);
-            self.scopes_term_list_cons_6(delta);
+            self.scopes_term_list_cons_5(delta);
             self.scopes_term_list_cons_8(delta);
+            self.scopes_term_list_cons_11(delta);
         }
     }
 
@@ -58052,28 +58824,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.scopes_term_list_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_list_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermListNode,
+        tm1: TermNode,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(_, tm3) in self.rule_descendant_term_list.iter_all_0(tm0) {
-                self.scopes_term_list_cons_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_term_list_cons_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_list_cons_4(&self, delta: &mut ModelDelta) {
+    fn scopes_term_list_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm0, tm3) in self.rule_descendant_term_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                    self.scopes_term_list_cons_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_term_list_cons_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_list_cons_5(
+    fn scopes_term_list_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: TermListNode,
+        tm0: TermListNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_term_list_cons_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_list_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -58084,13 +58883,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_term_list_cons_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.scopes_term_list_cons_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_list_cons_6(&self, delta: &mut ModelDelta) {
+    fn scopes_term_list_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm4) in self.rule_descendant_term.iter_dirty() {
@@ -58100,7 +58899,7 @@ impl Eqlog {
                     for ConsTermListNode(_, _, tm2) in
                         self.cons_term_list_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.scopes_term_list_cons_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.scopes_term_list_cons_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -58108,7 +58907,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_list_cons_7(
+    fn scopes_term_list_cons_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: TermListNode,
+        tm0: TermListNode,
+        tm3: RuleDescendantNode,
+        tm1: TermNode,
+        tm4: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_term_list_cons_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_list_cons_10(
         &self,
         delta: &mut ModelDelta,
         tm2: TermListNode,
@@ -58120,13 +58934,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(_, tm5) in self.rule_descendant_term_list.iter_all_0(tm2) {
-                self.scopes_term_list_cons_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.scopes_term_list_cons_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_list_cons_8(&self, delta: &mut ModelDelta) {
+    fn scopes_term_list_cons_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm2, tm5) in self.rule_descendant_term_list.iter_dirty() {
@@ -58139,7 +58953,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for RuleDescendantTerm(_, tm4) in self.rule_descendant_term.iter_all_0(tm1)
                         {
-                            self.scopes_term_list_cons_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.scopes_term_list_cons_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -58148,7 +58962,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_list_cons_9(
+    fn scopes_term_list_cons_12(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -58177,8 +58991,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_opt_term_some_1(delta);
             self.scopes_opt_term_some_2(delta);
-            self.scopes_opt_term_some_4(delta);
-            self.scopes_opt_term_some_6(delta);
+            self.scopes_opt_term_some_5(delta);
+            self.scopes_opt_term_some_8(delta);
         }
     }
 
@@ -58200,28 +59014,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_opt_term_some_3(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm1: TermNode) {
         for _ in [()] {
+            self.scopes_opt_term_some_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_opt_term_some_4(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm1: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantOptTerm(_, tm2) in self.rule_descendant_opt_term.iter_all_0(tm0) {
-                self.scopes_opt_term_some_5(delta, tm1, tm0, tm2);
+                self.scopes_opt_term_some_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_opt_term_some_4(&self, delta: &mut ModelDelta) {
+    fn scopes_opt_term_some_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantOptTerm(tm0, tm2) in self.rule_descendant_opt_term.iter_dirty() {
                 #[allow(unused_variables)]
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                    self.scopes_opt_term_some_5(delta, tm1, tm0, tm2);
+                    self.scopes_opt_term_some_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_opt_term_some_5(
+    fn scopes_opt_term_some_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm0: OptTermNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_opt_term_some_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_opt_term_some_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -58231,13 +59065,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm1) {
-                self.scopes_opt_term_some_7(delta, tm0, tm2, tm1, tm3);
+                self.scopes_opt_term_some_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_opt_term_some_6(&self, delta: &mut ModelDelta) {
+    fn scopes_opt_term_some_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm1, tm3) in self.rule_descendant_term.iter_dirty() {
@@ -58247,7 +59081,7 @@ impl Eqlog {
                     for RuleDescendantOptTerm(_, tm2) in
                         self.rule_descendant_opt_term.iter_all_0(tm0)
                     {
-                        self.scopes_opt_term_some_7(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_opt_term_some_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -58255,7 +59089,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_opt_term_some_7(
+    fn scopes_opt_term_some_9(
         &self,
         delta: &mut ModelDelta,
         tm0: OptTermNode,
@@ -58282,8 +59116,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_term_app_1(delta);
             self.scopes_term_app_2(delta);
-            self.scopes_term_app_4(delta);
-            self.scopes_term_app_6(delta);
+            self.scopes_term_app_5(delta);
+            self.scopes_term_app_8(delta);
         }
     }
 
@@ -58311,28 +59145,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.scopes_term_app_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_app_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm0) {
-                self.scopes_term_app_5(delta, tm1, tm2, tm0, tm3);
+                self.scopes_term_app_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_app_4(&self, delta: &mut ModelDelta) {
+    fn scopes_term_app_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm0, tm3) in self.rule_descendant_term.iter_dirty() {
                 #[allow(unused_variables)]
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                    self.scopes_term_app_5(delta, tm1, tm2, tm0, tm3);
+                    self.scopes_term_app_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_app_5(
+    fn scopes_term_app_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_term_app_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_app_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -58343,13 +59204,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(_, tm4) in self.rule_descendant_term_list.iter_all_0(tm2) {
-                self.scopes_term_app_7(delta, tm1, tm0, tm3, tm2, tm4);
+                self.scopes_term_app_9(delta, tm1, tm0, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_app_6(&self, delta: &mut ModelDelta) {
+    fn scopes_term_app_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm2, tm4) in self.rule_descendant_term_list.iter_dirty() {
@@ -58357,7 +59218,7 @@ impl Eqlog {
                 for RuleDescendantTerm(tm0, tm3) in self.rule_descendant_term.iter_all() {
                     #[allow(unused_variables)]
                     for AppTermNode(_, tm1, _) in self.app_term_node.iter_all_0_2(tm0, tm2) {
-                        self.scopes_term_app_7(delta, tm1, tm0, tm3, tm2, tm4);
+                        self.scopes_term_app_9(delta, tm1, tm0, tm3, tm2, tm4);
                     }
                 }
             }
@@ -58365,7 +59226,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_app_7(
+    fn scopes_term_app_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -58393,8 +59254,8 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_term_var_1(delta);
             self.scopes_term_var_2(delta);
-            self.scopes_term_var_4(delta);
-            self.scopes_term_var_6(delta);
+            self.scopes_term_var_5(delta);
+            self.scopes_term_var_8(delta);
         }
     }
 
@@ -58416,28 +59277,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn scopes_term_var_3(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         for _ in [()] {
+            self.scopes_term_var_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_var_4(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(_, tm2) in self.rule_descendant_term.iter_all_0(tm0) {
-                self.scopes_term_var_5(delta, tm1, tm0, tm2);
+                self.scopes_term_var_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_var_4(&self, delta: &mut ModelDelta) {
+    fn scopes_term_var_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm0, tm2) in self.rule_descendant_term.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    self.scopes_term_var_5(delta, tm1, tm0, tm2);
+                    self.scopes_term_var_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_var_5(
+    fn scopes_term_var_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: VirtIdent,
+        tm0: TermNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_term_var_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_term_var_7(
         &self,
         delta: &mut ModelDelta,
         tm1: VirtIdent,
@@ -58447,13 +59328,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm2) {
-                self.scopes_term_var_7(delta, tm1, tm0, tm2, tm3);
+                self.scopes_term_var_9(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_var_6(&self, delta: &mut ModelDelta) {
+    fn scopes_term_var_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm2, tm3) in self.exit_scope.iter_dirty() {
@@ -58461,7 +59342,7 @@ impl Eqlog {
                 for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm2) {
                     #[allow(unused_variables)]
                     for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                        self.scopes_term_var_7(delta, tm1, tm0, tm2, tm3);
+                        self.scopes_term_var_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -58469,7 +59350,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_term_var_7(
+    fn scopes_term_var_9(
         &self,
         delta: &mut ModelDelta,
         tm1: VirtIdent,
@@ -58529,7 +59410,7 @@ impl Eqlog {
         for _ in [()] {
             self.enum_ctors_cons_1(delta);
             self.enum_ctors_cons_2(delta);
-            self.enum_ctors_cons_4(delta);
+            self.enum_ctors_cons_5(delta);
         }
     }
 
@@ -58551,28 +59432,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn enum_ctors_cons_3(&self, delta: &mut ModelDelta, tm0: CtorDeclListNode, tm1: EnumDeclNode) {
         for _ in [()] {
+            self.enum_ctors_cons_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn enum_ctors_cons_4(&self, delta: &mut ModelDelta, tm0: CtorDeclListNode, tm1: EnumDeclNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsCtorDeclListNode(_, tm2, tm3) in self.cons_ctor_decl_list_node.iter_all_0(tm0) {
-                self.enum_ctors_cons_5(delta, tm1, tm0, tm2, tm3);
+                self.enum_ctors_cons_6(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_ctors_cons_4(&self, delta: &mut ModelDelta) {
+    fn enum_ctors_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsCtorDeclListNode(tm0, tm2, tm3) in self.cons_ctor_decl_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for CtorsEnum(_, tm1) in self.ctors_enum.iter_all_0(tm0) {
-                    self.enum_ctors_cons_5(delta, tm1, tm0, tm2, tm3);
+                    self.enum_ctors_cons_6(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_ctors_cons_5(
+    fn enum_ctors_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm1: EnumDeclNode,
@@ -58641,7 +59529,7 @@ impl Eqlog {
         for _ in [()] {
             self.cases_match_stmt_cons_1(delta);
             self.cases_match_stmt_cons_2(delta);
-            self.cases_match_stmt_cons_4(delta);
+            self.cases_match_stmt_cons_5(delta);
         }
     }
 
@@ -58668,30 +59556,42 @@ impl Eqlog {
         tm1: TermNode,
     ) {
         for _ in [()] {
+            self.cases_match_stmt_cons_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cases_match_stmt_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsMatchCaseListNode(_, tm2, tm3) in self.cons_match_case_list_node.iter_all_0(tm0)
             {
-                self.cases_match_stmt_cons_5(delta, tm1, tm0, tm2, tm3);
+                self.cases_match_stmt_cons_6(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cases_match_stmt_cons_4(&self, delta: &mut ModelDelta) {
+    fn cases_match_stmt_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsMatchCaseListNode(tm0, tm2, tm3) in self.cons_match_case_list_node.iter_dirty()
             {
                 #[allow(unused_variables)]
                 for CasesDiscriminee(_, tm1) in self.cases_discriminee.iter_all_0(tm0) {
-                    self.cases_match_stmt_cons_5(delta, tm1, tm0, tm2, tm3);
+                    self.cases_match_stmt_cons_6(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cases_match_stmt_cons_5(
+    fn cases_match_stmt_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -58725,8 +59625,8 @@ impl Eqlog {
         for _ in [()] {
             self.desugared_case_equality_stmt_loc_1(delta);
             self.desugared_case_equality_stmt_loc_2(delta);
-            self.desugared_case_equality_stmt_loc_4(delta);
-            self.desugared_case_equality_stmt_loc_6(delta);
+            self.desugared_case_equality_stmt_loc_5(delta);
+            self.desugared_case_equality_stmt_loc_8(delta);
         }
     }
 
@@ -58754,28 +59654,55 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.desugared_case_equality_stmt_loc_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_stmt_loc_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm1) {
-                self.desugared_case_equality_stmt_loc_5(delta, tm0, tm2, tm1, tm3);
+                self.desugared_case_equality_stmt_loc_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_stmt_loc_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_stmt_loc_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm1, tm3) in self.term_node_loc.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.desugared_case_equality_stmt_loc_5(delta, tm0, tm2, tm1, tm3);
+                    self.desugared_case_equality_stmt_loc_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_stmt_loc_5(
+    fn desugared_case_equality_stmt_loc_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm1: TermNode,
+        tm3: Loc,
+    ) {
+        for _ in [()] {
+            self.desugared_case_equality_stmt_loc_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_stmt_loc_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -58788,13 +59715,13 @@ impl Eqlog {
             for DesugaredCaseEqualityStmt(_, tm4) in
                 self.desugared_case_equality_stmt.iter_all_0(tm0)
             {
-                self.desugared_case_equality_stmt_loc_7(delta, tm2, tm1, tm3, tm0, tm4);
+                self.desugared_case_equality_stmt_loc_9(delta, tm2, tm1, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_stmt_loc_6(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_stmt_loc_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm4) in
@@ -58804,7 +59731,7 @@ impl Eqlog {
                 for TermNodeLoc(tm1, tm3) in self.term_node_loc.iter_all() {
                     #[allow(unused_variables)]
                     for MatchCase(_, _, tm2) in self.match_case.iter_all_0_1(tm0, tm1) {
-                        self.desugared_case_equality_stmt_loc_7(delta, tm2, tm1, tm3, tm0, tm4);
+                        self.desugared_case_equality_stmt_loc_9(delta, tm2, tm1, tm3, tm0, tm4);
                     }
                 }
             }
@@ -58812,7 +59739,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_stmt_loc_7(
+    fn desugared_case_equality_stmt_loc_9(
         &self,
         delta: &mut ModelDelta,
         tm2: StmtListNode,
@@ -58834,9 +59761,9 @@ impl Eqlog {
         for _ in [()] {
             self.desugared_case_defined_1(delta);
             self.desugared_case_defined_2(delta);
-            self.desugared_case_defined_4(delta);
-            self.desugared_case_defined_6(delta);
+            self.desugared_case_defined_5(delta);
             self.desugared_case_defined_8(delta);
+            self.desugared_case_defined_11(delta);
         }
     }
 
@@ -58864,6 +59791,19 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.desugared_case_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             let tm3 = match self.desugared_case_equality_atom.iter_all_0(tm0).next() {
                 Some(DesugaredCaseEqualityAtom(_, res)) => res,
                 None => {
@@ -58874,12 +59814,12 @@ impl Eqlog {
                 }
             };
 
-            self.desugared_case_defined_5(delta, tm1, tm2, tm0, tm3);
+            self.desugared_case_defined_6(delta, tm1, tm2, tm0, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_defined_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityAtom(tm0, tm3) in
@@ -58887,14 +59827,28 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
-                    self.desugared_case_defined_5(delta, tm1, tm2, tm0, tm3);
+                    self.desugared_case_defined_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_defined_5(
+    fn desugared_case_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: IfAtomNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_defined_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -58913,12 +59867,12 @@ impl Eqlog {
                 }
             };
 
-            self.desugared_case_defined_7(delta, tm1, tm2, tm3, tm0, tm4);
+            self.desugared_case_defined_9(delta, tm1, tm2, tm3, tm0, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_defined_6(&self, delta: &mut ModelDelta) {
+    fn desugared_case_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm4) in
@@ -58930,7 +59884,7 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
-                        self.desugared_case_defined_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.desugared_case_defined_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -58938,7 +59892,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_defined_7(
+    fn desugared_case_defined_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: StmtListNode,
+        tm3: IfAtomNode,
+        tm0: MatchCaseNode,
+        tm4: StmtNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_defined_10(delta, tm1, tm2, tm3, tm0, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_defined_10(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -58958,12 +59927,12 @@ impl Eqlog {
                 }
             };
 
-            self.desugared_case_defined_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            self.desugared_case_defined_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_defined_8(&self, delta: &mut ModelDelta) {
+    fn desugared_case_defined_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(tm0, tm5) in self.desugared_case_block.iter_dirty() {
@@ -58977,7 +59946,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
-                            self.desugared_case_defined_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                            self.desugared_case_defined_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
                         }
                     }
                 }
@@ -58986,7 +59955,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_defined_9(
+    fn desugared_case_defined_12(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -59004,7 +59973,7 @@ impl Eqlog {
         for _ in [()] {
             self.desugared_case_block_list_defined_1(delta);
             self.desugared_case_block_list_defined_2(delta);
-            self.desugared_case_block_list_defined_4(delta);
+            self.desugared_case_block_list_defined_5(delta);
         }
     }
 
@@ -59026,6 +59995,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn desugared_case_block_list_defined_3(&self, delta: &mut ModelDelta, tm0: MatchCaseListNode) {
         for _ in [()] {
+            self.desugared_case_block_list_defined_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_block_list_defined_4(&self, delta: &mut ModelDelta, tm0: MatchCaseListNode) {
+        for _ in [()] {
             let tm1 = match self.desugared_case_block_list.iter_all_0(tm0).next() {
                 Some(DesugaredCaseBlockList(_, res)) => res,
                 None => {
@@ -59036,22 +60012,22 @@ impl Eqlog {
                 }
             };
 
-            self.desugared_case_block_list_defined_5(delta, tm0, tm1);
+            self.desugared_case_block_list_defined_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_block_list_defined_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_block_list_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm0, tm1) in self.desugared_case_block_list.iter_dirty() {
-                self.desugared_case_block_list_defined_5(delta, tm0, tm1);
+                self.desugared_case_block_list_defined_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_block_list_defined_5(
+    fn desugared_case_block_list_defined_6(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -59065,9 +60041,9 @@ impl Eqlog {
         for _ in [()] {
             self.desugared_case_equality_atom_stmt_1(delta);
             self.desugared_case_equality_atom_stmt_2(delta);
-            self.desugared_case_equality_atom_stmt_4(delta);
-            self.desugared_case_equality_atom_stmt_6(delta);
+            self.desugared_case_equality_atom_stmt_5(delta);
             self.desugared_case_equality_atom_stmt_8(delta);
+            self.desugared_case_equality_atom_stmt_11(delta);
         }
     }
 
@@ -59094,28 +60070,54 @@ impl Eqlog {
         tm1: TermNode,
     ) {
         for _ in [()] {
+            self.desugared_case_equality_atom_stmt_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_atom_stmt_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for MatchCase(_, tm2, tm3) in self.match_case.iter_all_0(tm0) {
-                self.desugared_case_equality_atom_stmt_5(delta, tm1, tm0, tm2, tm3);
+                self.desugared_case_equality_atom_stmt_6(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_atom_stmt_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_atom_stmt_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCase(tm0, tm2, tm3) in self.match_case.iter_dirty() {
                 #[allow(unused_variables)]
                 for CaseDiscriminee(_, tm1) in self.case_discriminee.iter_all_0(tm0) {
-                    self.desugared_case_equality_atom_stmt_5(delta, tm1, tm0, tm2, tm3);
+                    self.desugared_case_equality_atom_stmt_6(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_atom_stmt_5(
+    fn desugared_case_equality_atom_stmt_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm0: MatchCaseNode,
+        tm2: TermNode,
+        tm3: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_equality_atom_stmt_7(delta, tm1, tm0, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_atom_stmt_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -59128,13 +60130,13 @@ impl Eqlog {
             for DesugaredCaseEqualityAtom(_, tm4) in
                 self.desugared_case_equality_atom.iter_all_0(tm0)
             {
-                self.desugared_case_equality_atom_stmt_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.desugared_case_equality_atom_stmt_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_atom_stmt_6(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_atom_stmt_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityAtom(tm0, tm4) in
@@ -59144,7 +60146,7 @@ impl Eqlog {
                 for CaseDiscriminee(_, tm1) in self.case_discriminee.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for MatchCase(_, tm2, tm3) in self.match_case.iter_all_0(tm0) {
-                        self.desugared_case_equality_atom_stmt_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.desugared_case_equality_atom_stmt_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -59152,7 +60154,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_atom_stmt_7(
+    fn desugared_case_equality_atom_stmt_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: TermNode,
+        tm3: StmtListNode,
+        tm0: MatchCaseNode,
+        tm4: IfAtomNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_equality_atom_stmt_10(delta, tm1, tm2, tm3, tm0, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_equality_atom_stmt_10(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -59166,13 +60183,13 @@ impl Eqlog {
             for DesugaredCaseEqualityStmt(_, tm5) in
                 self.desugared_case_equality_stmt.iter_all_0(tm0)
             {
-                self.desugared_case_equality_atom_stmt_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                self.desugared_case_equality_atom_stmt_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_atom_stmt_8(&self, delta: &mut ModelDelta) {
+    fn desugared_case_equality_atom_stmt_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm5) in
@@ -59186,7 +60203,7 @@ impl Eqlog {
                     for CaseDiscriminee(_, tm1) in self.case_discriminee.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for MatchCase(_, tm2, tm3) in self.match_case.iter_all_0(tm0) {
-                            self.desugared_case_equality_atom_stmt_9(
+                            self.desugared_case_equality_atom_stmt_12(
                                 delta, tm1, tm2, tm3, tm4, tm0, tm5,
                             );
                         }
@@ -59197,7 +60214,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_equality_atom_stmt_9(
+    fn desugared_case_equality_atom_stmt_12(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -59231,8 +60248,8 @@ impl Eqlog {
         for _ in [()] {
             self.desugared_case_block_structure_1(delta);
             self.desugared_case_block_structure_2(delta);
-            self.desugared_case_block_structure_4(delta);
-            self.desugared_case_block_structure_6(delta);
+            self.desugared_case_block_structure_5(delta);
+            self.desugared_case_block_structure_8(delta);
         }
     }
 
@@ -59260,17 +60277,30 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.desugared_case_block_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_block_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(_, tm3) in
                 self.desugared_case_equality_stmt.iter_all_0(tm0)
             {
-                self.desugared_case_block_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.desugared_case_block_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_block_structure_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_block_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm3) in
@@ -59278,14 +60308,28 @@ impl Eqlog {
             {
                 #[allow(unused_variables)]
                 for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
-                    self.desugared_case_block_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.desugared_case_block_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_block_structure_5(
+    fn desugared_case_block_structure_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: StmtNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_block_structure_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_block_structure_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -59296,13 +60340,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(_, tm4) in self.desugared_case_block.iter_all_0(tm0) {
-                self.desugared_case_block_structure_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.desugared_case_block_structure_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_block_structure_6(&self, delta: &mut ModelDelta) {
+    fn desugared_case_block_structure_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(tm0, tm4) in self.desugared_case_block.iter_dirty() {
@@ -59312,7 +60356,7 @@ impl Eqlog {
                 {
                     #[allow(unused_variables)]
                     for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
-                        self.desugared_case_block_structure_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.desugared_case_block_structure_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -59320,7 +60364,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_block_structure_7(
+    fn desugared_case_block_structure_9(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -59348,9 +60392,9 @@ impl Eqlog {
         for _ in [()] {
             self.desugared_case_blocks_1(delta);
             self.desugared_case_blocks_2(delta);
-            self.desugared_case_blocks_4(delta);
-            self.desugared_case_blocks_6(delta);
+            self.desugared_case_blocks_5(delta);
             self.desugared_case_blocks_8(delta);
+            self.desugared_case_blocks_11(delta);
         }
     }
 
@@ -59379,15 +60423,28 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.desugared_case_blocks_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_blocks_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(_, tm3) in self.desugared_case_block_list.iter_all_0(tm0) {
-                self.desugared_case_blocks_5(delta, tm1, tm2, tm0, tm3);
+                self.desugared_case_blocks_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_blocks_4(&self, delta: &mut ModelDelta) {
+    fn desugared_case_blocks_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm0, tm3) in self.desugared_case_block_list.iter_dirty() {
@@ -59395,14 +60452,28 @@ impl Eqlog {
                 for ConsMatchCaseListNode(_, tm1, tm2) in
                     self.cons_match_case_list_node.iter_all_0(tm0)
                 {
-                    self.desugared_case_blocks_5(delta, tm1, tm2, tm0, tm3);
+                    self.desugared_case_blocks_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_blocks_5(
+    fn desugared_case_blocks_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+        tm0: MatchCaseListNode,
+        tm3: StmtBlockListNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_blocks_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_blocks_7(
         &self,
         delta: &mut ModelDelta,
         tm1: MatchCaseNode,
@@ -59413,13 +60484,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(_, tm4) in self.desugared_case_block.iter_all_0(tm1) {
-                self.desugared_case_blocks_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.desugared_case_blocks_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_blocks_6(&self, delta: &mut ModelDelta) {
+    fn desugared_case_blocks_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(tm1, tm4) in self.desugared_case_block.iter_dirty() {
@@ -59429,7 +60500,7 @@ impl Eqlog {
                     for ConsMatchCaseListNode(_, _, tm2) in
                         self.cons_match_case_list_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.desugared_case_blocks_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.desugared_case_blocks_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -59437,7 +60508,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_blocks_7(
+    fn desugared_case_blocks_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: MatchCaseListNode,
+        tm0: MatchCaseListNode,
+        tm3: StmtBlockListNode,
+        tm1: MatchCaseNode,
+        tm4: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.desugared_case_blocks_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn desugared_case_blocks_10(
         &self,
         delta: &mut ModelDelta,
         tm2: MatchCaseListNode,
@@ -59449,13 +60535,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(_, tm5) in self.desugared_case_block_list.iter_all_0(tm2) {
-                self.desugared_case_blocks_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.desugared_case_blocks_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_blocks_8(&self, delta: &mut ModelDelta) {
+    fn desugared_case_blocks_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm2, tm5) in self.desugared_case_block_list.iter_dirty() {
@@ -59468,7 +60554,7 @@ impl Eqlog {
                         #[allow(unused_variables)]
                         for DesugaredCaseBlock(_, tm4) in self.desugared_case_block.iter_all_0(tm1)
                         {
-                            self.desugared_case_blocks_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                            self.desugared_case_blocks_12(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -59477,7 +60563,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn desugared_case_blocks_9(
+    fn desugared_case_blocks_12(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -59506,10 +60592,10 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_desugared_case_1(delta);
             self.scopes_desugared_case_2(delta);
-            self.scopes_desugared_case_4(delta);
-            self.scopes_desugared_case_6(delta);
+            self.scopes_desugared_case_5(delta);
             self.scopes_desugared_case_8(delta);
-            self.scopes_desugared_case_10(delta);
+            self.scopes_desugared_case_11(delta);
+            self.scopes_desugared_case_14(delta);
         }
     }
 
@@ -59536,28 +60622,53 @@ impl Eqlog {
         tm1: StmtListNode,
     ) {
         for _ in [()] {
+            self.scopes_desugared_case_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(_, tm2) in self.rule_descendant_stmt_list.iter_all_0(tm1) {
-                self.scopes_desugared_case_5(delta, tm0, tm1, tm2);
+                self.scopes_desugared_case_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_4(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm1, tm2) in self.rule_descendant_stmt_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for DesugaredCaseBlock(tm0, _) in self.desugared_case_block.iter_all_1(tm1) {
-                    self.scopes_desugared_case_5(delta, tm0, tm1, tm2);
+                    self.scopes_desugared_case_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_5(
+    fn scopes_desugared_case_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: StmtListNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_desugared_case_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -59567,13 +60678,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCase(_, tm3) in self.rule_descendant_match_case.iter_all_0(tm0) {
-                self.scopes_desugared_case_7(delta, tm1, tm2, tm0, tm3);
+                self.scopes_desugared_case_9(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_6(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCase(tm0, tm3) in self.rule_descendant_match_case.iter_dirty() {
@@ -59583,47 +60694,7 @@ impl Eqlog {
                     for RuleDescendantStmtList(_, tm2) in
                         self.rule_descendant_stmt_list.iter_all_0(tm1)
                     {
-                        self.scopes_desugared_case_7(delta, tm1, tm2, tm0, tm3);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scopes_desugared_case_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: StmtListNode,
-        tm2: RuleDescendantNode,
-        tm0: MatchCaseNode,
-        tm3: RuleDescendantNode,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
-                self.scopes_desugared_case_9(delta, tm1, tm2, tm0, tm3, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scopes_desugared_case_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
-                #[allow(unused_variables)]
-                for RuleDescendantMatchCase(tm0, _) in
-                    self.rule_descendant_match_case.iter_all_1(tm3)
-                {
-                    #[allow(unused_variables)]
-                    for DesugaredCaseBlock(_, tm1) in self.desugared_case_block.iter_all_0(tm0) {
-                        #[allow(unused_variables)]
-                        for RuleDescendantStmtList(_, tm2) in
-                            self.rule_descendant_stmt_list.iter_all_0(tm1)
-                        {
-                            self.scopes_desugared_case_9(delta, tm1, tm2, tm0, tm3, tm4);
-                        }
+                        self.scopes_desugared_case_9(delta, tm1, tm2, tm0, tm3);
                     }
                 }
             }
@@ -59638,18 +60709,87 @@ impl Eqlog {
         tm2: RuleDescendantNode,
         tm0: MatchCaseNode,
         tm3: RuleDescendantNode,
-        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.scopes_desugared_case_10(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm2: RuleDescendantNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ExitScope(_, tm5) in self.exit_scope.iter_all_0(tm3) {
-                self.scopes_desugared_case_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+            for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                self.scopes_desugared_case_12(delta, tm1, tm2, tm0, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_10(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantMatchCase(tm0, _) in
+                    self.rule_descendant_match_case.iter_all_1(tm3)
+                {
+                    #[allow(unused_variables)]
+                    for DesugaredCaseBlock(_, tm1) in self.desugared_case_block.iter_all_0(tm0) {
+                        #[allow(unused_variables)]
+                        for RuleDescendantStmtList(_, tm2) in
+                            self.rule_descendant_stmt_list.iter_all_0(tm1)
+                        {
+                            self.scopes_desugared_case_12(delta, tm1, tm2, tm0, tm3, tm4);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm2: RuleDescendantNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.scopes_desugared_case_13(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm2: RuleDescendantNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ExitScope(_, tm5) in self.exit_scope.iter_all_0(tm3) {
+                self.scopes_desugared_case_15(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_14(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm3, tm5) in self.exit_scope.iter_dirty() {
@@ -59666,7 +60806,7 @@ impl Eqlog {
                             for RuleDescendantStmtList(_, tm2) in
                                 self.rule_descendant_stmt_list.iter_all_0(tm1)
                             {
-                                self.scopes_desugared_case_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+                                self.scopes_desugared_case_15(delta, tm1, tm2, tm0, tm3, tm4, tm5);
                             }
                         }
                     }
@@ -59676,7 +60816,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_11(
+    fn scopes_desugared_case_15(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -59704,10 +60844,10 @@ impl Eqlog {
         for _ in [()] {
             self.scopes_desugared_case_list_1(delta);
             self.scopes_desugared_case_list_2(delta);
-            self.scopes_desugared_case_list_4(delta);
-            self.scopes_desugared_case_list_6(delta);
+            self.scopes_desugared_case_list_5(delta);
             self.scopes_desugared_case_list_8(delta);
-            self.scopes_desugared_case_list_10(delta);
+            self.scopes_desugared_case_list_11(delta);
+            self.scopes_desugared_case_list_14(delta);
         }
     }
 
@@ -59734,17 +60874,29 @@ impl Eqlog {
         tm1: StmtBlockListNode,
     ) {
         for _ in [()] {
+            self.scopes_desugared_case_list_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_list_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: StmtBlockListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(_, tm2) in
                 self.rule_descendant_stmt_block_list.iter_all_0(tm1)
             {
-                self.scopes_desugared_case_list_5(delta, tm0, tm1, tm2);
+                self.scopes_desugared_case_list_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_4(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_list_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(tm1, tm2) in
@@ -59753,14 +60905,27 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for DesugaredCaseBlockList(tm0, _) in self.desugared_case_block_list.iter_all_1(tm1)
                 {
-                    self.scopes_desugared_case_list_5(delta, tm0, tm1, tm2);
+                    self.scopes_desugared_case_list_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_5(
+    fn scopes_desugared_case_list_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: StmtBlockListNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_desugared_case_list_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_list_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -59772,13 +60937,13 @@ impl Eqlog {
             for RuleDescendantMatchCaseList(_, tm3) in
                 self.rule_descendant_match_case_list.iter_all_0(tm0)
             {
-                self.scopes_desugared_case_list_7(delta, tm1, tm2, tm0, tm3);
+                self.scopes_desugared_case_list_9(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_6(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_list_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCaseList(tm0, tm3) in
@@ -59791,7 +60956,7 @@ impl Eqlog {
                     for RuleDescendantStmtBlockList(_, tm2) in
                         self.rule_descendant_stmt_block_list.iter_all_0(tm1)
                     {
-                        self.scopes_desugared_case_list_7(delta, tm1, tm2, tm0, tm3);
+                        self.scopes_desugared_case_list_9(delta, tm1, tm2, tm0, tm3);
                     }
                 }
             }
@@ -59799,7 +60964,21 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_7(
+    fn scopes_desugared_case_list_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtBlockListNode,
+        tm2: RuleDescendantNode,
+        tm0: MatchCaseListNode,
+        tm3: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scopes_desugared_case_list_10(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_list_10(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -59810,13 +60989,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
-                self.scopes_desugared_case_list_9(delta, tm1, tm2, tm0, tm3, tm4);
+                self.scopes_desugared_case_list_12(delta, tm1, tm2, tm0, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_8(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_list_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
@@ -59832,7 +61011,7 @@ impl Eqlog {
                         for RuleDescendantStmtBlockList(_, tm2) in
                             self.rule_descendant_stmt_block_list.iter_all_0(tm1)
                         {
-                            self.scopes_desugared_case_list_9(delta, tm1, tm2, tm0, tm3, tm4);
+                            self.scopes_desugared_case_list_12(delta, tm1, tm2, tm0, tm3, tm4);
                         }
                     }
                 }
@@ -59841,7 +61020,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_9(
+    fn scopes_desugared_case_list_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtBlockListNode,
+        tm2: RuleDescendantNode,
+        tm0: MatchCaseListNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.scopes_desugared_case_list_13(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_desugared_case_list_13(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -59853,13 +61047,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(_, tm5) in self.exit_scope.iter_all_0(tm3) {
-                self.scopes_desugared_case_list_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+                self.scopes_desugared_case_list_15(delta, tm1, tm2, tm0, tm3, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_10(&self, delta: &mut ModelDelta) {
+    fn scopes_desugared_case_list_14(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm3, tm5) in self.exit_scope.iter_dirty() {
@@ -59877,7 +61071,7 @@ impl Eqlog {
                             for RuleDescendantStmtBlockList(_, tm2) in
                                 self.rule_descendant_stmt_block_list.iter_all_0(tm1)
                             {
-                                self.scopes_desugared_case_list_11(
+                                self.scopes_desugared_case_list_15(
                                     delta, tm1, tm2, tm0, tm3, tm4, tm5,
                                 );
                             }
@@ -59889,7 +61083,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_desugared_case_list_11(
+    fn scopes_desugared_case_list_15(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -60030,11 +61224,191 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn snoc_type_list_nil_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_type_list_nil_1(delta);
+            self.snoc_type_list_nil_2(delta);
+            self.snoc_type_list_nil_3(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_nil_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_nil_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocTypeList(_, tm1, tm2) in self.snoc_type_list.iter_all_0(tm0) {
+                    self.snoc_type_list_nil_4(delta, tm0, tm1, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_nil_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for NilTypeList(_) in self.nil_type_list.iter_all_0(tm0) {
+                    self.snoc_type_list_nil_4(delta, tm0, tm1, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_nil_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeList,
+        tm1: Type,
+        tm2: TypeList,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .cons_type_list
+                .iter_all_0_1_2(tm1, tm0, tm2)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_cons_type_list.push(ConsTypeList(tm1, tm0, tm2));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_type_list_cons_1(delta);
+            self.snoc_type_list_cons_2(delta);
+            self.snoc_type_list_cons_3(delta);
+            self.snoc_type_list_cons_6(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocTypeList(_, tm3, tm4) in self.snoc_type_list.iter_all_0(tm2) {
+                    self.snoc_type_list_cons_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm2, tm3, tm4) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ConsTypeList(tm0, tm1, _) in self.cons_type_list.iter_all_2(tm2) {
+                    self.snoc_type_list_cons_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Type,
+        tm1: TypeList,
+        tm2: TypeList,
+        tm3: Type,
+        tm4: TypeList,
+    ) {
+        for _ in [()] {
+            self.snoc_type_list_cons_5(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Type,
+        tm1: TypeList,
+        tm2: TypeList,
+        tm3: Type,
+        tm4: TypeList,
+    ) {
+        for _ in [()] {
+            let tm5 = match self.snoc_type_list.iter_all_0_1(tm1, tm3).next() {
+                Some(SnocTypeList(_, _, res)) => res,
+                None => {
+                    delta
+                        .new_snoc_type_list_def
+                        .push(SnocTypeListArgs(tm1, tm3));
+                    break;
+                }
+            };
+
+            self.snoc_type_list_cons_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm1, tm3, tm5) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocTypeList(tm2, _, tm4) in self.snoc_type_list.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for ConsTypeList(tm0, _, _) in self.cons_type_list.iter_all_1_2(tm1, tm2) {
+                        self.snoc_type_list_cons_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_type_list_cons_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Type,
+        tm2: TypeList,
+        tm4: TypeList,
+        tm1: TypeList,
+        tm3: Type,
+        tm5: TypeList,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .cons_type_list
+                .iter_all_0_1_2(tm0, tm5, tm4)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_cons_type_list.push(ConsTypeList(tm0, tm5, tm4));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
     fn semantic_decl_type_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.semantic_decl_type_1(delta);
             self.semantic_decl_type_2(delta);
-            self.semantic_decl_type_4(delta);
+            self.semantic_decl_type_5(delta);
         }
     }
 
@@ -60056,6 +61430,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_decl_type_3(&self, delta: &mut ModelDelta, tm0: TypeDeclNode, tm1: Ident) {
         for _ in [()] {
+            self.semantic_decl_type_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_decl_type_4(&self, delta: &mut ModelDelta, tm0: TypeDeclNode, tm1: Ident) {
+        for _ in [()] {
             let tm2 = match self.semantic_type.iter_all_0(tm1).next() {
                 Some(SemanticType(_, res)) => res,
                 None => {
@@ -60064,25 +61445,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_decl_type_5(delta, tm0, tm1, tm2);
+            self.semantic_decl_type_6(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_type_4(&self, delta: &mut ModelDelta) {
+    fn semantic_decl_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm1, tm2) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
-                    self.semantic_decl_type_5(delta, tm0, tm1, tm2);
+                    self.semantic_decl_type_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_type_5(
+    fn semantic_decl_type_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TypeDeclNode,
@@ -60097,7 +61478,7 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_decl_enum_1(delta);
             self.semantic_decl_enum_2(delta);
-            self.semantic_decl_enum_4(delta);
+            self.semantic_decl_enum_5(delta);
         }
     }
 
@@ -60125,6 +61506,19 @@ impl Eqlog {
         tm2: CtorDeclListNode,
     ) {
         for _ in [()] {
+            self.semantic_decl_enum_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_decl_enum_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: EnumDeclNode,
+        tm1: Ident,
+        tm2: CtorDeclListNode,
+    ) {
+        for _ in [()] {
             let tm3 = match self.semantic_type.iter_all_0(tm1).next() {
                 Some(SemanticType(_, res)) => res,
                 None => {
@@ -60133,25 +61527,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_decl_enum_5(delta, tm0, tm2, tm1, tm3);
+            self.semantic_decl_enum_6(delta, tm0, tm2, tm1, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_enum_4(&self, delta: &mut ModelDelta) {
+    fn semantic_decl_enum_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm1, tm3) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for EnumDecl(tm0, _, tm2) in self.enum_decl.iter_all_1(tm1) {
-                    self.semantic_decl_enum_5(delta, tm0, tm2, tm1, tm3);
+                    self.semantic_decl_enum_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_enum_5(
+    fn semantic_decl_enum_6(
         &self,
         delta: &mut ModelDelta,
         tm0: EnumDeclNode,
@@ -60167,7 +61561,7 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_arg_types_nil_1(delta);
             self.semantic_arg_types_nil_2(delta);
-            self.semantic_arg_types_nil_4(delta);
+            self.semantic_arg_types_nil_5(delta);
         }
     }
 
@@ -60189,6 +61583,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_arg_types_nil_3(&self, delta: &mut ModelDelta, tm0: ArgDeclListNode) {
         for _ in [()] {
+            self.semantic_arg_types_nil_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_arg_types_nil_4(&self, delta: &mut ModelDelta, tm0: ArgDeclListNode) {
+        for _ in [()] {
             let tm1 = match self.nil_type_list.iter_all().next() {
                 Some(NilTypeList(res)) => res,
                 None => {
@@ -60197,25 +61598,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_arg_types_nil_5(delta, tm0, tm1);
+            self.semantic_arg_types_nil_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_nil_4(&self, delta: &mut ModelDelta) {
+    fn semantic_arg_types_nil_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilTypeList(tm1) in self.nil_type_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for NilArgDeclListNode(tm0) in self.nil_arg_decl_list_node.iter_all() {
-                    self.semantic_arg_types_nil_5(delta, tm0, tm1);
+                    self.semantic_arg_types_nil_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_nil_5(
+    fn semantic_arg_types_nil_6(
         &self,
         delta: &mut ModelDelta,
         tm0: ArgDeclListNode,
@@ -60240,10 +61641,10 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_arg_types_cons_1(delta);
             self.semantic_arg_types_cons_2(delta);
-            self.semantic_arg_types_cons_4(delta);
-            self.semantic_arg_types_cons_6(delta);
+            self.semantic_arg_types_cons_5(delta);
             self.semantic_arg_types_cons_8(delta);
-            self.semantic_arg_types_cons_10(delta);
+            self.semantic_arg_types_cons_11(delta);
+            self.semantic_arg_types_cons_14(delta);
         }
     }
 
@@ -60271,29 +61672,42 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.semantic_arg_types_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_arg_types_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclListNode,
+        tm1: ArgDeclNode,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ArgDeclNodeType(_, tm3) in self.arg_decl_node_type.iter_all_0(tm1) {
-                self.semantic_arg_types_cons_5(delta, tm0, tm2, tm1, tm3);
+                self.semantic_arg_types_cons_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_cons_4(&self, delta: &mut ModelDelta) {
+    fn semantic_arg_types_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ArgDeclNodeType(tm1, tm3) in self.arg_decl_node_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsArgDeclListNode(tm0, _, tm2) in self.cons_arg_decl_list_node.iter_all_1(tm1)
                 {
-                    self.semantic_arg_types_cons_5(delta, tm0, tm2, tm1, tm3);
+                    self.semantic_arg_types_cons_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_cons_5(
+    fn semantic_arg_types_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm0: ArgDeclListNode,
@@ -60302,28 +61716,7 @@ impl Eqlog {
         tm3: Ident,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
-                self.semantic_arg_types_cons_7(delta, tm0, tm2, tm1, tm3, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn semantic_arg_types_cons_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticType(tm3, tm4) in self.semantic_type.iter_dirty() {
-                #[allow(unused_variables)]
-                for ArgDeclNodeType(tm1, _) in self.arg_decl_node_type.iter_all_1(tm3) {
-                    #[allow(unused_variables)]
-                    for ConsArgDeclListNode(tm0, _, tm2) in
-                        self.cons_arg_decl_list_node.iter_all_1(tm1)
-                    {
-                        self.semantic_arg_types_cons_7(delta, tm0, tm2, tm1, tm3, tm4);
-                    }
-                }
-            }
+            self.semantic_arg_types_cons_7(delta, tm0, tm2, tm1, tm3);
         }
     }
 
@@ -60335,18 +61728,68 @@ impl Eqlog {
         tm2: ArgDeclListNode,
         tm1: ArgDeclNode,
         tm3: Ident,
-        tm4: Type,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
-                self.semantic_arg_types_cons_9(delta, tm0, tm1, tm3, tm4, tm2, tm5);
+            for SemanticType(_, tm4) in self.semantic_type.iter_all_0(tm3) {
+                self.semantic_arg_types_cons_9(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
     fn semantic_arg_types_cons_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SemanticType(tm3, tm4) in self.semantic_type.iter_dirty() {
+                #[allow(unused_variables)]
+                for ArgDeclNodeType(tm1, _) in self.arg_decl_node_type.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for ConsArgDeclListNode(tm0, _, tm2) in
+                        self.cons_arg_decl_list_node.iter_all_1(tm1)
+                    {
+                        self.semantic_arg_types_cons_9(delta, tm0, tm2, tm1, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_arg_types_cons_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclListNode,
+        tm2: ArgDeclListNode,
+        tm1: ArgDeclNode,
+        tm3: Ident,
+        tm4: Type,
+    ) {
+        for _ in [()] {
+            self.semantic_arg_types_cons_10(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_arg_types_cons_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclListNode,
+        tm2: ArgDeclListNode,
+        tm1: ArgDeclNode,
+        tm3: Ident,
+        tm4: Type,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
+                self.semantic_arg_types_cons_12(delta, tm0, tm1, tm3, tm4, tm2, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_arg_types_cons_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm2, tm5) in self.semantic_arg_types.iter_dirty() {
@@ -60358,7 +61801,7 @@ impl Eqlog {
                         for ConsArgDeclListNode(tm0, _, _) in
                             self.cons_arg_decl_list_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.semantic_arg_types_cons_9(delta, tm0, tm1, tm3, tm4, tm2, tm5);
+                            self.semantic_arg_types_cons_12(delta, tm0, tm1, tm3, tm4, tm2, tm5);
                         }
                     }
                 }
@@ -60367,7 +61810,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_cons_9(
+    fn semantic_arg_types_cons_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclListNode,
+        tm1: ArgDeclNode,
+        tm3: Ident,
+        tm4: Type,
+        tm2: ArgDeclListNode,
+        tm5: TypeList,
+    ) {
+        for _ in [()] {
+            self.semantic_arg_types_cons_13(delta, tm0, tm1, tm3, tm4, tm2, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_arg_types_cons_13(
         &self,
         delta: &mut ModelDelta,
         tm0: ArgDeclListNode,
@@ -60388,12 +61847,12 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_arg_types_cons_11(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
+            self.semantic_arg_types_cons_15(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_cons_10(&self, delta: &mut ModelDelta) {
+    fn semantic_arg_types_cons_14(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTypeList(tm4, tm5, tm6) in self.cons_type_list.iter_dirty() {
@@ -60407,7 +61866,7 @@ impl Eqlog {
                             for ConsArgDeclListNode(tm0, _, _) in
                                 self.cons_arg_decl_list_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.semantic_arg_types_cons_11(
+                                self.semantic_arg_types_cons_15(
                                     delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6,
                                 );
                             }
@@ -60419,7 +61878,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn semantic_arg_types_cons_11(
+    fn semantic_arg_types_cons_15(
         &self,
         delta: &mut ModelDelta,
         tm0: ArgDeclListNode,
@@ -60449,7 +61908,7 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_decl_pred_1(delta);
             self.semantic_decl_pred_2(delta);
-            self.semantic_decl_pred_4(delta);
+            self.semantic_decl_pred_5(delta);
         }
     }
 
@@ -60477,6 +61936,19 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.semantic_decl_pred_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_decl_pred_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: PredDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             let tm3 = match self.semantic_pred.iter_all_0(tm1).next() {
                 Some(SemanticPred(_, res)) => res,
                 None => {
@@ -60485,25 +61957,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_decl_pred_5(delta, tm0, tm2, tm1, tm3);
+            self.semantic_decl_pred_6(delta, tm0, tm2, tm1, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_pred_4(&self, delta: &mut ModelDelta) {
+    fn semantic_decl_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredDecl(tm0, _, tm2) in self.pred_decl.iter_all_1(tm1) {
-                    self.semantic_decl_pred_5(delta, tm0, tm2, tm1, tm3);
+                    self.semantic_decl_pred_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_pred_5(
+    fn semantic_decl_pred_6(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -60519,8 +61991,8 @@ impl Eqlog {
         for _ in [()] {
             self.pred_arity_decl_1(delta);
             self.pred_arity_decl_2(delta);
-            self.pred_arity_decl_4(delta);
-            self.pred_arity_decl_6(delta);
+            self.pred_arity_decl_5(delta);
+            self.pred_arity_decl_8(delta);
         }
     }
 
@@ -60548,28 +62020,55 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.pred_arity_decl_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_arity_decl_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: PredDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                self.pred_arity_decl_5(delta, tm0, tm2, tm1, tm3);
+                self.pred_arity_decl_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_arity_decl_4(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredDecl(tm0, _, tm2) in self.pred_decl.iter_all_1(tm1) {
-                    self.pred_arity_decl_5(delta, tm0, tm2, tm1, tm3);
+                    self.pred_arity_decl_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_arity_decl_5(
+    fn pred_arity_decl_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: PredDeclNode,
+        tm2: ArgDeclListNode,
+        tm1: Ident,
+        tm3: Pred,
+    ) {
+        for _ in [()] {
+            self.pred_arity_decl_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_arity_decl_7(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -60580,13 +62079,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(_, tm4) in self.semantic_arg_types.iter_all_0(tm2) {
-                self.pred_arity_decl_7(delta, tm0, tm1, tm3, tm2, tm4);
+                self.pred_arity_decl_9(delta, tm0, tm1, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_arity_decl_6(&self, delta: &mut ModelDelta) {
+    fn pred_arity_decl_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm2, tm4) in self.semantic_arg_types.iter_dirty() {
@@ -60594,7 +62093,7 @@ impl Eqlog {
                 for SemanticPred(tm1, tm3) in self.semantic_pred.iter_all() {
                     #[allow(unused_variables)]
                     for PredDecl(tm0, _, _) in self.pred_decl.iter_all_1_2(tm1, tm2) {
-                        self.pred_arity_decl_7(delta, tm0, tm1, tm3, tm2, tm4);
+                        self.pred_arity_decl_9(delta, tm0, tm1, tm3, tm2, tm4);
                     }
                 }
             }
@@ -60602,7 +62101,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_arity_decl_7(
+    fn pred_arity_decl_9(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -60624,7 +62123,7 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_decl_func_1(delta);
             self.semantic_decl_func_2(delta);
-            self.semantic_decl_func_4(delta);
+            self.semantic_decl_func_5(delta);
         }
     }
 
@@ -60653,6 +62152,20 @@ impl Eqlog {
         tm3: Ident,
     ) {
         for _ in [()] {
+            self.semantic_decl_func_4(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_decl_func_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+    ) {
+        for _ in [()] {
             let tm4 = match self.semantic_func.iter_all_0(tm1).next() {
                 Some(SemanticFunc(_, res)) => res,
                 None => {
@@ -60661,25 +62174,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_decl_func_5(delta, tm0, tm2, tm3, tm1, tm4);
+            self.semantic_decl_func_6(delta, tm0, tm2, tm3, tm1, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_func_4(&self, delta: &mut ModelDelta) {
+    fn semantic_decl_func_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm4) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncDecl(tm0, _, tm2, tm3) in self.func_decl.iter_all_1(tm1) {
-                    self.semantic_decl_func_5(delta, tm0, tm2, tm3, tm1, tm4);
+                    self.semantic_decl_func_6(delta, tm0, tm2, tm3, tm1, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_func_5(
+    fn semantic_decl_func_6(
         &self,
         delta: &mut ModelDelta,
         tm0: FuncDeclNode,
@@ -60696,7 +62209,7 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_decl_func_ctor_1(delta);
             self.semantic_decl_func_ctor_2(delta);
-            self.semantic_decl_func_ctor_4(delta);
+            self.semantic_decl_func_ctor_5(delta);
         }
     }
 
@@ -60724,6 +62237,19 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.semantic_decl_func_ctor_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_decl_func_ctor_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             let tm3 = match self.semantic_func.iter_all_0(tm1).next() {
                 Some(SemanticFunc(_, res)) => res,
                 None => {
@@ -60732,25 +62258,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_decl_func_ctor_5(delta, tm0, tm2, tm1, tm3);
+            self.semantic_decl_func_ctor_6(delta, tm0, tm2, tm1, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_func_ctor_4(&self, delta: &mut ModelDelta) {
+    fn semantic_decl_func_ctor_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm3) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
                 for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
-                    self.semantic_decl_func_ctor_5(delta, tm0, tm2, tm1, tm3);
+                    self.semantic_decl_func_ctor_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_decl_func_ctor_5(
+    fn semantic_decl_func_ctor_6(
         &self,
         delta: &mut ModelDelta,
         tm0: CtorDeclNode,
@@ -60766,9 +62292,9 @@ impl Eqlog {
         for _ in [()] {
             self.func_decl_domain_codomain_1(delta);
             self.func_decl_domain_codomain_2(delta);
-            self.func_decl_domain_codomain_4(delta);
-            self.func_decl_domain_codomain_6(delta);
+            self.func_decl_domain_codomain_5(delta);
             self.func_decl_domain_codomain_8(delta);
+            self.func_decl_domain_codomain_11(delta);
         }
     }
 
@@ -60797,28 +62323,57 @@ impl Eqlog {
         tm3: Ident,
     ) {
         for _ in [()] {
+            self.func_decl_domain_codomain_4(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_domain_codomain_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(_, tm4) in self.semantic_func.iter_all_0(tm1) {
-                self.func_decl_domain_codomain_5(delta, tm0, tm2, tm3, tm1, tm4);
+                self.func_decl_domain_codomain_6(delta, tm0, tm2, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_domain_codomain_4(&self, delta: &mut ModelDelta) {
+    fn func_decl_domain_codomain_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm4) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncDecl(tm0, _, tm2, tm3) in self.func_decl.iter_all_1(tm1) {
-                    self.func_decl_domain_codomain_5(delta, tm0, tm2, tm3, tm1, tm4);
+                    self.func_decl_domain_codomain_6(delta, tm0, tm2, tm3, tm1, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_domain_codomain_5(
+    fn func_decl_domain_codomain_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+        tm1: Ident,
+        tm4: Func,
+    ) {
+        for _ in [()] {
+            self.func_decl_domain_codomain_7(delta, tm0, tm2, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_domain_codomain_7(
         &self,
         delta: &mut ModelDelta,
         tm0: FuncDeclNode,
@@ -60830,13 +62385,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
-                self.func_decl_domain_codomain_7(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                self.func_decl_domain_codomain_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_domain_codomain_6(&self, delta: &mut ModelDelta) {
+    fn func_decl_domain_codomain_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm2, tm5) in self.semantic_arg_types.iter_dirty() {
@@ -60844,7 +62399,7 @@ impl Eqlog {
                 for SemanticFunc(tm1, tm4) in self.semantic_func.iter_all() {
                     #[allow(unused_variables)]
                     for FuncDecl(tm0, _, _, tm3) in self.func_decl.iter_all_1_2(tm1, tm2) {
-                        self.func_decl_domain_codomain_7(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+                        self.func_decl_domain_codomain_9(delta, tm0, tm3, tm1, tm4, tm2, tm5);
                     }
                 }
             }
@@ -60852,7 +62407,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn func_decl_domain_codomain_7(
+    fn func_decl_domain_codomain_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm3: Ident,
+        tm1: Ident,
+        tm4: Func,
+        tm2: ArgDeclListNode,
+        tm5: TypeList,
+    ) {
+        for _ in [()] {
+            self.func_decl_domain_codomain_10(delta, tm0, tm3, tm1, tm4, tm2, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_domain_codomain_10(
         &self,
         delta: &mut ModelDelta,
         tm0: FuncDeclNode,
@@ -60865,13 +62436,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(_, tm6) in self.semantic_type.iter_all_0(tm3) {
-                self.func_decl_domain_codomain_9(delta, tm0, tm1, tm4, tm2, tm5, tm3, tm6);
+                self.func_decl_domain_codomain_12(delta, tm0, tm1, tm4, tm2, tm5, tm3, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_domain_codomain_8(&self, delta: &mut ModelDelta) {
+    fn func_decl_domain_codomain_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm3, tm6) in self.semantic_type.iter_dirty() {
@@ -60881,7 +62452,7 @@ impl Eqlog {
                     for FuncDecl(tm0, _, tm2, _) in self.func_decl.iter_all_1_3(tm1, tm3) {
                         #[allow(unused_variables)]
                         for SemanticArgTypes(_, tm5) in self.semantic_arg_types.iter_all_0(tm2) {
-                            self.func_decl_domain_codomain_9(
+                            self.func_decl_domain_codomain_12(
                                 delta, tm0, tm1, tm4, tm2, tm5, tm3, tm6,
                             );
                         }
@@ -60892,7 +62463,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn func_decl_domain_codomain_9(
+    fn func_decl_domain_codomain_12(
         &self,
         delta: &mut ModelDelta,
         tm0: FuncDeclNode,
@@ -60921,8 +62492,8 @@ impl Eqlog {
         for _ in [()] {
             self.ctor_decl_domain_1(delta);
             self.ctor_decl_domain_2(delta);
-            self.ctor_decl_domain_4(delta);
-            self.ctor_decl_domain_6(delta);
+            self.ctor_decl_domain_5(delta);
+            self.ctor_decl_domain_8(delta);
         }
     }
 
@@ -60950,28 +62521,55 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.ctor_decl_domain_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_domain_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                self.ctor_decl_domain_5(delta, tm0, tm2, tm1, tm3);
+                self.ctor_decl_domain_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_domain_4(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_domain_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm3) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
                 for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
-                    self.ctor_decl_domain_5(delta, tm0, tm2, tm1, tm3);
+                    self.ctor_decl_domain_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_domain_5(
+    fn ctor_decl_domain_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm2: ArgDeclListNode,
+        tm1: Ident,
+        tm3: Func,
+    ) {
+        for _ in [()] {
+            self.ctor_decl_domain_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_domain_7(
         &self,
         delta: &mut ModelDelta,
         tm0: CtorDeclNode,
@@ -60982,13 +62580,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(_, tm4) in self.semantic_arg_types.iter_all_0(tm2) {
-                self.ctor_decl_domain_7(delta, tm0, tm1, tm3, tm2, tm4);
+                self.ctor_decl_domain_9(delta, tm0, tm1, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_domain_6(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_domain_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm2, tm4) in self.semantic_arg_types.iter_dirty() {
@@ -60996,7 +62594,7 @@ impl Eqlog {
                 for SemanticFunc(tm1, tm3) in self.semantic_func.iter_all() {
                     #[allow(unused_variables)]
                     for CtorDecl(tm0, _, _) in self.ctor_decl.iter_all_1_2(tm1, tm2) {
-                        self.ctor_decl_domain_7(delta, tm0, tm1, tm3, tm2, tm4);
+                        self.ctor_decl_domain_9(delta, tm0, tm1, tm3, tm2, tm4);
                     }
                 }
             }
@@ -61004,7 +62602,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_domain_7(
+    fn ctor_decl_domain_9(
         &self,
         delta: &mut ModelDelta,
         tm0: CtorDeclNode,
@@ -61026,10 +62624,10 @@ impl Eqlog {
         for _ in [()] {
             self.ctor_decl_codomain_1(delta);
             self.ctor_decl_codomain_2(delta);
-            self.ctor_decl_codomain_4(delta);
-            self.ctor_decl_codomain_6(delta);
-            self.ctor_decl_codomain_7(delta);
+            self.ctor_decl_codomain_5(delta);
+            self.ctor_decl_codomain_8(delta);
             self.ctor_decl_codomain_9(delta);
+            self.ctor_decl_codomain_12(delta);
         }
     }
 
@@ -61057,28 +62655,55 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.ctor_decl_codomain_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_codomain_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                self.ctor_decl_codomain_5(delta, tm0, tm2, tm1, tm3);
+                self.ctor_decl_codomain_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_4(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_codomain_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm3) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
                 for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
-                    self.ctor_decl_codomain_5(delta, tm0, tm2, tm1, tm3);
+                    self.ctor_decl_codomain_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_5(
+    fn ctor_decl_codomain_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm2: ArgDeclListNode,
+        tm1: Ident,
+        tm3: Func,
+    ) {
+        for _ in [()] {
+            self.ctor_decl_codomain_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_codomain_7(
         &self,
         delta: &mut ModelDelta,
         tm0: CtorDeclNode,
@@ -61091,14 +62716,14 @@ impl Eqlog {
             for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for EnumDecl(_, tm5, tm6) in self.enum_decl.iter_all_0(tm4) {
-                    self.ctor_decl_codomain_8(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
+                    self.ctor_decl_codomain_10(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_6(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_codomain_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumDecl(tm4, tm5, tm6) in self.enum_decl.iter_dirty() {
@@ -61108,7 +62733,7 @@ impl Eqlog {
                     for SemanticFunc(tm1, tm3) in self.semantic_func.iter_all() {
                         #[allow(unused_variables)]
                         for CtorDecl(_, _, tm2) in self.ctor_decl.iter_all_0_1(tm0, tm1) {
-                            self.ctor_decl_codomain_8(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
+                            self.ctor_decl_codomain_10(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -61117,7 +62742,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_7(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_codomain_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm0, tm4) in self.ctor_enum.iter_dirty() {
@@ -61127,7 +62752,7 @@ impl Eqlog {
                     for CtorDecl(_, _, tm2) in self.ctor_decl.iter_all_0_1(tm0, tm1) {
                         #[allow(unused_variables)]
                         for EnumDecl(_, tm5, tm6) in self.enum_decl.iter_all_0(tm4) {
-                            self.ctor_decl_codomain_8(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
+                            self.ctor_decl_codomain_10(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -61136,7 +62761,24 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_8(
+    fn ctor_decl_codomain_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: ArgDeclListNode,
+        tm1: Ident,
+        tm3: Func,
+        tm0: CtorDeclNode,
+        tm4: EnumDeclNode,
+        tm5: Ident,
+        tm6: CtorDeclListNode,
+    ) {
+        for _ in [()] {
+            self.ctor_decl_codomain_11(delta, tm2, tm1, tm3, tm0, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_codomain_11(
         &self,
         delta: &mut ModelDelta,
         tm2: ArgDeclListNode,
@@ -61150,13 +62792,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(_, tm7) in self.semantic_type.iter_all_0(tm5) {
-                self.ctor_decl_codomain_10(delta, tm2, tm1, tm3, tm0, tm4, tm6, tm5, tm7);
+                self.ctor_decl_codomain_13(delta, tm2, tm1, tm3, tm0, tm4, tm6, tm5, tm7);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_9(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_codomain_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm5, tm7) in self.semantic_type.iter_dirty() {
@@ -61168,7 +62810,7 @@ impl Eqlog {
                         for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm0) {
                             #[allow(unused_variables)]
                             for EnumDecl(_, _, tm6) in self.enum_decl.iter_all_0_1(tm4, tm5) {
-                                self.ctor_decl_codomain_10(
+                                self.ctor_decl_codomain_13(
                                     delta, tm2, tm1, tm3, tm0, tm4, tm6, tm5, tm7,
                                 );
                             }
@@ -61180,7 +62822,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_codomain_10(
+    fn ctor_decl_codomain_13(
         &self,
         delta: &mut ModelDelta,
         tm2: ArgDeclListNode,
@@ -61205,8 +62847,7 @@ impl Eqlog {
         for _ in [()] {
             self.rel_constructors_pred_total_1(delta);
             self.rel_constructors_pred_total_2(delta);
-            self.rel_constructors_pred_total_4(delta);
-            self.rel_constructors_pred_total_6(delta);
+            self.rel_constructors_pred_total_5(delta);
         }
     }
 
@@ -61228,6 +62869,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rel_constructors_pred_total_3(&self, delta: &mut ModelDelta, tm0: Pred) {
         for _ in [()] {
+            self.rel_constructors_pred_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_constructors_pred_total_4(&self, delta: &mut ModelDelta, tm0: Pred) {
+        for _ in [()] {
             let tm1 = match self.pred_rel.iter_all_0(tm0).next() {
                 Some(PredRel(_, res)) => res,
                 None => {
@@ -61236,50 +62884,22 @@ impl Eqlog {
                 }
             };
 
-            self.rel_constructors_pred_total_5(delta, tm0, tm1);
+            self.rel_constructors_pred_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_constructors_pred_total_4(&self, delta: &mut ModelDelta) {
+    fn rel_constructors_pred_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredRel(tm0, tm1) in self.pred_rel.iter_dirty() {
-                self.rel_constructors_pred_total_5(delta, tm0, tm1);
+                self.rel_constructors_pred_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_constructors_pred_total_5(&self, delta: &mut ModelDelta, tm0: Pred, tm1: Rel) {
-        for _ in [()] {
-            let tm2 = match self.negated_pred_rel.iter_all_0(tm0).next() {
-                Some(NegatedPredRel(_, res)) => res,
-                None => {
-                    delta.new_negated_pred_rel_def.push(NegatedPredRelArgs(tm0));
-                    break;
-                }
-            };
-
-            self.rel_constructors_pred_total_7(delta, tm1, tm0, tm2);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_constructors_pred_total_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for NegatedPredRel(tm0, tm2) in self.negated_pred_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for PredRel(_, tm1) in self.pred_rel.iter_all_0(tm0) {
-                    self.rel_constructors_pred_total_7(delta, tm1, tm0, tm2);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_constructors_pred_total_7(&self, delta: &mut ModelDelta, tm1: Rel, tm0: Pred, tm2: Rel) {
+    fn rel_constructors_pred_total_6(&self, delta: &mut ModelDelta, tm0: Pred, tm1: Rel) {
         for _ in [()] {}
     }
 
@@ -61288,8 +62908,7 @@ impl Eqlog {
         for _ in [()] {
             self.rel_constructors_func_total_1(delta);
             self.rel_constructors_func_total_2(delta);
-            self.rel_constructors_func_total_4(delta);
-            self.rel_constructors_func_total_6(delta);
+            self.rel_constructors_func_total_5(delta);
         }
     }
 
@@ -61311,6 +62930,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rel_constructors_func_total_3(&self, delta: &mut ModelDelta, tm0: Func) {
         for _ in [()] {
+            self.rel_constructors_func_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_constructors_func_total_4(&self, delta: &mut ModelDelta, tm0: Func) {
+        for _ in [()] {
             let tm1 = match self.func_rel.iter_all_0(tm0).next() {
                 Some(FuncRel(_, res)) => res,
                 None => {
@@ -61319,52 +62945,22 @@ impl Eqlog {
                 }
             };
 
-            self.rel_constructors_func_total_5(delta, tm0, tm1);
+            self.rel_constructors_func_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_constructors_func_total_4(&self, delta: &mut ModelDelta) {
+    fn rel_constructors_func_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
-                self.rel_constructors_func_total_5(delta, tm0, tm1);
+                self.rel_constructors_func_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_constructors_func_total_5(&self, delta: &mut ModelDelta, tm0: Func, tm1: Rel) {
-        for _ in [()] {
-            let tm2 = match self.undefined_func_rel.iter_all_0(tm0).next() {
-                Some(UndefinedFuncRel(_, res)) => res,
-                None => {
-                    delta
-                        .new_undefined_func_rel_def
-                        .push(UndefinedFuncRelArgs(tm0));
-                    break;
-                }
-            };
-
-            self.rel_constructors_func_total_7(delta, tm1, tm0, tm2);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_constructors_func_total_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for UndefinedFuncRel(tm0, tm2) in self.undefined_func_rel.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncRel(_, tm1) in self.func_rel.iter_all_0(tm0) {
-                    self.rel_constructors_func_total_7(delta, tm1, tm0, tm2);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rel_constructors_func_total_7(&self, delta: &mut ModelDelta, tm1: Rel, tm0: Func, tm2: Rel) {
+    fn rel_constructors_func_total_6(&self, delta: &mut ModelDelta, tm0: Func, tm1: Rel) {
         for _ in [()] {}
     }
 
@@ -61373,16 +62969,12 @@ impl Eqlog {
         for _ in [()] {
             self.arity_laws_1(delta);
             self.arity_laws_2(delta);
-            self.arity_laws_5(delta);
             self.arity_laws_7(delta);
-            self.arity_laws_9(delta);
-            self.arity_laws_11(delta);
+            self.arity_laws_10(delta);
             self.arity_laws_13(delta);
-            self.arity_laws_15(delta);
-            self.arity_laws_17(delta);
+            self.arity_laws_16(delta);
             self.arity_laws_19(delta);
-            self.arity_laws_21(delta);
-            self.arity_laws_23(delta);
+            self.arity_laws_22(delta);
         }
     }
 
@@ -61411,41 +63003,24 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn arity_laws_4(&self, delta: &mut ModelDelta, tm0: Rel) {
         for _ in [()] {
+            self.arity_laws_5(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_5(&self, delta: &mut ModelDelta, tm0: Rel) {
+        for _ in [()] {
+            self.arity_laws_6(delta, tm0);
+            self.arity_laws_9(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_6(&self, delta: &mut ModelDelta, tm0: Rel) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for PredRel(tm1, _) in self.pred_rel.iter_all_1(tm0) {
-                self.arity_laws_6(delta, tm1, tm0);
-                #[allow(unused_variables)]
-                for FuncRel(tm2, _) in self.func_rel.iter_all_1(tm0) {
-                    self.arity_laws_8(delta, tm2, tm0);
-                    #[allow(unused_variables)]
-                    for NegatedPredRel(tm3, _) in self.negated_pred_rel.iter_all_1(tm0) {
-                        self.arity_laws_10(delta, tm3, tm0);
-                        #[allow(unused_variables)]
-                        for UndefinedFuncRel(tm4, _) in self.undefined_func_rel.iter_all_1(tm0) {
-                            self.arity_laws_12(delta, tm4, tm0);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_5(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredRel(tm1, tm0) in self.pred_rel.iter_dirty() {
-                self.arity_laws_6(delta, tm1, tm0);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_6(&self, delta: &mut ModelDelta, tm1: Pred, tm0: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm1) {
-                self.arity_laws_14(delta, tm0, tm1, tm5);
+                self.arity_laws_8(delta, tm1, tm0);
             }
         }
     }
@@ -61454,58 +63029,52 @@ impl Eqlog {
     fn arity_laws_7(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
+            for PredRel(tm1, tm0) in self.pred_rel.iter_dirty() {
+                self.arity_laws_8(delta, tm1, tm0);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_8(&self, delta: &mut ModelDelta, tm1: Pred, tm0: Rel) {
+        for _ in [()] {
+            self.arity_laws_12(delta, tm1, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_9(&self, delta: &mut ModelDelta, tm0: Rel) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncRel(tm2, _) in self.func_rel.iter_all_1(tm0) {
+                self.arity_laws_11(delta, tm2, tm0);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_10(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
             for FuncRel(tm2, tm0) in self.func_rel.iter_dirty() {
-                self.arity_laws_8(delta, tm2, tm0);
+                self.arity_laws_11(delta, tm2, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_8(&self, delta: &mut ModelDelta, tm2: Func, tm0: Rel) {
+    fn arity_laws_11(&self, delta: &mut ModelDelta, tm2: Func, tm0: Rel) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for Domain(_, tm6) in self.domain.iter_all_0(tm2) {
-                self.arity_laws_16(delta, tm0, tm2, tm6);
-            }
+            self.arity_laws_15(delta, tm2, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_9(&self, delta: &mut ModelDelta) {
+    fn arity_laws_12(&self, delta: &mut ModelDelta, tm1: Pred, tm0: Rel) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for NegatedPredRel(tm3, tm0) in self.negated_pred_rel.iter_dirty() {
-                self.arity_laws_10(delta, tm3, tm0);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_10(&self, delta: &mut ModelDelta, tm3: Pred, tm0: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for PredArity(_, tm7) in self.pred_arity.iter_all_0(tm3) {
-                self.arity_laws_18(delta, tm0, tm3, tm7);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_11(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for UndefinedFuncRel(tm4, tm0) in self.undefined_func_rel.iter_dirty() {
-                self.arity_laws_12(delta, tm4, tm0);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_12(&self, delta: &mut ModelDelta, tm4: Func, tm0: Rel) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Domain(_, tm8) in self.domain.iter_all_0(tm4) {
-                self.arity_laws_20(delta, tm0, tm4, tm8);
+            for PredArity(_, tm3) in self.pred_arity.iter_all_0(tm1) {
+                self.arity_laws_14(delta, tm0, tm1, tm3);
             }
         }
     }
@@ -61514,67 +63083,61 @@ impl Eqlog {
     fn arity_laws_13(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredArity(tm1, tm5) in self.pred_arity.iter_dirty() {
+            for PredArity(tm1, tm3) in self.pred_arity.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredRel(_, tm0) in self.pred_rel.iter_all_0(tm1) {
-                    self.arity_laws_14(delta, tm0, tm1, tm5);
+                    self.arity_laws_14(delta, tm0, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_14(&self, delta: &mut ModelDelta, tm0: Rel, tm1: Pred, tm5: TypeList) {
+    fn arity_laws_14(&self, delta: &mut ModelDelta, tm0: Rel, tm1: Pred, tm3: TypeList) {
         for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm5).next().is_some();
+            let exists_already = self.arity.iter_all_0_1(tm0, tm3).next().is_some();
             if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm5));
+                delta.new_arity.push(Arity(tm0, tm3));
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_15(&self, delta: &mut ModelDelta) {
+    fn arity_laws_15(&self, delta: &mut ModelDelta, tm2: Func, tm0: Rel) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Domain(tm2, tm6) in self.domain.iter_dirty() {
+            for Domain(_, tm4) in self.domain.iter_all_0(tm2) {
+                self.arity_laws_17(delta, tm0, tm2, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_16(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Domain(tm2, tm4) in self.domain.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncRel(_, tm0) in self.func_rel.iter_all_0(tm2) {
-                    self.arity_laws_16(delta, tm0, tm2, tm6);
+                    self.arity_laws_17(delta, tm0, tm2, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_16(&self, delta: &mut ModelDelta, tm0: Rel, tm2: Func, tm6: TypeList) {
+    fn arity_laws_17(&self, delta: &mut ModelDelta, tm0: Rel, tm2: Func, tm4: TypeList) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for Codomain(_, tm9) in self.codomain.iter_all_0(tm2) {
-                self.arity_laws_22(delta, tm0, tm6, tm2, tm9);
-            }
+            self.arity_laws_18(delta, tm0, tm2, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_17(&self, delta: &mut ModelDelta) {
+    fn arity_laws_18(&self, delta: &mut ModelDelta, tm0: Rel, tm2: Func, tm4: TypeList) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredArity(tm3, tm7) in self.pred_arity.iter_dirty() {
-                #[allow(unused_variables)]
-                for NegatedPredRel(_, tm0) in self.negated_pred_rel.iter_all_0(tm3) {
-                    self.arity_laws_18(delta, tm0, tm3, tm7);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_18(&self, delta: &mut ModelDelta, tm0: Rel, tm3: Pred, tm7: TypeList) {
-        for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm7).next().is_some();
-            if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm7));
+            for Codomain(_, tm5) in self.codomain.iter_all_0(tm2) {
+                self.arity_laws_20(delta, tm0, tm4, tm2, tm5);
             }
         }
     }
@@ -61583,35 +63146,12 @@ impl Eqlog {
     fn arity_laws_19(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Domain(tm4, tm8) in self.domain.iter_dirty() {
-                #[allow(unused_variables)]
-                for UndefinedFuncRel(_, tm0) in self.undefined_func_rel.iter_all_0(tm4) {
-                    self.arity_laws_20(delta, tm0, tm4, tm8);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_20(&self, delta: &mut ModelDelta, tm0: Rel, tm4: Func, tm8: TypeList) {
-        for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm8).next().is_some();
-            if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm8));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arity_laws_21(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Codomain(tm2, tm9) in self.codomain.iter_dirty() {
+            for Codomain(tm2, tm5) in self.codomain.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncRel(_, tm0) in self.func_rel.iter_all_0(tm2) {
                     #[allow(unused_variables)]
-                    for Domain(_, tm6) in self.domain.iter_all_0(tm2) {
-                        self.arity_laws_22(delta, tm0, tm6, tm2, tm9);
+                    for Domain(_, tm4) in self.domain.iter_all_0(tm2) {
+                        self.arity_laws_20(delta, tm0, tm4, tm2, tm5);
                     }
                 }
             }
@@ -61619,34 +63159,41 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_22(&self, delta: &mut ModelDelta, tm0: Rel, tm6: TypeList, tm2: Func, tm9: Type) {
+    fn arity_laws_20(&self, delta: &mut ModelDelta, tm0: Rel, tm4: TypeList, tm2: Func, tm5: Type) {
         for _ in [()] {
-            let tm10 = match self.cons_type_list.iter_all_0_1(tm9, tm6).next() {
-                Some(ConsTypeList(_, _, res)) => res,
-                None => {
-                    delta
-                        .new_cons_type_list_def
-                        .push(ConsTypeListArgs(tm9, tm6));
-                    break;
-                }
-            };
-
-            self.arity_laws_24(delta, tm0, tm6, tm2, tm9, tm10);
+            self.arity_laws_21(delta, tm0, tm4, tm2, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_23(&self, delta: &mut ModelDelta) {
+    fn arity_laws_21(&self, delta: &mut ModelDelta, tm0: Rel, tm4: TypeList, tm2: Func, tm5: Type) {
+        for _ in [()] {
+            let tm6 = match self.snoc_type_list.iter_all_0_1(tm4, tm5).next() {
+                Some(SnocTypeList(_, _, res)) => res,
+                None => {
+                    delta
+                        .new_snoc_type_list_def
+                        .push(SnocTypeListArgs(tm4, tm5));
+                    break;
+                }
+            };
+
+            self.arity_laws_23(delta, tm0, tm4, tm2, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arity_laws_22(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ConsTypeList(tm9, tm6, tm10) in self.cons_type_list.iter_dirty() {
+            for SnocTypeList(tm4, tm5, tm6) in self.snoc_type_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for Codomain(tm2, _) in self.codomain.iter_all_1(tm9) {
+                for Codomain(tm2, _) in self.codomain.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for Domain(_, _) in self.domain.iter_all_0_1(tm2, tm6) {
+                    for Domain(_, _) in self.domain.iter_all_0_1(tm2, tm4) {
                         #[allow(unused_variables)]
                         for FuncRel(_, tm0) in self.func_rel.iter_all_0(tm2) {
-                            self.arity_laws_24(delta, tm0, tm6, tm2, tm9, tm10);
+                            self.arity_laws_23(delta, tm0, tm4, tm2, tm5, tm6);
                         }
                     }
                 }
@@ -61655,19 +63202,19 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arity_laws_24(
+    fn arity_laws_23(
         &self,
         delta: &mut ModelDelta,
         tm0: Rel,
-        tm6: TypeList,
+        tm4: TypeList,
         tm2: Func,
-        tm9: Type,
-        tm10: TypeList,
+        tm5: Type,
+        tm6: TypeList,
     ) {
         for _ in [()] {
-            let exists_already = self.arity.iter_all_0_1(tm0, tm10).next().is_some();
+            let exists_already = self.arity.iter_all_0_1(tm0, tm6).next().is_some();
             if !exists_already {
-                delta.new_arity.push(Arity(tm0, tm10));
+                delta.new_arity.push(Arity(tm0, tm6));
             }
         }
     }
@@ -61791,6 +63338,359 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn snoc_cons_el_list_nil_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_cons_el_list_nil_1(delta);
+            self.snoc_cons_el_list_nil_2(delta);
+            self.snoc_cons_el_list_nil_3(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_nil_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_nil_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(_, tm2, tm3) in self.snoc_el_list.iter_all_0(tm1) {
+                    self.snoc_cons_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_nil_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm1, tm2, tm3) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
+                    self.snoc_cons_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_nil_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Structure,
+        tm1: ElList,
+        tm2: El,
+        tm3: ElList,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .cons_el_list
+                .iter_all_0_1_2(tm2, tm1, tm3)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_cons_el_list.push(ConsElList(tm2, tm1, tm3));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_nil_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.cons_snoc_el_list_nil_1(delta);
+            self.cons_snoc_el_list_nil_2(delta);
+            self.cons_snoc_el_list_nil_3(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_nil_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_nil_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for NilElList(tm1, tm2) in self.nil_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ConsElList(tm0, _, tm3) in self.cons_el_list.iter_all_1(tm2) {
+                    self.cons_snoc_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_nil_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm0, tm2, tm3) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for NilElList(tm1, _) in self.nil_el_list.iter_all_1(tm2) {
+                    self.cons_snoc_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_nil_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: El,
+        tm1: Structure,
+        tm2: ElList,
+        tm3: ElList,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .snoc_el_list
+                .iter_all_0_1_2(tm2, tm0, tm3)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_snoc_el_list.push(SnocElList(tm2, tm0, tm3));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_cons_el_list_1(delta);
+            self.snoc_cons_el_list_2(delta);
+            self.snoc_cons_el_list_3(delta);
+            self.snoc_cons_el_list_6(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(_, tm3, tm4) in self.snoc_el_list.iter_all_0(tm2) {
+                    self.snoc_cons_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm2, tm3, tm4) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
+                    self.snoc_cons_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: El,
+        tm1: ElList,
+        tm2: ElList,
+        tm3: El,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            self.snoc_cons_el_list_5(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: El,
+        tm1: ElList,
+        tm2: ElList,
+        tm3: El,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            let tm5 = match self.snoc_el_list.iter_all_0_1(tm1, tm3).next() {
+                Some(SnocElList(_, _, res)) => res,
+                None => {
+                    delta.new_snoc_el_list_def.push(SnocElListArgs(tm1, tm3));
+                    break;
+                }
+            };
+
+            self.snoc_cons_el_list_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm1, tm3, tm5) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm2, _, tm4) in self.snoc_el_list.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for ConsElList(tm0, _, _) in self.cons_el_list.iter_all_1_2(tm1, tm2) {
+                        self.snoc_cons_el_list_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_cons_el_list_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: El,
+        tm2: ElList,
+        tm4: ElList,
+        tm1: ElList,
+        tm3: El,
+        tm5: ElList,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .cons_el_list
+                .iter_all_0_1_2(tm0, tm5, tm4)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_cons_el_list.push(ConsElList(tm0, tm5, tm4));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.cons_snoc_el_list_1(delta);
+            self.cons_snoc_el_list_2(delta);
+            self.cons_snoc_el_list_3(delta);
+            self.cons_snoc_el_list_6(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm0, tm3, tm4) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm1, tm2, _) in self.snoc_el_list.iter_all_2(tm3) {
+                    self.cons_snoc_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm1, tm2, tm3) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ConsElList(tm0, _, tm4) in self.cons_el_list.iter_all_1(tm3) {
+                    self.cons_snoc_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: El,
+        tm1: ElList,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            self.cons_snoc_el_list_5(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: El,
+        tm1: ElList,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(_, _, tm5) in self.cons_el_list.iter_all_0_1(tm0, tm1) {
+                self.cons_snoc_el_list_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm0, tm1, tm5) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(_, tm2, tm3) in self.snoc_el_list.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ConsElList(_, _, tm4) in self.cons_el_list.iter_all_0_1(tm0, tm3) {
+                        self.cons_snoc_el_list_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_snoc_el_list_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+        tm0: El,
+        tm1: ElList,
+        tm5: ElList,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .snoc_el_list
+                .iter_all_0_1_2(tm5, tm2, tm4)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_snoc_el_list.push(SnocElList(tm5, tm2, tm4));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
     fn nil_els_structure_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.nil_els_structure_1(delta);
@@ -61828,7 +63728,7 @@ impl Eqlog {
         for _ in [()] {
             self.cons_els_structure_1(delta);
             self.cons_els_structure_2(delta);
-            self.cons_els_structure_4(delta);
+            self.cons_els_structure_5(delta);
         }
     }
 
@@ -61850,28 +63750,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cons_els_structure_3(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
         for _ in [()] {
+            self.cons_els_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_els_structure_4(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(_, tm3) in self.el_structure.iter_all_0(tm0) {
-                self.cons_els_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.cons_els_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_els_structure_4(&self, delta: &mut ModelDelta) {
+    fn cons_els_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm3) in self.el_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsElList(_, tm1, tm2) in self.cons_el_list.iter_all_0(tm0) {
-                    self.cons_els_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.cons_els_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_els_structure_5(
+    fn cons_els_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: ElList,
@@ -61930,7 +63837,7 @@ impl Eqlog {
         for _ in [()] {
             self.nil_el_types_1(delta);
             self.nil_el_types_2(delta);
-            self.nil_el_types_4(delta);
+            self.nil_el_types_5(delta);
         }
     }
 
@@ -61952,6 +63859,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn nil_el_types_3(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElList) {
         for _ in [()] {
+            self.nil_el_types_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn nil_el_types_4(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElList) {
+        for _ in [()] {
             let tm2 = match self.nil_type_list.iter_all().next() {
                 Some(NilTypeList(res)) => res,
                 None => {
@@ -61960,25 +63874,25 @@ impl Eqlog {
                 }
             };
 
-            self.nil_el_types_5(delta, tm0, tm1, tm2);
+            self.nil_el_types_6(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn nil_el_types_4(&self, delta: &mut ModelDelta) {
+    fn nil_el_types_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilTypeList(tm2) in self.nil_type_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for NilElList(tm0, tm1) in self.nil_el_list.iter_all() {
-                    self.nil_el_types_5(delta, tm0, tm1, tm2);
+                    self.nil_el_types_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn nil_el_types_5(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElList, tm2: TypeList) {
+    fn nil_el_types_6(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElList, tm2: TypeList) {
         for _ in [()] {
             let exists_already = self.el_types.iter_all_0_1(tm1, tm2).next().is_some();
             if !exists_already {
@@ -61992,9 +63906,9 @@ impl Eqlog {
         for _ in [()] {
             self.cons_el_types_1(delta);
             self.cons_el_types_2(delta);
-            self.cons_el_types_4(delta);
-            self.cons_el_types_6(delta);
+            self.cons_el_types_5(delta);
             self.cons_el_types_8(delta);
+            self.cons_el_types_11(delta);
         }
     }
 
@@ -62016,28 +63930,49 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cons_el_types_3(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
         for _ in [()] {
+            self.cons_el_types_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_el_types_4(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ElType(_, tm3) in self.el_type.iter_all_0(tm0) {
-                self.cons_el_types_5(delta, tm1, tm2, tm0, tm3);
+                self.cons_el_types_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_4(&self, delta: &mut ModelDelta) {
+    fn cons_el_types_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElType(tm0, tm3) in self.el_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsElList(_, tm1, tm2) in self.cons_el_list.iter_all_0(tm0) {
-                    self.cons_el_types_5(delta, tm1, tm2, tm0, tm3);
+                    self.cons_el_types_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_5(
+    fn cons_el_types_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: ElList,
+        tm2: ElList,
+        tm0: El,
+        tm3: Type,
+    ) {
+        for _ in [()] {
+            self.cons_el_types_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_el_types_7(
         &self,
         delta: &mut ModelDelta,
         tm1: ElList,
@@ -62048,13 +63983,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElTypes(_, tm4) in self.el_types.iter_all_0(tm1) {
-                self.cons_el_types_7(delta, tm2, tm0, tm3, tm1, tm4);
+                self.cons_el_types_9(delta, tm2, tm0, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_6(&self, delta: &mut ModelDelta) {
+    fn cons_el_types_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElTypes(tm1, tm4) in self.el_types.iter_dirty() {
@@ -62062,7 +63997,7 @@ impl Eqlog {
                 for ConsElList(tm0, _, tm2) in self.cons_el_list.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for ElType(_, tm3) in self.el_type.iter_all_0(tm0) {
-                        self.cons_el_types_7(delta, tm2, tm0, tm3, tm1, tm4);
+                        self.cons_el_types_9(delta, tm2, tm0, tm3, tm1, tm4);
                     }
                 }
             }
@@ -62070,7 +64005,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_7(
+    fn cons_el_types_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: ElList,
+        tm0: El,
+        tm3: Type,
+        tm1: ElList,
+        tm4: TypeList,
+    ) {
+        for _ in [()] {
+            self.cons_el_types_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_el_types_10(
         &self,
         delta: &mut ModelDelta,
         tm2: ElList,
@@ -62090,12 +64040,12 @@ impl Eqlog {
                 }
             };
 
-            self.cons_el_types_9(delta, tm2, tm0, tm1, tm3, tm4, tm5);
+            self.cons_el_types_12(delta, tm2, tm0, tm1, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_8(&self, delta: &mut ModelDelta) {
+    fn cons_el_types_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTypeList(tm3, tm4, tm5) in self.cons_type_list.iter_dirty() {
@@ -62105,7 +64055,7 @@ impl Eqlog {
                     for ElType(tm0, _) in self.el_type.iter_all_1(tm3) {
                         #[allow(unused_variables)]
                         for ConsElList(_, _, tm2) in self.cons_el_list.iter_all_0_1(tm0, tm1) {
-                            self.cons_el_types_9(delta, tm2, tm0, tm1, tm3, tm4, tm5);
+                            self.cons_el_types_12(delta, tm2, tm0, tm1, tm3, tm4, tm5);
                         }
                     }
                 }
@@ -62114,7 +64064,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_9(
+    fn cons_el_types_12(
         &self,
         delta: &mut ModelDelta,
         tm2: ElList,
@@ -62137,8 +64087,8 @@ impl Eqlog {
         for _ in [()] {
             self.cons_el_types_reverse_1(delta);
             self.cons_el_types_reverse_2(delta);
-            self.cons_el_types_reverse_4(delta);
             self.cons_el_types_reverse_5(delta);
+            self.cons_el_types_reverse_6(delta);
         }
     }
 
@@ -62160,27 +64110,18 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cons_el_types_reverse_3(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for ElTypes(_, tm5) in self.el_types.iter_all_0(tm2) {
-                #[allow(unused_variables)]
-                for ConsTypeList(tm3, tm4, _) in self.cons_type_list.iter_all_2(tm5) {
-                    self.cons_el_types_reverse_6(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-                }
-            }
+            self.cons_el_types_reverse_4(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_reverse_4(&self, delta: &mut ModelDelta) {
+    fn cons_el_types_reverse_4(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ElTypes(tm2, tm5) in self.el_types.iter_dirty() {
+            for ElTypes(_, tm5) in self.el_types.iter_all_0(tm2) {
                 #[allow(unused_variables)]
-                for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
-                    #[allow(unused_variables)]
-                    for ConsTypeList(tm3, tm4, _) in self.cons_type_list.iter_all_2(tm5) {
-                        self.cons_el_types_reverse_6(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-                    }
+                for ConsTypeList(tm3, tm4, _) in self.cons_type_list.iter_all_2(tm5) {
+                    self.cons_el_types_reverse_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                 }
             }
         }
@@ -62190,12 +64131,12 @@ impl Eqlog {
     fn cons_el_types_reverse_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ConsTypeList(tm3, tm4, tm5) in self.cons_type_list.iter_dirty() {
+            for ElTypes(tm2, tm5) in self.el_types.iter_dirty() {
                 #[allow(unused_variables)]
-                for ElTypes(tm2, _) in self.el_types.iter_all_1(tm5) {
+                for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
                     #[allow(unused_variables)]
-                    for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
-                        self.cons_el_types_reverse_6(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                    for ConsTypeList(tm3, tm4, _) in self.cons_type_list.iter_all_2(tm5) {
+                        self.cons_el_types_reverse_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                     }
                 }
             }
@@ -62203,7 +64144,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cons_el_types_reverse_6(
+    fn cons_el_types_reverse_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsTypeList(tm3, tm4, tm5) in self.cons_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElTypes(tm2, _) in self.el_types.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
+                        self.cons_el_types_reverse_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_el_types_reverse_7(
         &self,
         delta: &mut ModelDelta,
         tm0: El,
@@ -62231,7 +64188,7 @@ impl Eqlog {
         for _ in [()] {
             self.rel_app_types_1(delta);
             self.rel_app_types_2(delta);
-            self.rel_app_types_4(delta);
+            self.rel_app_types_5(delta);
         }
     }
 
@@ -62253,28 +64210,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rel_app_types_3(&self, delta: &mut ModelDelta, tm0: Rel, tm1: ElList) {
         for _ in [()] {
+            self.rel_app_types_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_app_types_4(&self, delta: &mut ModelDelta, tm0: Rel, tm1: ElList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for Arity(_, tm2) in self.arity.iter_all_0(tm0) {
-                self.rel_app_types_5(delta, tm1, tm0, tm2);
+                self.rel_app_types_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_app_types_4(&self, delta: &mut ModelDelta) {
+    fn rel_app_types_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Arity(tm0, tm2) in self.arity.iter_dirty() {
                 #[allow(unused_variables)]
                 for RelApp(_, tm1) in self.rel_app.iter_all_0(tm0) {
-                    self.rel_app_types_5(delta, tm1, tm0, tm2);
+                    self.rel_app_types_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_app_types_5(&self, delta: &mut ModelDelta, tm1: ElList, tm0: Rel, tm2: TypeList) {
+    fn rel_app_types_6(&self, delta: &mut ModelDelta, tm1: ElList, tm0: Rel, tm2: TypeList) {
         for _ in [()] {
             let exists_already = self.el_types.iter_all_0_1(tm1, tm2).next().is_some();
             if !exists_already {
@@ -62306,7 +64270,7 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for FuncRel(tm0, _) in self.func_rel.iter_all_1(tm1) {
                     #[allow(unused_variables)]
-                    for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm4) {
+                    for SnocElList(tm2, tm3, _) in self.snoc_el_list.iter_all_2(tm4) {
                         self.rel_app_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
                     }
                 }
@@ -62318,7 +64282,7 @@ impl Eqlog {
     fn rel_app_func_app_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ConsElList(tm2, tm3, tm4) in self.cons_el_list.iter_dirty() {
+            for SnocElList(tm2, tm3, tm4) in self.snoc_el_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for RelApp(tm1, _) in self.rel_app.iter_all_1(tm4) {
                     #[allow(unused_variables)]
@@ -62338,7 +64302,7 @@ impl Eqlog {
                 #[allow(unused_variables)]
                 for RelApp(_, tm4) in self.rel_app.iter_all_0(tm1) {
                     #[allow(unused_variables)]
-                    for ConsElList(tm2, tm3, _) in self.cons_el_list.iter_all_2(tm4) {
+                    for SnocElList(tm2, tm3, _) in self.snoc_el_list.iter_all_2(tm4) {
                         self.rel_app_func_app_5(delta, tm0, tm1, tm2, tm3, tm4);
                     }
                 }
@@ -62352,14 +64316,14 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm0: Func,
         tm1: Rel,
-        tm2: El,
-        tm3: ElList,
+        tm2: ElList,
+        tm3: El,
         tm4: ElList,
     ) {
         for _ in [()] {
-            let exists_already = self.func_app.iter_all_0_1_2(tm0, tm3, tm2).next().is_some();
+            let exists_already = self.func_app.iter_all_0_1_2(tm0, tm2, tm3).next().is_some();
             if !exists_already {
-                delta.new_func_app.push(FuncApp(tm0, tm3, tm2));
+                delta.new_func_app.push(FuncApp(tm0, tm2, tm3));
             }
         }
     }
@@ -62457,7 +64421,7 @@ impl Eqlog {
         for _ in [()] {
             self.dom_total_1(delta);
             self.dom_total_2(delta);
-            self.dom_total_4(delta);
+            self.dom_total_5(delta);
         }
     }
 
@@ -62479,6 +64443,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn dom_total_3(&self, delta: &mut ModelDelta, tm0: Morphism) {
         for _ in [()] {
+            self.dom_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn dom_total_4(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        for _ in [()] {
             let tm1 = match self.dom.iter_all_0(tm0).next() {
                 Some(Dom(_, res)) => res,
                 None => {
@@ -62487,22 +64458,22 @@ impl Eqlog {
                 }
             };
 
-            self.dom_total_5(delta, tm0, tm1);
+            self.dom_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn dom_total_4(&self, delta: &mut ModelDelta) {
+    fn dom_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Dom(tm0, tm1) in self.dom.iter_dirty() {
-                self.dom_total_5(delta, tm0, tm1);
+                self.dom_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn dom_total_5(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
+    fn dom_total_6(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
         for _ in [()] {}
     }
 
@@ -62511,7 +64482,7 @@ impl Eqlog {
         for _ in [()] {
             self.cod_total_1(delta);
             self.cod_total_2(delta);
-            self.cod_total_4(delta);
+            self.cod_total_5(delta);
         }
     }
 
@@ -62533,6 +64504,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cod_total_3(&self, delta: &mut ModelDelta, tm0: Morphism) {
         for _ in [()] {
+            self.cod_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cod_total_4(&self, delta: &mut ModelDelta, tm0: Morphism) {
+        for _ in [()] {
             let tm1 = match self.cod.iter_all_0(tm0).next() {
                 Some(Cod(_, res)) => res,
                 None => {
@@ -62541,22 +64519,22 @@ impl Eqlog {
                 }
             };
 
-            self.cod_total_5(delta, tm0, tm1);
+            self.cod_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn cod_total_4(&self, delta: &mut ModelDelta) {
+    fn cod_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm1) in self.cod.iter_dirty() {
-                self.cod_total_5(delta, tm0, tm1);
+                self.cod_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cod_total_5(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
+    fn cod_total_6(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
         for _ in [()] {}
     }
 
@@ -62565,7 +64543,7 @@ impl Eqlog {
         for _ in [()] {
             self.map_el_structure_1(delta);
             self.map_el_structure_2(delta);
-            self.map_el_structure_4(delta);
+            self.map_el_structure_5(delta);
         }
     }
 
@@ -62587,28 +64565,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_el_structure_3(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: El, tm2: El) {
         for _ in [()] {
+            self.map_el_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_el_structure_4(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: El, tm2: El) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for Cod(_, tm3) in self.cod.iter_all_0(tm0) {
-                self.map_el_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.map_el_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_el_structure_4(&self, delta: &mut ModelDelta) {
+    fn map_el_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm3) in self.cod.iter_dirty() {
                 #[allow(unused_variables)]
                 for MapEl(_, tm1, tm2) in self.map_el.iter_all_0(tm0) {
-                    self.map_el_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.map_el_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_el_structure_5(
+    fn map_el_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: El,
@@ -62629,7 +64614,7 @@ impl Eqlog {
         for _ in [()] {
             self.map_els_structure_1(delta);
             self.map_els_structure_2(delta);
-            self.map_els_structure_4(delta);
+            self.map_els_structure_5(delta);
         }
     }
 
@@ -62651,28 +64636,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_els_structure_3(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: ElList, tm2: ElList) {
         for _ in [()] {
+            self.map_els_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_structure_4(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: ElList, tm2: ElList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for Cod(_, tm3) in self.cod.iter_all_0(tm0) {
-                self.map_els_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.map_els_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_els_structure_4(&self, delta: &mut ModelDelta) {
+    fn map_els_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm3) in self.cod.iter_dirty() {
                 #[allow(unused_variables)]
                 for MapEls(_, tm1, tm2) in self.map_els.iter_all_0(tm0) {
-                    self.map_els_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.map_els_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_els_structure_5(
+    fn map_els_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: ElList,
@@ -62693,8 +64685,8 @@ impl Eqlog {
         for _ in [()] {
             self.map_el_defined_1(delta);
             self.map_el_defined_2(delta);
-            self.map_el_defined_4(delta);
-            self.map_el_defined_6(delta);
+            self.map_el_defined_5(delta);
+            self.map_el_defined_8(delta);
         }
     }
 
@@ -62716,28 +64708,42 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_el_defined_3(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
         for _ in [()] {
+            self.map_el_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_el_defined_4(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm2, _) in self.el_structure.iter_all_1(tm1) {
-                self.map_el_defined_5(delta, tm0, tm2, tm1);
+                self.map_el_defined_6(delta, tm0, tm2, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_el_defined_4(&self, delta: &mut ModelDelta) {
+    fn map_el_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm2, tm1) in self.el_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for Dom(tm0, _) in self.dom.iter_all_1(tm1) {
-                    self.map_el_defined_5(delta, tm0, tm2, tm1);
+                    self.map_el_defined_6(delta, tm0, tm2, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_el_defined_5(&self, delta: &mut ModelDelta, tm0: Morphism, tm2: El, tm1: Structure) {
+    fn map_el_defined_6(&self, delta: &mut ModelDelta, tm0: Morphism, tm2: El, tm1: Structure) {
+        for _ in [()] {
+            self.map_el_defined_7(delta, tm0, tm2, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_el_defined_7(&self, delta: &mut ModelDelta, tm0: Morphism, tm2: El, tm1: Structure) {
         for _ in [()] {
             let tm3 = match self.map_el.iter_all_0_1(tm0, tm2).next() {
                 Some(MapEl(_, _, res)) => res,
@@ -62747,12 +64753,12 @@ impl Eqlog {
                 }
             };
 
-            self.map_el_defined_7(delta, tm1, tm0, tm2, tm3);
+            self.map_el_defined_9(delta, tm1, tm0, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_el_defined_6(&self, delta: &mut ModelDelta) {
+    fn map_el_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm2, tm3) in self.map_el.iter_dirty() {
@@ -62760,7 +64766,7 @@ impl Eqlog {
                 for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for ElStructure(_, _) in self.el_structure.iter_all_0_1(tm2, tm1) {
-                        self.map_el_defined_7(delta, tm1, tm0, tm2, tm3);
+                        self.map_el_defined_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -62768,7 +64774,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_el_defined_7(
+    fn map_el_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Structure,
@@ -62784,8 +64790,8 @@ impl Eqlog {
         for _ in [()] {
             self.map_els_defined_1(delta);
             self.map_els_defined_2(delta);
-            self.map_els_defined_4(delta);
-            self.map_els_defined_6(delta);
+            self.map_els_defined_5(delta);
+            self.map_els_defined_8(delta);
         }
     }
 
@@ -62807,28 +64813,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_els_defined_3(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
         for _ in [()] {
+            self.map_els_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_4(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm2, _) in self.els_structure.iter_all_1(tm1) {
-                self.map_els_defined_5(delta, tm0, tm2, tm1);
+                self.map_els_defined_6(delta, tm0, tm2, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_els_defined_4(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm2, tm1) in self.els_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for Dom(tm0, _) in self.dom.iter_all_1(tm1) {
-                    self.map_els_defined_5(delta, tm0, tm2, tm1);
+                    self.map_els_defined_6(delta, tm0, tm2, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_els_defined_5(
+    fn map_els_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Morphism,
+        tm2: ElList,
+        tm1: Structure,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_7(delta, tm0, tm2, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: Morphism,
@@ -62844,12 +64870,12 @@ impl Eqlog {
                 }
             };
 
-            self.map_els_defined_7(delta, tm1, tm0, tm2, tm3);
+            self.map_els_defined_9(delta, tm1, tm0, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_els_defined_6(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm2, tm3) in self.map_els.iter_dirty() {
@@ -62857,7 +64883,7 @@ impl Eqlog {
                 for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for ElsStructure(_, _) in self.els_structure.iter_all_0_1(tm2, tm1) {
-                        self.map_els_defined_7(delta, tm1, tm0, tm2, tm3);
+                        self.map_els_defined_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -62865,7 +64891,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_els_defined_7(
+    fn map_els_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Structure,
@@ -62882,7 +64908,7 @@ impl Eqlog {
             self.map_nil_els_1(delta);
             self.map_nil_els_2(delta);
             self.map_nil_els_3(delta);
-            self.map_nil_els_5(delta);
+            self.map_nil_els_6(delta);
         }
     }
 
@@ -62927,15 +64953,29 @@ impl Eqlog {
         tm3: ElList,
     ) {
         for _ in [()] {
+            self.map_nil_els_5(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_nil_els_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Morphism,
+        tm1: Structure,
+        tm2: ElList,
+        tm3: ElList,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for Cod(_, tm4) in self.cod.iter_all_0(tm0) {
-                self.map_nil_els_6(delta, tm1, tm2, tm3, tm0, tm4);
+                self.map_nil_els_7(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_5(&self, delta: &mut ModelDelta) {
+    fn map_nil_els_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm4) in self.cod.iter_dirty() {
@@ -62943,7 +64983,7 @@ impl Eqlog {
                 for MapEls(_, tm2, tm3) in self.map_els.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for NilElList(tm1, _) in self.nil_el_list.iter_all_1(tm2) {
-                        self.map_nil_els_6(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.map_nil_els_7(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -62951,7 +64991,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_6(
+    fn map_nil_els_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Structure,
@@ -62974,8 +65014,8 @@ impl Eqlog {
             self.map_cons_els_1(delta);
             self.map_cons_els_2(delta);
             self.map_cons_els_3(delta);
-            self.map_cons_els_5(delta);
-            self.map_cons_els_7(delta);
+            self.map_cons_els_6(delta);
+            self.map_cons_els_9(delta);
         }
     }
 
@@ -63021,6 +65061,21 @@ impl Eqlog {
         tm4: ElList,
     ) {
         for _ in [()] {
+            self.map_cons_els_5(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_cons_els_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Morphism,
+        tm1: El,
+        tm2: ElList,
+        tm3: ElList,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
             let tm5 = match self.map_el.iter_all_0_1(tm0, tm1).next() {
                 Some(MapEl(_, _, res)) => res,
                 None => {
@@ -63029,12 +65084,12 @@ impl Eqlog {
                 }
             };
 
-            self.map_cons_els_6(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+            self.map_cons_els_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_5(&self, delta: &mut ModelDelta) {
+    fn map_cons_els_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm1, tm5) in self.map_el.iter_dirty() {
@@ -63042,7 +65097,7 @@ impl Eqlog {
                 for MapEls(_, tm3, tm4) in self.map_els.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for ConsElList(_, tm2, _) in self.cons_el_list.iter_all_0_2(tm1, tm3) {
-                        self.map_cons_els_6(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+                        self.map_cons_els_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
                     }
                 }
             }
@@ -63050,7 +65105,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_6(
+    fn map_cons_els_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: ElList,
+        tm3: ElList,
+        tm4: ElList,
+        tm0: Morphism,
+        tm1: El,
+        tm5: El,
+    ) {
+        for _ in [()] {
+            self.map_cons_els_8(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_cons_els_8(
         &self,
         delta: &mut ModelDelta,
         tm2: ElList,
@@ -63069,12 +65140,12 @@ impl Eqlog {
                 }
             };
 
-            self.map_cons_els_8(delta, tm3, tm4, tm1, tm5, tm0, tm2, tm6);
+            self.map_cons_els_10(delta, tm3, tm4, tm1, tm5, tm0, tm2, tm6);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_7(&self, delta: &mut ModelDelta) {
+    fn map_cons_els_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm2, tm6) in self.map_els.iter_dirty() {
@@ -63084,7 +65155,7 @@ impl Eqlog {
                     for ConsElList(tm1, _, _) in self.cons_el_list.iter_all_1_2(tm2, tm3) {
                         #[allow(unused_variables)]
                         for MapEl(_, _, tm5) in self.map_el.iter_all_0_1(tm0, tm1) {
-                            self.map_cons_els_8(delta, tm3, tm4, tm1, tm5, tm0, tm2, tm6);
+                            self.map_cons_els_10(delta, tm3, tm4, tm1, tm5, tm0, tm2, tm6);
                         }
                     }
                 }
@@ -63093,7 +65164,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_8(
+    fn map_cons_els_10(
         &self,
         delta: &mut ModelDelta,
         tm3: ElList,
@@ -63121,8 +65192,8 @@ impl Eqlog {
         for _ in [()] {
             self.map_var_1(delta);
             self.map_var_2(delta);
-            self.map_var_4(delta);
-            self.map_var_6(delta);
+            self.map_var_5(delta);
+            self.map_var_8(delta);
         }
     }
 
@@ -63144,28 +65215,50 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_var_3(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElName, tm2: El) {
         for _ in [()] {
+            self.map_var_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_var_4(&self, delta: &mut ModelDelta, tm0: Structure, tm1: ElName, tm2: El) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm3, _, tm4) in self.map_el.iter_all_1(tm2) {
-                self.map_var_5(delta, tm0, tm1, tm2, tm3, tm4);
+                self.map_var_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_var_4(&self, delta: &mut ModelDelta) {
+    fn map_var_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm3, tm2, tm4) in self.map_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
-                    self.map_var_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    self.map_var_6(delta, tm0, tm1, tm2, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_var_5(
+    fn map_var_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Structure,
+        tm1: ElName,
+        tm2: El,
+        tm3: Morphism,
+        tm4: El,
+    ) {
+        for _ in [()] {
+            self.map_var_7(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_var_7(
         &self,
         delta: &mut ModelDelta,
         tm0: Structure,
@@ -63177,13 +65270,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(_, tm5) in self.cod.iter_all_0(tm3) {
-                self.map_var_7(delta, tm0, tm1, tm2, tm4, tm3, tm5);
+                self.map_var_9(delta, tm0, tm1, tm2, tm4, tm3, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_var_6(&self, delta: &mut ModelDelta) {
+    fn map_var_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm3, tm5) in self.cod.iter_dirty() {
@@ -63191,7 +65284,7 @@ impl Eqlog {
                 for MapEl(_, tm2, tm4) in self.map_el.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for Var(tm0, tm1, _) in self.var.iter_all_2(tm2) {
-                        self.map_var_7(delta, tm0, tm1, tm2, tm4, tm3, tm5);
+                        self.map_var_9(delta, tm0, tm1, tm2, tm4, tm3, tm5);
                     }
                 }
             }
@@ -63199,7 +65292,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_var_7(
+    fn map_var_9(
         &self,
         delta: &mut ModelDelta,
         tm0: Structure,
@@ -63222,7 +65315,7 @@ impl Eqlog {
         for _ in [()] {
             self.map_rel_app_1(delta);
             self.map_rel_app_2(delta);
-            self.map_rel_app_4(delta);
+            self.map_rel_app_5(delta);
         }
     }
 
@@ -63244,28 +65337,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_rel_app_3(&self, delta: &mut ModelDelta, tm0: Rel, tm1: ElList) {
         for _ in [()] {
+            self.map_rel_app_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_rel_app_4(&self, delta: &mut ModelDelta, tm0: Rel, tm1: ElList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm2, _, tm3) in self.map_els.iter_all_1(tm1) {
-                self.map_rel_app_5(delta, tm0, tm2, tm1, tm3);
+                self.map_rel_app_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_rel_app_4(&self, delta: &mut ModelDelta) {
+    fn map_rel_app_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm2, tm1, tm3) in self.map_els.iter_dirty() {
                 #[allow(unused_variables)]
                 for RelApp(tm0, _) in self.rel_app.iter_all_1(tm1) {
-                    self.map_rel_app_5(delta, tm0, tm2, tm1, tm3);
+                    self.map_rel_app_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_rel_app_5(
+    fn map_rel_app_6(
         &self,
         delta: &mut ModelDelta,
         tm0: Rel,
@@ -63286,7 +65386,7 @@ impl Eqlog {
         for _ in [()] {
             self.map_preserves_el_type_1(delta);
             self.map_preserves_el_type_2(delta);
-            self.map_preserves_el_type_4(delta);
+            self.map_preserves_el_type_5(delta);
         }
     }
 
@@ -63308,28 +65408,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn map_preserves_el_type_3(&self, delta: &mut ModelDelta, tm0: El, tm1: Type) {
         for _ in [()] {
+            self.map_preserves_el_type_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_preserves_el_type_4(&self, delta: &mut ModelDelta, tm0: El, tm1: Type) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm2, _, tm3) in self.map_el.iter_all_1(tm0) {
-                self.map_preserves_el_type_5(delta, tm1, tm2, tm0, tm3);
+                self.map_preserves_el_type_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_preserves_el_type_4(&self, delta: &mut ModelDelta) {
+    fn map_preserves_el_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm2, tm0, tm3) in self.map_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for ElType(_, tm1) in self.el_type.iter_all_0(tm0) {
-                    self.map_preserves_el_type_5(delta, tm1, tm2, tm0, tm3);
+                    self.map_preserves_el_type_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_preserves_el_type_5(
+    fn map_preserves_el_type_6(
         &self,
         delta: &mut ModelDelta,
         tm1: Type,
@@ -63490,7 +65597,7 @@ impl Eqlog {
         for _ in [()] {
             self.rel_tuple_in_img_law_1(delta);
             self.rel_tuple_in_img_law_2(delta);
-            self.rel_tuple_in_img_law_4(delta);
+            self.rel_tuple_in_img_law_5(delta);
         }
     }
 
@@ -63512,28 +65619,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn rel_tuple_in_img_law_3(&self, delta: &mut ModelDelta, tm0: Rel, tm1: ElList) {
         for _ in [()] {
+            self.rel_tuple_in_img_law_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rel_tuple_in_img_law_4(&self, delta: &mut ModelDelta, tm0: Rel, tm1: ElList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm2, _, tm3) in self.map_els.iter_all_1(tm1) {
-                self.rel_tuple_in_img_law_5(delta, tm0, tm2, tm1, tm3);
+                self.rel_tuple_in_img_law_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_tuple_in_img_law_4(&self, delta: &mut ModelDelta) {
+    fn rel_tuple_in_img_law_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm2, tm1, tm3) in self.map_els.iter_dirty() {
                 #[allow(unused_variables)]
                 for RelApp(tm0, _) in self.rel_app.iter_all_1(tm1) {
-                    self.rel_tuple_in_img_law_5(delta, tm0, tm2, tm1, tm3);
+                    self.rel_tuple_in_img_law_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rel_tuple_in_img_law_5(
+    fn rel_tuple_in_img_law_6(
         &self,
         delta: &mut ModelDelta,
         tm0: Rel,
@@ -63556,20 +65670,27 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_91_1(delta);
-            self.anonymous_rule_91_2(delta);
-            self.anonymous_rule_91_4(delta);
-            self.anonymous_rule_91_6(delta);
-            self.anonymous_rule_91_8(delta);
-            self.anonymous_rule_91_10(delta);
-            self.anonymous_rule_91_12(delta);
+            self.anonymous_rule_97_1(delta);
+            self.anonymous_rule_97_3(delta);
+            self.anonymous_rule_97_6(delta);
+            self.anonymous_rule_97_9(delta);
+            self.anonymous_rule_97_12(delta);
+            self.anonymous_rule_97_15(delta);
+            self.anonymous_rule_97_18(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.anonymous_rule_97_2(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn anonymous_rule_97_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -63579,22 +65700,29 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_91_3(delta, tm0);
+            self.anonymous_rule_97_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_91_3(delta, tm0);
+                self.anonymous_rule_97_4(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_3(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_97_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+        for _ in [()] {
+            self.anonymous_rule_97_5(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn anonymous_rule_97_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -63604,25 +65732,32 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_91_5(delta, tm0, tm1);
+            self.anonymous_rule_97_7(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_4(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_91_5(delta, tm0, tm1);
+                    self.anonymous_rule_97_7(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_5(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_97_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+        for _ in [()] {
+            self.anonymous_rule_97_8(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn anonymous_rule_97_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -63632,12 +65767,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_91_7(delta, tm0, tm1, tm2);
+            self.anonymous_rule_97_10(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -63645,7 +65780,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_91_7(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_97_10(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -63653,7 +65788,20 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_7(
+    fn anonymous_rule_97_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: SymbolKind,
+        tm1: SymbolKind,
+        tm2: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.anonymous_rule_97_11(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn anonymous_rule_97_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -63669,12 +65817,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_91_9(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_97_13(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_8(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -63684,7 +65832,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_91_9(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_97_13(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -63693,7 +65841,21 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_9(
+    fn anonymous_rule_97_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: SymbolKind,
+        tm1: SymbolKind,
+        tm2: SymbolKind,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.anonymous_rule_97_14(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn anonymous_rule_97_14(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -63710,12 +65872,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_91_11(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_97_16(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_10(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -63727,7 +65889,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_91_11(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_97_16(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -63737,7 +65899,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_11(
+    fn anonymous_rule_97_16(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: SymbolKind,
+        tm1: SymbolKind,
+        tm2: SymbolKind,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.anonymous_rule_97_17(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn anonymous_rule_97_17(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -63755,12 +65932,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_91_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_97_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_97_18(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -63774,7 +65951,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_91_13(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_97_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -63785,7 +65962,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_91_13(
+    fn anonymous_rule_97_19(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -63803,8 +65980,8 @@ impl Eqlog {
         for _ in [()] {
             self.type_decl_defines_symbol_1(delta);
             self.type_decl_defines_symbol_2(delta);
-            self.type_decl_defines_symbol_4(delta);
-            self.type_decl_defines_symbol_6(delta);
+            self.type_decl_defines_symbol_5(delta);
+            self.type_decl_defines_symbol_8(delta);
         }
     }
 
@@ -63826,28 +66003,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn type_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: TypeDeclNode, tm1: Ident) {
         for _ in [()] {
+            self.type_decl_defines_symbol_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: TypeDeclNode, tm1: Ident) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm2) in self.type_symbol.iter_all() {
-                self.type_decl_defines_symbol_5(delta, tm0, tm1, tm2);
+                self.type_decl_defines_symbol_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_decl_defines_symbol_4(&self, delta: &mut ModelDelta) {
+    fn type_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm2) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeDecl(tm0, tm1) in self.type_decl.iter_all() {
-                    self.type_decl_defines_symbol_5(delta, tm0, tm1, tm2);
+                    self.type_decl_defines_symbol_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_decl_defines_symbol_5(
+    fn type_decl_defines_symbol_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeDeclNode,
+        tm1: Ident,
+        tm2: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.type_decl_defines_symbol_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
         tm0: TypeDeclNode,
@@ -63857,13 +66054,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeDeclNodeLoc(_, tm3) in self.type_decl_node_loc.iter_all_0(tm0) {
-                self.type_decl_defines_symbol_7(delta, tm1, tm2, tm0, tm3);
+                self.type_decl_defines_symbol_9(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_decl_defines_symbol_6(&self, delta: &mut ModelDelta) {
+    fn type_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeDeclNodeLoc(tm0, tm3) in self.type_decl_node_loc.iter_dirty() {
@@ -63871,7 +66068,7 @@ impl Eqlog {
                 for TypeSymbol(tm2) in self.type_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeDecl(_, tm1) in self.type_decl.iter_all_0(tm0) {
-                        self.type_decl_defines_symbol_7(delta, tm1, tm2, tm0, tm3);
+                        self.type_decl_defines_symbol_9(delta, tm1, tm2, tm0, tm3);
                     }
                 }
             }
@@ -63879,7 +66076,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn type_decl_defines_symbol_7(
+    fn type_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -63904,8 +66101,8 @@ impl Eqlog {
         for _ in [()] {
             self.enum_decl_defines_symbol_1(delta);
             self.enum_decl_defines_symbol_2(delta);
-            self.enum_decl_defines_symbol_4(delta);
-            self.enum_decl_defines_symbol_6(delta);
+            self.enum_decl_defines_symbol_5(delta);
+            self.enum_decl_defines_symbol_8(delta);
         }
     }
 
@@ -63933,28 +66130,55 @@ impl Eqlog {
         tm2: CtorDeclListNode,
     ) {
         for _ in [()] {
+            self.enum_decl_defines_symbol_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn enum_decl_defines_symbol_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: EnumDeclNode,
+        tm1: Ident,
+        tm2: CtorDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
-                self.enum_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3);
+                self.enum_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_decl_defines_symbol_4(&self, delta: &mut ModelDelta) {
+    fn enum_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm3) in self.enum_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for EnumDecl(tm0, tm1, tm2) in self.enum_decl.iter_all() {
-                    self.enum_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3);
+                    self.enum_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_decl_defines_symbol_5(
+    fn enum_decl_defines_symbol_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: EnumDeclNode,
+        tm1: Ident,
+        tm2: CtorDeclListNode,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.enum_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn enum_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
         tm0: EnumDeclNode,
@@ -63965,13 +66189,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumDeclNodeLoc(_, tm4) in self.enum_decl_node_loc.iter_all_0(tm0) {
-                self.enum_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.enum_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_decl_defines_symbol_6(&self, delta: &mut ModelDelta) {
+    fn enum_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumDeclNodeLoc(tm0, tm4) in self.enum_decl_node_loc.iter_dirty() {
@@ -63979,7 +66203,7 @@ impl Eqlog {
                 for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for EnumDecl(_, tm1, tm2) in self.enum_decl.iter_all_0(tm0) {
-                        self.enum_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.enum_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -63987,7 +66211,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn enum_decl_defines_symbol_7(
+    fn enum_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -64013,8 +66237,8 @@ impl Eqlog {
         for _ in [()] {
             self.pred_decl_defines_symbol_1(delta);
             self.pred_decl_defines_symbol_2(delta);
-            self.pred_decl_defines_symbol_4(delta);
-            self.pred_decl_defines_symbol_6(delta);
+            self.pred_decl_defines_symbol_5(delta);
+            self.pred_decl_defines_symbol_8(delta);
         }
     }
 
@@ -64042,28 +66266,55 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.pred_decl_defines_symbol_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_decl_defines_symbol_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: PredDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm3) in self.pred_symbol.iter_all() {
-                self.pred_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3);
+                self.pred_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_decl_defines_symbol_4(&self, delta: &mut ModelDelta) {
+    fn pred_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm3) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_all() {
-                    self.pred_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3);
+                    self.pred_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_decl_defines_symbol_5(
+    fn pred_decl_defines_symbol_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: PredDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.pred_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
         tm0: PredDeclNode,
@@ -64074,13 +66325,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredDeclNodeLoc(_, tm4) in self.pred_decl_node_loc.iter_all_0(tm0) {
-                self.pred_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.pred_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_decl_defines_symbol_6(&self, delta: &mut ModelDelta) {
+    fn pred_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredDeclNodeLoc(tm0, tm4) in self.pred_decl_node_loc.iter_dirty() {
@@ -64088,7 +66339,7 @@ impl Eqlog {
                 for PredSymbol(tm3) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for PredDecl(_, tm1, tm2) in self.pred_decl.iter_all_0(tm0) {
-                        self.pred_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.pred_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -64096,7 +66347,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_decl_defines_symbol_7(
+    fn pred_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -64122,8 +66373,8 @@ impl Eqlog {
         for _ in [()] {
             self.func_decl_defines_symbol_1(delta);
             self.func_decl_defines_symbol_2(delta);
-            self.func_decl_defines_symbol_4(delta);
-            self.func_decl_defines_symbol_6(delta);
+            self.func_decl_defines_symbol_5(delta);
+            self.func_decl_defines_symbol_8(delta);
         }
     }
 
@@ -64152,28 +66403,57 @@ impl Eqlog {
         tm3: Ident,
     ) {
         for _ in [()] {
+            self.func_decl_defines_symbol_4(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_defines_symbol_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm4) in self.func_symbol.iter_all() {
-                self.func_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3, tm4);
+                self.func_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_defines_symbol_4(&self, delta: &mut ModelDelta) {
+    fn func_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm4) in self.func_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
-                    self.func_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    self.func_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_defines_symbol_5(
+    fn func_decl_defines_symbol_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.func_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
         tm0: FuncDeclNode,
@@ -64185,13 +66465,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncDeclNodeLoc(_, tm5) in self.func_decl_node_loc.iter_all_0(tm0) {
-                self.func_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                self.func_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_defines_symbol_6(&self, delta: &mut ModelDelta) {
+    fn func_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncDeclNodeLoc(tm0, tm5) in self.func_decl_node_loc.iter_dirty() {
@@ -64199,7 +66479,7 @@ impl Eqlog {
                 for FuncSymbol(tm4) in self.func_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
-                        self.func_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                        self.func_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
                     }
                 }
             }
@@ -64207,7 +66487,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn func_decl_defines_symbol_7(
+    fn func_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -64234,8 +66514,8 @@ impl Eqlog {
         for _ in [()] {
             self.ctor_decl_defines_symbol_1(delta);
             self.ctor_decl_defines_symbol_2(delta);
-            self.ctor_decl_defines_symbol_4(delta);
-            self.ctor_decl_defines_symbol_6(delta);
+            self.ctor_decl_defines_symbol_5(delta);
+            self.ctor_decl_defines_symbol_8(delta);
         }
     }
 
@@ -64263,28 +66543,55 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.ctor_decl_defines_symbol_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_defines_symbol_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm3) in self.ctor_symbol.iter_all() {
-                self.ctor_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3);
+                self.ctor_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_defines_symbol_4(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm3) in self.ctor_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for CtorDecl(tm0, tm1, tm2) in self.ctor_decl.iter_all() {
-                    self.ctor_decl_defines_symbol_5(delta, tm0, tm1, tm2, tm3);
+                    self.ctor_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_defines_symbol_5(
+    fn ctor_decl_defines_symbol_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.ctor_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
         tm0: CtorDeclNode,
@@ -64295,13 +66602,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorDeclNodeLoc(_, tm4) in self.ctor_decl_node_loc.iter_all_0(tm0) {
-                self.ctor_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.ctor_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_defines_symbol_6(&self, delta: &mut ModelDelta) {
+    fn ctor_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorDeclNodeLoc(tm0, tm4) in self.ctor_decl_node_loc.iter_dirty() {
@@ -64309,7 +66616,7 @@ impl Eqlog {
                 for CtorSymbol(tm3) in self.ctor_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for CtorDecl(_, tm1, tm2) in self.ctor_decl.iter_all_0(tm0) {
-                        self.ctor_decl_defines_symbol_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.ctor_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -64317,7 +66624,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_defines_symbol_7(
+    fn ctor_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -64343,9 +66650,9 @@ impl Eqlog {
         for _ in [()] {
             self.rule_decl_defines_symbol_1(delta);
             self.rule_decl_defines_symbol_2(delta);
-            self.rule_decl_defines_symbol_4(delta);
-            self.rule_decl_defines_symbol_6(delta);
+            self.rule_decl_defines_symbol_5(delta);
             self.rule_decl_defines_symbol_8(delta);
+            self.rule_decl_defines_symbol_11(delta);
         }
     }
 
@@ -64372,28 +66679,40 @@ impl Eqlog {
         tm1: StmtListNode,
     ) {
         for _ in [()] {
+            self.rule_decl_defines_symbol_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDeclNode,
+        tm1: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
-                self.rule_decl_defines_symbol_5(delta, tm1, tm0, tm2);
+                self.rule_decl_defines_symbol_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_decl_defines_symbol_4(&self, delta: &mut ModelDelta) {
+    fn rule_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleName(tm0, tm2) in self.rule_name.iter_dirty() {
                 #[allow(unused_variables)]
                 for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                    self.rule_decl_defines_symbol_5(delta, tm1, tm0, tm2);
+                    self.rule_decl_defines_symbol_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_decl_defines_symbol_5(
+    fn rule_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -64401,26 +66720,7 @@ impl Eqlog {
         tm2: Ident,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                self.rule_decl_defines_symbol_7(delta, tm1, tm0, tm2, tm3);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn rule_decl_defines_symbol_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for RuleName(tm0, tm2) in self.rule_name.iter_all() {
-                    #[allow(unused_variables)]
-                    for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                        self.rule_decl_defines_symbol_7(delta, tm1, tm0, tm2, tm3);
-                    }
-                }
-            }
+            self.rule_decl_defines_symbol_7(delta, tm1, tm0, tm2);
         }
     }
 
@@ -64431,18 +66731,64 @@ impl Eqlog {
         tm1: StmtListNode,
         tm0: RuleDeclNode,
         tm2: Ident,
-        tm3: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleDeclNodeLoc(_, tm4) in self.rule_decl_node_loc.iter_all_0(tm0) {
-                self.rule_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+            for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
+                self.rule_decl_defines_symbol_9(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
     fn rule_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleName(tm0, tm2) in self.rule_name.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
+                        self.rule_decl_defines_symbol_9(delta, tm1, tm0, tm2, tm3);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm0: RuleDeclNode,
+        tm2: Ident,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.rule_decl_defines_symbol_10(delta, tm1, tm0, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtListNode,
+        tm0: RuleDeclNode,
+        tm2: Ident,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleDeclNodeLoc(_, tm4) in self.rule_decl_node_loc.iter_all_0(tm0) {
+                self.rule_decl_defines_symbol_12(delta, tm1, tm2, tm3, tm0, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDeclNodeLoc(tm0, tm4) in self.rule_decl_node_loc.iter_dirty() {
@@ -64452,7 +66798,7 @@ impl Eqlog {
                     for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
-                            self.rule_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+                            self.rule_decl_defines_symbol_12(delta, tm1, tm2, tm3, tm0, tm4);
                         }
                     }
                 }
@@ -64461,7 +66807,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn rule_decl_defines_symbol_9(
+    fn rule_decl_defines_symbol_12(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -64487,9 +66833,9 @@ impl Eqlog {
         for _ in [()] {
             self.arg_decl_should_be_type_1(delta);
             self.arg_decl_should_be_type_2(delta);
-            self.arg_decl_should_be_type_4(delta);
-            self.arg_decl_should_be_type_6(delta);
+            self.arg_decl_should_be_type_5(delta);
             self.arg_decl_should_be_type_8(delta);
+            self.arg_decl_should_be_type_11(delta);
         }
     }
 
@@ -64511,28 +66857,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn arg_decl_should_be_type_3(&self, delta: &mut ModelDelta, tm0: ArgDeclNode, tm1: Ident) {
         for _ in [()] {
+            self.arg_decl_should_be_type_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_4(&self, delta: &mut ModelDelta, tm0: ArgDeclNode, tm1: Ident) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm2) in self.type_symbol.iter_all() {
-                self.arg_decl_should_be_type_5(delta, tm0, tm1, tm2);
+                self.arg_decl_should_be_type_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arg_decl_should_be_type_4(&self, delta: &mut ModelDelta) {
+    fn arg_decl_should_be_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm2) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
-                    self.arg_decl_should_be_type_5(delta, tm0, tm1, tm2);
+                    self.arg_decl_should_be_type_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn arg_decl_should_be_type_5(
+    fn arg_decl_should_be_type_6(
         &self,
         delta: &mut ModelDelta,
         tm0: ArgDeclNode,
@@ -64540,26 +66893,7 @@ impl Eqlog {
         tm2: SymbolKind,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
-                self.arg_decl_should_be_type_7(delta, tm0, tm1, tm2, tm3);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn arg_decl_should_be_type_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm3) in self.enum_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for TypeSymbol(tm2) in self.type_symbol.iter_all() {
-                    #[allow(unused_variables)]
-                    for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
-                        self.arg_decl_should_be_type_7(delta, tm0, tm1, tm2, tm3);
-                    }
-                }
-            }
+            self.arg_decl_should_be_type_7(delta, tm0, tm1, tm2);
         }
     }
 
@@ -64570,18 +66904,64 @@ impl Eqlog {
         tm0: ArgDeclNode,
         tm1: Ident,
         tm2: SymbolKind,
-        tm3: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ArgDeclNodeLoc(_, tm4) in self.arg_decl_node_loc.iter_all_0(tm0) {
-                self.arg_decl_should_be_type_9(delta, tm1, tm2, tm3, tm0, tm4);
+            for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
+                self.arg_decl_should_be_type_9(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
     fn arg_decl_should_be_type_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumSymbol(tm3) in self.enum_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for TypeSymbol(tm2) in self.type_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
+                        self.arg_decl_should_be_type_9(delta, tm0, tm1, tm2, tm3);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclNode,
+        tm1: Ident,
+        tm2: SymbolKind,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.arg_decl_should_be_type_10(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclNode,
+        tm1: Ident,
+        tm2: SymbolKind,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ArgDeclNodeLoc(_, tm4) in self.arg_decl_node_loc.iter_all_0(tm0) {
+                self.arg_decl_should_be_type_12(delta, tm1, tm2, tm3, tm0, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ArgDeclNodeLoc(tm0, tm4) in self.arg_decl_node_loc.iter_dirty() {
@@ -64591,7 +66971,7 @@ impl Eqlog {
                     for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
                         #[allow(unused_variables)]
                         for TypeSymbol(tm2) in self.type_symbol.iter_all() {
-                            self.arg_decl_should_be_type_9(delta, tm1, tm2, tm3, tm0, tm4);
+                            self.arg_decl_should_be_type_12(delta, tm1, tm2, tm3, tm0, tm4);
                         }
                     }
                 }
@@ -64600,7 +66980,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn arg_decl_should_be_type_9(
+    fn arg_decl_should_be_type_12(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -64628,9 +67008,9 @@ impl Eqlog {
         for _ in [()] {
             self.result_should_be_type_1(delta);
             self.result_should_be_type_2(delta);
-            self.result_should_be_type_4(delta);
-            self.result_should_be_type_6(delta);
+            self.result_should_be_type_5(delta);
             self.result_should_be_type_8(delta);
+            self.result_should_be_type_11(delta);
         }
     }
 
@@ -64659,28 +67039,42 @@ impl Eqlog {
         tm3: Ident,
     ) {
         for _ in [()] {
+            self.result_should_be_type_4(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm4) in self.type_symbol.iter_all() {
-                self.result_should_be_type_5(delta, tm0, tm1, tm2, tm3, tm4);
+                self.result_should_be_type_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn result_should_be_type_4(&self, delta: &mut ModelDelta) {
+    fn result_should_be_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm4) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
-                    self.result_should_be_type_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    self.result_should_be_type_6(delta, tm0, tm1, tm2, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn result_should_be_type_5(
+    fn result_should_be_type_6(
         &self,
         delta: &mut ModelDelta,
         tm0: FuncDeclNode,
@@ -64690,26 +67084,7 @@ impl Eqlog {
         tm4: SymbolKind,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm5) in self.enum_symbol.iter_all() {
-                self.result_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn result_should_be_type_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm5) in self.enum_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for TypeSymbol(tm4) in self.type_symbol.iter_all() {
-                    #[allow(unused_variables)]
-                    for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
-                        self.result_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-                    }
-                }
-            }
+            self.result_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
@@ -64722,18 +67097,68 @@ impl Eqlog {
         tm2: ArgDeclListNode,
         tm3: Ident,
         tm4: SymbolKind,
-        tm5: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncDeclNodeLoc(_, tm6) in self.func_decl_node_loc.iter_all_0(tm0) {
-                self.result_should_be_type_9(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+            for EnumSymbol(tm5) in self.enum_symbol.iter_all() {
+                self.result_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
     fn result_should_be_type_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumSymbol(tm5) in self.enum_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for TypeSymbol(tm4) in self.type_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
+                        self.result_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+        tm4: SymbolKind,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.result_should_be_type_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+        tm4: SymbolKind,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncDeclNodeLoc(_, tm6) in self.func_decl_node_loc.iter_all_0(tm0) {
+                self.result_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncDeclNodeLoc(tm0, tm6) in self.func_decl_node_loc.iter_dirty() {
@@ -64743,7 +67168,7 @@ impl Eqlog {
                     for TypeSymbol(tm4) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
-                            self.result_should_be_type_9(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+                            self.result_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
                         }
                     }
                 }
@@ -64752,7 +67177,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn result_should_be_type_9(
+    fn result_should_be_type_12(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -64782,9 +67207,9 @@ impl Eqlog {
         for _ in [()] {
             self.var_atom_should_be_type_1(delta);
             self.var_atom_should_be_type_2(delta);
-            self.var_atom_should_be_type_4(delta);
-            self.var_atom_should_be_type_6(delta);
+            self.var_atom_should_be_type_5(delta);
             self.var_atom_should_be_type_8(delta);
+            self.var_atom_should_be_type_11(delta);
         }
     }
 
@@ -64812,28 +67237,41 @@ impl Eqlog {
         tm2: Ident,
     ) {
         for _ in [()] {
+            self.var_atom_should_be_type_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                self.var_atom_should_be_type_5(delta, tm0, tm1, tm2, tm3);
+                self.var_atom_should_be_type_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_atom_should_be_type_4(&self, delta: &mut ModelDelta) {
+    fn var_atom_should_be_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm3) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
-                    self.var_atom_should_be_type_5(delta, tm0, tm1, tm2, tm3);
+                    self.var_atom_should_be_type_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_atom_should_be_type_5(
+    fn var_atom_should_be_type_6(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -64842,26 +67280,7 @@ impl Eqlog {
         tm3: SymbolKind,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
-                self.var_atom_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn var_atom_should_be_type_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                    #[allow(unused_variables)]
-                    for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
-                        self.var_atom_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4);
-                    }
-                }
-            }
+            self.var_atom_should_be_type_7(delta, tm0, tm1, tm2, tm3);
         }
     }
 
@@ -64873,18 +67292,66 @@ impl Eqlog {
         tm1: TermNode,
         tm2: Ident,
         tm3: SymbolKind,
-        tm4: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for IfAtomNodeLoc(_, tm5) in self.if_atom_node_loc.iter_all_0(tm0) {
-                self.var_atom_should_be_type_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
+                self.var_atom_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
     fn var_atom_should_be_type_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for TypeSymbol(tm3) in self.type_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
+                        self.var_atom_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.var_atom_should_be_type_10(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for IfAtomNodeLoc(_, tm5) in self.if_atom_node_loc.iter_all_0(tm0) {
+                self.var_atom_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomNodeLoc(tm0, tm5) in self.if_atom_node_loc.iter_dirty() {
@@ -64894,7 +67361,7 @@ impl Eqlog {
                     for TypeSymbol(tm3) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                            self.var_atom_should_be_type_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                            self.var_atom_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
                         }
                     }
                 }
@@ -64903,7 +67370,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_atom_should_be_type_9(
+    fn var_atom_should_be_type_12(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -64932,8 +67399,8 @@ impl Eqlog {
         for _ in [()] {
             self.pred_if_atom_should_be_pred_1(delta);
             self.pred_if_atom_should_be_pred_2(delta);
-            self.pred_if_atom_should_be_pred_4(delta);
-            self.pred_if_atom_should_be_pred_6(delta);
+            self.pred_if_atom_should_be_pred_5(delta);
+            self.pred_if_atom_should_be_pred_8(delta);
         }
     }
 
@@ -64961,28 +67428,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.pred_if_atom_should_be_pred_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm3) in self.pred_symbol.iter_all() {
-                self.pred_if_atom_should_be_pred_5(delta, tm0, tm1, tm2, tm3);
+                self.pred_if_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_4(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_should_be_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm3) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_all() {
-                    self.pred_if_atom_should_be_pred_5(delta, tm0, tm1, tm2, tm3);
+                    self.pred_if_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_5(
+    fn pred_if_atom_should_be_pred_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.pred_if_atom_should_be_pred_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_7(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -64993,13 +67487,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomNodeLoc(_, tm4) in self.if_atom_node_loc.iter_all_0(tm0) {
-                self.pred_if_atom_should_be_pred_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.pred_if_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_6(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_should_be_pred_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomNodeLoc(tm0, tm4) in self.if_atom_node_loc.iter_dirty() {
@@ -65007,7 +67501,7 @@ impl Eqlog {
                 for PredSymbol(tm3) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                        self.pred_if_atom_should_be_pred_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.pred_if_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -65015,7 +67509,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_7(
+    fn pred_if_atom_should_be_pred_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -65043,8 +67537,8 @@ impl Eqlog {
         for _ in [()] {
             self.pred_then_atom_should_be_pred_1(delta);
             self.pred_then_atom_should_be_pred_2(delta);
-            self.pred_then_atom_should_be_pred_4(delta);
-            self.pred_then_atom_should_be_pred_6(delta);
+            self.pred_then_atom_should_be_pred_5(delta);
+            self.pred_then_atom_should_be_pred_8(delta);
         }
     }
 
@@ -65072,28 +67566,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.pred_then_atom_should_be_pred_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm3) in self.pred_symbol.iter_all() {
-                self.pred_then_atom_should_be_pred_5(delta, tm0, tm1, tm2, tm3);
+                self.pred_then_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_4(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_should_be_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm3) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_all() {
-                    self.pred_then_atom_should_be_pred_5(delta, tm0, tm1, tm2, tm3);
+                    self.pred_then_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_5(
+    fn pred_then_atom_should_be_pred_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.pred_then_atom_should_be_pred_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_7(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -65104,13 +67625,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomNodeLoc(_, tm4) in self.then_atom_node_loc.iter_all_0(tm0) {
-                self.pred_then_atom_should_be_pred_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.pred_then_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_6(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_should_be_pred_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomNodeLoc(tm0, tm4) in self.then_atom_node_loc.iter_dirty() {
@@ -65118,7 +67639,7 @@ impl Eqlog {
                 for PredSymbol(tm3) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                        self.pred_then_atom_should_be_pred_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.pred_then_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -65126,7 +67647,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_7(
+    fn pred_then_atom_should_be_pred_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -65154,9 +67675,9 @@ impl Eqlog {
         for _ in [()] {
             self.app_atom_should_be_func_1(delta);
             self.app_atom_should_be_func_2(delta);
-            self.app_atom_should_be_func_4(delta);
-            self.app_atom_should_be_func_6(delta);
+            self.app_atom_should_be_func_5(delta);
             self.app_atom_should_be_func_8(delta);
+            self.app_atom_should_be_func_11(delta);
         }
     }
 
@@ -65184,28 +67705,41 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.app_atom_should_be_func_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm3) in self.func_symbol.iter_all() {
-                self.app_atom_should_be_func_5(delta, tm0, tm1, tm2, tm3);
+                self.app_atom_should_be_func_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_atom_should_be_func_4(&self, delta: &mut ModelDelta) {
+    fn app_atom_should_be_func_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm3) in self.func_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
-                    self.app_atom_should_be_func_5(delta, tm0, tm1, tm2, tm3);
+                    self.app_atom_should_be_func_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_atom_should_be_func_5(
+    fn app_atom_should_be_func_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -65214,26 +67748,7 @@ impl Eqlog {
         tm3: SymbolKind,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for CtorSymbol(tm4) in self.ctor_symbol.iter_all() {
-                self.app_atom_should_be_func_7(delta, tm0, tm1, tm2, tm3, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn app_atom_should_be_func_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for CtorSymbol(tm4) in self.ctor_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncSymbol(tm3) in self.func_symbol.iter_all() {
-                    #[allow(unused_variables)]
-                    for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
-                        self.app_atom_should_be_func_7(delta, tm0, tm1, tm2, tm3, tm4);
-                    }
-                }
-            }
+            self.app_atom_should_be_func_7(delta, tm0, tm1, tm2, tm3);
         }
     }
 
@@ -65245,18 +67760,66 @@ impl Eqlog {
         tm1: Ident,
         tm2: TermListNode,
         tm3: SymbolKind,
-        tm4: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TermNodeLoc(_, tm5) in self.term_node_loc.iter_all_0(tm0) {
-                self.app_atom_should_be_func_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            for CtorSymbol(tm4) in self.ctor_symbol.iter_all() {
+                self.app_atom_should_be_func_9(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
     fn app_atom_should_be_func_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorSymbol(tm4) in self.ctor_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncSymbol(tm3) in self.func_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
+                        self.app_atom_should_be_func_9(delta, tm0, tm1, tm2, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.app_atom_should_be_func_10(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TermNodeLoc(_, tm5) in self.term_node_loc.iter_all_0(tm0) {
+                self.app_atom_should_be_func_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm0, tm5) in self.term_node_loc.iter_dirty() {
@@ -65266,7 +67829,7 @@ impl Eqlog {
                     for FuncSymbol(tm3) in self.func_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                            self.app_atom_should_be_func_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                            self.app_atom_should_be_func_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
                         }
                     }
                 }
@@ -65275,7 +67838,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_atom_should_be_func_9(
+    fn app_atom_should_be_func_12(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -65304,7 +67867,7 @@ impl Eqlog {
         for _ in [()] {
             self.type_list_len_total_1(delta);
             self.type_list_len_total_2(delta);
-            self.type_list_len_total_4(delta);
+            self.type_list_len_total_5(delta);
         }
     }
 
@@ -65326,6 +67889,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn type_list_len_total_3(&self, delta: &mut ModelDelta, tm0: TypeList) {
         for _ in [()] {
+            self.type_list_len_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_total_4(&self, delta: &mut ModelDelta, tm0: TypeList) {
+        for _ in [()] {
             let tm1 = match self.type_list_len.iter_all_0(tm0).next() {
                 Some(TypeListLen(_, res)) => res,
                 None => {
@@ -65334,22 +67904,22 @@ impl Eqlog {
                 }
             };
 
-            self.type_list_len_total_5(delta, tm0, tm1);
+            self.type_list_len_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_total_4(&self, delta: &mut ModelDelta) {
+    fn type_list_len_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
-                self.type_list_len_total_5(delta, tm0, tm1);
+                self.type_list_len_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_total_5(&self, delta: &mut ModelDelta, tm0: TypeList, tm1: Nat) {
+    fn type_list_len_total_6(&self, delta: &mut ModelDelta, tm0: TypeList, tm1: Nat) {
         for _ in [()] {}
     }
 
@@ -65358,7 +67928,7 @@ impl Eqlog {
         for _ in [()] {
             self.type_list_len_nil_1(delta);
             self.type_list_len_nil_2(delta);
-            self.type_list_len_nil_4(delta);
+            self.type_list_len_nil_5(delta);
         }
     }
 
@@ -65380,28 +67950,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn type_list_len_nil_3(&self, delta: &mut ModelDelta, tm0: TypeList) {
         for _ in [()] {
+            self.type_list_len_nil_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_nil_4(&self, delta: &mut ModelDelta, tm0: TypeList) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(_, tm1) in self.type_list_len.iter_all_0(tm0) {
-                self.type_list_len_nil_5(delta, tm0, tm1);
+                self.type_list_len_nil_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_nil_4(&self, delta: &mut ModelDelta) {
+    fn type_list_len_nil_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for NilTypeList(_) in self.nil_type_list.iter_all_0(tm0) {
-                    self.type_list_len_nil_5(delta, tm0, tm1);
+                    self.type_list_len_nil_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_nil_5(&self, delta: &mut ModelDelta, tm0: TypeList, tm1: Nat) {
+    fn type_list_len_nil_6(&self, delta: &mut ModelDelta, tm0: TypeList, tm1: Nat) {
         for _ in [()] {
             let exists_already = self.zero.iter_all_0(tm1).next().is_some();
             if !exists_already {
@@ -65415,8 +67992,8 @@ impl Eqlog {
         for _ in [()] {
             self.type_list_len_cons_1(delta);
             self.type_list_len_cons_2(delta);
-            self.type_list_len_cons_4(delta);
-            self.type_list_len_cons_6(delta);
+            self.type_list_len_cons_5(delta);
+            self.type_list_len_cons_8(delta);
         }
     }
 
@@ -65444,28 +68021,55 @@ impl Eqlog {
         tm2: TypeList,
     ) {
         for _ in [()] {
+            self.type_list_len_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Type,
+        tm1: TypeList,
+        tm2: TypeList,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(_, tm3) in self.type_list_len.iter_all_0(tm2) {
-                self.type_list_len_cons_5(delta, tm0, tm1, tm2, tm3);
+                self.type_list_len_cons_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_cons_4(&self, delta: &mut ModelDelta) {
+    fn type_list_len_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm2, tm3) in self.type_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsTypeList(tm0, tm1, _) in self.cons_type_list.iter_all_2(tm2) {
-                    self.type_list_len_cons_5(delta, tm0, tm1, tm2, tm3);
+                    self.type_list_len_cons_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_cons_5(
+    fn type_list_len_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Type,
+        tm1: TypeList,
+        tm2: TypeList,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            self.type_list_len_cons_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm0: Type,
@@ -65476,13 +68080,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(_, tm4) in self.type_list_len.iter_all_0(tm1) {
-                self.type_list_len_cons_7(delta, tm0, tm2, tm3, tm1, tm4);
+                self.type_list_len_cons_9(delta, tm0, tm2, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_cons_6(&self, delta: &mut ModelDelta) {
+    fn type_list_len_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm1, tm4) in self.type_list_len.iter_dirty() {
@@ -65490,7 +68094,7 @@ impl Eqlog {
                 for TypeListLen(tm2, tm3) in self.type_list_len.iter_all() {
                     #[allow(unused_variables)]
                     for ConsTypeList(tm0, _, _) in self.cons_type_list.iter_all_1_2(tm1, tm2) {
-                        self.type_list_len_cons_7(delta, tm0, tm2, tm3, tm1, tm4);
+                        self.type_list_len_cons_9(delta, tm0, tm2, tm3, tm1, tm4);
                     }
                 }
             }
@@ -65498,7 +68102,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn type_list_len_cons_7(
+    fn type_list_len_cons_9(
         &self,
         delta: &mut ModelDelta,
         tm0: Type,
@@ -65520,7 +68124,7 @@ impl Eqlog {
         for _ in [()] {
             self.term_list_len_total_1(delta);
             self.term_list_len_total_2(delta);
-            self.term_list_len_total_4(delta);
+            self.term_list_len_total_5(delta);
         }
     }
 
@@ -65542,6 +68146,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn term_list_len_total_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.term_list_len_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn term_list_len_total_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             let tm1 = match self.term_list_len.iter_all_0(tm0).next() {
                 Some(TermListLen(_, res)) => res,
                 None => {
@@ -65550,22 +68161,22 @@ impl Eqlog {
                 }
             };
 
-            self.term_list_len_total_5(delta, tm0, tm1);
+            self.term_list_len_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_total_4(&self, delta: &mut ModelDelta) {
+    fn term_list_len_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
-                self.term_list_len_total_5(delta, tm0, tm1);
+                self.term_list_len_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_total_5(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Nat) {
+    fn term_list_len_total_6(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Nat) {
         for _ in [()] {}
     }
 
@@ -65574,7 +68185,7 @@ impl Eqlog {
         for _ in [()] {
             self.term_list_len_nil_1(delta);
             self.term_list_len_nil_2(delta);
-            self.term_list_len_nil_4(delta);
+            self.term_list_len_nil_5(delta);
         }
     }
 
@@ -65596,28 +68207,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn term_list_len_nil_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.term_list_len_nil_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn term_list_len_nil_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(_, tm1) in self.term_list_len.iter_all_0(tm0) {
-                self.term_list_len_nil_5(delta, tm0, tm1);
+                self.term_list_len_nil_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_nil_4(&self, delta: &mut ModelDelta) {
+    fn term_list_len_nil_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                    self.term_list_len_nil_5(delta, tm0, tm1);
+                    self.term_list_len_nil_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_nil_5(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Nat) {
+    fn term_list_len_nil_6(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Nat) {
         for _ in [()] {
             let exists_already = self.zero.iter_all_0(tm1).next().is_some();
             if !exists_already {
@@ -65631,8 +68249,8 @@ impl Eqlog {
         for _ in [()] {
             self.term_list_len_cons_1(delta);
             self.term_list_len_cons_2(delta);
-            self.term_list_len_cons_4(delta);
-            self.term_list_len_cons_6(delta);
+            self.term_list_len_cons_5(delta);
+            self.term_list_len_cons_8(delta);
         }
     }
 
@@ -65660,28 +68278,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.term_list_len_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn term_list_len_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermListNode,
+        tm1: TermNode,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(_, tm3) in self.term_list_len.iter_all_0(tm0) {
-                self.term_list_len_cons_5(delta, tm1, tm2, tm0, tm3);
+                self.term_list_len_cons_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_cons_4(&self, delta: &mut ModelDelta) {
+    fn term_list_len_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm3) in self.term_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                    self.term_list_len_cons_5(delta, tm1, tm2, tm0, tm3);
+                    self.term_list_len_cons_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_cons_5(
+    fn term_list_len_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: TermListNode,
+        tm0: TermListNode,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            self.term_list_len_cons_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn term_list_len_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -65692,13 +68337,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(_, tm4) in self.term_list_len.iter_all_0(tm2) {
-                self.term_list_len_cons_7(delta, tm1, tm0, tm3, tm2, tm4);
+                self.term_list_len_cons_9(delta, tm1, tm0, tm3, tm2, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_cons_6(&self, delta: &mut ModelDelta) {
+    fn term_list_len_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm2, tm4) in self.term_list_len.iter_dirty() {
@@ -65708,7 +68353,7 @@ impl Eqlog {
                     for ConsTermListNode(_, tm1, _) in
                         self.cons_term_list_node.iter_all_0_2(tm0, tm2)
                     {
-                        self.term_list_len_cons_7(delta, tm1, tm0, tm3, tm2, tm4);
+                        self.term_list_len_cons_9(delta, tm1, tm0, tm3, tm2, tm4);
                     }
                 }
             }
@@ -65716,7 +68361,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn term_list_len_cons_7(
+    fn term_list_len_cons_9(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -65738,11 +68383,11 @@ impl Eqlog {
         for _ in [()] {
             self.pred_if_atom_arg_num_should_match_1(delta);
             self.pred_if_atom_arg_num_should_match_2(delta);
-            self.pred_if_atom_arg_num_should_match_4(delta);
-            self.pred_if_atom_arg_num_should_match_6(delta);
-            self.pred_if_atom_arg_num_should_match_7(delta);
+            self.pred_if_atom_arg_num_should_match_5(delta);
             self.pred_if_atom_arg_num_should_match_8(delta);
+            self.pred_if_atom_arg_num_should_match_9(delta);
             self.pred_if_atom_arg_num_should_match_10(delta);
+            self.pred_if_atom_arg_num_should_match_13(delta);
         }
     }
 
@@ -65770,28 +68415,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.pred_if_atom_arg_num_should_match_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_arg_num_should_match_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(_, tm3) in self.term_list_len.iter_all_0(tm2) {
-                self.pred_if_atom_arg_num_should_match_5(delta, tm0, tm1, tm2, tm3);
+                self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_4(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_arg_num_should_match_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm2, tm3) in self.term_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(tm0, tm1, _) in self.pred_if_atom_node.iter_all_2(tm2) {
-                    self.pred_if_atom_arg_num_should_match_5(delta, tm0, tm1, tm2, tm3);
+                    self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_5(
+    fn pred_if_atom_arg_num_should_match_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            self.pred_if_atom_arg_num_should_match_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_arg_num_should_match_7(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -65806,7 +68478,7 @@ impl Eqlog {
                 for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                        self.pred_if_atom_arg_num_should_match_9(
+                        self.pred_if_atom_arg_num_should_match_11(
                             delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                         );
                     }
@@ -65816,7 +68488,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_6(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_arg_num_should_match_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm4) in self.semantic_pred.iter_dirty() {
@@ -65830,7 +68502,7 @@ impl Eqlog {
                             for PredIfAtomNode(tm0, _, _) in
                                 self.pred_if_atom_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.pred_if_atom_arg_num_should_match_9(
+                                self.pred_if_atom_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -65842,7 +68514,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_7(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_arg_num_should_match_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm4, tm5) in self.pred_arity.iter_dirty() {
@@ -65856,7 +68528,7 @@ impl Eqlog {
                             for PredIfAtomNode(tm0, _, _) in
                                 self.pred_if_atom_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.pred_if_atom_arg_num_should_match_9(
+                                self.pred_if_atom_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -65868,7 +68540,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_8(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_arg_num_should_match_10(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
@@ -65882,7 +68554,7 @@ impl Eqlog {
                             for PredIfAtomNode(tm0, _, _) in
                                 self.pred_if_atom_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.pred_if_atom_arg_num_should_match_9(
+                                self.pred_if_atom_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -65894,7 +68566,24 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_9(
+    fn pred_if_atom_arg_num_should_match_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm2: TermListNode,
+        tm3: Nat,
+        tm1: Ident,
+        tm4: Pred,
+        tm5: TypeList,
+        tm6: Nat,
+    ) {
+        for _ in [()] {
+            self.pred_if_atom_arg_num_should_match_12(delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_arg_num_should_match_12(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -65908,7 +68597,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomNodeLoc(_, tm7) in self.if_atom_node_loc.iter_all_0(tm0) {
-                self.pred_if_atom_arg_num_should_match_11(
+                self.pred_if_atom_arg_num_should_match_14(
                     delta, tm2, tm3, tm1, tm4, tm5, tm6, tm0, tm7,
                 );
             }
@@ -65916,7 +68605,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_10(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_arg_num_should_match_13(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomNodeLoc(tm0, tm7) in self.if_atom_node_loc.iter_dirty() {
@@ -65930,7 +68619,7 @@ impl Eqlog {
                             for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
                                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                    self.pred_if_atom_arg_num_should_match_11(
+                                    self.pred_if_atom_arg_num_should_match_14(
                                         delta, tm2, tm3, tm1, tm4, tm5, tm6, tm0, tm7,
                                     );
                                 }
@@ -65943,7 +68632,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_arg_num_should_match_11(
+    fn pred_if_atom_arg_num_should_match_14(
         &self,
         delta: &mut ModelDelta,
         tm2: TermListNode,
@@ -65974,11 +68663,11 @@ impl Eqlog {
         for _ in [()] {
             self.pred_then_atom_arg_num_should_match_1(delta);
             self.pred_then_atom_arg_num_should_match_2(delta);
-            self.pred_then_atom_arg_num_should_match_4(delta);
-            self.pred_then_atom_arg_num_should_match_6(delta);
-            self.pred_then_atom_arg_num_should_match_7(delta);
+            self.pred_then_atom_arg_num_should_match_5(delta);
             self.pred_then_atom_arg_num_should_match_8(delta);
+            self.pred_then_atom_arg_num_should_match_9(delta);
             self.pred_then_atom_arg_num_should_match_10(delta);
+            self.pred_then_atom_arg_num_should_match_13(delta);
         }
     }
 
@@ -66006,28 +68695,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.pred_then_atom_arg_num_should_match_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_arg_num_should_match_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(_, tm3) in self.term_list_len.iter_all_0(tm2) {
-                self.pred_then_atom_arg_num_should_match_5(delta, tm0, tm1, tm2, tm3);
+                self.pred_then_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_4(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_arg_num_should_match_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm2, tm3) in self.term_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(tm0, tm1, _) in self.pred_then_atom_node.iter_all_2(tm2) {
-                    self.pred_then_atom_arg_num_should_match_5(delta, tm0, tm1, tm2, tm3);
+                    self.pred_then_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_5(
+    fn pred_then_atom_arg_num_should_match_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            self.pred_then_atom_arg_num_should_match_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_arg_num_should_match_7(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -66042,7 +68758,7 @@ impl Eqlog {
                 for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                        self.pred_then_atom_arg_num_should_match_9(
+                        self.pred_then_atom_arg_num_should_match_11(
                             delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                         );
                     }
@@ -66052,7 +68768,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_6(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_arg_num_should_match_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm1, tm4) in self.semantic_pred.iter_dirty() {
@@ -66066,7 +68782,7 @@ impl Eqlog {
                             for PredThenAtomNode(tm0, _, _) in
                                 self.pred_then_atom_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.pred_then_atom_arg_num_should_match_9(
+                                self.pred_then_atom_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -66078,7 +68794,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_7(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_arg_num_should_match_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm4, tm5) in self.pred_arity.iter_dirty() {
@@ -66092,7 +68808,7 @@ impl Eqlog {
                             for PredThenAtomNode(tm0, _, _) in
                                 self.pred_then_atom_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.pred_then_atom_arg_num_should_match_9(
+                                self.pred_then_atom_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -66104,7 +68820,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_8(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_arg_num_should_match_10(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
@@ -66118,7 +68834,7 @@ impl Eqlog {
                             for PredThenAtomNode(tm0, _, _) in
                                 self.pred_then_atom_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.pred_then_atom_arg_num_should_match_9(
+                                self.pred_then_atom_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -66130,7 +68846,24 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_9(
+    fn pred_then_atom_arg_num_should_match_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm2: TermListNode,
+        tm3: Nat,
+        tm1: Ident,
+        tm4: Pred,
+        tm5: TypeList,
+        tm6: Nat,
+    ) {
+        for _ in [()] {
+            self.pred_then_atom_arg_num_should_match_12(delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_arg_num_should_match_12(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -66144,7 +68877,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomNodeLoc(_, tm7) in self.then_atom_node_loc.iter_all_0(tm0) {
-                self.pred_then_atom_arg_num_should_match_11(
+                self.pred_then_atom_arg_num_should_match_14(
                     delta, tm2, tm3, tm1, tm4, tm5, tm6, tm0, tm7,
                 );
             }
@@ -66152,7 +68885,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_10(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_arg_num_should_match_13(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomNodeLoc(tm0, tm7) in self.then_atom_node_loc.iter_dirty() {
@@ -66168,7 +68901,7 @@ impl Eqlog {
                             for PredArity(_, tm5) in self.pred_arity.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
                                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                    self.pred_then_atom_arg_num_should_match_11(
+                                    self.pred_then_atom_arg_num_should_match_14(
                                         delta, tm2, tm3, tm1, tm4, tm5, tm6, tm0, tm7,
                                     );
                                 }
@@ -66181,7 +68914,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_arg_num_should_match_11(
+    fn pred_then_atom_arg_num_should_match_14(
         &self,
         delta: &mut ModelDelta,
         tm2: TermListNode,
@@ -66212,11 +68945,11 @@ impl Eqlog {
         for _ in [()] {
             self.app_term_arg_num_should_match_1(delta);
             self.app_term_arg_num_should_match_2(delta);
-            self.app_term_arg_num_should_match_4(delta);
-            self.app_term_arg_num_should_match_6(delta);
-            self.app_term_arg_num_should_match_7(delta);
+            self.app_term_arg_num_should_match_5(delta);
             self.app_term_arg_num_should_match_8(delta);
+            self.app_term_arg_num_should_match_9(delta);
             self.app_term_arg_num_should_match_10(delta);
+            self.app_term_arg_num_should_match_13(delta);
         }
     }
 
@@ -66244,28 +68977,55 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.app_term_arg_num_should_match_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_arg_num_should_match_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(_, tm3) in self.term_list_len.iter_all_0(tm2) {
-                self.app_term_arg_num_should_match_5(delta, tm0, tm1, tm2, tm3);
+                self.app_term_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_4(&self, delta: &mut ModelDelta) {
+    fn app_term_arg_num_should_match_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm2, tm3) in self.term_list_len.iter_dirty() {
                 #[allow(unused_variables)]
                 for AppTermNode(tm0, tm1, _) in self.app_term_node.iter_all_2(tm2) {
-                    self.app_term_arg_num_should_match_5(delta, tm0, tm1, tm2, tm3);
+                    self.app_term_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_5(
+    fn app_term_arg_num_should_match_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            self.app_term_arg_num_should_match_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_arg_num_should_match_7(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -66280,7 +69040,7 @@ impl Eqlog {
                 for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
                     #[allow(unused_variables)]
                     for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                        self.app_term_arg_num_should_match_9(
+                        self.app_term_arg_num_should_match_11(
                             delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                         );
                     }
@@ -66290,7 +69050,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_6(&self, delta: &mut ModelDelta) {
+    fn app_term_arg_num_should_match_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm4) in self.semantic_func.iter_dirty() {
@@ -66303,7 +69063,7 @@ impl Eqlog {
                             #[allow(unused_variables)]
                             for AppTermNode(tm0, _, _) in self.app_term_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.app_term_arg_num_should_match_9(
+                                self.app_term_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -66315,7 +69075,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_7(&self, delta: &mut ModelDelta) {
+    fn app_term_arg_num_should_match_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Domain(tm4, tm5) in self.domain.iter_dirty() {
@@ -66328,7 +69088,7 @@ impl Eqlog {
                             #[allow(unused_variables)]
                             for AppTermNode(tm0, _, _) in self.app_term_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.app_term_arg_num_should_match_9(
+                                self.app_term_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -66340,7 +69100,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_8(&self, delta: &mut ModelDelta) {
+    fn app_term_arg_num_should_match_10(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm5, tm6) in self.type_list_len.iter_dirty() {
@@ -66353,7 +69113,7 @@ impl Eqlog {
                             #[allow(unused_variables)]
                             for AppTermNode(tm0, _, _) in self.app_term_node.iter_all_1_2(tm1, tm2)
                             {
-                                self.app_term_arg_num_should_match_9(
+                                self.app_term_arg_num_should_match_11(
                                     delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6,
                                 );
                             }
@@ -66365,7 +69125,24 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_9(
+    fn app_term_arg_num_should_match_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm2: TermListNode,
+        tm3: Nat,
+        tm1: Ident,
+        tm4: Func,
+        tm5: TypeList,
+        tm6: Nat,
+    ) {
+        for _ in [()] {
+            self.app_term_arg_num_should_match_12(delta, tm0, tm2, tm3, tm1, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_arg_num_should_match_12(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -66379,7 +69156,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm7) in self.term_node_loc.iter_all_0(tm0) {
-                self.app_term_arg_num_should_match_11(
+                self.app_term_arg_num_should_match_14(
                     delta, tm2, tm3, tm1, tm4, tm5, tm6, tm0, tm7,
                 );
             }
@@ -66387,7 +69164,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_10(&self, delta: &mut ModelDelta) {
+    fn app_term_arg_num_should_match_13(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm0, tm7) in self.term_node_loc.iter_dirty() {
@@ -66401,7 +69178,7 @@ impl Eqlog {
                             for Domain(_, tm5) in self.domain.iter_all_0(tm4) {
                                 #[allow(unused_variables)]
                                 for TypeListLen(_, tm6) in self.type_list_len.iter_all_0(tm5) {
-                                    self.app_term_arg_num_should_match_11(
+                                    self.app_term_arg_num_should_match_14(
                                         delta, tm2, tm3, tm1, tm4, tm5, tm6, tm0, tm7,
                                     );
                                 }
@@ -66414,7 +69191,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_arg_num_should_match_11(
+    fn app_term_arg_num_should_match_14(
         &self,
         delta: &mut ModelDelta,
         tm2: TermListNode,
@@ -66445,7 +69222,7 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_stmts_stmt_cons_1(delta);
             self.cfg_edge_stmts_stmt_cons_2(delta);
-            self.cfg_edge_stmts_stmt_cons_4(delta);
+            self.cfg_edge_stmts_stmt_cons_5(delta);
         }
     }
 
@@ -66467,28 +69244,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cfg_edge_stmts_stmt_cons_3(&self, delta: &mut ModelDelta, tm0: StmtListNode, tm1: StmtNode) {
         for _ in [()] {
+            self.cfg_edge_stmts_stmt_cons_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmts_stmt_cons_4(&self, delta: &mut ModelDelta, tm0: StmtListNode, tm1: StmtNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm2, tm3) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.cfg_edge_stmts_stmt_cons_5(delta, tm1, tm0, tm2, tm3);
+                self.cfg_edge_stmts_stmt_cons_6(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmts_stmt_cons_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmts_stmt_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, tm2, tm3) in self.cons_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for CfgEdgeStmtsStmt(_, tm1) in self.cfg_edge_stmts_stmt.iter_all_0(tm0) {
-                    self.cfg_edge_stmts_stmt_cons_5(delta, tm1, tm0, tm2, tm3);
+                    self.cfg_edge_stmts_stmt_cons_6(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmts_stmt_cons_5(
+    fn cfg_edge_stmts_stmt_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -66515,8 +69299,8 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_stmts_stmt_singleton_1(delta);
             self.cfg_edge_stmts_stmt_singleton_2(delta);
-            self.cfg_edge_stmts_stmt_singleton_4(delta);
-            self.cfg_edge_stmts_stmt_singleton_6(delta);
+            self.cfg_edge_stmts_stmt_singleton_5(delta);
+            self.cfg_edge_stmts_stmt_singleton_8(delta);
         }
     }
 
@@ -66543,28 +69327,54 @@ impl Eqlog {
         tm1: StmtNode,
     ) {
         for _ in [()] {
+            self.cfg_edge_stmts_stmt_singleton_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmts_stmt_singleton_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtListNode,
+        tm1: StmtNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm2, tm3) in self.cons_stmt_list_node.iter_all_0(tm0) {
-                self.cfg_edge_stmts_stmt_singleton_5(delta, tm1, tm0, tm2, tm3);
+                self.cfg_edge_stmts_stmt_singleton_6(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmts_stmt_singleton_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmts_stmt_singleton_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm0, tm2, tm3) in self.cons_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for CfgEdgeStmtsStmt(_, tm1) in self.cfg_edge_stmts_stmt.iter_all_0(tm0) {
-                    self.cfg_edge_stmts_stmt_singleton_5(delta, tm1, tm0, tm2, tm3);
+                    self.cfg_edge_stmts_stmt_singleton_6(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmts_stmt_singleton_5(
+    fn cfg_edge_stmts_stmt_singleton_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtNode,
+        tm0: StmtListNode,
+        tm2: StmtNode,
+        tm3: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_stmts_stmt_singleton_7(delta, tm1, tm0, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmts_stmt_singleton_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -66575,13 +69385,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm3) {
-                self.cfg_edge_stmts_stmt_singleton_7(delta, tm1, tm0, tm2, tm3);
+                self.cfg_edge_stmts_stmt_singleton_9(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmts_stmt_singleton_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmts_stmt_singleton_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilStmtListNode(tm3) in self.nil_stmt_list_node.iter_dirty() {
@@ -66591,7 +69401,7 @@ impl Eqlog {
                     for ConsStmtListNode(_, tm2, _) in
                         self.cons_stmt_list_node.iter_all_0_2(tm0, tm3)
                     {
-                        self.cfg_edge_stmts_stmt_singleton_7(delta, tm1, tm0, tm2, tm3);
+                        self.cfg_edge_stmts_stmt_singleton_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -66599,7 +69409,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmts_stmt_singleton_7(
+    fn cfg_edge_stmts_stmt_singleton_9(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -66620,7 +69430,7 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_stmt_stmts_cons_1(delta);
             self.cfg_edge_stmt_stmts_cons_2(delta);
-            self.cfg_edge_stmt_stmts_cons_4(delta);
+            self.cfg_edge_stmt_stmts_cons_5(delta);
         }
     }
 
@@ -66642,28 +69452,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cfg_edge_stmt_stmts_cons_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
         for _ in [()] {
+            self.cfg_edge_stmt_stmts_cons_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmt_stmts_cons_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm2, tm3) in self.cons_stmt_list_node.iter_all_0(tm1) {
-                self.cfg_edge_stmt_stmts_cons_5(delta, tm0, tm1, tm2, tm3);
+                self.cfg_edge_stmt_stmts_cons_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_stmts_cons_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmt_stmts_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm1, tm2, tm3) in self.cons_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for CfgEdgeStmtStmts(tm0, _) in self.cfg_edge_stmt_stmts.iter_all_1(tm1) {
-                    self.cfg_edge_stmt_stmts_cons_5(delta, tm0, tm1, tm2, tm3);
+                    self.cfg_edge_stmt_stmts_cons_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_stmts_cons_5(
+    fn cfg_edge_stmt_stmts_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -66684,8 +69501,8 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_stmt_stmts_nil_1(delta);
             self.cfg_edge_stmt_stmts_nil_2(delta);
-            self.cfg_edge_stmt_stmts_nil_4(delta);
-            self.cfg_edge_stmt_stmts_nil_6(delta);
+            self.cfg_edge_stmt_stmts_nil_5(delta);
+            self.cfg_edge_stmt_stmts_nil_8(delta);
         }
     }
 
@@ -66707,38 +69524,52 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cfg_edge_stmt_stmts_nil_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
         for _ in [()] {
+            self.cfg_edge_stmt_stmts_nil_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmt_stmts_nil_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm1) {
-                self.cfg_edge_stmt_stmts_nil_5(delta, tm0, tm1);
+                self.cfg_edge_stmt_stmts_nil_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_stmts_nil_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmt_stmts_nil_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilStmtListNode(tm1) in self.nil_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for CfgEdgeStmtStmts(tm0, _) in self.cfg_edge_stmt_stmts.iter_all_1(tm1) {
-                    self.cfg_edge_stmt_stmts_nil_5(delta, tm0, tm1);
+                    self.cfg_edge_stmt_stmts_nil_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_stmts_nil_5(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
+    fn cfg_edge_stmt_stmts_nil_6(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
+        for _ in [()] {
+            self.cfg_edge_stmt_stmts_nil_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmt_stmts_nil_7(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtListNode) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CfgEdgeStmtsStmt(_, tm2) in self.cfg_edge_stmts_stmt.iter_all_0(tm1) {
-                self.cfg_edge_stmt_stmts_nil_7(delta, tm0, tm1, tm2);
+                self.cfg_edge_stmt_stmts_nil_9(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_stmts_nil_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmt_stmts_nil_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CfgEdgeStmtsStmt(tm1, tm2) in self.cfg_edge_stmts_stmt.iter_dirty() {
@@ -66746,7 +69577,7 @@ impl Eqlog {
                 for NilStmtListNode(_) in self.nil_stmt_list_node.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for CfgEdgeStmtStmts(tm0, _) in self.cfg_edge_stmt_stmts.iter_all_1(tm1) {
-                        self.cfg_edge_stmt_stmts_nil_7(delta, tm0, tm1, tm2);
+                        self.cfg_edge_stmt_stmts_nil_9(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -66754,7 +69585,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_stmts_nil_7(
+    fn cfg_edge_stmt_stmts_nil_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -66774,7 +69605,7 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_fork_cons_1(delta);
             self.cfg_edge_fork_cons_2(delta);
-            self.cfg_edge_fork_cons_4(delta);
+            self.cfg_edge_fork_cons_5(delta);
         }
     }
 
@@ -66796,30 +69627,37 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cfg_edge_fork_cons_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtBlockListNode) {
         for _ in [()] {
+            self.cfg_edge_fork_cons_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_fork_cons_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtBlockListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(_, tm2, tm3) in self.cons_stmt_block_list_node.iter_all_0(tm1)
             {
-                self.cfg_edge_fork_cons_5(delta, tm0, tm1, tm2, tm3);
+                self.cfg_edge_fork_cons_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_fork_cons_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_fork_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(tm1, tm2, tm3) in self.cons_stmt_block_list_node.iter_dirty()
             {
                 #[allow(unused_variables)]
                 for CfgEdgeFork(tm0, _) in self.cfg_edge_fork.iter_all_1(tm1) {
-                    self.cfg_edge_fork_cons_5(delta, tm0, tm1, tm2, tm3);
+                    self.cfg_edge_fork_cons_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_fork_cons_5(
+    fn cfg_edge_fork_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -66851,7 +69689,7 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_join_cons_1(delta);
             self.cfg_edge_join_cons_2(delta);
-            self.cfg_edge_join_cons_4(delta);
+            self.cfg_edge_join_cons_5(delta);
         }
     }
 
@@ -66873,30 +69711,37 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cfg_edge_join_cons_3(&self, delta: &mut ModelDelta, tm0: StmtBlockListNode, tm1: StmtNode) {
         for _ in [()] {
+            self.cfg_edge_join_cons_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_join_cons_4(&self, delta: &mut ModelDelta, tm0: StmtBlockListNode, tm1: StmtNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(_, tm2, tm3) in self.cons_stmt_block_list_node.iter_all_0(tm0)
             {
-                self.cfg_edge_join_cons_5(delta, tm1, tm0, tm2, tm3);
+                self.cfg_edge_join_cons_6(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_join_cons_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_join_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtBlockListNode(tm0, tm2, tm3) in self.cons_stmt_block_list_node.iter_dirty()
             {
                 #[allow(unused_variables)]
                 for CfgEdgeJoin(_, tm1) in self.cfg_edge_join.iter_all_0(tm0) {
-                    self.cfg_edge_join_cons_5(delta, tm1, tm0, tm2, tm3);
+                    self.cfg_edge_join_cons_6(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_join_cons_5(
+    fn cfg_edge_join_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -66928,8 +69773,8 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_if_1(delta);
             self.cfg_edge_if_2(delta);
-            self.cfg_edge_if_4(delta);
-            self.cfg_edge_if_6(delta);
+            self.cfg_edge_if_5(delta);
+            self.cfg_edge_if_8(delta);
         }
     }
 
@@ -66957,28 +69802,55 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.cfg_edge_if_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_if_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtListNode,
+        tm1: StmtNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm1) {
-                self.cfg_edge_if_5(delta, tm0, tm2, tm1, tm3);
+                self.cfg_edge_if_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_if_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_if_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfStmtNode(tm1, tm3) in self.if_stmt_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
-                    self.cfg_edge_if_5(delta, tm0, tm2, tm1, tm3);
+                    self.cfg_edge_if_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_if_5(
+    fn cfg_edge_if_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtListNode,
+        tm2: StmtListNode,
+        tm1: StmtNode,
+        tm3: IfAtomNode,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_if_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_if_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtListNode,
@@ -66989,13 +69861,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm4, tm5) in self.cons_stmt_list_node.iter_all_0(tm2) {
-                self.cfg_edge_if_7(delta, tm0, tm1, tm3, tm2, tm4, tm5);
+                self.cfg_edge_if_9(delta, tm0, tm1, tm3, tm2, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_if_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_if_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm2, tm4, tm5) in self.cons_stmt_list_node.iter_dirty() {
@@ -67003,7 +69875,7 @@ impl Eqlog {
                 for ConsStmtListNode(tm0, tm1, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, tm3) in self.if_stmt_node.iter_all_0(tm1) {
-                        self.cfg_edge_if_7(delta, tm0, tm1, tm3, tm2, tm4, tm5);
+                        self.cfg_edge_if_9(delta, tm0, tm1, tm3, tm2, tm4, tm5);
                     }
                 }
             }
@@ -67011,7 +69883,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_if_7(
+    fn cfg_edge_if_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtListNode,
@@ -67034,8 +69906,8 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_then_1(delta);
             self.cfg_edge_then_2(delta);
-            self.cfg_edge_then_4(delta);
-            self.cfg_edge_then_6(delta);
+            self.cfg_edge_then_5(delta);
+            self.cfg_edge_then_8(delta);
         }
     }
 
@@ -67063,28 +69935,55 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.cfg_edge_then_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_then_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtListNode,
+        tm1: StmtNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm1) {
-                self.cfg_edge_then_5(delta, tm0, tm2, tm1, tm3);
+                self.cfg_edge_then_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_then_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_then_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenStmtNode(tm1, tm3) in self.then_stmt_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsStmtListNode(tm0, _, tm2) in self.cons_stmt_list_node.iter_all_1(tm1) {
-                    self.cfg_edge_then_5(delta, tm0, tm2, tm1, tm3);
+                    self.cfg_edge_then_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_then_5(
+    fn cfg_edge_then_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtListNode,
+        tm2: StmtListNode,
+        tm1: StmtNode,
+        tm3: ThenAtomNode,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_then_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_then_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtListNode,
@@ -67095,13 +69994,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm4, tm5) in self.cons_stmt_list_node.iter_all_0(tm2) {
-                self.cfg_edge_then_7(delta, tm0, tm1, tm3, tm2, tm4, tm5);
+                self.cfg_edge_then_9(delta, tm0, tm1, tm3, tm2, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_then_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_then_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm2, tm4, tm5) in self.cons_stmt_list_node.iter_dirty() {
@@ -67109,7 +70008,7 @@ impl Eqlog {
                 for ConsStmtListNode(tm0, tm1, _) in self.cons_stmt_list_node.iter_all_2(tm2) {
                     #[allow(unused_variables)]
                     for ThenStmtNode(_, tm3) in self.then_stmt_node.iter_all_0(tm1) {
-                        self.cfg_edge_then_7(delta, tm0, tm1, tm3, tm2, tm4, tm5);
+                        self.cfg_edge_then_9(delta, tm0, tm1, tm3, tm2, tm4, tm5);
                     }
                 }
             }
@@ -67117,7 +70016,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_then_7(
+    fn cfg_edge_then_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtListNode,
@@ -67178,7 +70077,7 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_match_fork_blocks_1(delta);
             self.cfg_edge_match_fork_blocks_2(delta);
-            self.cfg_edge_match_fork_blocks_4(delta);
+            self.cfg_edge_match_fork_blocks_5(delta);
         }
     }
 
@@ -67206,28 +70105,41 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.cfg_edge_match_fork_blocks_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_match_fork_blocks_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(_, tm3) in self.desugared_case_block_list.iter_all_0(tm2) {
-                self.cfg_edge_match_fork_blocks_5(delta, tm0, tm1, tm2, tm3);
+                self.cfg_edge_match_fork_blocks_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_fork_blocks_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_match_fork_blocks_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm2, tm3) in self.desugared_case_block_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                    self.cfg_edge_match_fork_blocks_5(delta, tm0, tm1, tm2, tm3);
+                    self.cfg_edge_match_fork_blocks_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_fork_blocks_5(
+    fn cfg_edge_match_fork_blocks_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -67248,8 +70160,8 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_branch_join_blocks_1(delta);
             self.cfg_edge_branch_join_blocks_2(delta);
-            self.cfg_edge_branch_join_blocks_4(delta);
-            self.cfg_edge_branch_join_blocks_6(delta);
+            self.cfg_edge_branch_join_blocks_5(delta);
+            self.cfg_edge_branch_join_blocks_8(delta);
         }
     }
 
@@ -67276,28 +70188,54 @@ impl Eqlog {
         tm1: StmtBlockListNode,
     ) {
         for _ in [()] {
+            self.cfg_edge_branch_join_blocks_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_branch_join_blocks_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: StmtBlockListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm2, _, tm3) in self.cons_stmt_list_node.iter_all_1(tm0) {
-                self.cfg_edge_branch_join_blocks_5(delta, tm1, tm2, tm0, tm3);
+                self.cfg_edge_branch_join_blocks_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_branch_join_blocks_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_branch_join_blocks_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm2, tm0, tm3) in self.cons_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                    self.cfg_edge_branch_join_blocks_5(delta, tm1, tm2, tm0, tm3);
+                    self.cfg_edge_branch_join_blocks_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_branch_join_blocks_5(
+    fn cfg_edge_branch_join_blocks_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtBlockListNode,
+        tm2: StmtListNode,
+        tm0: StmtNode,
+        tm3: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_branch_join_blocks_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_branch_join_blocks_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -67308,13 +70246,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm4, tm5) in self.cons_stmt_list_node.iter_all_0(tm3) {
-                self.cfg_edge_branch_join_blocks_7(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+                self.cfg_edge_branch_join_blocks_9(delta, tm1, tm2, tm0, tm3, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_branch_join_blocks_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_branch_join_blocks_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm3, tm4, tm5) in self.cons_stmt_list_node.iter_dirty() {
@@ -67322,7 +70260,7 @@ impl Eqlog {
                 for ConsStmtListNode(tm2, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm3) {
                     #[allow(unused_variables)]
                     for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                        self.cfg_edge_branch_join_blocks_7(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+                        self.cfg_edge_branch_join_blocks_9(delta, tm1, tm2, tm0, tm3, tm4, tm5);
                     }
                 }
             }
@@ -67330,7 +70268,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_branch_join_blocks_7(
+    fn cfg_edge_branch_join_blocks_9(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -67353,9 +70291,9 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_match_join_blocks_1(delta);
             self.cfg_edge_match_join_blocks_2(delta);
-            self.cfg_edge_match_join_blocks_4(delta);
-            self.cfg_edge_match_join_blocks_6(delta);
+            self.cfg_edge_match_join_blocks_5(delta);
             self.cfg_edge_match_join_blocks_8(delta);
+            self.cfg_edge_match_join_blocks_11(delta);
         }
     }
 
@@ -67383,28 +70321,56 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.cfg_edge_match_join_blocks_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_match_join_blocks_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm3, _, tm4) in self.cons_stmt_list_node.iter_all_1(tm0) {
-                self.cfg_edge_match_join_blocks_5(delta, tm1, tm2, tm3, tm0, tm4);
+                self.cfg_edge_match_join_blocks_6(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_join_blocks_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_match_join_blocks_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm3, tm0, tm4) in self.cons_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                    self.cfg_edge_match_join_blocks_5(delta, tm1, tm2, tm3, tm0, tm4);
+                    self.cfg_edge_match_join_blocks_6(delta, tm1, tm2, tm3, tm0, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_join_blocks_5(
+    fn cfg_edge_match_join_blocks_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm3: StmtListNode,
+        tm0: StmtNode,
+        tm4: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_match_join_blocks_7(delta, tm1, tm2, tm3, tm0, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_match_join_blocks_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -67416,13 +70382,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm5, tm6) in self.cons_stmt_list_node.iter_all_0(tm4) {
-                self.cfg_edge_match_join_blocks_7(delta, tm1, tm2, tm3, tm0, tm4, tm5, tm6);
+                self.cfg_edge_match_join_blocks_9(delta, tm1, tm2, tm3, tm0, tm4, tm5, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_join_blocks_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_match_join_blocks_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm4, tm5, tm6) in self.cons_stmt_list_node.iter_dirty() {
@@ -67430,7 +70396,7 @@ impl Eqlog {
                 for ConsStmtListNode(tm3, tm0, _) in self.cons_stmt_list_node.iter_all_2(tm4) {
                     #[allow(unused_variables)]
                     for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                        self.cfg_edge_match_join_blocks_7(delta, tm1, tm2, tm3, tm0, tm4, tm5, tm6);
+                        self.cfg_edge_match_join_blocks_9(delta, tm1, tm2, tm3, tm0, tm4, tm5, tm6);
                     }
                 }
             }
@@ -67438,7 +70404,24 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_join_blocks_7(
+    fn cfg_edge_match_join_blocks_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm3: StmtListNode,
+        tm0: StmtNode,
+        tm4: StmtListNode,
+        tm5: StmtNode,
+        tm6: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_match_join_blocks_10(delta, tm1, tm2, tm3, tm0, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_match_join_blocks_10(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -67452,13 +70435,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(_, tm7) in self.desugared_case_block_list.iter_all_0(tm2) {
-                self.cfg_edge_match_join_blocks_9(delta, tm1, tm3, tm0, tm4, tm5, tm6, tm2, tm7);
+                self.cfg_edge_match_join_blocks_12(delta, tm1, tm3, tm0, tm4, tm5, tm6, tm2, tm7);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_join_blocks_8(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_match_join_blocks_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm2, tm7) in self.desugared_case_block_list.iter_dirty() {
@@ -67470,7 +70453,7 @@ impl Eqlog {
                         for ConsStmtListNode(_, tm5, tm6) in
                             self.cons_stmt_list_node.iter_all_0(tm4)
                         {
-                            self.cfg_edge_match_join_blocks_9(
+                            self.cfg_edge_match_join_blocks_12(
                                 delta, tm1, tm3, tm0, tm4, tm5, tm6, tm2, tm7,
                             );
                         }
@@ -67481,7 +70464,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_match_join_blocks_9(
+    fn cfg_edge_match_join_blocks_12(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -67506,7 +70489,7 @@ impl Eqlog {
         for _ in [()] {
             self.before_rule_structure_total_1(delta);
             self.before_rule_structure_total_2(delta);
-            self.before_rule_structure_total_4(delta);
+            self.before_rule_structure_total_5(delta);
         }
     }
 
@@ -67528,6 +70511,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn before_rule_structure_total_3(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
         for _ in [()] {
+            self.before_rule_structure_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn before_rule_structure_total_4(&self, delta: &mut ModelDelta, tm0: RuleDeclNode) {
+        for _ in [()] {
             let tm1 = match self.before_rule_structure.iter_all_0(tm0).next() {
                 Some(BeforeRuleStructure(_, res)) => res,
                 None => {
@@ -67538,22 +70528,22 @@ impl Eqlog {
                 }
             };
 
-            self.before_rule_structure_total_5(delta, tm0, tm1);
+            self.before_rule_structure_total_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn before_rule_structure_total_4(&self, delta: &mut ModelDelta) {
+    fn before_rule_structure_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm1) in self.before_rule_structure.iter_dirty() {
-                self.before_rule_structure_total_5(delta, tm0, tm1);
+                self.before_rule_structure_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn before_rule_structure_total_5(
+    fn before_rule_structure_total_6(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDeclNode,
@@ -67567,8 +70557,8 @@ impl Eqlog {
         for _ in [()] {
             self.before_first_rule_stmt_1(delta);
             self.before_first_rule_stmt_2(delta);
-            self.before_first_rule_stmt_4(delta);
-            self.before_first_rule_stmt_6(delta);
+            self.before_first_rule_stmt_5(delta);
+            self.before_first_rule_stmt_8(delta);
         }
     }
 
@@ -67595,28 +70585,54 @@ impl Eqlog {
         tm1: StmtListNode,
     ) {
         for _ in [()] {
+            self.before_first_rule_stmt_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn before_first_rule_stmt_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDeclNode,
+        tm1: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(_, tm2, tm3) in self.cons_stmt_list_node.iter_all_0(tm1) {
-                self.before_first_rule_stmt_5(delta, tm0, tm1, tm2, tm3);
+                self.before_first_rule_stmt_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn before_first_rule_stmt_4(&self, delta: &mut ModelDelta) {
+    fn before_first_rule_stmt_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsStmtListNode(tm1, tm2, tm3) in self.cons_stmt_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
-                    self.before_first_rule_stmt_5(delta, tm0, tm1, tm2, tm3);
+                    self.before_first_rule_stmt_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn before_first_rule_stmt_5(
+    fn before_first_rule_stmt_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDeclNode,
+        tm1: StmtListNode,
+        tm2: StmtNode,
+        tm3: StmtListNode,
+    ) {
+        for _ in [()] {
+            self.before_first_rule_stmt_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn before_first_rule_stmt_7(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDeclNode,
@@ -67627,13 +70643,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(_, tm4) in self.before_rule_structure.iter_all_0(tm0) {
-                self.before_first_rule_stmt_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.before_first_rule_stmt_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn before_first_rule_stmt_6(&self, delta: &mut ModelDelta) {
+    fn before_first_rule_stmt_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm4) in self.before_rule_structure.iter_dirty() {
@@ -67641,7 +70657,7 @@ impl Eqlog {
                 for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for ConsStmtListNode(_, tm2, tm3) in self.cons_stmt_list_node.iter_all_0(tm1) {
-                        self.before_first_rule_stmt_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.before_first_rule_stmt_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -67649,7 +70665,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn before_first_rule_stmt_7(
+    fn before_first_rule_stmt_9(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -67677,8 +70693,8 @@ impl Eqlog {
         for _ in [()] {
             self.cfg_edge_stmt_structure_1(delta);
             self.cfg_edge_stmt_structure_2(delta);
-            self.cfg_edge_stmt_structure_4(delta);
-            self.cfg_edge_stmt_structure_6(delta);
+            self.cfg_edge_stmt_structure_5(delta);
+            self.cfg_edge_stmt_structure_8(delta);
         }
     }
 
@@ -67700,28 +70716,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn cfg_edge_stmt_structure_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtNode) {
         for _ in [()] {
+            self.cfg_edge_stmt_structure_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmt_structure_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: StmtNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
-                self.cfg_edge_stmt_structure_5(delta, tm1, tm0, tm2);
+                self.cfg_edge_stmt_structure_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_structure_4(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmt_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm2) in self.stmt_morphism.iter_dirty() {
                 #[allow(unused_variables)]
                 for CfgEdge(_, tm1) in self.cfg_edge.iter_all_0(tm0) {
-                    self.cfg_edge_stmt_structure_5(delta, tm1, tm0, tm2);
+                    self.cfg_edge_stmt_structure_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_structure_5(
+    fn cfg_edge_stmt_structure_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtNode,
+        tm0: StmtNode,
+        tm2: Morphism,
+    ) {
+        for _ in [()] {
+            self.cfg_edge_stmt_structure_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cfg_edge_stmt_structure_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -67731,13 +70767,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(_, tm3) in self.cod.iter_all_0(tm2) {
-                self.cfg_edge_stmt_structure_7(delta, tm1, tm0, tm2, tm3);
+                self.cfg_edge_stmt_structure_9(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_structure_6(&self, delta: &mut ModelDelta) {
+    fn cfg_edge_stmt_structure_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm2, tm3) in self.cod.iter_dirty() {
@@ -67745,7 +70781,7 @@ impl Eqlog {
                 for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm2) {
                     #[allow(unused_variables)]
                     for CfgEdge(_, tm1) in self.cfg_edge.iter_all_0(tm0) {
-                        self.cfg_edge_stmt_structure_7(delta, tm1, tm0, tm2, tm3);
+                        self.cfg_edge_stmt_structure_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -67753,7 +70789,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn cfg_edge_stmt_structure_7(
+    fn cfg_edge_stmt_structure_9(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtNode,
@@ -68004,8 +71040,8 @@ impl Eqlog {
         for _ in [()] {
             self.if_stmt_morphism_defined_1(delta);
             self.if_stmt_morphism_defined_2(delta);
-            self.if_stmt_morphism_defined_4(delta);
-            self.if_stmt_morphism_defined_6(delta);
+            self.if_stmt_morphism_defined_5(delta);
+            self.if_stmt_morphism_defined_8(delta);
         }
     }
 
@@ -68027,28 +71063,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn if_stmt_morphism_defined_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
         for _ in [()] {
+            self.if_stmt_morphism_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn if_stmt_morphism_defined_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(_, tm2) in self.before_stmt_structure.iter_all_0(tm0) {
-                self.if_stmt_morphism_defined_5(delta, tm1, tm0, tm2);
+                self.if_stmt_morphism_defined_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_morphism_defined_4(&self, delta: &mut ModelDelta) {
+    fn if_stmt_morphism_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(tm0, tm2) in self.before_stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                    self.if_stmt_morphism_defined_5(delta, tm1, tm0, tm2);
+                    self.if_stmt_morphism_defined_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_morphism_defined_5(
+    fn if_stmt_morphism_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: IfAtomNode,
+        tm0: StmtNode,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            self.if_stmt_morphism_defined_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn if_stmt_morphism_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: IfAtomNode,
@@ -68066,12 +71122,12 @@ impl Eqlog {
                 }
             };
 
-            self.if_stmt_morphism_defined_7(delta, tm0, tm1, tm2, tm3);
+            self.if_stmt_morphism_defined_9(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_morphism_defined_6(&self, delta: &mut ModelDelta) {
+    fn if_stmt_morphism_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm1, tm2, tm3) in self.if_atom_morphism.iter_dirty() {
@@ -68079,7 +71135,7 @@ impl Eqlog {
                 for BeforeStmtStructure(tm0, _) in self.before_stmt_structure.iter_all_1(tm2) {
                     #[allow(unused_variables)]
                     for IfStmtNode(_, _) in self.if_stmt_node.iter_all_0_1(tm0, tm1) {
-                        self.if_stmt_morphism_defined_7(delta, tm0, tm1, tm2, tm3);
+                        self.if_stmt_morphism_defined_9(delta, tm0, tm1, tm2, tm3);
                     }
                 }
             }
@@ -68087,7 +71143,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_morphism_defined_7(
+    fn if_stmt_morphism_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -68108,8 +71164,8 @@ impl Eqlog {
         for _ in [()] {
             self.then_stmt_morphism_defined_1(delta);
             self.then_stmt_morphism_defined_2(delta);
-            self.then_stmt_morphism_defined_4(delta);
-            self.then_stmt_morphism_defined_6(delta);
+            self.then_stmt_morphism_defined_5(delta);
+            self.then_stmt_morphism_defined_8(delta);
         }
     }
 
@@ -68136,28 +71192,53 @@ impl Eqlog {
         tm1: ThenAtomNode,
     ) {
         for _ in [()] {
+            self.then_stmt_morphism_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_stmt_morphism_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(_, tm2) in self.before_stmt_structure.iter_all_0(tm0) {
-                self.then_stmt_morphism_defined_5(delta, tm1, tm0, tm2);
+                self.then_stmt_morphism_defined_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_stmt_morphism_defined_4(&self, delta: &mut ModelDelta) {
+    fn then_stmt_morphism_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(tm0, tm2) in self.before_stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                    self.then_stmt_morphism_defined_5(delta, tm1, tm0, tm2);
+                    self.then_stmt_morphism_defined_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_stmt_morphism_defined_5(
+    fn then_stmt_morphism_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: ThenAtomNode,
+        tm0: StmtNode,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            self.then_stmt_morphism_defined_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_stmt_morphism_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: ThenAtomNode,
@@ -68175,12 +71256,12 @@ impl Eqlog {
                 }
             };
 
-            self.then_stmt_morphism_defined_7(delta, tm0, tm1, tm2, tm3);
+            self.then_stmt_morphism_defined_9(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn then_stmt_morphism_defined_6(&self, delta: &mut ModelDelta) {
+    fn then_stmt_morphism_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm1, tm2, tm3) in self.then_atom_morphism.iter_dirty() {
@@ -68188,7 +71269,7 @@ impl Eqlog {
                 for BeforeStmtStructure(tm0, _) in self.before_stmt_structure.iter_all_1(tm2) {
                     #[allow(unused_variables)]
                     for ThenStmtNode(_, _) in self.then_stmt_node.iter_all_0_1(tm0, tm1) {
-                        self.then_stmt_morphism_defined_7(delta, tm0, tm1, tm2, tm3);
+                        self.then_stmt_morphism_defined_9(delta, tm0, tm1, tm2, tm3);
                     }
                 }
             }
@@ -68196,7 +71277,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn then_stmt_morphism_defined_7(
+    fn then_stmt_morphism_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -68217,8 +71298,8 @@ impl Eqlog {
         for _ in [()] {
             self.branch_stmt_morphism_defined_1(delta);
             self.branch_stmt_morphism_defined_2(delta);
-            self.branch_stmt_morphism_defined_4(delta);
-            self.branch_stmt_morphism_defined_6(delta);
+            self.branch_stmt_morphism_defined_5(delta);
+            self.branch_stmt_morphism_defined_8(delta);
         }
     }
 
@@ -68245,28 +71326,53 @@ impl Eqlog {
         tm1: StmtBlockListNode,
     ) {
         for _ in [()] {
+            self.branch_stmt_morphism_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn branch_stmt_morphism_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: StmtBlockListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(_, tm2) in self.before_stmt_structure.iter_all_0(tm0) {
-                self.branch_stmt_morphism_defined_5(delta, tm1, tm0, tm2);
+                self.branch_stmt_morphism_defined_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn branch_stmt_morphism_defined_4(&self, delta: &mut ModelDelta) {
+    fn branch_stmt_morphism_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(tm0, tm2) in self.before_stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                    self.branch_stmt_morphism_defined_5(delta, tm1, tm0, tm2);
+                    self.branch_stmt_morphism_defined_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn branch_stmt_morphism_defined_5(
+    fn branch_stmt_morphism_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: StmtBlockListNode,
+        tm0: StmtNode,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            self.branch_stmt_morphism_defined_7(delta, tm1, tm0, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn branch_stmt_morphism_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -68284,12 +71390,12 @@ impl Eqlog {
                 }
             };
 
-            self.branch_stmt_morphism_defined_7(delta, tm1, tm0, tm2, tm3);
+            self.branch_stmt_morphism_defined_9(delta, tm1, tm0, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn branch_stmt_morphism_defined_6(&self, delta: &mut ModelDelta) {
+    fn branch_stmt_morphism_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BranchStmtMorphism(tm0, tm2, tm3) in self.branch_stmt_morphism.iter_dirty() {
@@ -68297,7 +71403,7 @@ impl Eqlog {
                 for BeforeStmtStructure(_, _) in self.before_stmt_structure.iter_all_0_1(tm0, tm2) {
                     #[allow(unused_variables)]
                     for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                        self.branch_stmt_morphism_defined_7(delta, tm1, tm0, tm2, tm3);
+                        self.branch_stmt_morphism_defined_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -68305,7 +71411,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn branch_stmt_morphism_defined_7(
+    fn branch_stmt_morphism_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -68326,8 +71432,8 @@ impl Eqlog {
         for _ in [()] {
             self.match_stmt_morphism_defined_1(delta);
             self.match_stmt_morphism_defined_2(delta);
-            self.match_stmt_morphism_defined_4(delta);
-            self.match_stmt_morphism_defined_6(delta);
+            self.match_stmt_morphism_defined_5(delta);
+            self.match_stmt_morphism_defined_8(delta);
         }
     }
 
@@ -68355,28 +71461,55 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.match_stmt_morphism_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_morphism_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(_, tm3) in self.before_stmt_structure.iter_all_0(tm0) {
-                self.match_stmt_morphism_defined_5(delta, tm1, tm2, tm0, tm3);
+                self.match_stmt_morphism_defined_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_morphism_defined_4(&self, delta: &mut ModelDelta) {
+    fn match_stmt_morphism_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeStmtStructure(tm0, tm3) in self.before_stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                    self.match_stmt_morphism_defined_5(delta, tm1, tm2, tm0, tm3);
+                    self.match_stmt_morphism_defined_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_morphism_defined_5(
+    fn match_stmt_morphism_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm0: StmtNode,
+        tm3: Structure,
+    ) {
+        for _ in [()] {
+            self.match_stmt_morphism_defined_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_morphism_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -68395,12 +71528,12 @@ impl Eqlog {
                 }
             };
 
-            self.match_stmt_morphism_defined_7(delta, tm1, tm2, tm0, tm3, tm4);
+            self.match_stmt_morphism_defined_9(delta, tm1, tm2, tm0, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_morphism_defined_6(&self, delta: &mut ModelDelta) {
+    fn match_stmt_morphism_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtMorphism(tm0, tm3, tm4) in self.match_stmt_morphism.iter_dirty() {
@@ -68408,7 +71541,7 @@ impl Eqlog {
                 for BeforeStmtStructure(_, _) in self.before_stmt_structure.iter_all_0_1(tm0, tm3) {
                     #[allow(unused_variables)]
                     for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                        self.match_stmt_morphism_defined_7(delta, tm1, tm2, tm0, tm3, tm4);
+                        self.match_stmt_morphism_defined_9(delta, tm1, tm2, tm0, tm3, tm4);
                     }
                 }
             }
@@ -68416,7 +71549,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_morphism_defined_7(
+    fn match_stmt_morphism_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -68438,7 +71571,7 @@ impl Eqlog {
         for _ in [()] {
             self.if_stmt_morphism_is_if_1(delta);
             self.if_stmt_morphism_is_if_2(delta);
-            self.if_stmt_morphism_is_if_4(delta);
+            self.if_stmt_morphism_is_if_5(delta);
         }
     }
 
@@ -68460,28 +71593,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn if_stmt_morphism_is_if_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
         for _ in [()] {
+            self.if_stmt_morphism_is_if_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn if_stmt_morphism_is_if_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
-                self.if_stmt_morphism_is_if_5(delta, tm1, tm0, tm2);
+                self.if_stmt_morphism_is_if_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_morphism_is_if_4(&self, delta: &mut ModelDelta) {
+    fn if_stmt_morphism_is_if_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm2) in self.stmt_morphism.iter_dirty() {
                 #[allow(unused_variables)]
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                    self.if_stmt_morphism_is_if_5(delta, tm1, tm0, tm2);
+                    self.if_stmt_morphism_is_if_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_morphism_is_if_5(
+    fn if_stmt_morphism_is_if_6(
         &self,
         delta: &mut ModelDelta,
         tm1: IfAtomNode,
@@ -68501,8 +71641,8 @@ impl Eqlog {
         for _ in [()] {
             self.then_equal_stmt_morphism_is_surj_1(delta);
             self.then_equal_stmt_morphism_is_surj_2(delta);
-            self.then_equal_stmt_morphism_is_surj_4(delta);
-            self.then_equal_stmt_morphism_is_surj_6(delta);
+            self.then_equal_stmt_morphism_is_surj_5(delta);
+            self.then_equal_stmt_morphism_is_surj_8(delta);
         }
     }
 
@@ -68529,28 +71669,54 @@ impl Eqlog {
         tm1: ThenAtomNode,
     ) {
         for _ in [()] {
+            self.then_equal_stmt_morphism_is_surj_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_equal_stmt_morphism_is_surj_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for EqualThenAtomNode(_, tm2, tm3) in self.equal_then_atom_node.iter_all_0(tm1) {
-                self.then_equal_stmt_morphism_is_surj_5(delta, tm0, tm1, tm2, tm3);
+                self.then_equal_stmt_morphism_is_surj_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_equal_stmt_morphism_is_surj_4(&self, delta: &mut ModelDelta) {
+    fn then_equal_stmt_morphism_is_surj_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EqualThenAtomNode(tm1, tm2, tm3) in self.equal_then_atom_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
-                    self.then_equal_stmt_morphism_is_surj_5(delta, tm0, tm1, tm2, tm3);
+                    self.then_equal_stmt_morphism_is_surj_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_equal_stmt_morphism_is_surj_5(
+    fn then_equal_stmt_morphism_is_surj_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+        tm2: TermNode,
+        tm3: TermNode,
+    ) {
+        for _ in [()] {
+            self.then_equal_stmt_morphism_is_surj_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_equal_stmt_morphism_is_surj_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -68561,13 +71727,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm0) {
-                self.then_equal_stmt_morphism_is_surj_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.then_equal_stmt_morphism_is_surj_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_equal_stmt_morphism_is_surj_6(&self, delta: &mut ModelDelta) {
+    fn then_equal_stmt_morphism_is_surj_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm4) in self.stmt_morphism.iter_dirty() {
@@ -68576,7 +71742,7 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for EqualThenAtomNode(_, tm2, tm3) in self.equal_then_atom_node.iter_all_0(tm1)
                     {
-                        self.then_equal_stmt_morphism_is_surj_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.then_equal_stmt_morphism_is_surj_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -68584,7 +71750,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn then_equal_stmt_morphism_is_surj_7(
+    fn then_equal_stmt_morphism_is_surj_9(
         &self,
         delta: &mut ModelDelta,
         tm1: ThenAtomNode,
@@ -68606,8 +71772,8 @@ impl Eqlog {
         for _ in [()] {
             self.then_pred_stmt_morphism_is_surj_1(delta);
             self.then_pred_stmt_morphism_is_surj_2(delta);
-            self.then_pred_stmt_morphism_is_surj_4(delta);
-            self.then_pred_stmt_morphism_is_surj_6(delta);
+            self.then_pred_stmt_morphism_is_surj_5(delta);
+            self.then_pred_stmt_morphism_is_surj_8(delta);
         }
     }
 
@@ -68634,28 +71800,54 @@ impl Eqlog {
         tm1: ThenAtomNode,
     ) {
         for _ in [()] {
+            self.then_pred_stmt_morphism_is_surj_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_pred_stmt_morphism_is_surj_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for PredThenAtomNode(_, tm2, tm3) in self.pred_then_atom_node.iter_all_0(tm1) {
-                self.then_pred_stmt_morphism_is_surj_5(delta, tm0, tm1, tm2, tm3);
+                self.then_pred_stmt_morphism_is_surj_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_pred_stmt_morphism_is_surj_4(&self, delta: &mut ModelDelta) {
+    fn then_pred_stmt_morphism_is_surj_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredThenAtomNode(tm1, tm2, tm3) in self.pred_then_atom_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
-                    self.then_pred_stmt_morphism_is_surj_5(delta, tm0, tm1, tm2, tm3);
+                    self.then_pred_stmt_morphism_is_surj_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_pred_stmt_morphism_is_surj_5(
+    fn then_pred_stmt_morphism_is_surj_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+        tm2: Ident,
+        tm3: TermListNode,
+    ) {
+        for _ in [()] {
+            self.then_pred_stmt_morphism_is_surj_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_pred_stmt_morphism_is_surj_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -68666,13 +71858,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm0) {
-                self.then_pred_stmt_morphism_is_surj_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.then_pred_stmt_morphism_is_surj_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_pred_stmt_morphism_is_surj_6(&self, delta: &mut ModelDelta) {
+    fn then_pred_stmt_morphism_is_surj_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm4) in self.stmt_morphism.iter_dirty() {
@@ -68680,7 +71872,7 @@ impl Eqlog {
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for PredThenAtomNode(_, tm2, tm3) in self.pred_then_atom_node.iter_all_0(tm1) {
-                        self.then_pred_stmt_morphism_is_surj_7(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.then_pred_stmt_morphism_is_surj_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }
             }
@@ -68688,7 +71880,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn then_pred_stmt_morphism_is_surj_7(
+    fn then_pred_stmt_morphism_is_surj_9(
         &self,
         delta: &mut ModelDelta,
         tm1: ThenAtomNode,
@@ -68710,8 +71902,8 @@ impl Eqlog {
         for _ in [()] {
             self.then_defined_stmt_morphism_is_non_surj_1(delta);
             self.then_defined_stmt_morphism_is_non_surj_2(delta);
-            self.then_defined_stmt_morphism_is_non_surj_4(delta);
-            self.then_defined_stmt_morphism_is_non_surj_6(delta);
+            self.then_defined_stmt_morphism_is_non_surj_5(delta);
+            self.then_defined_stmt_morphism_is_non_surj_8(delta);
         }
     }
 
@@ -68738,28 +71930,54 @@ impl Eqlog {
         tm1: ThenAtomNode,
     ) {
         for _ in [()] {
+            self.then_defined_stmt_morphism_is_non_surj_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_defined_stmt_morphism_is_non_surj_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(_, tm2, tm3) in self.defined_then_atom_node.iter_all_0(tm1) {
-                self.then_defined_stmt_morphism_is_non_surj_5(delta, tm0, tm1, tm2, tm3);
+                self.then_defined_stmt_morphism_is_non_surj_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_defined_stmt_morphism_is_non_surj_4(&self, delta: &mut ModelDelta) {
+    fn then_defined_stmt_morphism_is_non_surj_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DefinedThenAtomNode(tm1, tm2, tm3) in self.defined_then_atom_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for ThenStmtNode(tm0, _) in self.then_stmt_node.iter_all_1(tm1) {
-                    self.then_defined_stmt_morphism_is_non_surj_5(delta, tm0, tm1, tm2, tm3);
+                    self.then_defined_stmt_morphism_is_non_surj_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_defined_stmt_morphism_is_non_surj_5(
+    fn then_defined_stmt_morphism_is_non_surj_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: ThenAtomNode,
+        tm2: OptTermNode,
+        tm3: TermNode,
+    ) {
+        for _ in [()] {
+            self.then_defined_stmt_morphism_is_non_surj_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_defined_stmt_morphism_is_non_surj_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -68770,13 +71988,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm4) in self.stmt_morphism.iter_all_0(tm0) {
-                self.then_defined_stmt_morphism_is_non_surj_7(delta, tm1, tm2, tm3, tm0, tm4);
+                self.then_defined_stmt_morphism_is_non_surj_9(delta, tm1, tm2, tm3, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_defined_stmt_morphism_is_non_surj_6(&self, delta: &mut ModelDelta) {
+    fn then_defined_stmt_morphism_is_non_surj_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm4) in self.stmt_morphism.iter_dirty() {
@@ -68786,7 +72004,7 @@ impl Eqlog {
                     for DefinedThenAtomNode(_, tm2, tm3) in
                         self.defined_then_atom_node.iter_all_0(tm1)
                     {
-                        self.then_defined_stmt_morphism_is_non_surj_7(
+                        self.then_defined_stmt_morphism_is_non_surj_9(
                             delta, tm1, tm2, tm3, tm0, tm4,
                         );
                     }
@@ -68796,7 +72014,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn then_defined_stmt_morphism_is_non_surj_7(
+    fn then_defined_stmt_morphism_is_non_surj_9(
         &self,
         delta: &mut ModelDelta,
         tm1: ThenAtomNode,
@@ -68820,7 +72038,7 @@ impl Eqlog {
         for _ in [()] {
             self.branch_stmt_morphism_is_noop_1(delta);
             self.branch_stmt_morphism_is_noop_2(delta);
-            self.branch_stmt_morphism_is_noop_4(delta);
+            self.branch_stmt_morphism_is_noop_5(delta);
         }
     }
 
@@ -68847,28 +72065,40 @@ impl Eqlog {
         tm1: StmtBlockListNode,
     ) {
         for _ in [()] {
+            self.branch_stmt_morphism_is_noop_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn branch_stmt_morphism_is_noop_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: StmtBlockListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm2) in self.stmt_morphism.iter_all_0(tm0) {
-                self.branch_stmt_morphism_is_noop_5(delta, tm1, tm0, tm2);
+                self.branch_stmt_morphism_is_noop_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn branch_stmt_morphism_is_noop_4(&self, delta: &mut ModelDelta) {
+    fn branch_stmt_morphism_is_noop_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm2) in self.stmt_morphism.iter_dirty() {
                 #[allow(unused_variables)]
                 for BranchStmtNode(_, tm1) in self.branch_stmt_node.iter_all_0(tm0) {
-                    self.branch_stmt_morphism_is_noop_5(delta, tm1, tm0, tm2);
+                    self.branch_stmt_morphism_is_noop_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn branch_stmt_morphism_is_noop_5(
+    fn branch_stmt_morphism_is_noop_6(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtBlockListNode,
@@ -68888,7 +72118,7 @@ impl Eqlog {
         for _ in [()] {
             self.match_stmt_morphism_is_if_1(delta);
             self.match_stmt_morphism_is_if_2(delta);
-            self.match_stmt_morphism_is_if_4(delta);
+            self.match_stmt_morphism_is_if_5(delta);
         }
     }
 
@@ -68916,28 +72146,41 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.match_stmt_morphism_is_if_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_morphism_is_if_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(_, tm3) in self.stmt_morphism.iter_all_0(tm0) {
-                self.match_stmt_morphism_is_if_5(delta, tm1, tm2, tm0, tm3);
+                self.match_stmt_morphism_is_if_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_morphism_is_if_4(&self, delta: &mut ModelDelta) {
+    fn match_stmt_morphism_is_if_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtMorphism(tm0, tm3) in self.stmt_morphism.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                    self.match_stmt_morphism_is_if_5(delta, tm1, tm2, tm0, tm3);
+                    self.match_stmt_morphism_is_if_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_morphism_is_if_5(
+    fn match_stmt_morphism_is_if_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -68958,7 +72201,7 @@ impl Eqlog {
         for _ in [()] {
             self.stmt_structure_morphism_1(delta);
             self.stmt_structure_morphism_2(delta);
-            self.stmt_structure_morphism_4(delta);
+            self.stmt_structure_morphism_5(delta);
         }
     }
 
@@ -68980,28 +72223,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn stmt_structure_morphism_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: Morphism) {
         for _ in [()] {
+            self.stmt_structure_morphism_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn stmt_structure_morphism_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: Morphism) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for Cod(_, tm2) in self.cod.iter_all_0(tm1) {
-                self.stmt_structure_morphism_5(delta, tm0, tm1, tm2);
+                self.stmt_structure_morphism_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn stmt_structure_morphism_4(&self, delta: &mut ModelDelta) {
+    fn stmt_structure_morphism_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm1, tm2) in self.cod.iter_dirty() {
                 #[allow(unused_variables)]
                 for StmtMorphism(tm0, _) in self.stmt_morphism.iter_all_1(tm1) {
-                    self.stmt_structure_morphism_5(delta, tm0, tm1, tm2);
+                    self.stmt_structure_morphism_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn stmt_structure_morphism_5(
+    fn stmt_structure_morphism_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -69021,7 +72271,7 @@ impl Eqlog {
         for _ in [()] {
             self.if_stmt_structure_1(delta);
             self.if_stmt_structure_2(delta);
-            self.if_stmt_structure_4(delta);
+            self.if_stmt_structure_5(delta);
         }
     }
 
@@ -69043,28 +72293,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn if_stmt_structure_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
         for _ in [()] {
+            self.if_stmt_structure_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn if_stmt_structure_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: IfAtomNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.if_stmt_structure_5(delta, tm1, tm0, tm2);
+                self.if_stmt_structure_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_structure_4(&self, delta: &mut ModelDelta) {
+    fn if_stmt_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtStructure(tm0, tm2) in self.stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for IfStmtNode(_, tm1) in self.if_stmt_node.iter_all_0(tm0) {
-                    self.if_stmt_structure_5(delta, tm1, tm0, tm2);
+                    self.if_stmt_structure_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn if_stmt_structure_5(
+    fn if_stmt_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: IfAtomNode,
@@ -69088,7 +72345,7 @@ impl Eqlog {
         for _ in [()] {
             self.then_stmt_structure_1(delta);
             self.then_stmt_structure_2(delta);
-            self.then_stmt_structure_4(delta);
+            self.then_stmt_structure_5(delta);
         }
     }
 
@@ -69110,28 +72367,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn then_stmt_structure_3(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: ThenAtomNode) {
         for _ in [()] {
+            self.then_stmt_structure_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn then_stmt_structure_4(&self, delta: &mut ModelDelta, tm0: StmtNode, tm1: ThenAtomNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtStructure(_, tm2) in self.stmt_structure.iter_all_0(tm0) {
-                self.then_stmt_structure_5(delta, tm1, tm0, tm2);
+                self.then_stmt_structure_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_stmt_structure_4(&self, delta: &mut ModelDelta) {
+    fn then_stmt_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtStructure(tm0, tm2) in self.stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for ThenStmtNode(_, tm1) in self.then_stmt_node.iter_all_0(tm0) {
-                    self.then_stmt_structure_5(delta, tm1, tm0, tm2);
+                    self.then_stmt_structure_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn then_stmt_structure_5(
+    fn then_stmt_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: ThenAtomNode,
@@ -69157,7 +72421,7 @@ impl Eqlog {
         for _ in [()] {
             self.match_stmt_structure_1(delta);
             self.match_stmt_structure_2(delta);
-            self.match_stmt_structure_4(delta);
+            self.match_stmt_structure_5(delta);
         }
     }
 
@@ -69185,28 +72449,41 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.match_stmt_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for StmtStructure(_, tm3) in self.stmt_structure.iter_all_0(tm0) {
-                self.match_stmt_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.match_stmt_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_structure_4(&self, delta: &mut ModelDelta) {
+    fn match_stmt_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtStructure(tm0, tm3) in self.stmt_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(_, tm1, tm2) in self.match_stmt_node.iter_all_0(tm0) {
-                    self.match_stmt_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.match_stmt_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_structure_5(
+    fn match_stmt_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69227,7 +72504,7 @@ impl Eqlog {
         for _ in [()] {
             self.equal_if_atom_structure_1(delta);
             self.equal_if_atom_structure_2(delta);
-            self.equal_if_atom_structure_4(delta);
+            self.equal_if_atom_structure_5(delta);
         }
     }
 
@@ -69255,28 +72532,41 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.equal_if_atom_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn equal_if_atom_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.equal_if_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.equal_if_atom_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_if_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn equal_if_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(_, tm1, tm2) in self.equal_if_atom_node.iter_all_0(tm0) {
-                    self.equal_if_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.equal_if_atom_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_if_atom_structure_5(
+    fn equal_if_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69302,7 +72592,7 @@ impl Eqlog {
         for _ in [()] {
             self.defined_if_atom_structure_1(delta);
             self.defined_if_atom_structure_2(delta);
-            self.defined_if_atom_structure_4(delta);
+            self.defined_if_atom_structure_5(delta);
         }
     }
 
@@ -69324,28 +72614,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn defined_if_atom_structure_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode) {
         for _ in [()] {
+            self.defined_if_atom_structure_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_if_atom_structure_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm2) in self.if_atom_structure.iter_all_0(tm0) {
-                self.defined_if_atom_structure_5(delta, tm1, tm0, tm2);
+                self.defined_if_atom_structure_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_if_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn defined_if_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(tm0, tm2) in self.if_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedIfAtomNode(_, tm1) in self.defined_if_atom_node.iter_all_0(tm0) {
-                    self.defined_if_atom_structure_5(delta, tm1, tm0, tm2);
+                    self.defined_if_atom_structure_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_if_atom_structure_5(
+    fn defined_if_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69365,7 +72662,7 @@ impl Eqlog {
         for _ in [()] {
             self.pred_if_atom_structure_1(delta);
             self.pred_if_atom_structure_2(delta);
-            self.pred_if_atom_structure_4(delta);
+            self.pred_if_atom_structure_5(delta);
         }
     }
 
@@ -69393,28 +72690,41 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.pred_if_atom_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.pred_if_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.pred_if_atom_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                    self.pred_if_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.pred_if_atom_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_structure_5(
+    fn pred_if_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -69435,7 +72745,7 @@ impl Eqlog {
         for _ in [()] {
             self.var_if_atom_structure_1(delta);
             self.var_if_atom_structure_2(delta);
-            self.var_if_atom_structure_4(delta);
+            self.var_if_atom_structure_5(delta);
         }
     }
 
@@ -69463,28 +72773,41 @@ impl Eqlog {
         tm2: Ident,
     ) {
         for _ in [()] {
+            self.var_if_atom_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_if_atom_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(_, tm3) in self.if_atom_structure.iter_all_0(tm0) {
-                self.var_if_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.var_if_atom_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_if_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn var_if_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomStructure(tm0, tm3) in self.if_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                    self.var_if_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.var_if_atom_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_if_atom_structure_5(
+    fn var_if_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69505,7 +72828,7 @@ impl Eqlog {
         for _ in [()] {
             self.equal_then_atom_structure_1(delta);
             self.equal_then_atom_structure_2(delta);
-            self.equal_then_atom_structure_4(delta);
+            self.equal_then_atom_structure_5(delta);
         }
     }
 
@@ -69533,28 +72856,41 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.equal_then_atom_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn equal_then_atom_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: TermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.equal_then_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.equal_then_atom_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_then_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn equal_then_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(_, tm1, tm2) in self.equal_then_atom_node.iter_all_0(tm0) {
-                    self.equal_then_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.equal_then_atom_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_then_atom_structure_5(
+    fn equal_then_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69580,7 +72916,7 @@ impl Eqlog {
         for _ in [()] {
             self.defined_then_atom_structure_1(delta);
             self.defined_then_atom_structure_2(delta);
-            self.defined_then_atom_structure_4(delta);
+            self.defined_then_atom_structure_5(delta);
         }
     }
 
@@ -69608,29 +72944,42 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.defined_then_atom_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_atom_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.defined_then_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.defined_then_atom_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn defined_then_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(_, tm1, tm2) in self.defined_then_atom_node.iter_all_0(tm0)
                 {
-                    self.defined_then_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.defined_then_atom_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_structure_5(
+    fn defined_then_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: OptTermNode,
@@ -69662,7 +73011,7 @@ impl Eqlog {
         for _ in [()] {
             self.pred_then_atom_structure_1(delta);
             self.pred_then_atom_structure_2(delta);
-            self.pred_then_atom_structure_4(delta);
+            self.pred_then_atom_structure_5(delta);
         }
     }
 
@@ -69690,28 +73039,41 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.pred_then_atom_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomStructure(_, tm3) in self.then_atom_structure.iter_all_0(tm0) {
-                self.pred_then_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.pred_then_atom_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_structure_4(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomStructure(tm0, tm3) in self.then_atom_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                    self.pred_then_atom_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.pred_then_atom_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_structure_5(
+    fn pred_then_atom_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -69732,7 +73094,7 @@ impl Eqlog {
         for _ in [()] {
             self.cons_term_list_structure_1(delta);
             self.cons_term_list_structure_2(delta);
-            self.cons_term_list_structure_4(delta);
+            self.cons_term_list_structure_5(delta);
         }
     }
 
@@ -69760,28 +73122,41 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.cons_term_list_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn cons_term_list_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermListNode,
+        tm1: TermNode,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermsStructure(_, tm3) in self.terms_structure.iter_all_0(tm0) {
-                self.cons_term_list_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.cons_term_list_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_term_list_structure_4(&self, delta: &mut ModelDelta) {
+    fn cons_term_list_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermsStructure(tm0, tm3) in self.terms_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                    self.cons_term_list_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.cons_term_list_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn cons_term_list_structure_5(
+    fn cons_term_list_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69807,7 +73182,7 @@ impl Eqlog {
         for _ in [()] {
             self.some_opt_term_structure_1(delta);
             self.some_opt_term_structure_2(delta);
-            self.some_opt_term_structure_4(delta);
+            self.some_opt_term_structure_5(delta);
         }
     }
 
@@ -69829,28 +73204,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn some_opt_term_structure_3(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm1: TermNode) {
         for _ in [()] {
+            self.some_opt_term_structure_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn some_opt_term_structure_4(&self, delta: &mut ModelDelta, tm0: OptTermNode, tm1: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for OptTermStructure(_, tm2) in self.opt_term_structure.iter_all_0(tm0) {
-                self.some_opt_term_structure_5(delta, tm1, tm0, tm2);
+                self.some_opt_term_structure_6(delta, tm1, tm0, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn some_opt_term_structure_4(&self, delta: &mut ModelDelta) {
+    fn some_opt_term_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for OptTermStructure(tm0, tm2) in self.opt_term_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for SomeTermNode(_, tm1) in self.some_term_node.iter_all_0(tm0) {
-                    self.some_opt_term_structure_5(delta, tm1, tm0, tm2);
+                    self.some_opt_term_structure_6(delta, tm1, tm0, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn some_opt_term_structure_5(
+    fn some_opt_term_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -69870,7 +73252,7 @@ impl Eqlog {
         for _ in [()] {
             self.app_term_structure_1(delta);
             self.app_term_structure_2(delta);
-            self.app_term_structure_4(delta);
+            self.app_term_structure_5(delta);
         }
     }
 
@@ -69898,28 +73280,41 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.app_term_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_structure_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermStructure(_, tm3) in self.term_structure.iter_all_0(tm0) {
-                self.app_term_structure_5(delta, tm1, tm2, tm0, tm3);
+                self.app_term_structure_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_structure_4(&self, delta: &mut ModelDelta) {
+    fn app_term_structure_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermStructure(tm0, tm3) in self.term_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                    self.app_term_structure_5(delta, tm1, tm2, tm0, tm3);
+                    self.app_term_structure_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_structure_5(
+    fn app_term_structure_6(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -69940,7 +73335,7 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_name_defined_1(delta);
             self.semantic_name_defined_2(delta);
-            self.semantic_name_defined_4(delta);
+            self.semantic_name_defined_5(delta);
         }
     }
 
@@ -69962,6 +73357,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_name_defined_3(&self, delta: &mut ModelDelta, tm0: VirtIdent, tm1: Scope) {
         for _ in [()] {
+            self.semantic_name_defined_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_name_defined_4(&self, delta: &mut ModelDelta, tm0: VirtIdent, tm1: Scope) {
+        for _ in [()] {
             let tm2 = match self.semantic_name.iter_all_0_1(tm0, tm1).next() {
                 Some(SemanticName(_, _, res)) => res,
                 None => {
@@ -69970,25 +73372,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_name_defined_5(delta, tm0, tm1, tm2);
+            self.semantic_name_defined_6(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_name_defined_4(&self, delta: &mut ModelDelta) {
+    fn semantic_name_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm0, tm1, tm2) in self.semantic_name.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarInScope(_, _) in self.var_in_scope.iter_all_0_1(tm0, tm1) {
-                    self.semantic_name_defined_5(delta, tm0, tm1, tm2);
+                    self.semantic_name_defined_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_name_defined_5(
+    fn semantic_name_defined_6(
         &self,
         delta: &mut ModelDelta,
         tm0: VirtIdent,
@@ -70003,8 +73405,8 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_name_extension_scope_1(delta);
             self.semantic_name_extension_scope_2(delta);
-            self.semantic_name_extension_scope_4(delta);
-            self.semantic_name_extension_scope_6(delta);
+            self.semantic_name_extension_scope_5(delta);
+            self.semantic_name_extension_scope_8(delta);
         }
     }
 
@@ -70026,28 +73428,49 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_name_extension_scope_3(&self, delta: &mut ModelDelta, tm0: Scope, tm1: Scope) {
         for _ in [()] {
+            self.semantic_name_extension_scope_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_name_extension_scope_4(&self, delta: &mut ModelDelta, tm0: Scope, tm1: Scope) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm2, _, tm3) in self.semantic_name.iter_all_1(tm0) {
-                self.semantic_name_extension_scope_5(delta, tm1, tm2, tm0, tm3);
+                self.semantic_name_extension_scope_6(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_name_extension_scope_4(&self, delta: &mut ModelDelta) {
+    fn semantic_name_extension_scope_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm2, tm0, tm3) in self.semantic_name.iter_dirty() {
                 #[allow(unused_variables)]
                 for ScopeExtension(_, tm1) in self.scope_extension.iter_all_0(tm0) {
-                    self.semantic_name_extension_scope_5(delta, tm1, tm2, tm0, tm3);
+                    self.semantic_name_extension_scope_6(delta, tm1, tm2, tm0, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_name_extension_scope_5(
+    fn semantic_name_extension_scope_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Scope,
+        tm2: VirtIdent,
+        tm0: Scope,
+        tm3: ElName,
+    ) {
+        for _ in [()] {
+            self.semantic_name_extension_scope_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_name_extension_scope_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Scope,
@@ -70058,13 +73481,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(_, _, tm4) in self.semantic_name.iter_all_0_1(tm2, tm1) {
-                self.semantic_name_extension_scope_7(delta, tm0, tm3, tm2, tm1, tm4);
+                self.semantic_name_extension_scope_9(delta, tm0, tm3, tm2, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_name_extension_scope_6(&self, delta: &mut ModelDelta) {
+    fn semantic_name_extension_scope_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm2, tm1, tm4) in self.semantic_name.iter_dirty() {
@@ -70072,7 +73495,7 @@ impl Eqlog {
                 for ScopeExtension(tm0, _) in self.scope_extension.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for SemanticName(_, _, tm3) in self.semantic_name.iter_all_0_1(tm2, tm0) {
-                        self.semantic_name_extension_scope_7(delta, tm0, tm3, tm2, tm1, tm4);
+                        self.semantic_name_extension_scope_9(delta, tm0, tm3, tm2, tm1, tm4);
                     }
                 }
             }
@@ -70080,7 +73503,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn semantic_name_extension_scope_7(
+    fn semantic_name_extension_scope_9(
         &self,
         delta: &mut ModelDelta,
         tm0: Scope,
@@ -70101,8 +73524,8 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_el_defined_1(delta);
             self.semantic_el_defined_2(delta);
-            self.semantic_el_defined_4(delta);
-            self.semantic_el_defined_6(delta);
+            self.semantic_el_defined_5(delta);
+            self.semantic_el_defined_8(delta);
         }
     }
 
@@ -70124,25 +73547,39 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_el_defined_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.semantic_el_defined_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_el_defined_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermStructure(_, tm1) in self.term_structure.iter_all_0(tm0) {
-                self.semantic_el_defined_5(delta, tm0, tm1);
+                self.semantic_el_defined_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_el_defined_4(&self, delta: &mut ModelDelta) {
+    fn semantic_el_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermStructure(tm0, tm1) in self.term_structure.iter_dirty() {
-                self.semantic_el_defined_5(delta, tm0, tm1);
+                self.semantic_el_defined_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_el_defined_5(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: Structure) {
+    fn semantic_el_defined_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: Structure) {
+        for _ in [()] {
+            self.semantic_el_defined_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_el_defined_7(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: Structure) {
         for _ in [()] {
             let tm2 = match self.semantic_el.iter_all_0_1(tm0, tm1).next() {
                 Some(SemanticEl(_, _, res)) => res,
@@ -70152,25 +73589,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_el_defined_7(delta, tm0, tm1, tm2);
+            self.semantic_el_defined_9(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_el_defined_6(&self, delta: &mut ModelDelta) {
+    fn semantic_el_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for TermStructure(_, _) in self.term_structure.iter_all_0_1(tm0, tm1) {
-                    self.semantic_el_defined_7(delta, tm0, tm1, tm2);
+                    self.semantic_el_defined_9(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_el_defined_7(
+    fn semantic_el_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -70185,8 +73622,8 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_els_total_1(delta);
             self.semantic_els_total_2(delta);
-            self.semantic_els_total_4(delta);
-            self.semantic_els_total_6(delta);
+            self.semantic_els_total_5(delta);
+            self.semantic_els_total_8(delta);
         }
     }
 
@@ -70208,25 +73645,39 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_els_total_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.semantic_els_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_total_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
-                self.semantic_els_total_5(delta, tm0, tm1);
+                self.semantic_els_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_total_4(&self, delta: &mut ModelDelta) {
+    fn semantic_els_total_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermsStructure(tm0, tm1) in self.terms_structure.iter_dirty() {
-                self.semantic_els_total_5(delta, tm0, tm1);
+                self.semantic_els_total_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_total_5(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
+    fn semantic_els_total_6(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
+        for _ in [()] {
+            self.semantic_els_total_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_total_7(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
         for _ in [()] {
             let tm2 = match self.semantic_els.iter_all_0_1(tm0, tm1).next() {
                 Some(SemanticEls(_, _, res)) => res,
@@ -70236,25 +73687,25 @@ impl Eqlog {
                 }
             };
 
-            self.semantic_els_total_7(delta, tm0, tm1, tm2);
+            self.semantic_els_total_9(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_total_6(&self, delta: &mut ModelDelta) {
+    fn semantic_els_total_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
                 #[allow(unused_variables)]
                 for TermsStructure(_, _) in self.terms_structure.iter_all_0_1(tm0, tm1) {
-                    self.semantic_els_total_7(delta, tm0, tm1, tm2);
+                    self.semantic_els_total_9(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_total_7(
+    fn semantic_els_total_9(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -70269,8 +73720,8 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_els_nil_1(delta);
             self.semantic_els_nil_2(delta);
-            self.semantic_els_nil_4(delta);
-            self.semantic_els_nil_6(delta);
+            self.semantic_els_nil_5(delta);
+            self.semantic_els_nil_8(delta);
         }
     }
 
@@ -70292,38 +73743,52 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn semantic_els_nil_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.semantic_els_nil_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_nil_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for TermsStructure(_, tm1) in self.terms_structure.iter_all_0(tm0) {
-                self.semantic_els_nil_5(delta, tm0, tm1);
+                self.semantic_els_nil_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_nil_4(&self, delta: &mut ModelDelta) {
+    fn semantic_els_nil_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermsStructure(tm0, tm1) in self.terms_structure.iter_dirty() {
                 #[allow(unused_variables)]
                 for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                    self.semantic_els_nil_5(delta, tm0, tm1);
+                    self.semantic_els_nil_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_nil_5(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
+    fn semantic_els_nil_6(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
+        for _ in [()] {
+            self.semantic_els_nil_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_nil_7(&self, delta: &mut ModelDelta, tm0: TermListNode, tm1: Structure) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(_, _, tm2) in self.semantic_els.iter_all_0_1(tm0, tm1) {
-                self.semantic_els_nil_7(delta, tm0, tm1, tm2);
+                self.semantic_els_nil_9(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_nil_6(&self, delta: &mut ModelDelta) {
+    fn semantic_els_nil_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
@@ -70331,7 +73796,7 @@ impl Eqlog {
                 for TermsStructure(_, _) in self.terms_structure.iter_all_0_1(tm0, tm1) {
                     #[allow(unused_variables)]
                     for NilTermListNode(_) in self.nil_term_list_node.iter_all_0(tm0) {
-                        self.semantic_els_nil_7(delta, tm0, tm1, tm2);
+                        self.semantic_els_nil_9(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -70339,7 +73804,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_nil_7(
+    fn semantic_els_nil_9(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -70359,9 +73824,9 @@ impl Eqlog {
         for _ in [()] {
             self.semantic_els_cons_1(delta);
             self.semantic_els_cons_2(delta);
-            self.semantic_els_cons_4(delta);
-            self.semantic_els_cons_6(delta);
+            self.semantic_els_cons_5(delta);
             self.semantic_els_cons_8(delta);
+            self.semantic_els_cons_11(delta);
         }
     }
 
@@ -70389,28 +73854,56 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.semantic_els_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermListNode,
+        tm1: TermNode,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(_, tm3, tm4) in self.semantic_els.iter_all_0(tm0) {
-                self.semantic_els_cons_5(delta, tm1, tm2, tm0, tm3, tm4);
+                self.semantic_els_cons_6(delta, tm1, tm2, tm0, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_cons_4(&self, delta: &mut ModelDelta) {
+    fn semantic_els_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm3, tm4) in self.semantic_els.iter_dirty() {
                 #[allow(unused_variables)]
                 for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                    self.semantic_els_cons_5(delta, tm1, tm2, tm0, tm3, tm4);
+                    self.semantic_els_cons_6(delta, tm1, tm2, tm0, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_cons_5(
+    fn semantic_els_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: TermListNode,
+        tm0: TermListNode,
+        tm3: Structure,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            self.semantic_els_cons_7(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
@@ -70422,13 +73915,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm1, tm3) {
-                self.semantic_els_cons_7(delta, tm2, tm0, tm4, tm1, tm3, tm5);
+                self.semantic_els_cons_9(delta, tm2, tm0, tm4, tm1, tm3, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_cons_6(&self, delta: &mut ModelDelta) {
+    fn semantic_els_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm1, tm3, tm5) in self.semantic_el.iter_dirty() {
@@ -70438,7 +73931,7 @@ impl Eqlog {
                     for ConsTermListNode(_, _, tm2) in
                         self.cons_term_list_node.iter_all_0_1(tm0, tm1)
                     {
-                        self.semantic_els_cons_7(delta, tm2, tm0, tm4, tm1, tm3, tm5);
+                        self.semantic_els_cons_9(delta, tm2, tm0, tm4, tm1, tm3, tm5);
                     }
                 }
             }
@@ -70446,7 +73939,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_cons_7(
+    fn semantic_els_cons_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: TermListNode,
+        tm0: TermListNode,
+        tm4: ElList,
+        tm1: TermNode,
+        tm3: Structure,
+        tm5: El,
+    ) {
+        for _ in [()] {
+            self.semantic_els_cons_10(delta, tm2, tm0, tm4, tm1, tm3, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn semantic_els_cons_10(
         &self,
         delta: &mut ModelDelta,
         tm2: TermListNode,
@@ -70459,13 +73968,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(_, _, tm6) in self.semantic_els.iter_all_0_1(tm2, tm3) {
-                self.semantic_els_cons_9(delta, tm0, tm4, tm1, tm5, tm2, tm3, tm6);
+                self.semantic_els_cons_12(delta, tm0, tm4, tm1, tm5, tm2, tm3, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_cons_8(&self, delta: &mut ModelDelta) {
+    fn semantic_els_cons_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm2, tm3, tm6) in self.semantic_els.iter_dirty() {
@@ -70477,7 +73986,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm1, tm3) {
-                            self.semantic_els_cons_9(delta, tm0, tm4, tm1, tm5, tm2, tm3, tm6);
+                            self.semantic_els_cons_12(delta, tm0, tm4, tm1, tm5, tm2, tm3, tm6);
                         }
                     }
                 }
@@ -70486,7 +73995,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn semantic_els_cons_9(
+    fn semantic_els_cons_12(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -70586,11 +74095,11 @@ impl Eqlog {
         for _ in [()] {
             self.app_term_semantics_1(delta);
             self.app_term_semantics_2(delta);
-            self.app_term_semantics_4(delta);
-            self.app_term_semantics_6(delta);
+            self.app_term_semantics_5(delta);
             self.app_term_semantics_8(delta);
-            self.app_term_semantics_9(delta);
             self.app_term_semantics_11(delta);
+            self.app_term_semantics_12(delta);
+            self.app_term_semantics_15(delta);
         }
     }
 
@@ -70618,28 +74127,56 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.app_term_semantics_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm0) {
-                self.app_term_semantics_5(delta, tm1, tm2, tm0, tm3, tm4);
+                self.app_term_semantics_6(delta, tm1, tm2, tm0, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_4(&self, delta: &mut ModelDelta) {
+    fn app_term_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm3, tm4) in self.semantic_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                    self.app_term_semantics_5(delta, tm1, tm2, tm0, tm3, tm4);
+                    self.app_term_semantics_6(delta, tm1, tm2, tm0, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_5(
+    fn app_term_semantics_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: Structure,
+        tm4: El,
+    ) {
+        for _ in [()] {
+            self.app_term_semantics_7(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -70651,13 +74188,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(_, _, tm5) in self.semantic_els.iter_all_0_1(tm2, tm3) {
-                self.app_term_semantics_7(delta, tm1, tm0, tm4, tm2, tm3, tm5);
+                self.app_term_semantics_9(delta, tm1, tm0, tm4, tm2, tm3, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_6(&self, delta: &mut ModelDelta) {
+    fn app_term_semantics_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm2, tm3, tm5) in self.semantic_els.iter_dirty() {
@@ -70665,7 +74202,7 @@ impl Eqlog {
                 for SemanticEl(tm0, _, tm4) in self.semantic_el.iter_all_1(tm3) {
                     #[allow(unused_variables)]
                     for AppTermNode(_, tm1, _) in self.app_term_node.iter_all_0_2(tm0, tm2) {
-                        self.app_term_semantics_7(delta, tm1, tm0, tm4, tm2, tm3, tm5);
+                        self.app_term_semantics_9(delta, tm1, tm0, tm4, tm2, tm3, tm5);
                     }
                 }
             }
@@ -70673,7 +74210,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_7(
+    fn app_term_semantics_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm0: TermNode,
+        tm4: El,
+        tm2: TermListNode,
+        tm3: Structure,
+        tm5: ElList,
+    ) {
+        for _ in [()] {
+            self.app_term_semantics_10(delta, tm1, tm0, tm4, tm2, tm3, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_10(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -70688,14 +74241,14 @@ impl Eqlog {
             for SemanticFunc(_, tm6) in self.semantic_func.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for FuncRel(_, tm7) in self.func_rel.iter_all_0(tm6) {
-                    self.app_term_semantics_10(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7);
+                    self.app_term_semantics_13(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_8(&self, delta: &mut ModelDelta) {
+    fn app_term_semantics_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm6) in self.semantic_func.iter_dirty() {
@@ -70707,7 +74260,7 @@ impl Eqlog {
                         for SemanticEls(_, tm3, tm5) in self.semantic_els.iter_all_0(tm2) {
                             #[allow(unused_variables)]
                             for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm0, tm3) {
-                                self.app_term_semantics_10(
+                                self.app_term_semantics_13(
                                     delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7,
                                 );
                             }
@@ -70719,7 +74272,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_9(&self, delta: &mut ModelDelta) {
+    fn app_term_semantics_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncRel(tm6, tm7) in self.func_rel.iter_dirty() {
@@ -70731,7 +74284,7 @@ impl Eqlog {
                         for SemanticEls(_, tm3, tm5) in self.semantic_els.iter_all_0(tm2) {
                             #[allow(unused_variables)]
                             for SemanticEl(_, _, tm4) in self.semantic_el.iter_all_0_1(tm0, tm3) {
-                                self.app_term_semantics_10(
+                                self.app_term_semantics_13(
                                     delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7,
                                 );
                             }
@@ -70743,7 +74296,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_10(
+    fn app_term_semantics_13(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -70756,23 +74309,41 @@ impl Eqlog {
         tm7: Rel,
     ) {
         for _ in [()] {
-            let tm8 = match self.cons_el_list.iter_all_0_1(tm4, tm5).next() {
-                Some(ConsElList(_, _, res)) => res,
-                None => {
-                    delta.new_cons_el_list_def.push(ConsElListArgs(tm4, tm5));
-                    break;
-                }
-            };
-
-            self.app_term_semantics_12(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7, tm8);
+            self.app_term_semantics_14(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7);
         }
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_11(&self, delta: &mut ModelDelta) {
+    fn app_term_semantics_14(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm4: El,
+        tm2: TermListNode,
+        tm3: Structure,
+        tm5: ElList,
+        tm1: Ident,
+        tm6: Func,
+        tm7: Rel,
+    ) {
+        for _ in [()] {
+            let tm8 = match self.snoc_el_list.iter_all_0_1(tm5, tm4).next() {
+                Some(SnocElList(_, _, res)) => res,
+                None => {
+                    delta.new_snoc_el_list_def.push(SnocElListArgs(tm5, tm4));
+                    break;
+                }
+            };
+
+            self.app_term_semantics_16(delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7, tm8);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_term_semantics_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ConsElList(tm4, tm5, tm8) in self.cons_el_list.iter_dirty() {
+            for SnocElList(tm5, tm4, tm8) in self.snoc_el_list.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncRel(tm6, tm7) in self.func_rel.iter_all() {
                     #[allow(unused_variables)]
@@ -70785,7 +74356,7 @@ impl Eqlog {
                                 for SemanticEls(_, _, _) in
                                     self.semantic_els.iter_all_0_1_2(tm2, tm3, tm5)
                                 {
-                                    self.app_term_semantics_12(
+                                    self.app_term_semantics_16(
                                         delta, tm0, tm4, tm2, tm3, tm5, tm1, tm6, tm7, tm8,
                                     );
                                 }
@@ -70798,7 +74369,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_term_semantics_12(
+    fn app_term_semantics_16(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -70824,10 +74395,10 @@ impl Eqlog {
         for _ in [()] {
             self.var_term_semantics_1(delta);
             self.var_term_semantics_2(delta);
-            self.var_term_semantics_4(delta);
             self.var_term_semantics_5(delta);
-            self.var_term_semantics_7(delta);
+            self.var_term_semantics_6(delta);
             self.var_term_semantics_9(delta);
+            self.var_term_semantics_12(delta);
         }
     }
 
@@ -70849,27 +74420,18 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn var_term_semantics_3(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for RuleDescendantTerm(_, tm2) in self.rule_descendant_term.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm2) {
-                    self.var_term_semantics_6(delta, tm1, tm0, tm2, tm3);
-                }
-            }
+            self.var_term_semantics_4(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn var_term_semantics_4(&self, delta: &mut ModelDelta) {
+    fn var_term_semantics_4(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: VirtIdent) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleDescendantTerm(tm0, tm2) in self.rule_descendant_term.iter_dirty() {
+            for RuleDescendantTerm(_, tm2) in self.rule_descendant_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                    #[allow(unused_variables)]
-                    for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm2) {
-                        self.var_term_semantics_6(delta, tm1, tm0, tm2, tm3);
-                    }
+                for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm2) {
+                    self.var_term_semantics_7(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
@@ -70879,12 +74441,12 @@ impl Eqlog {
     fn var_term_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ExitScope(tm2, tm3) in self.exit_scope.iter_dirty() {
+            for RuleDescendantTerm(tm0, tm2) in self.rule_descendant_term.iter_dirty() {
                 #[allow(unused_variables)]
-                for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm2) {
+                for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                        self.var_term_semantics_6(delta, tm1, tm0, tm2, tm3);
+                    for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm2) {
+                        self.var_term_semantics_7(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -70892,7 +74454,37 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_term_semantics_6(
+    fn var_term_semantics_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ExitScope(tm2, tm3) in self.exit_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm2) {
+                    #[allow(unused_variables)]
+                    for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
+                        self.var_term_semantics_7(delta, tm1, tm0, tm2, tm3);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_term_semantics_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: VirtIdent,
+        tm0: TermNode,
+        tm2: RuleDescendantNode,
+        tm3: Scope,
+    ) {
+        for _ in [()] {
+            self.var_term_semantics_8(delta, tm1, tm0, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_term_semantics_8(
         &self,
         delta: &mut ModelDelta,
         tm1: VirtIdent,
@@ -70903,13 +74495,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(_, _, tm4) in self.semantic_name.iter_all_0_1(tm1, tm3) {
-                self.var_term_semantics_8(delta, tm0, tm2, tm3, tm1, tm4);
+                self.var_term_semantics_10(delta, tm0, tm2, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_term_semantics_7(&self, delta: &mut ModelDelta) {
+    fn var_term_semantics_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm1, tm3, tm4) in self.semantic_name.iter_dirty() {
@@ -70921,7 +74513,7 @@ impl Eqlog {
                         for RuleDescendantTerm(_, _) in
                             self.rule_descendant_term.iter_all_0_1(tm0, tm2)
                         {
-                            self.var_term_semantics_8(delta, tm0, tm2, tm3, tm1, tm4);
+                            self.var_term_semantics_10(delta, tm0, tm2, tm3, tm1, tm4);
                         }
                     }
                 }
@@ -70930,7 +74522,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_term_semantics_8(
+    fn var_term_semantics_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm2: RuleDescendantNode,
+        tm3: Scope,
+        tm1: VirtIdent,
+        tm4: ElName,
+    ) {
+        for _ in [()] {
+            self.var_term_semantics_11(delta, tm0, tm2, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_term_semantics_11(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -70942,13 +74549,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm5, tm6) in self.semantic_el.iter_all_0(tm0) {
-                self.var_term_semantics_10(delta, tm2, tm3, tm1, tm4, tm0, tm5, tm6);
+                self.var_term_semantics_13(delta, tm2, tm3, tm1, tm4, tm0, tm5, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_term_semantics_9(&self, delta: &mut ModelDelta) {
+    fn var_term_semantics_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm5, tm6) in self.semantic_el.iter_dirty() {
@@ -70961,7 +74568,7 @@ impl Eqlog {
                             #[allow(unused_variables)]
                             for SemanticName(_, _, tm4) in self.semantic_name.iter_all_0_1(tm1, tm3)
                             {
-                                self.var_term_semantics_10(
+                                self.var_term_semantics_13(
                                     delta, tm2, tm3, tm1, tm4, tm0, tm5, tm6,
                                 );
                             }
@@ -70973,7 +74580,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_term_semantics_10(
+    fn var_term_semantics_13(
         &self,
         delta: &mut ModelDelta,
         tm2: RuleDescendantNode,
@@ -70997,7 +74604,7 @@ impl Eqlog {
         for _ in [()] {
             self.wildcard_name_defined_1(delta);
             self.wildcard_name_defined_2(delta);
-            self.wildcard_name_defined_4(delta);
+            self.wildcard_name_defined_5(delta);
         }
     }
 
@@ -71019,6 +74626,13 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn wildcard_name_defined_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.wildcard_name_defined_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn wildcard_name_defined_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             let tm1 = match self.wildcard_name.iter_all_0(tm0).next() {
                 Some(WildcardName(_, res)) => res,
                 None => {
@@ -71027,25 +74641,25 @@ impl Eqlog {
                 }
             };
 
-            self.wildcard_name_defined_5(delta, tm0, tm1);
+            self.wildcard_name_defined_6(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn wildcard_name_defined_4(&self, delta: &mut ModelDelta) {
+    fn wildcard_name_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
                 #[allow(unused_variables)]
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                    self.wildcard_name_defined_5(delta, tm0, tm1);
+                    self.wildcard_name_defined_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn wildcard_name_defined_5(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: ElName) {
+    fn wildcard_name_defined_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: ElName) {
         for _ in [()] {}
     }
 
@@ -71054,8 +74668,8 @@ impl Eqlog {
         for _ in [()] {
             self.wildcard_term_semantics_1(delta);
             self.wildcard_term_semantics_2(delta);
-            self.wildcard_term_semantics_4(delta);
-            self.wildcard_term_semantics_6(delta);
+            self.wildcard_term_semantics_5(delta);
+            self.wildcard_term_semantics_8(delta);
         }
     }
 
@@ -71077,38 +74691,52 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn wildcard_term_semantics_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.wildcard_term_semantics_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn wildcard_term_semantics_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(_, tm1) in self.wildcard_name.iter_all_0(tm0) {
-                self.wildcard_term_semantics_5(delta, tm0, tm1);
+                self.wildcard_term_semantics_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn wildcard_term_semantics_4(&self, delta: &mut ModelDelta) {
+    fn wildcard_term_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
                 #[allow(unused_variables)]
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
-                    self.wildcard_term_semantics_5(delta, tm0, tm1);
+                    self.wildcard_term_semantics_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn wildcard_term_semantics_5(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: ElName) {
+    fn wildcard_term_semantics_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: ElName) {
+        for _ in [()] {
+            self.wildcard_term_semantics_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn wildcard_term_semantics_7(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: ElName) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm2, tm3) in self.semantic_el.iter_all_0(tm0) {
-                self.wildcard_term_semantics_7(delta, tm1, tm0, tm2, tm3);
+                self.wildcard_term_semantics_9(delta, tm1, tm0, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn wildcard_term_semantics_6(&self, delta: &mut ModelDelta) {
+    fn wildcard_term_semantics_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm2, tm3) in self.semantic_el.iter_dirty() {
@@ -71116,7 +74744,7 @@ impl Eqlog {
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for WildcardName(_, tm1) in self.wildcard_name.iter_all_0(tm0) {
-                        self.wildcard_term_semantics_7(delta, tm1, tm0, tm2, tm3);
+                        self.wildcard_term_semantics_9(delta, tm1, tm0, tm2, tm3);
                     }
                 }
             }
@@ -71124,7 +74752,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn wildcard_term_semantics_7(
+    fn wildcard_term_semantics_9(
         &self,
         delta: &mut ModelDelta,
         tm1: ElName,
@@ -71145,8 +74773,8 @@ impl Eqlog {
         for _ in [()] {
             self.equal_if_atom_semantics_1(delta);
             self.equal_if_atom_semantics_2(delta);
-            self.equal_if_atom_semantics_4(delta);
-            self.equal_if_atom_semantics_6(delta);
+            self.equal_if_atom_semantics_5(delta);
+            self.equal_if_atom_semantics_8(delta);
         }
     }
 
@@ -71174,28 +74802,56 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.equal_if_atom_semantics_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn equal_if_atom_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm1) {
-                self.equal_if_atom_semantics_5(delta, tm0, tm2, tm1, tm3, tm4);
+                self.equal_if_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_if_atom_semantics_4(&self, delta: &mut ModelDelta) {
+    fn equal_if_atom_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm1, tm3, tm4) in self.semantic_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for EqualIfAtomNode(tm0, _, tm2) in self.equal_if_atom_node.iter_all_1(tm1) {
-                    self.equal_if_atom_semantics_5(delta, tm0, tm2, tm1, tm3, tm4);
+                    self.equal_if_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_if_atom_semantics_5(
+    fn equal_if_atom_semantics_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm2: TermNode,
+        tm1: TermNode,
+        tm3: Structure,
+        tm4: El,
+    ) {
+        for _ in [()] {
+            self.equal_if_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn equal_if_atom_semantics_7(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -71207,13 +74863,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm2, tm3) {
-                self.equal_if_atom_semantics_7(delta, tm0, tm1, tm4, tm2, tm3, tm5);
+                self.equal_if_atom_semantics_9(delta, tm0, tm1, tm4, tm2, tm3, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_if_atom_semantics_6(&self, delta: &mut ModelDelta) {
+    fn equal_if_atom_semantics_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm2, tm3, tm5) in self.semantic_el.iter_dirty() {
@@ -71222,7 +74878,7 @@ impl Eqlog {
                     #[allow(unused_variables)]
                     for EqualIfAtomNode(tm0, _, _) in self.equal_if_atom_node.iter_all_1_2(tm1, tm2)
                     {
-                        self.equal_if_atom_semantics_7(delta, tm0, tm1, tm4, tm2, tm3, tm5);
+                        self.equal_if_atom_semantics_9(delta, tm0, tm1, tm4, tm2, tm3, tm5);
                     }
                 }
             }
@@ -71230,7 +74886,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn equal_if_atom_semantics_7(
+    fn equal_if_atom_semantics_9(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -71252,9 +74908,9 @@ impl Eqlog {
         for _ in [()] {
             self.pred_if_atom_semantics_1(delta);
             self.pred_if_atom_semantics_2(delta);
-            self.pred_if_atom_semantics_4(delta);
             self.pred_if_atom_semantics_5(delta);
-            self.pred_if_atom_semantics_7(delta);
+            self.pred_if_atom_semantics_6(delta);
+            self.pred_if_atom_semantics_9(delta);
         }
     }
 
@@ -71282,27 +74938,24 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                #[allow(unused_variables)]
-                for PredRel(_, tm4) in self.pred_rel.iter_all_0(tm3) {
-                    self.pred_if_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
-                }
-            }
+            self.pred_if_atom_semantics_4(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_semantics_4(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
+            for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for PredRel(_, tm4) in self.pred_rel.iter_all_0(tm3) {
-                    #[allow(unused_variables)]
-                    for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
-                        self.pred_if_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
-                    }
+                    self.pred_if_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
@@ -71312,12 +74965,12 @@ impl Eqlog {
     fn pred_if_atom_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredRel(tm3, tm4) in self.pred_rel.iter_dirty() {
+            for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
-                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm3) {
+                for PredRel(_, tm4) in self.pred_rel.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
-                        self.pred_if_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
+                        self.pred_if_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
                     }
                 }
             }
@@ -71325,7 +74978,38 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_semantics_6(
+    fn pred_if_atom_semantics_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredRel(tm3, tm4) in self.pred_rel.iter_dirty() {
+                #[allow(unused_variables)]
+                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for PredIfAtomNode(tm0, _, tm2) in self.pred_if_atom_node.iter_all_1(tm1) {
+                        self.pred_if_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_semantics_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm2: TermListNode,
+        tm1: Ident,
+        tm3: Pred,
+        tm4: Rel,
+    ) {
+        for _ in [()] {
+            self.pred_if_atom_semantics_8(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_semantics_8(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -71337,13 +75021,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(_, tm5, tm6) in self.semantic_els.iter_all_0(tm2) {
-                self.pred_if_atom_semantics_8(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
+                self.pred_if_atom_semantics_10(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_semantics_7(&self, delta: &mut ModelDelta) {
+    fn pred_if_atom_semantics_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm2, tm5, tm6) in self.semantic_els.iter_dirty() {
@@ -71355,7 +75039,9 @@ impl Eqlog {
                         for PredIfAtomNode(tm0, _, _) in
                             self.pred_if_atom_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.pred_if_atom_semantics_8(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
+                            self.pred_if_atom_semantics_10(
+                                delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6,
+                            );
                         }
                     }
                 }
@@ -71364,7 +75050,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_semantics_8(
+    fn pred_if_atom_semantics_10(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -71388,8 +75074,8 @@ impl Eqlog {
         for _ in [()] {
             self.var_if_atom_semantics_1(delta);
             self.var_if_atom_semantics_2(delta);
-            self.var_if_atom_semantics_4(delta);
-            self.var_if_atom_semantics_6(delta);
+            self.var_if_atom_semantics_5(delta);
+            self.var_if_atom_semantics_8(delta);
         }
     }
 
@@ -71417,28 +75103,55 @@ impl Eqlog {
         tm2: Ident,
     ) {
         for _ in [()] {
+            self.var_if_atom_semantics_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_if_atom_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(_, tm3) in self.semantic_type.iter_all_0(tm2) {
-                self.var_if_atom_semantics_5(delta, tm0, tm1, tm2, tm3);
+                self.var_if_atom_semantics_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_if_atom_semantics_4(&self, delta: &mut ModelDelta) {
+    fn var_if_atom_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm2, tm3) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for VarIfAtomNode(tm0, tm1, _) in self.var_if_atom_node.iter_all_2(tm2) {
-                    self.var_if_atom_semantics_5(delta, tm0, tm1, tm2, tm3);
+                    self.var_if_atom_semantics_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_if_atom_semantics_5(
+    fn var_if_atom_semantics_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: IfAtomNode,
+        tm1: TermNode,
+        tm2: Ident,
+        tm3: Type,
+    ) {
+        for _ in [()] {
+            self.var_if_atom_semantics_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_if_atom_semantics_7(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -71449,13 +75162,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm4, tm5) in self.semantic_el.iter_all_0(tm1) {
-                self.var_if_atom_semantics_7(delta, tm0, tm2, tm3, tm1, tm4, tm5);
+                self.var_if_atom_semantics_9(delta, tm0, tm2, tm3, tm1, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_if_atom_semantics_6(&self, delta: &mut ModelDelta) {
+    fn var_if_atom_semantics_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm1, tm4, tm5) in self.semantic_el.iter_dirty() {
@@ -71463,7 +75176,7 @@ impl Eqlog {
                 for SemanticType(tm2, tm3) in self.semantic_type.iter_all() {
                     #[allow(unused_variables)]
                     for VarIfAtomNode(tm0, _, _) in self.var_if_atom_node.iter_all_1_2(tm1, tm2) {
-                        self.var_if_atom_semantics_7(delta, tm0, tm2, tm3, tm1, tm4, tm5);
+                        self.var_if_atom_semantics_9(delta, tm0, tm2, tm3, tm1, tm4, tm5);
                     }
                 }
             }
@@ -71471,7 +75184,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_if_atom_semantics_7(
+    fn var_if_atom_semantics_9(
         &self,
         delta: &mut ModelDelta,
         tm0: IfAtomNode,
@@ -71494,8 +75207,8 @@ impl Eqlog {
         for _ in [()] {
             self.equal_then_atom_semantics_1(delta);
             self.equal_then_atom_semantics_2(delta);
-            self.equal_then_atom_semantics_4(delta);
-            self.equal_then_atom_semantics_6(delta);
+            self.equal_then_atom_semantics_5(delta);
+            self.equal_then_atom_semantics_8(delta);
         }
     }
 
@@ -71523,28 +75236,56 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.equal_then_atom_semantics_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn equal_then_atom_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: TermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm1) {
-                self.equal_then_atom_semantics_5(delta, tm0, tm2, tm1, tm3, tm4);
+                self.equal_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_then_atom_semantics_4(&self, delta: &mut ModelDelta) {
+    fn equal_then_atom_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm1, tm3, tm4) in self.semantic_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for EqualThenAtomNode(tm0, _, tm2) in self.equal_then_atom_node.iter_all_1(tm1) {
-                    self.equal_then_atom_semantics_5(delta, tm0, tm2, tm1, tm3, tm4);
+                    self.equal_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_then_atom_semantics_5(
+    fn equal_then_atom_semantics_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm2: TermNode,
+        tm1: TermNode,
+        tm3: Structure,
+        tm4: El,
+    ) {
+        for _ in [()] {
+            self.equal_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn equal_then_atom_semantics_7(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71556,13 +75297,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, _, tm5) in self.semantic_el.iter_all_0_1(tm2, tm3) {
-                self.equal_then_atom_semantics_7(delta, tm0, tm1, tm4, tm2, tm3, tm5);
+                self.equal_then_atom_semantics_9(delta, tm0, tm1, tm4, tm2, tm3, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn equal_then_atom_semantics_6(&self, delta: &mut ModelDelta) {
+    fn equal_then_atom_semantics_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm2, tm3, tm5) in self.semantic_el.iter_dirty() {
@@ -71572,7 +75313,7 @@ impl Eqlog {
                     for EqualThenAtomNode(tm0, _, _) in
                         self.equal_then_atom_node.iter_all_1_2(tm1, tm2)
                     {
-                        self.equal_then_atom_semantics_7(delta, tm0, tm1, tm4, tm2, tm3, tm5);
+                        self.equal_then_atom_semantics_9(delta, tm0, tm1, tm4, tm2, tm3, tm5);
                     }
                 }
             }
@@ -71580,7 +75321,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn equal_then_atom_semantics_7(
+    fn equal_then_atom_semantics_9(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71602,9 +75343,9 @@ impl Eqlog {
         for _ in [()] {
             self.defined_then_atom_semantics_1(delta);
             self.defined_then_atom_semantics_2(delta);
-            self.defined_then_atom_semantics_4(delta);
-            self.defined_then_atom_semantics_6(delta);
+            self.defined_then_atom_semantics_5(delta);
             self.defined_then_atom_semantics_8(delta);
+            self.defined_then_atom_semantics_11(delta);
         }
     }
 
@@ -71632,29 +75373,56 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.defined_then_atom_semantics_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_atom_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SomeTermNode(_, tm3) in self.some_term_node.iter_all_0(tm1) {
-                self.defined_then_atom_semantics_5(delta, tm0, tm2, tm1, tm3);
+                self.defined_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_semantics_4(&self, delta: &mut ModelDelta) {
+    fn defined_then_atom_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SomeTermNode(tm1, tm3) in self.some_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(tm0, _, tm2) in self.defined_then_atom_node.iter_all_1(tm1)
                 {
-                    self.defined_then_atom_semantics_5(delta, tm0, tm2, tm1, tm3);
+                    self.defined_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_semantics_5(
+    fn defined_then_atom_semantics_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm2: TermNode,
+        tm1: OptTermNode,
+        tm3: TermNode,
+    ) {
+        for _ in [()] {
+            self.defined_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_atom_semantics_7(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71665,13 +75433,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm4, tm5) in self.semantic_el.iter_all_0(tm3) {
-                self.defined_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4, tm5);
+                self.defined_then_atom_semantics_9(delta, tm0, tm2, tm1, tm3, tm4, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_semantics_6(&self, delta: &mut ModelDelta) {
+    fn defined_then_atom_semantics_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm3, tm4, tm5) in self.semantic_el.iter_dirty() {
@@ -71681,7 +75449,7 @@ impl Eqlog {
                     for DefinedThenAtomNode(tm0, _, tm2) in
                         self.defined_then_atom_node.iter_all_1(tm1)
                     {
-                        self.defined_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4, tm5);
+                        self.defined_then_atom_semantics_9(delta, tm0, tm2, tm1, tm3, tm4, tm5);
                     }
                 }
             }
@@ -71689,7 +75457,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_semantics_7(
+    fn defined_then_atom_semantics_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm2: TermNode,
+        tm1: OptTermNode,
+        tm3: TermNode,
+        tm4: Structure,
+        tm5: El,
+    ) {
+        for _ in [()] {
+            self.defined_then_atom_semantics_10(delta, tm0, tm2, tm1, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_atom_semantics_10(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71702,13 +75486,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, _, tm6) in self.semantic_el.iter_all_0_1(tm2, tm4) {
-                self.defined_then_atom_semantics_9(delta, tm0, tm1, tm3, tm5, tm2, tm4, tm6);
+                self.defined_then_atom_semantics_12(delta, tm0, tm1, tm3, tm5, tm2, tm4, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_semantics_8(&self, delta: &mut ModelDelta) {
+    fn defined_then_atom_semantics_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm2, tm4, tm6) in self.semantic_el.iter_dirty() {
@@ -71720,7 +75504,7 @@ impl Eqlog {
                         for DefinedThenAtomNode(tm0, _, _) in
                             self.defined_then_atom_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.defined_then_atom_semantics_9(
+                            self.defined_then_atom_semantics_12(
                                 delta, tm0, tm1, tm3, tm5, tm2, tm4, tm6,
                             );
                         }
@@ -71731,7 +75515,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_atom_semantics_9(
+    fn defined_then_atom_semantics_12(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71754,9 +75538,9 @@ impl Eqlog {
         for _ in [()] {
             self.pred_then_atom_semantics_1(delta);
             self.pred_then_atom_semantics_2(delta);
-            self.pred_then_atom_semantics_4(delta);
             self.pred_then_atom_semantics_5(delta);
-            self.pred_then_atom_semantics_7(delta);
+            self.pred_then_atom_semantics_6(delta);
+            self.pred_then_atom_semantics_9(delta);
         }
     }
 
@@ -71784,27 +75568,24 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
-                #[allow(unused_variables)]
-                for PredRel(_, tm4) in self.pred_rel.iter_all_0(tm3) {
-                    self.pred_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
-                }
-            }
+            self.pred_then_atom_semantics_4(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_semantics_4(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_semantics_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
+            for SemanticPred(_, tm3) in self.semantic_pred.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for PredRel(_, tm4) in self.pred_rel.iter_all_0(tm3) {
-                    #[allow(unused_variables)]
-                    for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
-                        self.pred_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
-                    }
+                    self.pred_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
@@ -71814,12 +75595,12 @@ impl Eqlog {
     fn pred_then_atom_semantics_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredRel(tm3, tm4) in self.pred_rel.iter_dirty() {
+            for SemanticPred(tm1, tm3) in self.semantic_pred.iter_dirty() {
                 #[allow(unused_variables)]
-                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm3) {
+                for PredRel(_, tm4) in self.pred_rel.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
-                        self.pred_then_atom_semantics_6(delta, tm0, tm2, tm1, tm3, tm4);
+                        self.pred_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
                     }
                 }
             }
@@ -71827,7 +75608,38 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_semantics_6(
+    fn pred_then_atom_semantics_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredRel(tm3, tm4) in self.pred_rel.iter_dirty() {
+                #[allow(unused_variables)]
+                for SemanticPred(tm1, _) in self.semantic_pred.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for PredThenAtomNode(tm0, _, tm2) in self.pred_then_atom_node.iter_all_1(tm1) {
+                        self.pred_then_atom_semantics_7(delta, tm0, tm2, tm1, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_semantics_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm2: TermListNode,
+        tm1: Ident,
+        tm3: Pred,
+        tm4: Rel,
+    ) {
+        for _ in [()] {
+            self.pred_then_atom_semantics_8(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_semantics_8(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71839,13 +75651,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(_, tm5, tm6) in self.semantic_els.iter_all_0(tm2) {
-                self.pred_then_atom_semantics_8(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
+                self.pred_then_atom_semantics_10(delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_semantics_7(&self, delta: &mut ModelDelta) {
+    fn pred_then_atom_semantics_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm2, tm5, tm6) in self.semantic_els.iter_dirty() {
@@ -71857,7 +75669,7 @@ impl Eqlog {
                         for PredThenAtomNode(tm0, _, _) in
                             self.pred_then_atom_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.pred_then_atom_semantics_8(
+                            self.pred_then_atom_semantics_10(
                                 delta, tm0, tm1, tm3, tm4, tm2, tm5, tm6,
                             );
                         }
@@ -71868,7 +75680,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_semantics_8(
+    fn pred_then_atom_semantics_10(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -71892,7 +75704,7 @@ impl Eqlog {
         for _ in [()] {
             self.terms_should_be_epic_ok_cons_1(delta);
             self.terms_should_be_epic_ok_cons_2(delta);
-            self.terms_should_be_epic_ok_cons_4(delta);
+            self.terms_should_be_epic_ok_cons_5(delta);
         }
     }
 
@@ -71914,28 +75726,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn terms_should_be_epic_ok_cons_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.terms_should_be_epic_ok_cons_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn terms_should_be_epic_ok_cons_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.terms_should_be_epic_ok_cons_5(delta, tm0, tm1, tm2);
+                self.terms_should_be_epic_ok_cons_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn terms_should_be_epic_ok_cons_4(&self, delta: &mut ModelDelta) {
+    fn terms_should_be_epic_ok_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for TermsShouldBeEpicOk(_) in self.terms_should_be_epic_ok.iter_all_0(tm0) {
-                    self.terms_should_be_epic_ok_cons_5(delta, tm0, tm1, tm2);
+                    self.terms_should_be_epic_ok_cons_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn terms_should_be_epic_ok_cons_5(
+    fn terms_should_be_epic_ok_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -71968,7 +75787,7 @@ impl Eqlog {
         for _ in [()] {
             self.terms_should_be_epic_ok_app_1(delta);
             self.terms_should_be_epic_ok_app_2(delta);
-            self.terms_should_be_epic_ok_app_4(delta);
+            self.terms_should_be_epic_ok_app_5(delta);
         }
     }
 
@@ -71990,28 +75809,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn terms_should_be_epic_ok_app_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.terms_should_be_epic_ok_app_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn terms_should_be_epic_ok_app_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.terms_should_be_epic_ok_app_5(delta, tm0, tm1, tm2);
+                self.terms_should_be_epic_ok_app_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn terms_should_be_epic_ok_app_4(&self, delta: &mut ModelDelta) {
+    fn terms_should_be_epic_ok_app_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for TermShouldBeEpicOk(_) in self.term_should_be_epic_ok.iter_all_0(tm0) {
-                    self.terms_should_be_epic_ok_app_5(delta, tm0, tm1, tm2);
+                    self.terms_should_be_epic_ok_app_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn terms_should_be_epic_ok_app_5(
+    fn terms_should_be_epic_ok_app_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -72171,8 +75997,8 @@ impl Eqlog {
         for _ in [()] {
             self.surjective_codomain_should_be_ok_1(delta);
             self.surjective_codomain_should_be_ok_2(delta);
-            self.surjective_codomain_should_be_ok_4(delta);
             self.surjective_codomain_should_be_ok_5(delta);
+            self.surjective_codomain_should_be_ok_6(delta);
         }
     }
 
@@ -72194,27 +76020,18 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn surjective_codomain_should_be_ok_3(&self, delta: &mut ModelDelta, tm0: Morphism) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.surjective_codomain_should_be_ok_6(delta, tm1, tm0, tm2);
-                }
-            }
+            self.surjective_codomain_should_be_ok_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn surjective_codomain_should_be_ok_4(&self, delta: &mut ModelDelta) {
+    fn surjective_codomain_should_be_ok_4(&self, delta: &mut ModelDelta, tm0: Morphism) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ElStructure(tm1, tm2) in self.el_structure.iter_dirty() {
+            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for SurjThenMorphism(tm0) in self.surj_then_morphism.iter_all() {
-                    #[allow(unused_variables)]
-                    for Cod(_, _) in self.cod.iter_all_0_1(tm0, tm2) {
-                        self.surjective_codomain_should_be_ok_6(delta, tm1, tm0, tm2);
-                    }
+                for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
+                    self.surjective_codomain_should_be_ok_7(delta, tm1, tm0, tm2);
                 }
             }
         }
@@ -72224,12 +76041,12 @@ impl Eqlog {
     fn surjective_codomain_should_be_ok_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Cod(tm0, tm2) in self.cod.iter_dirty() {
+            for ElStructure(tm1, tm2) in self.el_structure.iter_dirty() {
                 #[allow(unused_variables)]
-                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
+                for SurjThenMorphism(tm0) in self.surj_then_morphism.iter_all() {
                     #[allow(unused_variables)]
-                    for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                        self.surjective_codomain_should_be_ok_6(delta, tm1, tm0, tm2);
+                    for Cod(_, _) in self.cod.iter_all_0_1(tm0, tm2) {
+                        self.surjective_codomain_should_be_ok_7(delta, tm1, tm0, tm2);
                     }
                 }
             }
@@ -72237,7 +76054,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn surjective_codomain_should_be_ok_6(
+    fn surjective_codomain_should_be_ok_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Cod(tm0, tm2) in self.cod.iter_dirty() {
+                #[allow(unused_variables)]
+                for SurjThenMorphism(_) in self.surj_then_morphism.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
+                        self.surjective_codomain_should_be_ok_7(delta, tm1, tm0, tm2);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn surjective_codomain_should_be_ok_7(
         &self,
         delta: &mut ModelDelta,
         tm1: El,
@@ -72263,8 +76096,8 @@ impl Eqlog {
         for _ in [()] {
             self.non_surjective_codomain_should_be_ok_1(delta);
             self.non_surjective_codomain_should_be_ok_2(delta);
-            self.non_surjective_codomain_should_be_ok_4(delta);
             self.non_surjective_codomain_should_be_ok_5(delta);
+            self.non_surjective_codomain_should_be_ok_6(delta);
         }
     }
 
@@ -72286,27 +76119,18 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn non_surjective_codomain_should_be_ok_3(&self, delta: &mut ModelDelta, tm0: Morphism) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
-                #[allow(unused_variables)]
-                for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                    self.non_surjective_codomain_should_be_ok_6(delta, tm1, tm0, tm2);
-                }
-            }
+            self.non_surjective_codomain_should_be_ok_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn non_surjective_codomain_should_be_ok_4(&self, delta: &mut ModelDelta) {
+    fn non_surjective_codomain_should_be_ok_4(&self, delta: &mut ModelDelta, tm0: Morphism) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ElStructure(tm1, tm2) in self.el_structure.iter_dirty() {
+            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
                 #[allow(unused_variables)]
-                for NonSurjThenMorphism(tm0) in self.non_surj_then_morphism.iter_all() {
-                    #[allow(unused_variables)]
-                    for Cod(_, _) in self.cod.iter_all_0_1(tm0, tm2) {
-                        self.non_surjective_codomain_should_be_ok_6(delta, tm1, tm0, tm2);
-                    }
+                for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
+                    self.non_surjective_codomain_should_be_ok_7(delta, tm1, tm0, tm2);
                 }
             }
         }
@@ -72316,12 +76140,12 @@ impl Eqlog {
     fn non_surjective_codomain_should_be_ok_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Cod(tm0, tm2) in self.cod.iter_dirty() {
+            for ElStructure(tm1, tm2) in self.el_structure.iter_dirty() {
                 #[allow(unused_variables)]
-                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
+                for NonSurjThenMorphism(tm0) in self.non_surj_then_morphism.iter_all() {
                     #[allow(unused_variables)]
-                    for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
-                        self.non_surjective_codomain_should_be_ok_6(delta, tm1, tm0, tm2);
+                    for Cod(_, _) in self.cod.iter_all_0_1(tm0, tm2) {
+                        self.non_surjective_codomain_should_be_ok_7(delta, tm1, tm0, tm2);
                     }
                 }
             }
@@ -72329,7 +76153,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn non_surjective_codomain_should_be_ok_6(
+    fn non_surjective_codomain_should_be_ok_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Cod(tm0, tm2) in self.cod.iter_dirty() {
+                #[allow(unused_variables)]
+                for NonSurjThenMorphism(_) in self.non_surj_then_morphism.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for ElStructure(tm1, _) in self.el_structure.iter_all_1(tm2) {
+                        self.non_surjective_codomain_should_be_ok_7(delta, tm1, tm0, tm2);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn non_surjective_codomain_should_be_ok_7(
         &self,
         delta: &mut ModelDelta,
         tm1: El,
@@ -72355,7 +76195,7 @@ impl Eqlog {
         for _ in [()] {
             self.surjective_img_el_is_ok_1(delta);
             self.surjective_img_el_is_ok_2(delta);
-            self.surjective_img_el_is_ok_4(delta);
+            self.surjective_img_el_is_ok_5(delta);
         }
     }
 
@@ -72377,28 +76217,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn surjective_img_el_is_ok_3(&self, delta: &mut ModelDelta, tm0: El) {
         for _ in [()] {
+            self.surjective_img_el_is_ok_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn surjective_img_el_is_ok_4(&self, delta: &mut ModelDelta, tm0: El) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ElInImg(tm1, _) in self.el_in_img.iter_all_1(tm0) {
-                self.surjective_img_el_is_ok_5(delta, tm1, tm0);
+                self.surjective_img_el_is_ok_6(delta, tm1, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn surjective_img_el_is_ok_4(&self, delta: &mut ModelDelta) {
+    fn surjective_img_el_is_ok_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElInImg(tm1, tm0) in self.el_in_img.iter_dirty() {
                 #[allow(unused_variables)]
                 for ElShouldBeSurjectiveOk(_) in self.el_should_be_surjective_ok.iter_all_0(tm0) {
-                    self.surjective_img_el_is_ok_5(delta, tm1, tm0);
+                    self.surjective_img_el_is_ok_6(delta, tm1, tm0);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn surjective_img_el_is_ok_5(&self, delta: &mut ModelDelta, tm1: Morphism, tm0: El) {
+    fn surjective_img_el_is_ok_6(&self, delta: &mut ModelDelta, tm1: Morphism, tm0: El) {
         for _ in [()] {
             let exists_already = self.el_is_surjective_ok.iter_all_0(tm0).next().is_some();
             if !exists_already {
@@ -72412,7 +76259,7 @@ impl Eqlog {
         for _ in [()] {
             self.surjective_exempted_then_defined_term_1(delta);
             self.surjective_exempted_then_defined_term_2(delta);
-            self.surjective_exempted_then_defined_term_4(delta);
+            self.surjective_exempted_then_defined_term_5(delta);
         }
     }
 
@@ -72440,29 +76287,42 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.surjective_exempted_then_defined_term_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn surjective_exempted_then_defined_term_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm2) {
-                self.surjective_exempted_then_defined_term_5(delta, tm0, tm1, tm2, tm3, tm4);
+                self.surjective_exempted_then_defined_term_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn surjective_exempted_then_defined_term_4(&self, delta: &mut ModelDelta) {
+    fn surjective_exempted_then_defined_term_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm2, tm3, tm4) in self.semantic_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2)
                 {
-                    self.surjective_exempted_then_defined_term_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    self.surjective_exempted_then_defined_term_6(delta, tm0, tm1, tm2, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn surjective_exempted_then_defined_term_5(
+    fn surjective_exempted_then_defined_term_6(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -72484,10 +76344,10 @@ impl Eqlog {
         for _ in [()] {
             self.defined_then_should_be_given_by_ctor_1(delta);
             self.defined_then_should_be_given_by_ctor_2(delta);
-            self.defined_then_should_be_given_by_ctor_4(delta);
-            self.defined_then_should_be_given_by_ctor_6(delta);
-            self.defined_then_should_be_given_by_ctor_7(delta);
+            self.defined_then_should_be_given_by_ctor_5(delta);
+            self.defined_then_should_be_given_by_ctor_8(delta);
             self.defined_then_should_be_given_by_ctor_9(delta);
+            self.defined_then_should_be_given_by_ctor_12(delta);
         }
     }
 
@@ -72515,29 +76375,57 @@ impl Eqlog {
         tm2: TermNode,
     ) {
         for _ in [()] {
+            self.defined_then_should_be_given_by_ctor_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_should_be_given_by_ctor_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm2) {
-                self.defined_then_should_be_given_by_ctor_5(delta, tm0, tm1, tm2, tm3, tm4);
+                self.defined_then_should_be_given_by_ctor_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_4(&self, delta: &mut ModelDelta) {
+    fn defined_then_should_be_given_by_ctor_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm2, tm3, tm4) in self.semantic_el.iter_dirty() {
                 #[allow(unused_variables)]
                 for DefinedThenAtomNode(tm0, tm1, _) in self.defined_then_atom_node.iter_all_2(tm2)
                 {
-                    self.defined_then_should_be_given_by_ctor_5(delta, tm0, tm1, tm2, tm3, tm4);
+                    self.defined_then_should_be_given_by_ctor_6(delta, tm0, tm1, tm2, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_5(
+    fn defined_then_should_be_given_by_ctor_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+        tm3: Structure,
+        tm4: El,
+    ) {
+        for _ in [()] {
+            self.defined_then_should_be_given_by_ctor_7(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_should_be_given_by_ctor_7(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -72551,7 +76439,7 @@ impl Eqlog {
             for ElType(_, tm6) in self.el_type.iter_all_0(tm4) {
                 #[allow(unused_variables)]
                 for SemanticType(tm5, _) in self.semantic_type.iter_all_1(tm6) {
-                    self.defined_then_should_be_given_by_ctor_8(
+                    self.defined_then_should_be_given_by_ctor_10(
                         delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6,
                     );
                 }
@@ -72560,7 +76448,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_6(&self, delta: &mut ModelDelta) {
+    fn defined_then_should_be_given_by_ctor_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElType(tm4, tm6) in self.el_type.iter_dirty() {
@@ -72572,7 +76460,7 @@ impl Eqlog {
                         for DefinedThenAtomNode(tm0, tm1, _) in
                             self.defined_then_atom_node.iter_all_2(tm2)
                         {
-                            self.defined_then_should_be_given_by_ctor_8(
+                            self.defined_then_should_be_given_by_ctor_10(
                                 delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6,
                             );
                         }
@@ -72583,7 +76471,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_7(&self, delta: &mut ModelDelta) {
+    fn defined_then_should_be_given_by_ctor_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm5, tm6) in self.semantic_type.iter_dirty() {
@@ -72595,7 +76483,7 @@ impl Eqlog {
                         for DefinedThenAtomNode(tm0, tm1, _) in
                             self.defined_then_atom_node.iter_all_2(tm2)
                         {
-                            self.defined_then_should_be_given_by_ctor_8(
+                            self.defined_then_should_be_given_by_ctor_10(
                                 delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6,
                             );
                         }
@@ -72606,7 +76494,24 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_8(
+    fn defined_then_should_be_given_by_ctor_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ThenAtomNode,
+        tm1: OptTermNode,
+        tm2: TermNode,
+        tm3: Structure,
+        tm4: El,
+        tm5: Ident,
+        tm6: Type,
+    ) {
+        for _ in [()] {
+            self.defined_then_should_be_given_by_ctor_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_then_should_be_given_by_ctor_11(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -72620,7 +76525,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumDecl(tm7, _, tm8) in self.enum_decl.iter_all_1(tm5) {
-                self.defined_then_should_be_given_by_ctor_10(
+                self.defined_then_should_be_given_by_ctor_13(
                     delta, tm0, tm1, tm2, tm3, tm4, tm6, tm7, tm5, tm8,
                 );
             }
@@ -72628,7 +76533,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_9(&self, delta: &mut ModelDelta) {
+    fn defined_then_should_be_given_by_ctor_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumDecl(tm7, tm5, tm8) in self.enum_decl.iter_dirty() {
@@ -72642,7 +76547,7 @@ impl Eqlog {
                             for DefinedThenAtomNode(tm0, tm1, _) in
                                 self.defined_then_atom_node.iter_all_2(tm2)
                             {
-                                self.defined_then_should_be_given_by_ctor_10(
+                                self.defined_then_should_be_given_by_ctor_13(
                                     delta, tm0, tm1, tm2, tm3, tm4, tm6, tm7, tm5, tm8,
                                 );
                             }
@@ -72654,7 +76559,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn defined_then_should_be_given_by_ctor_10(
+    fn defined_then_should_be_given_by_ctor_13(
         &self,
         delta: &mut ModelDelta,
         tm0: ThenAtomNode,
@@ -72686,8 +76591,8 @@ impl Eqlog {
         for _ in [()] {
             self.ctor_app_is_given_by_ctor_1(delta);
             self.ctor_app_is_given_by_ctor_2(delta);
-            self.ctor_app_is_given_by_ctor_4(delta);
-            self.ctor_app_is_given_by_ctor_6(delta);
+            self.ctor_app_is_given_by_ctor_5(delta);
+            self.ctor_app_is_given_by_ctor_8(delta);
         }
     }
 
@@ -72715,28 +76620,56 @@ impl Eqlog {
         tm2: TermListNode,
     ) {
         for _ in [()] {
+            self.ctor_app_is_given_by_ctor_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_app_is_given_by_ctor_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CtorDecl(tm3, _, tm4) in self.ctor_decl.iter_all_1(tm1) {
-                self.ctor_app_is_given_by_ctor_5(delta, tm0, tm2, tm3, tm1, tm4);
+                self.ctor_app_is_given_by_ctor_6(delta, tm0, tm2, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_app_is_given_by_ctor_4(&self, delta: &mut ModelDelta) {
+    fn ctor_app_is_given_by_ctor_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorDecl(tm3, tm1, tm4) in self.ctor_decl.iter_dirty() {
                 #[allow(unused_variables)]
                 for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
-                    self.ctor_app_is_given_by_ctor_5(delta, tm0, tm2, tm3, tm1, tm4);
+                    self.ctor_app_is_given_by_ctor_6(delta, tm0, tm2, tm3, tm1, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_app_is_given_by_ctor_5(
+    fn ctor_app_is_given_by_ctor_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm2: TermListNode,
+        tm3: CtorDeclNode,
+        tm1: Ident,
+        tm4: ArgDeclListNode,
+    ) {
+        for _ in [()] {
+            self.ctor_app_is_given_by_ctor_7(delta, tm0, tm2, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_app_is_given_by_ctor_7(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -72748,13 +76681,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(_, tm5) in self.ctor_enum.iter_all_0(tm3) {
-                self.ctor_app_is_given_by_ctor_7(delta, tm0, tm2, tm1, tm4, tm3, tm5);
+                self.ctor_app_is_given_by_ctor_9(delta, tm0, tm2, tm1, tm4, tm3, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_app_is_given_by_ctor_6(&self, delta: &mut ModelDelta) {
+    fn ctor_app_is_given_by_ctor_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm3, tm5) in self.ctor_enum.iter_dirty() {
@@ -72762,7 +76695,7 @@ impl Eqlog {
                 for CtorDecl(_, tm1, tm4) in self.ctor_decl.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for AppTermNode(tm0, _, tm2) in self.app_term_node.iter_all_1(tm1) {
-                        self.ctor_app_is_given_by_ctor_7(delta, tm0, tm2, tm1, tm4, tm3, tm5);
+                        self.ctor_app_is_given_by_ctor_9(delta, tm0, tm2, tm1, tm4, tm3, tm5);
                     }
                 }
             }
@@ -72770,7 +76703,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_app_is_given_by_ctor_7(
+    fn ctor_app_is_given_by_ctor_9(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -72797,8 +76730,8 @@ impl Eqlog {
         for _ in [()] {
             self.function_can_be_made_defined_if_codomain_normal_type_1(delta);
             self.function_can_be_made_defined_if_codomain_normal_type_2(delta);
-            self.function_can_be_made_defined_if_codomain_normal_type_4(delta);
-            self.function_can_be_made_defined_if_codomain_normal_type_6(delta);
+            self.function_can_be_made_defined_if_codomain_normal_type_5(delta);
+            self.function_can_be_made_defined_if_codomain_normal_type_8(delta);
         }
     }
 
@@ -72825,21 +76758,33 @@ impl Eqlog {
         tm1: Ident,
     ) {
         for _ in [()] {
+            self.function_can_be_made_defined_if_codomain_normal_type_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn function_can_be_made_defined_if_codomain_normal_type_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeDeclNode,
+        tm1: Ident,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(_, tm2) in self.semantic_type.iter_all_0(tm1) {
-                self.function_can_be_made_defined_if_codomain_normal_type_5(delta, tm0, tm1, tm2);
+                self.function_can_be_made_defined_if_codomain_normal_type_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn function_can_be_made_defined_if_codomain_normal_type_4(&self, delta: &mut ModelDelta) {
+    fn function_can_be_made_defined_if_codomain_normal_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm1, tm2) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
-                    self.function_can_be_made_defined_if_codomain_normal_type_5(
+                    self.function_can_be_made_defined_if_codomain_normal_type_6(
                         delta, tm0, tm1, tm2,
                     );
                 }
@@ -72848,7 +76793,20 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn function_can_be_made_defined_if_codomain_normal_type_5(
+    fn function_can_be_made_defined_if_codomain_normal_type_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeDeclNode,
+        tm1: Ident,
+        tm2: Type,
+    ) {
+        for _ in [()] {
+            self.function_can_be_made_defined_if_codomain_normal_type_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn function_can_be_made_defined_if_codomain_normal_type_7(
         &self,
         delta: &mut ModelDelta,
         tm0: TypeDeclNode,
@@ -72858,7 +76816,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm3, _) in self.codomain.iter_all_1(tm2) {
-                self.function_can_be_made_defined_if_codomain_normal_type_7(
+                self.function_can_be_made_defined_if_codomain_normal_type_9(
                     delta, tm0, tm1, tm3, tm2,
                 );
             }
@@ -72866,7 +76824,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn function_can_be_made_defined_if_codomain_normal_type_6(&self, delta: &mut ModelDelta) {
+    fn function_can_be_made_defined_if_codomain_normal_type_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm3, tm2) in self.codomain.iter_dirty() {
@@ -72874,7 +76832,7 @@ impl Eqlog {
                 for SemanticType(tm1, _) in self.semantic_type.iter_all_1(tm2) {
                     #[allow(unused_variables)]
                     for TypeDecl(tm0, _) in self.type_decl.iter_all_1(tm1) {
-                        self.function_can_be_made_defined_if_codomain_normal_type_7(
+                        self.function_can_be_made_defined_if_codomain_normal_type_9(
                             delta, tm0, tm1, tm3, tm2,
                         );
                     }
@@ -72884,7 +76842,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn function_can_be_made_defined_if_codomain_normal_type_7(
+    fn function_can_be_made_defined_if_codomain_normal_type_9(
         &self,
         delta: &mut ModelDelta,
         tm0: TypeDeclNode,
@@ -72911,7 +76869,7 @@ impl Eqlog {
         for _ in [()] {
             self.function_can_be_defined_if_constructor_1(delta);
             self.function_can_be_defined_if_constructor_2(delta);
-            self.function_can_be_defined_if_constructor_4(delta);
+            self.function_can_be_defined_if_constructor_5(delta);
         }
     }
 
@@ -72939,28 +76897,41 @@ impl Eqlog {
         tm2: ArgDeclListNode,
     ) {
         for _ in [()] {
+            self.function_can_be_defined_if_constructor_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn function_can_be_defined_if_constructor_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: CtorDeclNode,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(_, tm3) in self.semantic_func.iter_all_0(tm1) {
-                self.function_can_be_defined_if_constructor_5(delta, tm0, tm2, tm1, tm3);
+                self.function_can_be_defined_if_constructor_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn function_can_be_defined_if_constructor_4(&self, delta: &mut ModelDelta) {
+    fn function_can_be_defined_if_constructor_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm1, tm3) in self.semantic_func.iter_dirty() {
                 #[allow(unused_variables)]
                 for CtorDecl(tm0, _, tm2) in self.ctor_decl.iter_all_1(tm1) {
-                    self.function_can_be_defined_if_constructor_5(delta, tm0, tm2, tm1, tm3);
+                    self.function_can_be_defined_if_constructor_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn function_can_be_defined_if_constructor_5(
+    fn function_can_be_defined_if_constructor_6(
         &self,
         delta: &mut ModelDelta,
         tm0: CtorDeclNode,
@@ -72987,8 +76958,8 @@ impl Eqlog {
         for _ in [()] {
             self.case_pattern_is_variable_defined_1(delta);
             self.case_pattern_is_variable_defined_2(delta);
-            self.case_pattern_is_variable_defined_4(delta);
-            self.case_pattern_is_variable_defined_6(delta);
+            self.case_pattern_is_variable_defined_5(delta);
+            self.case_pattern_is_variable_defined_8(delta);
         }
     }
 
@@ -73016,28 +76987,55 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.case_pattern_is_variable_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_is_variable_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for VarTermNode(_, tm3) in self.var_term_node.iter_all_0(tm1) {
-                self.case_pattern_is_variable_defined_5(delta, tm0, tm2, tm1, tm3);
+                self.case_pattern_is_variable_defined_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_variable_defined_4(&self, delta: &mut ModelDelta) {
+    fn case_pattern_is_variable_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for VarTermNode(tm1, tm3) in self.var_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.case_pattern_is_variable_defined_5(delta, tm0, tm2, tm1, tm3);
+                    self.case_pattern_is_variable_defined_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_variable_defined_5(
+    fn case_pattern_is_variable_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm1: TermNode,
+        tm3: VirtIdent,
+    ) {
+        for _ in [()] {
+            self.case_pattern_is_variable_defined_7(delta, tm0, tm2, tm1, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_is_variable_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73048,13 +77046,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm4) in self.term_node_loc.iter_all_0(tm1) {
-                self.case_pattern_is_variable_defined_7(delta, tm0, tm2, tm3, tm1, tm4);
+                self.case_pattern_is_variable_defined_9(delta, tm0, tm2, tm3, tm1, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_variable_defined_6(&self, delta: &mut ModelDelta) {
+    fn case_pattern_is_variable_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm1, tm4) in self.term_node_loc.iter_dirty() {
@@ -73062,7 +77060,7 @@ impl Eqlog {
                 for VarTermNode(_, tm3) in self.var_term_node.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                        self.case_pattern_is_variable_defined_7(delta, tm0, tm2, tm3, tm1, tm4);
+                        self.case_pattern_is_variable_defined_9(delta, tm0, tm2, tm3, tm1, tm4);
                     }
                 }
             }
@@ -73070,7 +77068,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_variable_defined_7(
+    fn case_pattern_is_variable_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73098,8 +77096,8 @@ impl Eqlog {
         for _ in [()] {
             self.case_pattern_is_wildcard_defined_1(delta);
             self.case_pattern_is_wildcard_defined_2(delta);
-            self.case_pattern_is_wildcard_defined_4(delta);
-            self.case_pattern_is_wildcard_defined_6(delta);
+            self.case_pattern_is_wildcard_defined_5(delta);
+            self.case_pattern_is_wildcard_defined_8(delta);
         }
     }
 
@@ -73127,28 +77125,54 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.case_pattern_is_wildcard_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_is_wildcard_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm1) {
-                self.case_pattern_is_wildcard_defined_5(delta, tm0, tm2, tm1);
+                self.case_pattern_is_wildcard_defined_6(delta, tm0, tm2, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_wildcard_defined_4(&self, delta: &mut ModelDelta) {
+    fn case_pattern_is_wildcard_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardTermNode(tm1) in self.wildcard_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.case_pattern_is_wildcard_defined_5(delta, tm0, tm2, tm1);
+                    self.case_pattern_is_wildcard_defined_6(delta, tm0, tm2, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_wildcard_defined_5(
+    fn case_pattern_is_wildcard_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm1: TermNode,
+    ) {
+        for _ in [()] {
+            self.case_pattern_is_wildcard_defined_7(delta, tm0, tm2, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_is_wildcard_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73158,13 +77182,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm1) {
-                self.case_pattern_is_wildcard_defined_7(delta, tm0, tm2, tm1, tm3);
+                self.case_pattern_is_wildcard_defined_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_wildcard_defined_6(&self, delta: &mut ModelDelta) {
+    fn case_pattern_is_wildcard_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm1, tm3) in self.term_node_loc.iter_dirty() {
@@ -73172,7 +77196,7 @@ impl Eqlog {
                 for WildcardTermNode(_) in self.wildcard_term_node.iter_all_0(tm1) {
                     #[allow(unused_variables)]
                     for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                        self.case_pattern_is_wildcard_defined_7(delta, tm0, tm2, tm1, tm3);
+                        self.case_pattern_is_wildcard_defined_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -73180,7 +77204,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_is_wildcard_defined_7(
+    fn case_pattern_is_wildcard_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73207,9 +77231,9 @@ impl Eqlog {
         for _ in [()] {
             self.case_pattern_app_should_be_constructor_1(delta);
             self.case_pattern_app_should_be_constructor_2(delta);
-            self.case_pattern_app_should_be_constructor_4(delta);
-            self.case_pattern_app_should_be_constructor_6(delta);
+            self.case_pattern_app_should_be_constructor_5(delta);
             self.case_pattern_app_should_be_constructor_8(delta);
+            self.case_pattern_app_should_be_constructor_11(delta);
         }
     }
 
@@ -73237,28 +77261,56 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.case_pattern_app_should_be_constructor_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
-                self.case_pattern_app_should_be_constructor_5(delta, tm0, tm2, tm1, tm3, tm4);
+                self.case_pattern_app_should_be_constructor_6(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_4(&self, delta: &mut ModelDelta) {
+    fn case_pattern_app_should_be_constructor_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(tm1, tm3, tm4) in self.app_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.case_pattern_app_should_be_constructor_5(delta, tm0, tm2, tm1, tm3, tm4);
+                    self.case_pattern_app_should_be_constructor_6(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_5(
+    fn case_pattern_app_should_be_constructor_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm1: TermNode,
+        tm3: Ident,
+        tm4: TermListNode,
+    ) {
+        for _ in [()] {
+            self.case_pattern_app_should_be_constructor_7(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73270,13 +77322,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm5) in self.term_node_loc.iter_all_0(tm1) {
-                self.case_pattern_app_should_be_constructor_7(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+                self.case_pattern_app_should_be_constructor_9(delta, tm0, tm2, tm3, tm4, tm1, tm5);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_6(&self, delta: &mut ModelDelta) {
+    fn case_pattern_app_should_be_constructor_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm1, tm5) in self.term_node_loc.iter_dirty() {
@@ -73284,7 +77336,7 @@ impl Eqlog {
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
-                        self.case_pattern_app_should_be_constructor_7(
+                        self.case_pattern_app_should_be_constructor_9(
                             delta, tm0, tm2, tm3, tm4, tm1, tm5,
                         );
                     }
@@ -73294,7 +77346,23 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_7(
+    fn case_pattern_app_should_be_constructor_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm3: Ident,
+        tm4: TermListNode,
+        tm1: TermNode,
+        tm5: Loc,
+    ) {
+        for _ in [()] {
+            self.case_pattern_app_should_be_constructor_10(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_10(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73307,7 +77375,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm6) in self.ctor_symbol.iter_all() {
-                self.case_pattern_app_should_be_constructor_9(
+                self.case_pattern_app_should_be_constructor_12(
                     delta, tm0, tm2, tm3, tm4, tm1, tm5, tm6,
                 );
             }
@@ -73315,7 +77383,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_8(&self, delta: &mut ModelDelta) {
+    fn case_pattern_app_should_be_constructor_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm6) in self.ctor_symbol.iter_dirty() {
@@ -73325,7 +77393,7 @@ impl Eqlog {
                     for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
                         #[allow(unused_variables)]
                         for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                            self.case_pattern_app_should_be_constructor_9(
+                            self.case_pattern_app_should_be_constructor_12(
                                 delta, tm0, tm2, tm3, tm4, tm1, tm5, tm6,
                             );
                         }
@@ -73336,7 +77404,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_9(
+    fn case_pattern_app_should_be_constructor_12(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73366,8 +77434,8 @@ impl Eqlog {
         for _ in [()] {
             self.match_case_pattern_ctor_defined_1(delta);
             self.match_case_pattern_ctor_defined_2(delta);
-            self.match_case_pattern_ctor_defined_4(delta);
-            self.match_case_pattern_ctor_defined_6(delta);
+            self.match_case_pattern_ctor_defined_5(delta);
+            self.match_case_pattern_ctor_defined_8(delta);
         }
     }
 
@@ -73395,28 +77463,56 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.match_case_pattern_ctor_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_case_pattern_ctor_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
-                self.match_case_pattern_ctor_defined_5(delta, tm0, tm2, tm1, tm3, tm4);
+                self.match_case_pattern_ctor_defined_6(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_case_pattern_ctor_defined_4(&self, delta: &mut ModelDelta) {
+    fn match_case_pattern_ctor_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(tm1, tm3, tm4) in self.app_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.match_case_pattern_ctor_defined_5(delta, tm0, tm2, tm1, tm3, tm4);
+                    self.match_case_pattern_ctor_defined_6(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_case_pattern_ctor_defined_5(
+    fn match_case_pattern_ctor_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm2: StmtListNode,
+        tm1: TermNode,
+        tm3: Ident,
+        tm4: TermListNode,
+    ) {
+        for _ in [()] {
+            self.match_case_pattern_ctor_defined_7(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_case_pattern_ctor_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73428,13 +77524,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorDecl(tm5, _, tm6) in self.ctor_decl.iter_all_1(tm3) {
-                self.match_case_pattern_ctor_defined_7(delta, tm0, tm2, tm1, tm4, tm5, tm3, tm6);
+                self.match_case_pattern_ctor_defined_9(delta, tm0, tm2, tm1, tm4, tm5, tm3, tm6);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_case_pattern_ctor_defined_6(&self, delta: &mut ModelDelta) {
+    fn match_case_pattern_ctor_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorDecl(tm5, tm3, tm6) in self.ctor_decl.iter_dirty() {
@@ -73442,7 +77538,7 @@ impl Eqlog {
                 for AppTermNode(tm1, _, tm4) in self.app_term_node.iter_all_1(tm3) {
                     #[allow(unused_variables)]
                     for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                        self.match_case_pattern_ctor_defined_7(
+                        self.match_case_pattern_ctor_defined_9(
                             delta, tm0, tm2, tm1, tm4, tm5, tm3, tm6,
                         );
                     }
@@ -73452,7 +77548,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_case_pattern_ctor_defined_7(
+    fn match_case_pattern_ctor_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73482,7 +77578,7 @@ impl Eqlog {
         for _ in [()] {
             self.is_pattern_ctor_arg_cons_1(delta);
             self.is_pattern_ctor_arg_cons_2(delta);
-            self.is_pattern_ctor_arg_cons_4(delta);
+            self.is_pattern_ctor_arg_cons_5(delta);
         }
     }
 
@@ -73504,28 +77600,35 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn is_pattern_ctor_arg_cons_3(&self, delta: &mut ModelDelta, tm0: TermListNode) {
         for _ in [()] {
+            self.is_pattern_ctor_arg_cons_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn is_pattern_ctor_arg_cons_4(&self, delta: &mut ModelDelta, tm0: TermListNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for ConsTermListNode(_, tm1, tm2) in self.cons_term_list_node.iter_all_0(tm0) {
-                self.is_pattern_ctor_arg_cons_5(delta, tm0, tm1, tm2);
+                self.is_pattern_ctor_arg_cons_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn is_pattern_ctor_arg_cons_4(&self, delta: &mut ModelDelta) {
+    fn is_pattern_ctor_arg_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTermListNode(tm0, tm1, tm2) in self.cons_term_list_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for ArePatternCtorArgs(_) in self.are_pattern_ctor_args.iter_all_0(tm0) {
-                    self.is_pattern_ctor_arg_cons_5(delta, tm0, tm1, tm2);
+                    self.is_pattern_ctor_arg_cons_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn is_pattern_ctor_arg_cons_5(
+    fn is_pattern_ctor_arg_cons_6(
         &self,
         delta: &mut ModelDelta,
         tm0: TermListNode,
@@ -73552,7 +77655,7 @@ impl Eqlog {
         for _ in [()] {
             self.are_pattern_ctor_args_defined_1(delta);
             self.are_pattern_ctor_args_defined_2(delta);
-            self.are_pattern_ctor_args_defined_4(delta);
+            self.are_pattern_ctor_args_defined_5(delta);
         }
     }
 
@@ -73580,28 +77683,41 @@ impl Eqlog {
         tm2: StmtListNode,
     ) {
         for _ in [()] {
+            self.are_pattern_ctor_args_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn are_pattern_ctor_args_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseNode,
+        tm1: TermNode,
+        tm2: StmtListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
-                self.are_pattern_ctor_args_defined_5(delta, tm0, tm2, tm1, tm3, tm4);
+                self.are_pattern_ctor_args_defined_6(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn are_pattern_ctor_args_defined_4(&self, delta: &mut ModelDelta) {
+    fn are_pattern_ctor_args_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(tm1, tm3, tm4) in self.app_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.are_pattern_ctor_args_defined_5(delta, tm0, tm2, tm1, tm3, tm4);
+                    self.are_pattern_ctor_args_defined_6(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn are_pattern_ctor_args_defined_5(
+    fn are_pattern_ctor_args_defined_6(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseNode,
@@ -73625,8 +77741,8 @@ impl Eqlog {
         for _ in [()] {
             self.pattern_ctor_arg_is_app_defined_1(delta);
             self.pattern_ctor_arg_is_app_defined_2(delta);
-            self.pattern_ctor_arg_is_app_defined_4(delta);
-            self.pattern_ctor_arg_is_app_defined_6(delta);
+            self.pattern_ctor_arg_is_app_defined_5(delta);
+            self.pattern_ctor_arg_is_app_defined_8(delta);
         }
     }
 
@@ -73648,28 +77764,48 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn pattern_ctor_arg_is_app_defined_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.pattern_ctor_arg_is_app_defined_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pattern_ctor_arg_is_app_defined_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                self.pattern_ctor_arg_is_app_defined_5(delta, tm0, tm1, tm2);
+                self.pattern_ctor_arg_is_app_defined_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_is_app_defined_4(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_is_app_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for IsPatternCtorArg(_) in self.is_pattern_ctor_arg.iter_all_0(tm0) {
-                    self.pattern_ctor_arg_is_app_defined_5(delta, tm0, tm1, tm2);
+                    self.pattern_ctor_arg_is_app_defined_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_is_app_defined_5(
+    fn pattern_ctor_arg_is_app_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: Ident,
+        tm2: TermListNode,
+    ) {
+        for _ in [()] {
+            self.pattern_ctor_arg_is_app_defined_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pattern_ctor_arg_is_app_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -73679,13 +77815,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm3) in self.term_node_loc.iter_all_0(tm0) {
-                self.pattern_ctor_arg_is_app_defined_7(delta, tm1, tm2, tm0, tm3);
+                self.pattern_ctor_arg_is_app_defined_9(delta, tm1, tm2, tm0, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_is_app_defined_6(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_is_app_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm0, tm3) in self.term_node_loc.iter_dirty() {
@@ -73693,7 +77829,7 @@ impl Eqlog {
                 for IsPatternCtorArg(_) in self.is_pattern_ctor_arg.iter_all_0(tm0) {
                     #[allow(unused_variables)]
                     for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                        self.pattern_ctor_arg_is_app_defined_7(delta, tm1, tm2, tm0, tm3);
+                        self.pattern_ctor_arg_is_app_defined_9(delta, tm1, tm2, tm0, tm3);
                     }
                 }
             }
@@ -73701,7 +77837,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_is_app_defined_7(
+    fn pattern_ctor_arg_is_app_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
@@ -73728,11 +77864,11 @@ impl Eqlog {
         for _ in [()] {
             self.pattern_ctor_arg_var_is_not_fresh_defined_1(delta);
             self.pattern_ctor_arg_var_is_not_fresh_defined_2(delta);
-            self.pattern_ctor_arg_var_is_not_fresh_defined_4(delta);
-            self.pattern_ctor_arg_var_is_not_fresh_defined_6(delta);
-            self.pattern_ctor_arg_var_is_not_fresh_defined_7(delta);
+            self.pattern_ctor_arg_var_is_not_fresh_defined_5(delta);
+            self.pattern_ctor_arg_var_is_not_fresh_defined_8(delta);
             self.pattern_ctor_arg_var_is_not_fresh_defined_9(delta);
-            self.pattern_ctor_arg_var_is_not_fresh_defined_11(delta);
+            self.pattern_ctor_arg_var_is_not_fresh_defined_12(delta);
+            self.pattern_ctor_arg_var_is_not_fresh_defined_15(delta);
         }
     }
 
@@ -73754,28 +77890,47 @@ impl Eqlog {
     #[allow(unused_variables)]
     fn pattern_ctor_arg_var_is_not_fresh_defined_3(&self, delta: &mut ModelDelta, tm0: TermNode) {
         for _ in [()] {
+            self.pattern_ctor_arg_var_is_not_fresh_defined_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pattern_ctor_arg_var_is_not_fresh_defined_4(&self, delta: &mut ModelDelta, tm0: TermNode) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                self.pattern_ctor_arg_var_is_not_fresh_defined_5(delta, tm0, tm1);
+                self.pattern_ctor_arg_var_is_not_fresh_defined_6(delta, tm0, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_4(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_var_is_not_fresh_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for VarTermNode(tm0, tm1) in self.var_term_node.iter_dirty() {
                 #[allow(unused_variables)]
                 for IsPatternCtorArg(_) in self.is_pattern_ctor_arg.iter_all_0(tm0) {
-                    self.pattern_ctor_arg_var_is_not_fresh_defined_5(delta, tm0, tm1);
+                    self.pattern_ctor_arg_var_is_not_fresh_defined_6(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_5(
+    fn pattern_ctor_arg_var_is_not_fresh_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm1: VirtIdent,
+    ) {
+        for _ in [()] {
+            self.pattern_ctor_arg_var_is_not_fresh_defined_7(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pattern_ctor_arg_var_is_not_fresh_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -73786,14 +77941,14 @@ impl Eqlog {
             for RuleDescendantTerm(_, tm2) in self.rule_descendant_term.iter_all_0(tm0) {
                 #[allow(unused_variables)]
                 for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
-                    self.pattern_ctor_arg_var_is_not_fresh_defined_8(delta, tm1, tm0, tm2, tm3);
+                    self.pattern_ctor_arg_var_is_not_fresh_defined_10(delta, tm1, tm0, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_6(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_var_is_not_fresh_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm0, tm2) in self.rule_descendant_term.iter_dirty() {
@@ -73803,7 +77958,7 @@ impl Eqlog {
                     for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
                         #[allow(unused_variables)]
                         for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                            self.pattern_ctor_arg_var_is_not_fresh_defined_8(
+                            self.pattern_ctor_arg_var_is_not_fresh_defined_10(
                                 delta, tm1, tm0, tm2, tm3,
                             );
                         }
@@ -73814,7 +77969,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_7(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_var_is_not_fresh_defined_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm2, tm3) in self.entry_scope.iter_dirty() {
@@ -73825,7 +77980,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
-                            self.pattern_ctor_arg_var_is_not_fresh_defined_8(
+                            self.pattern_ctor_arg_var_is_not_fresh_defined_10(
                                 delta, tm1, tm0, tm2, tm3,
                             );
                         }
@@ -73836,7 +77991,21 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_8(
+    fn pattern_ctor_arg_var_is_not_fresh_defined_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: VirtIdent,
+        tm0: TermNode,
+        tm2: RuleDescendantNode,
+        tm3: Scope,
+    ) {
+        for _ in [()] {
+            self.pattern_ctor_arg_var_is_not_fresh_defined_11(delta, tm1, tm0, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pattern_ctor_arg_var_is_not_fresh_defined_11(
         &self,
         delta: &mut ModelDelta,
         tm1: VirtIdent,
@@ -73847,13 +78016,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for VarInScope(_, _) in self.var_in_scope.iter_all_0_1(tm1, tm3) {
-                self.pattern_ctor_arg_var_is_not_fresh_defined_10(delta, tm0, tm2, tm3, tm1);
+                self.pattern_ctor_arg_var_is_not_fresh_defined_13(delta, tm0, tm2, tm3, tm1);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_9(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_var_is_not_fresh_defined_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for VarInScope(tm1, tm3) in self.var_in_scope.iter_dirty() {
@@ -73867,7 +78036,7 @@ impl Eqlog {
                             for RuleDescendantTerm(_, _) in
                                 self.rule_descendant_term.iter_all_0_1(tm0, tm2)
                             {
-                                self.pattern_ctor_arg_var_is_not_fresh_defined_10(
+                                self.pattern_ctor_arg_var_is_not_fresh_defined_13(
                                     delta, tm0, tm2, tm3, tm1,
                                 );
                             }
@@ -73879,7 +78048,21 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_10(
+    fn pattern_ctor_arg_var_is_not_fresh_defined_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TermNode,
+        tm2: RuleDescendantNode,
+        tm3: Scope,
+        tm1: VirtIdent,
+    ) {
+        for _ in [()] {
+            self.pattern_ctor_arg_var_is_not_fresh_defined_14(delta, tm0, tm2, tm3, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pattern_ctor_arg_var_is_not_fresh_defined_14(
         &self,
         delta: &mut ModelDelta,
         tm0: TermNode,
@@ -73890,13 +78073,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(_, tm4) in self.term_node_loc.iter_all_0(tm0) {
-                self.pattern_ctor_arg_var_is_not_fresh_defined_12(delta, tm2, tm3, tm1, tm0, tm4);
+                self.pattern_ctor_arg_var_is_not_fresh_defined_16(delta, tm2, tm3, tm1, tm0, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_11(&self, delta: &mut ModelDelta) {
+    fn pattern_ctor_arg_var_is_not_fresh_defined_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermNodeLoc(tm0, tm4) in self.term_node_loc.iter_dirty() {
@@ -73910,7 +78093,7 @@ impl Eqlog {
                             for VarTermNode(_, tm1) in self.var_term_node.iter_all_0(tm0) {
                                 #[allow(unused_variables)]
                                 for VarInScope(_, _) in self.var_in_scope.iter_all_0_1(tm1, tm3) {
-                                    self.pattern_ctor_arg_var_is_not_fresh_defined_12(
+                                    self.pattern_ctor_arg_var_is_not_fresh_defined_16(
                                         delta, tm2, tm3, tm1, tm0, tm4,
                                     );
                                 }
@@ -73923,7 +78106,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pattern_ctor_arg_var_is_not_fresh_defined_12(
+    fn pattern_ctor_arg_var_is_not_fresh_defined_16(
         &self,
         delta: &mut ModelDelta,
         tm2: RuleDescendantNode,
@@ -73951,7 +78134,7 @@ impl Eqlog {
         for _ in [()] {
             self.contains_ctor_case_head_1(delta);
             self.contains_ctor_case_head_2(delta);
-            self.contains_ctor_case_head_4(delta);
+            self.contains_ctor_case_head_5(delta);
         }
     }
 
@@ -73980,15 +78163,28 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.contains_ctor_case_head_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn contains_ctor_case_head_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(_, tm3) in self.match_case_pattern_ctor.iter_all_0(tm1) {
-                self.contains_ctor_case_head_5(delta, tm0, tm2, tm1, tm3);
+                self.contains_ctor_case_head_6(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn contains_ctor_case_head_4(&self, delta: &mut ModelDelta) {
+    fn contains_ctor_case_head_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm1, tm3) in self.match_case_pattern_ctor.iter_dirty() {
@@ -73996,14 +78192,14 @@ impl Eqlog {
                 for ConsMatchCaseListNode(tm0, _, tm2) in
                     self.cons_match_case_list_node.iter_all_1(tm1)
                 {
-                    self.contains_ctor_case_head_5(delta, tm0, tm2, tm1, tm3);
+                    self.contains_ctor_case_head_6(delta, tm0, tm2, tm1, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn contains_ctor_case_head_5(
+    fn contains_ctor_case_head_6(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -74030,7 +78226,7 @@ impl Eqlog {
         for _ in [()] {
             self.contains_ctor_case_tail_1(delta);
             self.contains_ctor_case_tail_2(delta);
-            self.contains_ctor_case_tail_4(delta);
+            self.contains_ctor_case_tail_5(delta);
         }
     }
 
@@ -74059,15 +78255,28 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.contains_ctor_case_tail_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn contains_ctor_case_tail_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CasesContainCtor(_, tm3) in self.cases_contain_ctor.iter_all_0(tm2) {
-                self.contains_ctor_case_tail_5(delta, tm0, tm1, tm2, tm3);
+                self.contains_ctor_case_tail_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn contains_ctor_case_tail_4(&self, delta: &mut ModelDelta) {
+    fn contains_ctor_case_tail_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesContainCtor(tm2, tm3) in self.cases_contain_ctor.iter_dirty() {
@@ -74075,14 +78284,14 @@ impl Eqlog {
                 for ConsMatchCaseListNode(tm0, tm1, _) in
                     self.cons_match_case_list_node.iter_all_2(tm2)
                 {
-                    self.contains_ctor_case_tail_5(delta, tm0, tm1, tm2, tm3);
+                    self.contains_ctor_case_tail_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn contains_ctor_case_tail_5(
+    fn contains_ctor_case_tail_6(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -74109,8 +78318,8 @@ impl Eqlog {
         for _ in [()] {
             self.match_stmt_contains_ctor_of_enum_defined_1(delta);
             self.match_stmt_contains_ctor_of_enum_defined_2(delta);
-            self.match_stmt_contains_ctor_of_enum_defined_4(delta);
-            self.match_stmt_contains_ctor_of_enum_defined_6(delta);
+            self.match_stmt_contains_ctor_of_enum_defined_5(delta);
+            self.match_stmt_contains_ctor_of_enum_defined_8(delta);
         }
     }
 
@@ -74138,28 +78347,55 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.match_stmt_contains_ctor_of_enum_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_contains_ctor_of_enum_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CasesContainCtor(_, tm3) in self.cases_contain_ctor.iter_all_0(tm2) {
-                self.match_stmt_contains_ctor_of_enum_defined_5(delta, tm0, tm1, tm2, tm3);
+                self.match_stmt_contains_ctor_of_enum_defined_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_contains_ctor_of_enum_defined_4(&self, delta: &mut ModelDelta) {
+    fn match_stmt_contains_ctor_of_enum_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesContainCtor(tm2, tm3) in self.cases_contain_ctor.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                    self.match_stmt_contains_ctor_of_enum_defined_5(delta, tm0, tm1, tm2, tm3);
+                    self.match_stmt_contains_ctor_of_enum_defined_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_contains_ctor_of_enum_defined_5(
+    fn match_stmt_contains_ctor_of_enum_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm3: CtorDeclNode,
+    ) {
+        for _ in [()] {
+            self.match_stmt_contains_ctor_of_enum_defined_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_contains_ctor_of_enum_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -74170,13 +78406,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm3) {
-                self.match_stmt_contains_ctor_of_enum_defined_7(delta, tm0, tm1, tm2, tm3, tm4);
+                self.match_stmt_contains_ctor_of_enum_defined_9(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_contains_ctor_of_enum_defined_6(&self, delta: &mut ModelDelta) {
+    fn match_stmt_contains_ctor_of_enum_defined_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm3, tm4) in self.ctor_enum.iter_dirty() {
@@ -74184,7 +78420,7 @@ impl Eqlog {
                 for CasesContainCtor(tm2, _) in self.cases_contain_ctor.iter_all_1(tm3) {
                     #[allow(unused_variables)]
                     for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                        self.match_stmt_contains_ctor_of_enum_defined_7(
+                        self.match_stmt_contains_ctor_of_enum_defined_9(
                             delta, tm0, tm1, tm2, tm3, tm4,
                         );
                     }
@@ -74194,7 +78430,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_contains_ctor_of_enum_defined_7(
+    fn match_stmt_contains_ctor_of_enum_defined_9(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -74222,9 +78458,9 @@ impl Eqlog {
         for _ in [()] {
             self.ctor_cases_determine_enum_singleton_1(delta);
             self.ctor_cases_determine_enum_singleton_2(delta);
-            self.ctor_cases_determine_enum_singleton_4(delta);
-            self.ctor_cases_determine_enum_singleton_6(delta);
-            self.ctor_cases_determine_enum_singleton_7(delta);
+            self.ctor_cases_determine_enum_singleton_5(delta);
+            self.ctor_cases_determine_enum_singleton_8(delta);
+            self.ctor_cases_determine_enum_singleton_9(delta);
         }
     }
 
@@ -74253,15 +78489,28 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.ctor_cases_determine_enum_singleton_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_cases_determine_enum_singleton_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for NilMatchCaseListNode(_) in self.nil_match_case_list_node.iter_all_0(tm2) {
-                self.ctor_cases_determine_enum_singleton_5(delta, tm0, tm1, tm2);
+                self.ctor_cases_determine_enum_singleton_6(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_singleton_4(&self, delta: &mut ModelDelta) {
+    fn ctor_cases_determine_enum_singleton_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilMatchCaseListNode(tm2) in self.nil_match_case_list_node.iter_dirty() {
@@ -74269,14 +78518,27 @@ impl Eqlog {
                 for ConsMatchCaseListNode(tm0, tm1, _) in
                     self.cons_match_case_list_node.iter_all_2(tm2)
                 {
-                    self.ctor_cases_determine_enum_singleton_5(delta, tm0, tm1, tm2);
+                    self.ctor_cases_determine_enum_singleton_6(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_singleton_5(
+    fn ctor_cases_determine_enum_singleton_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
+            self.ctor_cases_determine_enum_singleton_7(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_cases_determine_enum_singleton_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -74288,14 +78550,14 @@ impl Eqlog {
             for MatchCasePatternCtor(_, tm3) in self.match_case_pattern_ctor.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm3) {
-                    self.ctor_cases_determine_enum_singleton_8(delta, tm0, tm2, tm1, tm3, tm4);
+                    self.ctor_cases_determine_enum_singleton_10(delta, tm0, tm2, tm1, tm3, tm4);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_singleton_6(&self, delta: &mut ModelDelta) {
+    fn ctor_cases_determine_enum_singleton_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm3, tm4) in self.ctor_enum.iter_dirty() {
@@ -74308,7 +78570,7 @@ impl Eqlog {
                         for ConsMatchCaseListNode(tm0, _, _) in
                             self.cons_match_case_list_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.ctor_cases_determine_enum_singleton_8(
+                            self.ctor_cases_determine_enum_singleton_10(
                                 delta, tm0, tm2, tm1, tm3, tm4,
                             );
                         }
@@ -74319,7 +78581,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_singleton_7(&self, delta: &mut ModelDelta) {
+    fn ctor_cases_determine_enum_singleton_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm1, tm3) in self.match_case_pattern_ctor.iter_dirty() {
@@ -74331,7 +78593,7 @@ impl Eqlog {
                     {
                         #[allow(unused_variables)]
                         for CtorEnum(_, tm4) in self.ctor_enum.iter_all_0(tm3) {
-                            self.ctor_cases_determine_enum_singleton_8(
+                            self.ctor_cases_determine_enum_singleton_10(
                                 delta, tm0, tm2, tm1, tm3, tm4,
                             );
                         }
@@ -74342,7 +78604,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_singleton_8(
+    fn ctor_cases_determine_enum_singleton_10(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -74370,9 +78632,9 @@ impl Eqlog {
         for _ in [()] {
             self.ctor_cases_determine_enum_cons_1(delta);
             self.ctor_cases_determine_enum_cons_2(delta);
-            self.ctor_cases_determine_enum_cons_4(delta);
-            self.ctor_cases_determine_enum_cons_6(delta);
-            self.ctor_cases_determine_enum_cons_7(delta);
+            self.ctor_cases_determine_enum_cons_5(delta);
+            self.ctor_cases_determine_enum_cons_8(delta);
+            self.ctor_cases_determine_enum_cons_9(delta);
         }
     }
 
@@ -74401,15 +78663,28 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.ctor_cases_determine_enum_cons_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_cases_determine_enum_cons_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(_, tm3) in self.cases_determined_enum.iter_all_0(tm2) {
-                self.ctor_cases_determine_enum_cons_5(delta, tm0, tm1, tm2, tm3);
+                self.ctor_cases_determine_enum_cons_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_cons_4(&self, delta: &mut ModelDelta) {
+    fn ctor_cases_determine_enum_cons_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm2, tm3) in self.cases_determined_enum.iter_dirty() {
@@ -74417,14 +78692,28 @@ impl Eqlog {
                 for ConsMatchCaseListNode(tm0, tm1, _) in
                     self.cons_match_case_list_node.iter_all_2(tm2)
                 {
-                    self.ctor_cases_determine_enum_cons_5(delta, tm0, tm1, tm2, tm3);
+                    self.ctor_cases_determine_enum_cons_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_cons_5(
+    fn ctor_cases_determine_enum_cons_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: MatchCaseListNode,
+        tm1: MatchCaseNode,
+        tm2: MatchCaseListNode,
+        tm3: EnumDeclNode,
+    ) {
+        for _ in [()] {
+            self.ctor_cases_determine_enum_cons_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_cases_determine_enum_cons_7(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -74437,14 +78726,14 @@ impl Eqlog {
             for MatchCasePatternCtor(_, tm4) in self.match_case_pattern_ctor.iter_all_0(tm1) {
                 #[allow(unused_variables)]
                 for CtorEnum(_, _) in self.ctor_enum.iter_all_0_1(tm4, tm3) {
-                    self.ctor_cases_determine_enum_cons_8(delta, tm0, tm2, tm1, tm4, tm3);
+                    self.ctor_cases_determine_enum_cons_10(delta, tm0, tm2, tm1, tm4, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_cons_6(&self, delta: &mut ModelDelta) {
+    fn ctor_cases_determine_enum_cons_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm4, tm3) in self.ctor_enum.iter_dirty() {
@@ -74457,7 +78746,7 @@ impl Eqlog {
                         for ConsMatchCaseListNode(tm0, _, _) in
                             self.cons_match_case_list_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.ctor_cases_determine_enum_cons_8(delta, tm0, tm2, tm1, tm4, tm3);
+                            self.ctor_cases_determine_enum_cons_10(delta, tm0, tm2, tm1, tm4, tm3);
                         }
                     }
                 }
@@ -74466,7 +78755,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_cons_7(&self, delta: &mut ModelDelta) {
+    fn ctor_cases_determine_enum_cons_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm1, tm4) in self.match_case_pattern_ctor.iter_dirty() {
@@ -74478,7 +78767,7 @@ impl Eqlog {
                         for ConsMatchCaseListNode(tm0, _, _) in
                             self.cons_match_case_list_node.iter_all_1_2(tm1, tm2)
                         {
-                            self.ctor_cases_determine_enum_cons_8(delta, tm0, tm2, tm1, tm4, tm3);
+                            self.ctor_cases_determine_enum_cons_10(delta, tm0, tm2, tm1, tm4, tm3);
                         }
                     }
                 }
@@ -74487,7 +78776,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn ctor_cases_determine_enum_cons_8(
+    fn ctor_cases_determine_enum_cons_10(
         &self,
         delta: &mut ModelDelta,
         tm0: MatchCaseListNode,
@@ -74515,10 +78804,10 @@ impl Eqlog {
         for _ in [()] {
             self.match_term_type_if_cases_determine_enum_1(delta);
             self.match_term_type_if_cases_determine_enum_2(delta);
-            self.match_term_type_if_cases_determine_enum_4(delta);
-            self.match_term_type_if_cases_determine_enum_6(delta);
+            self.match_term_type_if_cases_determine_enum_5(delta);
             self.match_term_type_if_cases_determine_enum_8(delta);
-            self.match_term_type_if_cases_determine_enum_10(delta);
+            self.match_term_type_if_cases_determine_enum_11(delta);
+            self.match_term_type_if_cases_determine_enum_14(delta);
         }
     }
 
@@ -74546,28 +78835,41 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.match_term_type_if_cases_determine_enum_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_term_type_if_cases_determine_enum_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(_, tm3) in self.cases_determined_enum.iter_all_0(tm2) {
-                self.match_term_type_if_cases_determine_enum_5(delta, tm0, tm1, tm2, tm3);
+                self.match_term_type_if_cases_determine_enum_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_term_type_if_cases_determine_enum_4(&self, delta: &mut ModelDelta) {
+    fn match_term_type_if_cases_determine_enum_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm2, tm3) in self.cases_determined_enum.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                    self.match_term_type_if_cases_determine_enum_5(delta, tm0, tm1, tm2, tm3);
+                    self.match_term_type_if_cases_determine_enum_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_term_type_if_cases_determine_enum_5(
+    fn match_term_type_if_cases_determine_enum_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -74576,28 +78878,7 @@ impl Eqlog {
         tm3: EnumDeclNode,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumDecl(_, tm4, tm5) in self.enum_decl.iter_all_0(tm3) {
-                self.match_term_type_if_cases_determine_enum_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn match_term_type_if_cases_determine_enum_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumDecl(tm3, tm4, tm5) in self.enum_decl.iter_dirty() {
-                #[allow(unused_variables)]
-                for CasesDeterminedEnum(tm2, _) in self.cases_determined_enum.iter_all_1(tm3) {
-                    #[allow(unused_variables)]
-                    for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                        self.match_term_type_if_cases_determine_enum_7(
-                            delta, tm0, tm1, tm2, tm3, tm4, tm5,
-                        );
-                    }
-                }
-            }
+            self.match_term_type_if_cases_determine_enum_7(delta, tm0, tm1, tm2, tm3);
         }
     }
 
@@ -74609,15 +78890,11 @@ impl Eqlog {
         tm1: TermNode,
         tm2: MatchCaseListNode,
         tm3: EnumDeclNode,
-        tm4: Ident,
-        tm5: CtorDeclListNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SemanticType(_, tm6) in self.semantic_type.iter_all_0(tm4) {
-                self.match_term_type_if_cases_determine_enum_9(
-                    delta, tm0, tm1, tm2, tm3, tm5, tm4, tm6,
-                );
+            for EnumDecl(_, tm4, tm5) in self.enum_decl.iter_all_0(tm3) {
+                self.match_term_type_if_cases_determine_enum_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
             }
         }
     }
@@ -74626,17 +78903,14 @@ impl Eqlog {
     fn match_term_type_if_cases_determine_enum_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SemanticType(tm4, tm6) in self.semantic_type.iter_dirty() {
+            for EnumDecl(tm3, tm4, tm5) in self.enum_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for CasesDeterminedEnum(tm2, tm3) in self.cases_determined_enum.iter_all() {
+                for CasesDeterminedEnum(tm2, _) in self.cases_determined_enum.iter_all_1(tm3) {
                     #[allow(unused_variables)]
-                    for EnumDecl(_, _, tm5) in self.enum_decl.iter_all_0_1(tm3, tm4) {
-                        #[allow(unused_variables)]
-                        for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                            self.match_term_type_if_cases_determine_enum_9(
-                                delta, tm0, tm1, tm2, tm3, tm5, tm4, tm6,
-                            );
-                        }
+                    for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                        self.match_term_type_if_cases_determine_enum_9(
+                            delta, tm0, tm1, tm2, tm3, tm4, tm5,
+                        );
                     }
                 }
             }
@@ -74651,6 +78925,83 @@ impl Eqlog {
         tm1: TermNode,
         tm2: MatchCaseListNode,
         tm3: EnumDeclNode,
+        tm4: Ident,
+        tm5: CtorDeclListNode,
+    ) {
+        for _ in [()] {
+            self.match_term_type_if_cases_determine_enum_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_term_type_if_cases_determine_enum_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm3: EnumDeclNode,
+        tm4: Ident,
+        tm5: CtorDeclListNode,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SemanticType(_, tm6) in self.semantic_type.iter_all_0(tm4) {
+                self.match_term_type_if_cases_determine_enum_12(
+                    delta, tm0, tm1, tm2, tm3, tm5, tm4, tm6,
+                );
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_term_type_if_cases_determine_enum_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SemanticType(tm4, tm6) in self.semantic_type.iter_dirty() {
+                #[allow(unused_variables)]
+                for CasesDeterminedEnum(tm2, tm3) in self.cases_determined_enum.iter_all() {
+                    #[allow(unused_variables)]
+                    for EnumDecl(_, _, tm5) in self.enum_decl.iter_all_0_1(tm3, tm4) {
+                        #[allow(unused_variables)]
+                        for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
+                            self.match_term_type_if_cases_determine_enum_12(
+                                delta, tm0, tm1, tm2, tm3, tm5, tm4, tm6,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_term_type_if_cases_determine_enum_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm3: EnumDeclNode,
+        tm5: CtorDeclListNode,
+        tm4: Ident,
+        tm6: Type,
+    ) {
+        for _ in [()] {
+            self.match_term_type_if_cases_determine_enum_13(
+                delta, tm0, tm1, tm2, tm3, tm5, tm4, tm6,
+            );
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_term_type_if_cases_determine_enum_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+        tm3: EnumDeclNode,
         tm5: CtorDeclListNode,
         tm4: Ident,
         tm6: Type,
@@ -74658,7 +79009,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(_, tm7, tm8) in self.semantic_el.iter_all_0(tm1) {
-                self.match_term_type_if_cases_determine_enum_11(
+                self.match_term_type_if_cases_determine_enum_15(
                     delta, tm0, tm2, tm3, tm5, tm4, tm6, tm1, tm7, tm8,
                 );
             }
@@ -74666,7 +79017,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_term_type_if_cases_determine_enum_10(&self, delta: &mut ModelDelta) {
+    fn match_term_type_if_cases_determine_enum_14(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm1, tm7, tm8) in self.semantic_el.iter_dirty() {
@@ -74678,7 +79029,7 @@ impl Eqlog {
                         for EnumDecl(_, tm4, tm5) in self.enum_decl.iter_all_0(tm3) {
                             #[allow(unused_variables)]
                             for SemanticType(_, tm6) in self.semantic_type.iter_all_0(tm4) {
-                                self.match_term_type_if_cases_determine_enum_11(
+                                self.match_term_type_if_cases_determine_enum_15(
                                     delta, tm0, tm2, tm3, tm5, tm4, tm6, tm1, tm7, tm8,
                                 );
                             }
@@ -74690,7 +79041,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_term_type_if_cases_determine_enum_11(
+    fn match_term_type_if_cases_determine_enum_15(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -74716,11 +79067,11 @@ impl Eqlog {
         for _ in [()] {
             self.match_stmt_should_contain_ctor_defined_1(delta);
             self.match_stmt_should_contain_ctor_defined_2(delta);
-            self.match_stmt_should_contain_ctor_defined_4(delta);
             self.match_stmt_should_contain_ctor_defined_5(delta);
-            self.match_stmt_should_contain_ctor_defined_7(delta);
+            self.match_stmt_should_contain_ctor_defined_6(delta);
             self.match_stmt_should_contain_ctor_defined_9(delta);
-            self.match_stmt_should_contain_ctor_defined_11(delta);
+            self.match_stmt_should_contain_ctor_defined_12(delta);
+            self.match_stmt_should_contain_ctor_defined_15(delta);
         }
     }
 
@@ -74748,31 +79099,26 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm1) {
-                #[allow(unused_variables)]
-                for ElType(_, tm5) in self.el_type.iter_all_0(tm4) {
-                    self.match_stmt_should_contain_ctor_defined_6(
-                        delta, tm0, tm2, tm1, tm3, tm4, tm5,
-                    );
-                }
-            }
+            self.match_stmt_should_contain_ctor_defined_4(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_should_contain_ctor_defined_4(&self, delta: &mut ModelDelta) {
+    fn match_stmt_should_contain_ctor_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ElType(tm4, tm5) in self.el_type.iter_dirty() {
+            for SemanticEl(_, tm3, tm4) in self.semantic_el.iter_all_0(tm1) {
                 #[allow(unused_variables)]
-                for SemanticEl(tm1, tm3, _) in self.semantic_el.iter_all_2(tm4) {
-                    #[allow(unused_variables)]
-                    for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
-                        self.match_stmt_should_contain_ctor_defined_6(
-                            delta, tm0, tm2, tm1, tm3, tm4, tm5,
-                        );
-                    }
+                for ElType(_, tm5) in self.el_type.iter_all_0(tm4) {
+                    self.match_stmt_should_contain_ctor_defined_7(
+                        delta, tm0, tm2, tm1, tm3, tm4, tm5,
+                    );
                 }
             }
         }
@@ -74782,12 +79128,12 @@ impl Eqlog {
     fn match_stmt_should_contain_ctor_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SemanticEl(tm1, tm3, tm4) in self.semantic_el.iter_dirty() {
+            for ElType(tm4, tm5) in self.el_type.iter_dirty() {
                 #[allow(unused_variables)]
-                for ElType(_, tm5) in self.el_type.iter_all_0(tm4) {
+                for SemanticEl(tm1, tm3, _) in self.semantic_el.iter_all_2(tm4) {
                     #[allow(unused_variables)]
                     for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
-                        self.match_stmt_should_contain_ctor_defined_6(
+                        self.match_stmt_should_contain_ctor_defined_7(
                             delta, tm0, tm2, tm1, tm3, tm4, tm5,
                         );
                     }
@@ -74797,7 +79143,25 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_should_contain_ctor_defined_6(
+    fn match_stmt_should_contain_ctor_defined_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SemanticEl(tm1, tm3, tm4) in self.semantic_el.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElType(_, tm5) in self.el_type.iter_all_0(tm4) {
+                    #[allow(unused_variables)]
+                    for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
+                        self.match_stmt_should_contain_ctor_defined_7(
+                            delta, tm0, tm2, tm1, tm3, tm4, tm5,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_should_contain_ctor_defined_7(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -74808,33 +79172,7 @@ impl Eqlog {
         tm5: Type,
     ) {
         for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticType(tm6, _) in self.semantic_type.iter_all_1(tm5) {
-                self.match_stmt_should_contain_ctor_defined_8(
-                    delta, tm0, tm2, tm1, tm3, tm4, tm6, tm5,
-                );
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn match_stmt_should_contain_ctor_defined_7(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SemanticType(tm6, tm5) in self.semantic_type.iter_dirty() {
-                #[allow(unused_variables)]
-                for ElType(tm4, _) in self.el_type.iter_all_1(tm5) {
-                    #[allow(unused_variables)]
-                    for SemanticEl(tm1, tm3, _) in self.semantic_el.iter_all_2(tm4) {
-                        #[allow(unused_variables)]
-                        for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
-                            self.match_stmt_should_contain_ctor_defined_8(
-                                delta, tm0, tm2, tm1, tm3, tm4, tm6, tm5,
-                            );
-                        }
-                    }
-                }
-            }
+            self.match_stmt_should_contain_ctor_defined_8(delta, tm0, tm2, tm1, tm3, tm4, tm5);
         }
     }
 
@@ -74847,14 +79185,13 @@ impl Eqlog {
         tm1: TermNode,
         tm3: Structure,
         tm4: El,
-        tm6: Ident,
         tm5: Type,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumDecl(tm7, _, tm8) in self.enum_decl.iter_all_1(tm6) {
+            for SemanticType(tm6, _) in self.semantic_type.iter_all_1(tm5) {
                 self.match_stmt_should_contain_ctor_defined_10(
-                    delta, tm0, tm2, tm1, tm3, tm4, tm5, tm7, tm6, tm8,
+                    delta, tm0, tm2, tm1, tm3, tm4, tm6, tm5,
                 );
             }
         }
@@ -74864,19 +79201,16 @@ impl Eqlog {
     fn match_stmt_should_contain_ctor_defined_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumDecl(tm7, tm6, tm8) in self.enum_decl.iter_dirty() {
+            for SemanticType(tm6, tm5) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
-                for SemanticType(_, tm5) in self.semantic_type.iter_all_0(tm6) {
+                for ElType(tm4, _) in self.el_type.iter_all_1(tm5) {
                     #[allow(unused_variables)]
-                    for ElType(tm4, _) in self.el_type.iter_all_1(tm5) {
+                    for SemanticEl(tm1, tm3, _) in self.semantic_el.iter_all_2(tm4) {
                         #[allow(unused_variables)]
-                        for SemanticEl(tm1, tm3, _) in self.semantic_el.iter_all_2(tm4) {
-                            #[allow(unused_variables)]
-                            for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
-                                self.match_stmt_should_contain_ctor_defined_10(
-                                    delta, tm0, tm2, tm1, tm3, tm4, tm5, tm7, tm6, tm8,
-                                );
-                            }
+                        for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
+                            self.match_stmt_should_contain_ctor_defined_10(
+                                delta, tm0, tm2, tm1, tm3, tm4, tm6, tm5,
+                            );
                         }
                     }
                 }
@@ -74893,6 +79227,92 @@ impl Eqlog {
         tm1: TermNode,
         tm3: Structure,
         tm4: El,
+        tm6: Ident,
+        tm5: Type,
+    ) {
+        for _ in [()] {
+            self.match_stmt_should_contain_ctor_defined_11(
+                delta, tm0, tm2, tm1, tm3, tm4, tm6, tm5,
+            );
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_should_contain_ctor_defined_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm2: MatchCaseListNode,
+        tm1: TermNode,
+        tm3: Structure,
+        tm4: El,
+        tm6: Ident,
+        tm5: Type,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumDecl(tm7, _, tm8) in self.enum_decl.iter_all_1(tm6) {
+                self.match_stmt_should_contain_ctor_defined_13(
+                    delta, tm0, tm2, tm1, tm3, tm4, tm5, tm7, tm6, tm8,
+                );
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_should_contain_ctor_defined_12(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumDecl(tm7, tm6, tm8) in self.enum_decl.iter_dirty() {
+                #[allow(unused_variables)]
+                for SemanticType(_, tm5) in self.semantic_type.iter_all_0(tm6) {
+                    #[allow(unused_variables)]
+                    for ElType(tm4, _) in self.el_type.iter_all_1(tm5) {
+                        #[allow(unused_variables)]
+                        for SemanticEl(tm1, tm3, _) in self.semantic_el.iter_all_2(tm4) {
+                            #[allow(unused_variables)]
+                            for MatchStmtNode(tm0, _, tm2) in self.match_stmt_node.iter_all_1(tm1) {
+                                self.match_stmt_should_contain_ctor_defined_13(
+                                    delta, tm0, tm2, tm1, tm3, tm4, tm5, tm7, tm6, tm8,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_should_contain_ctor_defined_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm2: MatchCaseListNode,
+        tm1: TermNode,
+        tm3: Structure,
+        tm4: El,
+        tm5: Type,
+        tm7: EnumDeclNode,
+        tm6: Ident,
+        tm8: CtorDeclListNode,
+    ) {
+        for _ in [()] {
+            self.match_stmt_should_contain_ctor_defined_14(
+                delta, tm0, tm2, tm1, tm3, tm4, tm5, tm7, tm6, tm8,
+            );
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_should_contain_ctor_defined_14(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm2: MatchCaseListNode,
+        tm1: TermNode,
+        tm3: Structure,
+        tm4: El,
         tm5: Type,
         tm7: EnumDeclNode,
         tm6: Ident,
@@ -74901,7 +79321,7 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm9, _) in self.ctor_enum.iter_all_1(tm7) {
-                self.match_stmt_should_contain_ctor_defined_12(
+                self.match_stmt_should_contain_ctor_defined_16(
                     delta, tm0, tm2, tm1, tm3, tm4, tm5, tm6, tm8, tm9, tm7,
                 );
             }
@@ -74909,7 +79329,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_should_contain_ctor_defined_11(&self, delta: &mut ModelDelta) {
+    fn match_stmt_should_contain_ctor_defined_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm9, tm7) in self.ctor_enum.iter_dirty() {
@@ -74925,7 +79345,7 @@ impl Eqlog {
                                 for MatchStmtNode(tm0, _, tm2) in
                                     self.match_stmt_node.iter_all_1(tm1)
                                 {
-                                    self.match_stmt_should_contain_ctor_defined_12(
+                                    self.match_stmt_should_contain_ctor_defined_16(
                                         delta, tm0, tm2, tm1, tm3, tm4, tm5, tm6, tm8, tm9, tm7,
                                     );
                                 }
@@ -74938,7 +79358,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_should_contain_ctor_defined_12(
+    fn match_stmt_should_contain_ctor_defined_16(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -74971,7 +79391,7 @@ impl Eqlog {
         for _ in [()] {
             self.match_stmt_contains_ctor_defined_1(delta);
             self.match_stmt_contains_ctor_defined_2(delta);
-            self.match_stmt_contains_ctor_defined_4(delta);
+            self.match_stmt_contains_ctor_defined_5(delta);
         }
     }
 
@@ -74999,28 +79419,41 @@ impl Eqlog {
         tm2: MatchCaseListNode,
     ) {
         for _ in [()] {
+            self.match_stmt_contains_ctor_defined_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn match_stmt_contains_ctor_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: StmtNode,
+        tm1: TermNode,
+        tm2: MatchCaseListNode,
+    ) {
+        for _ in [()] {
             #[allow(unused_variables)]
             for CasesContainCtor(_, tm3) in self.cases_contain_ctor.iter_all_0(tm2) {
-                self.match_stmt_contains_ctor_defined_5(delta, tm0, tm1, tm2, tm3);
+                self.match_stmt_contains_ctor_defined_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_contains_ctor_defined_4(&self, delta: &mut ModelDelta) {
+    fn match_stmt_contains_ctor_defined_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesContainCtor(tm2, tm3) in self.cases_contain_ctor.iter_dirty() {
                 #[allow(unused_variables)]
                 for MatchStmtNode(tm0, tm1, _) in self.match_stmt_node.iter_all_2(tm2) {
-                    self.match_stmt_contains_ctor_defined_5(delta, tm0, tm1, tm2, tm3);
+                    self.match_stmt_contains_ctor_defined_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn match_stmt_contains_ctor_defined_5(
+    fn match_stmt_contains_ctor_defined_6(
         &self,
         delta: &mut ModelDelta,
         tm0: StmtNode,
@@ -75188,6 +79621,7 @@ impl Eqlog {
         self.desugared_case_block_list.drop_dirt();
         self.nil_type_list.drop_dirt();
         self.cons_type_list.drop_dirt();
+        self.snoc_type_list.drop_dirt();
         self.semantic_type.drop_dirt();
         self.semantic_arg_types.drop_dirt();
         self.semantic_pred.drop_dirt();
@@ -75197,13 +79631,12 @@ impl Eqlog {
         self.codomain.drop_dirt();
         self.pred_rel.drop_dirt();
         self.func_rel.drop_dirt();
-        self.negated_pred_rel.drop_dirt();
-        self.undefined_func_rel.drop_dirt();
         self.arity.drop_dirt();
         self.dom.drop_dirt();
         self.cod.drop_dirt();
         self.nil_el_list.drop_dirt();
         self.cons_el_list.drop_dirt();
+        self.snoc_el_list.drop_dirt();
         self.el_structure.drop_dirt();
         self.els_structure.drop_dirt();
         self.func_app.drop_dirt();
@@ -75807,6 +80240,7 @@ impl fmt::Display for Eqlog {
         self.desugared_case_block_list.fmt(f)?;
         self.nil_type_list.fmt(f)?;
         self.cons_type_list.fmt(f)?;
+        self.snoc_type_list.fmt(f)?;
         self.semantic_type.fmt(f)?;
         self.semantic_arg_types.fmt(f)?;
         self.semantic_pred.fmt(f)?;
@@ -75816,13 +80250,12 @@ impl fmt::Display for Eqlog {
         self.codomain.fmt(f)?;
         self.pred_rel.fmt(f)?;
         self.func_rel.fmt(f)?;
-        self.negated_pred_rel.fmt(f)?;
-        self.undefined_func_rel.fmt(f)?;
         self.arity.fmt(f)?;
         self.dom.fmt(f)?;
         self.cod.fmt(f)?;
         self.nil_el_list.fmt(f)?;
         self.cons_el_list.fmt(f)?;
+        self.snoc_el_list.fmt(f)?;
         self.el_structure.fmt(f)?;
         self.els_structure.fmt(f)?;
         self.func_app.fmt(f)?;

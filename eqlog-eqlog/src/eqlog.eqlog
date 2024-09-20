@@ -531,6 +531,17 @@ rule type_list_cons_injective {
     then tail_0 = tail_1;
 }
 
+func snoc_type_list(init: TypeList, last: Type) -> TypeList;
+rule snoc_type_list_nil {
+    if ts = snoc_type_list(nil_type_list(), last);
+    then ts = cons_type_list(last, nil_type_list());
+}
+rule snoc_type_list_cons {
+    if ts = snoc_type_list(cons_type_list(head, middle), last);
+    then tail := snoc_type_list(middle, last)!;
+    then ts = cons_type_list(head, tail);
+}
+
 func semantic_type(Ident) -> Type;
 rule semantic_decl_type {
     if type_decl(_, ident);
@@ -609,20 +620,20 @@ rule ctor_decl_codomain {
 
 enum Rel {
     PredRel(Pred),
-    FuncRel(Func),
-    NegatedPredRel(Pred),
-    UndefinedFuncRel(Func)
+    FuncRel(Func)
+    //NegatedPredRel(Pred),
+    //UndefinedFuncRel(Func)
 }
 
 rule rel_constructors_pred_total {
     if predicate: Pred;
     then PredRel(predicate)!;
-    then NegatedPredRel(predicate)!;
+    //then NegatedPredRel(predicate)!;
 }
 rule rel_constructors_func_total {
     if function: Func;
     then FuncRel(function)!;
-    then UndefinedFuncRel(function)!;
+    //then UndefinedFuncRel(function)!;
 }
 
 func arity(Rel) -> TypeList;
@@ -648,17 +659,17 @@ rule arity_laws {
         FuncRel(function) => {
             if dom = domain(function);
             if cod = codomain(function);
-            then tys := cons_type_list(cod, dom)!;
+            then tys := snoc_type_list(dom, cod)!;
             then arity(rel) = tys;
         }
-        NegatedPredRel(predicate) => {
-            if tys = pred_arity(predicate);
-            then arity(rel) = tys;
-        }
-        UndefinedFuncRel(function) => {
-            if tys = domain(function);
-            then arity(rel) = tys;
-        }
+        //NegatedPredRel(predicate) => {
+        //    if tys = pred_arity(predicate);
+        //    then arity(rel) = tys;
+        //}
+        //UndefinedFuncRel(function) => {
+        //    if tys = domain(function);
+        //    then arity(rel) = tys;
+        //}
     }
 }
 
@@ -680,6 +691,28 @@ rule el_list_cons_injective {
 rule el_list_cons_nil {
     if cons_el_list(_, _) = nil_el_list(_);
     then absurd();
+}
+
+func snoc_el_list(init: ElList, last: El) -> ElList;
+
+rule snoc_cons_el_list_nil {
+    if els = snoc_el_list(nil_el_list(strct), last);
+    then els = cons_el_list(last, nil_el_list(strct));
+}
+rule cons_snoc_el_list_nil {
+    if els = cons_el_list(last, nil_el_list(strct));
+    then els = snoc_el_list(nil_el_list(strct), last);
+}
+
+rule snoc_cons_el_list {
+    if els = snoc_el_list(cons_el_list(head, middle), last);
+    then tail := snoc_el_list(middle, last)!;
+    then els = cons_el_list(head, tail);
+}
+rule cons_snoc_el_list {
+    if els = cons_el_list(head, snoc_el_list(middle, last));
+    if init = cons_el_list(head, middle);
+    then els = snoc_el_list(init, last);
 }
 
 pred rel_app(Rel, ElList);
@@ -740,7 +773,7 @@ rule rel_app_types {
 // FuncRel relations though.
 func func_app(function: Func, args: ElList) -> El;
 rule rel_app_func_app {
-    if rel_app(FuncRel(function), cons_el_list(result, args));
+    if rel_app(FuncRel(function), snoc_el_list(args, result));
     then result = func_app(function, args);
 }
 
@@ -1418,7 +1451,7 @@ rule app_term_semantics {
     if result_el = semantic_el(result_term, structure);
     if func_arg_els = semantic_els(arg_terms, structure);
     if func_rel = FuncRel(semantic_func(func_name));
-    then rel_arg_els := cons_el_list(result_el, func_arg_els)!;
+    then rel_arg_els := snoc_el_list(func_arg_els, result_el)!;
     then rel_app(func_rel, rel_arg_els);
 }
 
