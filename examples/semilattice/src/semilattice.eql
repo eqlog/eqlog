@@ -1,23 +1,47 @@
 // semilattice.eqlog
 
 // The carrier set.
-Sort El;
+type El;
 // The less-equal relation.
-Pred Le: El * El;
+pred le (El, El);
 
-// Reflexivity.
-Axiom x: El => Le(x, x);
-// Transitivity.
-Axiom Le(x, y) & Le(y, z) => Le(x, z);
-// Antisymmetry.
-Axiom Le(x, y) & Le(y, x) => x = y;
+// The less-equal relation is reflexive.
+rule reflexivity {
+    if x: El; 
+    then le(x, x);
+}
+// The less-equal relation is transitive.
+rule transitivity {
+    if le(x, y);
+    if le(y, z);
+    then le(x, z);
+}
+// The less-equal relation is antisymmetric.
+rule antisymmetry {
+    if le(x, y);
+    if le(y, x);
+    then x = y;
+}
 
 // A function assigning binary meets, i.e. binary greatest lower bound.
-Func Meet: El * El -> El;
+func meet(El, El) -> El;
 
 // The meet function is total, i.e. defined for all elements x, y.
-Axiom x: El & y: El => Meet(x, y)!;
+rule totality {
+    if x: El;
+    if y: El;
+    then meet(x, y)!;
+}
 // The meet is a lower bound.
-Axiom m = Meet(x, y) => Le(m, x) & Le(m, y);
-// All lower bounds are smaller or equal to the meet.
-Axiom Le(z, x) & Le(z, y) & m = Meet(x, y) => Le(z, m);
+rule lower_bound {
+    if m = meet(x, y);
+    then le(m, x);
+    then le(m, y);
+}
+// The meet is the greatest lower bound.
+rule greatest_lower_bound {
+    if le(z, x);
+    if le(z, y);
+    if m = meet(x, y);
+    then le(z, m);
+}
