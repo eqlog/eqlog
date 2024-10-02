@@ -162,8 +162,8 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         {sort_snake}_equalities: Unification<{sort}>,
-        {sort_snake}_all: BTreeSet<{sort}>,
-        {sort_snake}_dirty: BTreeSet<{sort}>,
+        {sort_snake}_old: BTreeSet<{sort}>,
+        {sort_snake}_new: BTreeSet<{sort}>,
         {sort_snake}_weights: Vec<usize>,
         {sort_snake}_uprooted: Vec<{sort}>,
     "}
@@ -642,7 +642,7 @@ fn write_is_dirty_fn(
 
     let sorts_dirty = iter_types(eqlog, identifiers).format_with("", |sort, f| {
         let sort_snake = sort.to_case(Snake);
-        f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
+        f(&format_args!(" || !self.{sort_snake}_new.is_empty()"))
     });
 
     let uprooted_dirty = iter_types(eqlog, identifiers).format_with("", |typ, f| {
@@ -927,8 +927,7 @@ fn write_new_element_internal(
             self.{type_snake}_equalities.increase_size_to(old_len + 1);
             let el = {type_camel}::from(u32::try_from(old_len).unwrap());
 
-            self.{type_snake}_dirty.insert(el);
-            self.{type_snake}_all.insert(el);
+            self.{type_snake}_new.insert(el);
 
             assert!(self.{type_snake}_weights.len() == old_len);
             self.{type_snake}_weights.push(0);
@@ -1059,8 +1058,8 @@ fn write_equate_elements(
 
             self.{type_snake}_equalities.union_roots_into(child, root);
             
-            self.{type_snake}_all.remove(&child);
-            self.{type_snake}_dirty.remove(&child);
+            self.{type_snake}_old.remove(&child);
+            self.{type_snake}_new.remove(&child);
             self.{type_snake}_uprooted.push(child);
         }}
     "}
@@ -1099,7 +1098,7 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
         /// The iterator yields canonical representatives only.
         #[allow(dead_code)]
         pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
-            self.{sort_snake}_all.iter().copied()
+            self.{sort_snake}_new.iter().chain(self.{sort_snake}_old.iter()).copied()
         }}
     "}
 }
@@ -1519,10 +1518,17 @@ fn display_if_stmt_header<'a>(
                 );
                 let typ_snake = typ.to_case(Snake);
                 let var = display_var(*var);
-                writedoc! {f, "
-                    #[allow(unused_variables)]
-                    for {var} in self.{typ_snake}_{dirty_str}.iter().copied() {{
-                "}?;
+                if *only_dirty {
+                    writedoc! {f, "
+                        #[allow(unused_variables)]
+                        for {var} in self.{typ_snake}_new.iter().copied() {{
+                    "}?;
+                } else {
+                    writedoc! {f, "
+                        #[allow(unused_variables)]
+                        for {var} in self.{typ_snake}_old.iter().chain(self.{typ_snake}_new.iter()).copied() {{
+                    "}?;
+                }
             }
         };
 
@@ -1742,7 +1748,9 @@ fn write_drop_dirt_fn(
         });
     let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
-        f(&format_args!("self.{sort_snake}_dirty.clear();"))
+        f(&format_args!(
+            "self.{sort_snake}_old.append(&mut self.{sort_snake}_new);"
+        ))
     });
 
     writedoc! {out, "
@@ -1833,9 +1841,9 @@ fn write_new_fn(
     for sort in iter_types(eqlog, identifiers) {
         let sort_snake = sort.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
-        write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
-        write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
+        write!(out, "{sort_snake}_new: BTreeSet::new(),\n")?;
+        write!(out, "{sort_snake}_old: BTreeSet::new(),\n")?;
         write!(out, "{sort_snake}_uprooted: Vec::new(),\n")?;
     }
     for (relation, _) in iter_relation_arities(eqlog, identifiers) {
