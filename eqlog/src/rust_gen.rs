@@ -152,7 +152,10 @@ fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io:
         .iter()
         .copied()
         .format_with(", ", |typ, f| f(&format_args!("pub {typ}")));
+    // The #[allow(unused)] is there for functions that cannot be made defined via the Rust API. At
+    // the moment, those are non-constructor functions valued in an enum type.
     writedoc! {out, "
+        #[allow(unused)]
         #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
         struct {func_camel}Args({args});
     "}
