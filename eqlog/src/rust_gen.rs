@@ -187,7 +187,7 @@ struct IndexName<'a>(&'a IndexSpec);
 impl<'a> Display for IndexName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let index = self.0;
-        let dirty_str = if index.only_dirty { "dirty" } else { "all" };
+        let dirty_str = if index.only_dirty { "new" } else { "all" };
         write!(f, "{dirty_str}")?;
         for i in index.order.iter() {
             write!(f, "_{i}")?;
@@ -393,7 +393,7 @@ struct QueryName<'a>(&'a QuerySpec);
 impl<'a> Display for QueryName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let query = self.0;
-        let dirty_str = if query.only_dirty { "dirty" } else { "all" };
+        let dirty_str = if query.only_dirty { "new" } else { "all" };
         write!(f, "{dirty_str}")?;
         for i in query.projections.iter() {
             write!(f, "_{i}")?;
@@ -496,17 +496,46 @@ fn write_table_drop_dirt_fn(
     index_selection: &BTreeMap<QuerySpec, IndexSpec>,
 ) -> io::Result<()> {
     let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let clears = indices
+    let master_index_new = index_selection.get(&QuerySpec::all_dirty()).unwrap();
+    let master_index_new_order = OrderName(&master_index_new.order);
+    let master_index_new = IndexName(master_index_new);
+
+    let old_extends = indices
+        .iter()
+        .copied()
+        .filter(|index| !index.only_dirty)
+        .map(|index| {
+            FmtFn(|f| {
+                let index_name = IndexName(index);
+                let index_order = OrderName(&index.order);
+                writedoc!{f, "
+                    self.index_{index_name}.extend(
+                        self.index_{master_index_new}
+                        .iter().copied()
+                        .map(|t| Self::permute{index_order}(Self::permute_inverse{master_index_new_order}(t)))
+                    );
+                "}
+            })
+        })
+        .format("\n");
+
+    let new_clears = indices
         .iter()
         .copied()
         .filter(|index| index.only_dirty)
-        .format_with("\n", |index, f| {
-            let index_name = IndexName(index);
-            f(&format_args!("    self.index_{index_name}.clear();"))
-        });
+        .map(|index| {
+            FmtFn(move |f| {
+                let index_name = IndexName(index);
+                writedoc! {f, "
+                    self.index_{index_name}.clear();
+                "}
+            })
+        })
+        .format("\n");
     writedoc! {out, "
         fn drop_dirt(&mut self) {{
-            {clears}
+        {old_extends}
+        {new_clears}
         }}
     "}
 }
@@ -663,11 +692,7 @@ impl<'a> Display for IterName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let IterName(relation, query_spec) = self;
         let relation_snake = relation.to_case(Snake);
-        let dirty_str = if query_spec.only_dirty {
-            "dirty"
-        } else {
-            "all"
-        };
+        let dirty_str = if query_spec.only_dirty { "new" } else { "all" };
         write!(f, "{relation_snake}.iter_{dirty_str}")?;
         for p in query_spec.projections.iter() {
             write!(f, "_{p}")?;
