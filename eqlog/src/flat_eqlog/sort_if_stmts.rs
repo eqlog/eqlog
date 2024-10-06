@@ -4,11 +4,17 @@ use std::collections::BTreeSet;
 use super::ast::*;
 use super::slice_group_by::*;
 
-#[derive(Default, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 struct IfStmtGoodness {
     is_equal: bool,
-    only_dirty: bool,
+    age: QueryAge,
     new_variables: usize,
+}
+
+fn cmp_age_goodness(lhs: QueryAge, rhs: QueryAge) -> std::cmp::Ordering {
+    let lhs_is_new = matches!(lhs, QueryAge::New);
+    let rhs_is_new = matches!(rhs, QueryAge::New);
+    lhs_is_new.cmp(&rhs_is_new)
 }
 
 impl Ord for IfStmtGoodness {
@@ -16,11 +22,11 @@ impl Ord for IfStmtGoodness {
         // True is better than false.
         let is_equal = self.is_equal.cmp(&other.is_equal);
         // True is better than false.
-        let only_dirty = self.only_dirty.cmp(&other.only_dirty);
+        let age_goodness = cmp_age_goodness(self.age, other.age);
         // Smaller is better than greater.
         let new_variables = self.new_variables.cmp(&other.new_variables).reverse();
 
-        is_equal.then(only_dirty).then(new_variables)
+        is_equal.then(age_goodness).then(new_variables)
     }
 }
 
@@ -73,10 +79,10 @@ fn less_variables_is_better() {
 
 fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
     let is_equal = matches!(stmt, FlatIfStmt::Equal(_));
-    let only_dirty = match stmt {
-        FlatIfStmt::Equal(_) => false,
-        FlatIfStmt::Relation(FlatIfStmtRelation { only_dirty, .. }) => *only_dirty,
-        FlatIfStmt::Type(FlatIfStmtType { only_dirty, .. }) => *only_dirty,
+    let age = match stmt {
+        FlatIfStmt::Equal(_) => QueryAge::All,
+        FlatIfStmt::Relation(FlatIfStmtRelation { age, .. }) => *age,
+        FlatIfStmt::Type(FlatIfStmtType { age, .. }) => *age,
     };
     let new_variables = stmt
         .iter_vars()
@@ -85,7 +91,7 @@ fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmt
         .count();
     IfStmtGoodness {
         is_equal,
-        only_dirty,
+        age,
         new_variables,
     }
 }

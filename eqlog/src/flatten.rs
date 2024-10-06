@@ -80,11 +80,11 @@ fn flatten_if_arbitrary(
                 .map(|el| *el_vars.get(&el).unwrap())
                 .collect();
             let rel = Rel::Pred(pred);
-            let only_dirty = false;
+            let age = QueryAge::All;
             stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
     }
@@ -104,11 +104,11 @@ fn flatten_if_arbitrary(
             };
 
             let rel = Rel::Func(func);
-            let only_dirty = false;
+            let age = QueryAge::All;
             stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
     }
@@ -116,11 +116,8 @@ fn flatten_if_arbitrary(
     for el in iter_els(cod, eqlog) {
         if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
             let var = *el_vars.get(&el).unwrap();
-            let only_dirty = false;
-            stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
-                var,
-                only_dirty,
-            })));
+            let age = QueryAge::All;
+            stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
     }
 
@@ -201,11 +198,15 @@ fn flatten_if_fresh(
             .cloned()
             .enumerate()
         {
-            let only_dirty = i == fresh_rel_index;
+            let age = if i == fresh_rel_index {
+                QueryAge::New
+            } else {
+                QueryAge::All
+            };
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
 
@@ -214,11 +215,8 @@ fn flatten_if_fresh(
             .chain(arbitrary_type_els.iter())
             .copied()
         {
-            let only_dirty = false;
-            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
-                var,
-                only_dirty,
-            })));
+            let age = QueryAge::All;
+            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
 
         blocks.push(block);
@@ -232,11 +230,11 @@ fn flatten_if_fresh(
             .chain(arbitrary_rel_tuples.iter())
             .cloned()
         {
-            let only_dirty = false;
+            let age = QueryAge::All;
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
 
@@ -246,11 +244,12 @@ fn flatten_if_fresh(
             .copied()
             .enumerate()
         {
-            let only_dirty = i == fresh_type_el_index;
-            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
-                var,
-                only_dirty,
-            })));
+            let age = if i == fresh_type_el_index {
+                QueryAge::New
+            } else {
+                QueryAge::All
+            };
+            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
 
         blocks.push(block);
