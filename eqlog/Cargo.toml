@@ -29,3 +29,4 @@ base16ct = { version = ">= 0", features = ["alloc"] }
 [features]
 default = []
 rebuild = ["eqlog-eqlog/rebuild"]
+rustfmt = []
