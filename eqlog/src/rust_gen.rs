@@ -1663,11 +1663,6 @@ fn display_if_stmt_header<'a>(
             }
             FlatIfStmt::Type(type_stmt) => {
                 let FlatIfStmtType { var, age } = type_stmt;
-                let dirty_str = match age {
-                    QueryAge::All => "all",
-                    QueryAge::New => "dirty",
-                    QueryAge::Old => panic!("QueryAge::Old is not supported in type if stmts"),
-                };
                 let typ = format!(
                     "{}",
                     display_type(*analysis.var_types.get(var).unwrap(), eqlog, identifiers)
@@ -1682,9 +1677,10 @@ fn display_if_stmt_header<'a>(
                         "}?;
                     }
                     QueryAge::Old => {
-                        // We can easily support this by just omitting the chain in the
-                        // QueryAge::All case, but it'd be dead code at the moment.
-                        panic!("QueryAge::Old is not supported in type if stmts")
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in self.{typ_snake}_old.iter().copied() {{
+                        "}?;
                     }
                     QueryAge::All => {
                         writedoc! {f, "

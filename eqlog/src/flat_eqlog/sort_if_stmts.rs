@@ -11,6 +11,16 @@ struct IfStmtGoodness {
     new_variables: usize,
 }
 
+impl Default for IfStmtGoodness {
+    fn default() -> Self {
+        IfStmtGoodness {
+            is_equal: false,
+            age: QueryAge::All,
+            new_variables: 0,
+        }
+    }
+}
+
 fn cmp_age_goodness(lhs: QueryAge, rhs: QueryAge) -> std::cmp::Ordering {
     let lhs_is_new = matches!(lhs, QueryAge::New);
     let rhs_is_new = matches!(rhs, QueryAge::New);
@@ -53,12 +63,12 @@ fn equal_is_better() {
 #[test]
 fn only_dirty_is_better() {
     let only_dirty = IfStmtGoodness {
-        only_dirty: true,
+        age: QueryAge::New,
         new_variables: 2,
         ..IfStmtGoodness::default()
     };
     let arbitrary = IfStmtGoodness {
-        only_dirty: false,
+        age: QueryAge::All,
         ..IfStmtGoodness::default()
     };
     assert!(only_dirty > arbitrary);

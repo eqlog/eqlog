@@ -2,6 +2,7 @@ use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
 use maplit::btreemap;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -124,7 +125,8 @@ fn flatten_if_arbitrary(
     stmts
 }
 
-/// Returns a list of list of if statements which together match the delta given by `morphism` with fresh data.
+/// Returns a list of list of if statements which together match the delta given by `morphism` with
+/// fresh data and the domain of `morphism` with arbitrary data.
 ///
 /// In contrast to [flatten_if_arbitrary], the output blocks assume that *no* data has been matched
 /// so far.
@@ -198,10 +200,10 @@ fn flatten_if_fresh(
             .cloned()
             .enumerate()
         {
-            let age = if i == fresh_rel_index {
-                QueryAge::New
-            } else {
-                QueryAge::All
+            let age = match i.cmp(&fresh_rel_index) {
+                Ordering::Less => QueryAge::All,
+                Ordering::Equal => QueryAge::New,
+                Ordering::Greater => QueryAge::Old,
             };
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
@@ -230,7 +232,7 @@ fn flatten_if_fresh(
             .chain(arbitrary_rel_tuples.iter())
             .cloned()
         {
-            let age = QueryAge::All;
+            let age = QueryAge::Old;
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
@@ -244,10 +246,10 @@ fn flatten_if_fresh(
             .copied()
             .enumerate()
         {
-            let age = if i == fresh_type_el_index {
-                QueryAge::New
-            } else {
-                QueryAge::All
+            let age = match i.cmp(&fresh_type_el_index) {
+                Ordering::Less => QueryAge::All,
+                Ordering::Equal => QueryAge::New,
+                Ordering::Greater => QueryAge::Old,
             };
             block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
