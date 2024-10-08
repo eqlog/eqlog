@@ -1,0 +1,9 @@
+type P;
+
+func join(a: P, b: P, c: P) -> P;
+rule join_exists {
+    if a: P;
+    if b: P;
+    if c: P;
+    then join(a, b, c)!;
+}

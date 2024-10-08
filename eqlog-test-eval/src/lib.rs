@@ -19,6 +19,7 @@ eqlog_mod!(branches);
 eqlog_mod!(nat);
 eqlog_mod!(matches);
 eqlog_mod!(matches_rel);
+eqlog_mod!(triple_join);
 
 mod category_mod;
 #[cfg(test)]

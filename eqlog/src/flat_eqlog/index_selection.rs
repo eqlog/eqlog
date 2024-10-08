@@ -13,7 +13,7 @@ use maplit::btreeset;
 pub struct QuerySpec {
     pub projections: BTreeSet<usize>,
     pub diagonals: BTreeSet<BTreeSet<usize>>,
-    pub only_dirty: bool,
+    pub age: QueryAge,
 }
 
 impl QuerySpec {
@@ -22,7 +22,7 @@ impl QuerySpec {
         QuerySpec {
             projections: BTreeSet::new(),
             diagonals: BTreeSet::new(),
-            only_dirty: false,
+            age: QueryAge::All,
         }
     }
     /// The [QuerySpec] to query for all dirty tuples in a relation.
@@ -30,7 +30,7 @@ impl QuerySpec {
         QuerySpec {
             projections: BTreeSet::new(),
             diagonals: BTreeSet::new(),
-            only_dirty: true,
+            age: QueryAge::New,
         }
     }
     /// The [QuerySpec] to query for one specific tuple in a relation.
@@ -40,7 +40,7 @@ impl QuerySpec {
         QuerySpec {
             projections: (0..arity_len).collect(),
             diagonals: BTreeSet::new(),
-            only_dirty: false,
+            age: QueryAge::All,
         }
     }
     /// The [QuerySpec] for evaluating a function.
@@ -50,12 +50,12 @@ impl QuerySpec {
         QuerySpec {
             projections: (0..dom_len).collect(),
             diagonals: BTreeSet::new(),
-            only_dirty: false,
+            age: QueryAge::All,
         }
     }
 
     pub fn le_restrictive(&self, rhs: &QuerySpec) -> bool {
-        if self.diagonals != rhs.diagonals || self.only_dirty != rhs.only_dirty {
+        if self.diagonals != rhs.diagonals || self.age != rhs.age {
             false
         } else {
             self.projections.is_subset(&rhs.projections)
@@ -63,8 +63,8 @@ impl QuerySpec {
     }
 }
 
-pub fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
-    let mut specs: Vec<QuerySpec> = indices.into_iter().collect();
+pub fn query_spec_chains(indices: &BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
+    let mut specs: Vec<QuerySpec> = indices.into_iter().cloned().collect();
     specs.sort_by_key(|index| index.projections.len());
 
     let mut chains: Vec<Vec<QuerySpec>> = Vec::new();
@@ -82,11 +82,17 @@ pub fn query_spec_chains(indices: BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
     chains
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum IndexAge {
+    New,
+    Old,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IndexSpec {
     pub order: Vec<usize>,
     pub diagonals: BTreeSet<BTreeSet<usize>>,
-    pub only_dirty: bool,
+    pub age: IndexAge,
 }
 
 fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
@@ -95,11 +101,11 @@ fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
 }
 
 impl IndexSpec {
-    pub fn can_serve(&self, query: &QuerySpec) -> bool {
-        self.only_dirty == query.only_dirty
-            && query.diagonals == self.diagonals
-            && is_prefix(&query.projections, &self.order)
-    }
+    //pub fn can_serve(&self, query: &[QuerySpec]) -> bool {
+    //    self.age == query.age
+    //        && query.diagonals == self.diagonals
+    //        && is_prefix(&query.projections, &self.order)
+    //}
     pub fn from_query_spec_chain(arity_len: usize, chain: &[QuerySpec]) -> Self {
         let empty_projections = BTreeSet::new();
         let full_projections: BTreeSet<usize> = (0..arity_len).collect();
@@ -115,17 +121,21 @@ impl IndexSpec {
 
         let last = chain.last().unwrap();
         let diagonals = last.diagonals.clone();
-        let only_dirty = last.only_dirty;
+        let age = match last.age {
+            QueryAge::All => panic!("QueryAge::All should have been desugared"),
+            QueryAge::New => IndexAge::New,
+            QueryAge::Old => IndexAge::Old,
+        };
         IndexSpec {
             order,
             diagonals,
-            only_dirty,
+            age,
         }
     }
 }
 
-// Maps relation name and query spec to an index for the relation that can serve the query.
-pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, IndexSpec>>;
+// Maps relation name and query spec to the indices of the the relation that can serve the query.
+pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, Vec<IndexSpec>>>;
 
 pub fn select_indices<'a>(
     if_stmt_rel_infos: &BTreeSet<(&'a FlatIfStmtRelation, &'a RelationInfo)>,
@@ -144,7 +154,7 @@ pub fn select_indices<'a>(
         })
         .collect();
 
-    // Every func needs in addition a QuerySpec for the arguments to the functino to generate
+    // Every func needs in addition a QuerySpec for the arguments to the function to generate
     // the public eval function and for non surjective then statements.
     for func in eqlog.iter_func() {
         let rel = format!(
@@ -157,12 +167,8 @@ pub fn select_indices<'a>(
 
     // Every relation if stmt needs a QuerySpec.
     for (if_stmt_rel, info) in if_stmt_rel_infos {
-        let FlatIfStmtRelation {
-            rel,
-            args: _,
-            only_dirty,
-        } = if_stmt_rel;
-        let rel = format!("{}", display_rel(*rel, eqlog, identifiers));
+        let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
+        let rel = format!("{}", rel.display(eqlog, identifiers));
         let RelationInfo {
             diagonals,
             in_projections,
@@ -171,7 +177,7 @@ pub fn select_indices<'a>(
         let spec = QuerySpec {
             diagonals: diagonals.clone(),
             projections: in_projections.keys().copied().collect(),
-            only_dirty: *only_dirty,
+            age: *age,
         };
         query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
     }
@@ -179,8 +185,26 @@ pub fn select_indices<'a>(
     query_specs
         .into_iter()
         .map(|(rel, query_specs)| {
-            let chains = query_spec_chains(query_specs);
-            let query_index_map: BTreeMap<QuerySpec, IndexSpec> = chains
+            let desugared_query_specs: BTreeSet<QuerySpec> = query_specs
+                .iter()
+                .flat_map(|query_spec| match query_spec.age {
+                    QueryAge::All => {
+                        let new = QuerySpec {
+                            age: QueryAge::New,
+                            ..query_spec.clone()
+                        };
+                        let old = QuerySpec {
+                            age: QueryAge::Old,
+                            ..query_spec.clone()
+                        };
+                        vec![new, old]
+                    }
+                    QueryAge::New => vec![query_spec.clone()],
+                    QueryAge::Old => vec![query_spec.clone()],
+                })
+                .collect();
+            let desugared_chains = query_spec_chains(&desugared_query_specs);
+            let desugared_query_index_map: BTreeMap<QuerySpec, IndexSpec> = desugared_chains
                 .into_iter()
                 .flat_map(|queries| {
                     let index = IndexSpec::from_query_spec_chain(
@@ -190,6 +214,43 @@ pub fn select_indices<'a>(
                     queries.into_iter().zip(repeat(index))
                 })
                 .collect();
+
+            let query_index_map: BTreeMap<QuerySpec, Vec<IndexSpec>> = query_specs
+                .into_iter()
+                .map(|query| {
+                    let indices = match query.age {
+                        QueryAge::All => {
+                            let new_query_spec = QuerySpec {
+                                age: QueryAge::New,
+                                ..query.clone()
+                            };
+                            let old_query_spec = QuerySpec {
+                                age: QueryAge::Old,
+                                ..query.clone()
+                            };
+
+                            let new_index = desugared_query_index_map
+                                .get(&new_query_spec)
+                                .unwrap()
+                                .clone();
+                            let old_index = desugared_query_index_map
+                                .get(&old_query_spec)
+                                .unwrap()
+                                .clone();
+
+                            vec![new_index, old_index]
+                        }
+                        QueryAge::New => {
+                            vec![desugared_query_index_map.get(&query).unwrap().clone()]
+                        }
+                        QueryAge::Old => {
+                            vec![desugared_query_index_map.get(&query).unwrap().clone()]
+                        }
+                    };
+                    (query, indices)
+                })
+                .collect();
+
             (rel, query_index_map)
         })
         .collect()

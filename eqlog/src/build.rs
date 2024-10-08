@@ -234,7 +234,12 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         &index_selection,
     )?;
     fs::write(&out_file, &result)?;
-    match Command::new("rustfmt").arg(&out_file).status() {
+
+    #[cfg(feature = "rustfmt")]
+    match std::process::Command::new("rustfmt")
+        .arg(&out_file)
+        .status()
+    {
         Err(_) => {
             // In all likelyhood, rustfmt is not installed. This is OK, only print an info.
             println!(
@@ -252,6 +257,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
             }
         }
     }
+
     Ok(())
 }
 

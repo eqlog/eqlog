@@ -14,6 +14,16 @@ use std::iter::repeat;
 
 use Case::{Snake, UpperCamel};
 
+fn from_singleton<T>(supposed_singleton: &[T]) -> &T {
+    let mut iter = supposed_singleton.into_iter();
+    let value = iter.next().expect("Supposed singleton is empty");
+    assert!(
+        iter.next().is_none(),
+        "Supposed singleton contains more than one element"
+    );
+    value
+}
+
 fn display_func_snake<'a>(
     func: Func,
     eqlog: &'a Eqlog,
@@ -152,7 +162,10 @@ fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io:
         .iter()
         .copied()
         .format_with(", ", |typ, f| f(&format_args!("pub {typ}")));
+    // The #[allow(unused)] is there for functions that cannot be made defined via the Rust API. At
+    // the moment, those are non-constructor functions valued in an enum type.
     writedoc! {out, "
+        #[allow(unused)]
         #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
         struct {func_camel}Args({args});
     "}
@@ -162,8 +175,8 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         {sort_snake}_equalities: Unification<{sort}>,
-        {sort_snake}_all: BTreeSet<{sort}>,
-        {sort_snake}_dirty: BTreeSet<{sort}>,
+        {sort_snake}_old: BTreeSet<{sort}>,
+        {sort_snake}_new: BTreeSet<{sort}>,
         {sort_snake}_weights: Vec<usize>,
         {sort_snake}_uprooted: Vec<{sort}>,
     "}
@@ -187,8 +200,11 @@ struct IndexName<'a>(&'a IndexSpec);
 impl<'a> Display for IndexName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let index = self.0;
-        let dirty_str = if index.only_dirty { "dirty" } else { "all" };
-        write!(f, "{dirty_str}")?;
+        let age_str = match index.age {
+            IndexAge::New => "new",
+            IndexAge::Old => "old",
+        };
+        write!(f, "{age_str}")?;
         for i in index.order.iter() {
             write!(f, "_{i}")?;
         }
@@ -206,9 +222,8 @@ fn write_table_struct(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
 ) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
     let tuple_type = format!("({tuple_type_args})");
 
@@ -240,9 +255,8 @@ fn write_table_struct(
 fn write_table_new_fn(
     out: &mut impl Write,
     arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
 ) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let index_inits = indices.iter().copied().format_with("\n", |index, f| {
         let index_name = IndexName(index);
         f(&format_args!(
@@ -330,16 +344,41 @@ fn write_table_insert_fn(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
 ) -> io::Result<()> {
-    let master_index = index_selection.get(&QuerySpec::all()).unwrap();
-    let master = IndexName(&master_index);
-    let master_order = OrderName(&master_index.order);
+    let (master_new_index, master_old_index) =
+        match index_selection.get(&QuerySpec::all()).unwrap().as_slice() {
+            [a, b] => {
+                let (new_index, old_index) = if a.age == IndexAge::New {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+                assert!(
+                    new_index.age == IndexAge::New,
+                    "Master indices should be given by a new index and an old index"
+                );
+                assert!(
+                    old_index.age == IndexAge::Old,
+                    "Master indices should be given by a new index and an old index"
+                );
+                (new_index, old_index)
+            }
+            indices => panic!(
+                "Expected exactly QuerySpec::all to be served by two indices, found {:?} indices",
+                indices.len()
+            ),
+        };
+    let master_new = IndexName(master_new_index);
+    let master_old = IndexName(master_old_index);
 
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
+    let master_new_order = OrderName(&master_new_index.order);
+    let master_old_order = OrderName(&master_old_index.order);
+
     let slave_inserts = indices
         .into_iter()
-        .filter(|index| *index != master_index)
+        .filter(|index| index.age != IndexAge::Old && **index != master_new_index)
         .format_with("\n", |index, f| {
             let index_name = IndexName(index);
             let order = OrderName(&index.order);
@@ -364,6 +403,7 @@ fn write_table_insert_fn(
         .format_with("\n", |(i, sort), f| {
             let sort_snake = sort.to_case(Snake);
             // TODO: Use try_insert here once it stabilizes.
+            // NOTE: Can't this be done with `entry(...).or_insert_with(...)` as well though?
             f(&format_args! {"
             match self.element_index_{sort_snake}.get_mut(&t.{i}) {{
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -377,13 +417,16 @@ fn write_table_insert_fn(
     writedoc! {out, "
         #[allow(dead_code)]
         fn insert(&mut self, t: {relation_camel}) -> bool {{
-            if self.index_{master}.insert(Self::permute{master_order}(t)) {{
+        if self.index_{master_old}.contains(&Self::permute{master_old_order}(t)) {{
+        return false;
+        }}
+        if !self.index_{master_new}.insert(Self::permute{master_new_order}(t)) {{
+        return false;
+        }}
+
         {slave_inserts}
         {element_inserts}
-                true
-            }} else {{
-                false
-            }}
+        true
         }}
     "}
 }
@@ -393,8 +436,12 @@ struct QueryName<'a>(&'a QuerySpec);
 impl<'a> Display for QueryName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let query = self.0;
-        let dirty_str = if query.only_dirty { "dirty" } else { "all" };
-        write!(f, "{dirty_str}")?;
+        let age_str = match query.age {
+            QueryAge::New => "new",
+            QueryAge::Old => "old",
+            QueryAge::All => "all",
+        };
+        write!(f, "{age_str}")?;
         for i in query.projections.iter() {
             write!(f, "_{i}")?;
         }
@@ -413,18 +460,17 @@ fn write_table_iter_fn(
     relation: &str,
     arity: &[&str],
     query: &QuerySpec,
-    index: &IndexSpec,
+    indices: &[IndexSpec],
 ) -> io::Result<()> {
-    assert!(index.can_serve(query));
-    let query_name = QueryName(query);
-    let index_name = IndexName(index);
-    let order_name = OrderName(&index.order);
-
     // (arg3: Mor, arg5: Obj, ...)
     let fn_args = query.projections.iter().copied().format_with(", ", |i, f| {
         let sort = arity[i];
         f(&format_args!("arg{i}: {sort}"))
     });
+
+    let fixed_arg_len = query.projections.len();
+    let open_arg_len = arity.len() - query.projections.len();
+    let query_name = QueryName(query);
 
     let unalias_args = query
         .projections
@@ -432,81 +478,151 @@ fn write_table_iter_fn(
         .copied()
         .format_with("\n", |i, f| f(&format_args!("    let arg{i} = arg{i}.0;")));
 
-    let fixed_arg_len = query.projections.len();
-    let open_arg_len = arity.len() - query.projections.len();
-
-    let fixed_args = || {
-        index.order[..fixed_arg_len]
-            .iter()
-            .format_with("", |i, f| f(&format_args!("arg{i}, ")))
-    };
-    let fixed_args_min = fixed_args();
-    let fixed_args_max = fixed_args();
-
-    let open_args_min = (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MIN, ")));
-    let open_args_max = (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MAX, ")));
-
     let relation_camel = relation.to_case(UpperCamel);
+
+    let mut index_iters = indices.iter().map(|index| {
+        FmtFn(move |f| {
+            let index_name = IndexName(index);
+            let order_name = OrderName(&index.order);
+
+            let fixed_args = || {
+                index.order[..fixed_arg_len]
+                    .iter()
+                    .format_with("", |i, f| f(&format_args!("arg{i}, ")))
+            };
+            let fixed_args_min = fixed_args();
+            let fixed_args_max = fixed_args();
+
+            let open_args_min =
+                (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MIN, ")));
+            let open_args_max =
+                (0..open_arg_len).format_with("", |_, f| f(&format_args!("u32::MAX, ")));
+
+            writedoc! {f, "
+                self.index_{index_name}
+                    .range((
+                        Bound::Included(&({fixed_args_min} {open_args_min})),
+                        Bound::Included(&({fixed_args_max} {open_args_max}))
+                    ))
+                    .copied()
+                    .map(Self::permute_inverse{order_name})
+            "}
+        })
+    });
+
     writedoc! {out, "
         #[allow(dead_code)]
         fn iter_{query_name}(&self, {fn_args}) -> impl '_ + Iterator<Item = {relation_camel}> {{
         {unalias_args}
-            let min = ({fixed_args_min}{open_args_min});
-            let max = ({fixed_args_max}{open_args_max});
-            self.index_{index_name}
-                .range((Bound::Included(&min), Bound::Included(&max)))
-                .copied()
-                .map(Self::permute_inverse{order_name})
+    "}?;
+
+    let first_index_iter = index_iters
+        .next()
+        .expect("there should be at least one index per query");
+    writedoc! {out, "{first_index_iter}"}?;
+    for index_iter in index_iters {
+        writedoc! {out, ".chain({index_iter})"}?;
+    }
+
+    writedoc! {out, "
         }}
-    "}
+    "}?;
+
+    Ok(())
 }
 
 fn write_table_contains_fn(
     out: &mut impl Write,
     relation: &str,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
 ) -> io::Result<()> {
-    let master = index_selection.get(&QuerySpec::all()).unwrap();
-    let master_name = IndexName(master);
-    let order_name = OrderName(&master.order);
+    let indices = index_selection.get(&QuerySpec::all()).unwrap();
     let relation_camel = relation.to_case(UpperCamel);
+    let checks = indices
+        .iter()
+        .map(|index| {
+            FmtFn(|f| {
+                let index_name = IndexName(index);
+                let order_name = OrderName(&index.order);
+                writedoc! {f, "
+                self.index_{index_name}.contains(&Self::permute{order_name}(t))
+            "}
+            })
+        })
+        .format(" || ");
     writedoc! {out, "
         #[allow(dead_code)]
         fn contains(&self, t: {relation_camel}) -> bool {{
-            self.index_{master_name}.contains(&Self::permute{order_name}(t))
+            {checks}
         }}
     "}
 }
 
 fn write_table_is_dirty_fn(
     out: &mut impl Write,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
 ) -> io::Result<()> {
-    let master_dirty = IndexName(index_selection.get(&QuerySpec::all_dirty()).unwrap());
+    // A "new" query is always mapped to a single index at the moment.
+    let master_index_new = from_singleton(
+        index_selection
+            .get(&QuerySpec::all_dirty())
+            .unwrap()
+            .as_slice(),
+    );
+    let master_index_new = IndexName(master_index_new);
 
     writedoc! {out, "
         fn is_dirty(&self) -> bool {{
-            !self.index_{master_dirty}.is_empty()
+            !self.index_{master_index_new}.is_empty()
         }}
     "}
 }
 
 fn write_table_drop_dirt_fn(
     out: &mut impl Write,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
 ) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let clears = indices
+    let master_index_new = from_singleton(index_selection.get(&QuerySpec::all_dirty()).unwrap());
+    let master_index_new_order = OrderName(&master_index_new.order);
+    let master_index_new = IndexName(master_index_new);
+
+    let old_extends = indices
         .iter()
         .copied()
-        .filter(|index| index.only_dirty)
-        .format_with("\n", |index, f| {
-            let index_name = IndexName(index);
-            f(&format_args!("    self.index_{index_name}.clear();"))
-        });
+        .filter(|index| index.age == IndexAge::Old)
+        .map(|index| {
+            FmtFn(|f| {
+                let index_name = IndexName(index);
+                let index_order = OrderName(&index.order);
+                writedoc!{f, "
+                    self.index_{index_name}.extend(
+                        self.index_{master_index_new}
+                        .iter().copied()
+                        .map(|t| Self::permute{index_order}(Self::permute_inverse{master_index_new_order}(t)))
+                    );
+                "}
+            })
+        })
+        .format("\n");
+
+    let new_clears = indices
+        .iter()
+        .copied()
+        .filter(|index| index.age == IndexAge::New)
+        .map(|index| {
+            FmtFn(move |f| {
+                let index_name = IndexName(index);
+                writedoc! {f, "
+                    self.index_{index_name}.clear();
+                "}
+            })
+        })
+        .format("\n");
     writedoc! {out, "
         fn drop_dirt(&mut self) {{
-            {clears}
+        {old_extends}
+        {new_clears}
         }}
     "}
 }
@@ -514,17 +630,55 @@ fn write_table_drop_dirt_fn(
 fn write_table_drain_with_element(
     out: &mut impl Write,
     relation: &str,
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
     sort: &str,
 ) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
-    let master_index = index_selection.get(&QuerySpec::all()).unwrap();
-    let master_index_name = IndexName(master_index);
-    let master_order_name = OrderName(&master_index.order);
-    let slave_removes = indices
+
+    let (master_new_index, master_old_index) =
+        match index_selection.get(&QuerySpec::all()).unwrap().as_slice() {
+            [a, b] => {
+                let (new_index, old_index) = if a.age == IndexAge::New {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+                assert!(
+                    new_index.age == IndexAge::New,
+                    "Master indices should be given by a new index and an old index"
+                );
+                assert!(
+                    old_index.age == IndexAge::Old,
+                    "Master indices should be given by a new index and an old index"
+                );
+                (new_index, old_index)
+            }
+            indices => panic!(
+                "Expected exactly QuerySpec::all to be served by two indices, found {:?} indices",
+                indices.len()
+            ),
+        };
+    let master_new = IndexName(master_new_index);
+    let master_old = IndexName(master_old_index);
+
+    let master_new_order = OrderName(&master_new_index.order);
+    let master_old_order = OrderName(&master_old_index.order);
+
+    let slave_new_removes = indices
         .into_iter()
-        .filter(|index| index != &master_index)
+        .filter(|index| index.age == IndexAge::New && *index != &master_new_index)
+        .format_with("\n", |index, f| {
+            let index_name = IndexName(index);
+            let order_name = OrderName(&index.order);
+            f(&format_args!(
+                "self.index_{index_name}.remove(&Self::permute{order_name}(t));"
+            ))
+        });
+
+    let slave_old_removes = indices
+        .into_iter()
+        .filter(|index| index.age == IndexAge::Old && *index != &master_old_index)
         .format_with("\n", |index, f| {
             let index_name = IndexName(index);
             let order_name = OrderName(&index.order);
@@ -545,8 +699,11 @@ fn write_table_drain_with_element(
             let mut i = 0;
             while i < ts.len() {{
                 let t = ts[i];
-                if self.index_{master_index_name}.remove(&Self::permute{master_order_name}(t)) {{
-                    {slave_removes}
+                if self.index_{master_new}.remove(&Self::permute{master_new_order}(t)) {{
+                    {slave_new_removes}
+                    i += 1;
+                }} else if self.index_{master_old}.remove(&Self::permute{master_old_order}(t)) {{
+                    {slave_old_removes}
                     i += 1;
                 }} else {{
                     ts.swap_remove(i);
@@ -561,9 +718,8 @@ fn write_table_drain_with_element(
 fn write_table_weight(
     out: &mut impl Write,
     arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
 ) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let tuple_weight = arity.len();
     let el_lookup_weight = tuple_weight;
     let indices_weight = indices.len() * tuple_weight;
@@ -578,18 +734,18 @@ fn write_table_impl(
     out: &mut impl Write,
     relation: &str,
     arity: &[&str],
-    index_selection: &BTreeMap<QuerySpec, IndexSpec>,
+    indices: &BTreeSet<&IndexSpec>,
+    index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
 ) -> io::Result<()> {
-    let indices: BTreeSet<&IndexSpec> = index_selection.values().collect();
     let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         impl {relation_camel}Table {{
     "}?;
-    write_table_weight(out, arity, index_selection)?;
-    write_table_new_fn(out, arity, index_selection)?;
-    write_table_insert_fn(out, relation, arity, index_selection)?;
+    write_table_weight(out, arity, &indices)?;
+    write_table_new_fn(out, arity, &indices)?;
+    write_table_insert_fn(out, relation, arity, &indices, index_selection)?;
     write_table_contains_fn(out, relation, index_selection)?;
-    write_table_drop_dirt_fn(out, index_selection)?;
+    write_table_drop_dirt_fn(out, &indices, index_selection)?;
     write_table_is_dirty_fn(out, index_selection)?;
 
     let index_orders: BTreeSet<&[usize]> =
@@ -598,11 +754,11 @@ fn write_table_impl(
         write_table_permute_fn(out, relation, arity, order)?;
         write_table_permute_inverse_fn(out, relation, arity, order)?;
     }
-    for (query, index) in index_selection.iter() {
-        write_table_iter_fn(out, relation, arity, query, index)?;
+    for (query, indices) in index_selection.iter() {
+        write_table_iter_fn(out, relation, arity, query, indices.as_slice())?;
     }
     for sort in arity.iter().copied().collect::<BTreeSet<&str>>() {
-        write_table_drain_with_element(out, relation, index_selection, sort)?;
+        write_table_drain_with_element(out, relation, &indices, index_selection, sort)?;
     }
     writedoc! {out, "
         }}
@@ -642,7 +798,7 @@ fn write_is_dirty_fn(
 
     let sorts_dirty = iter_types(eqlog, identifiers).format_with("", |sort, f| {
         let sort_snake = sort.to_case(Snake);
-        f(&format_args!(" || !self.{sort_snake}_dirty.is_empty()"))
+        f(&format_args!(" || !self.{sort_snake}_new.is_empty()"))
     });
 
     let uprooted_dirty = iter_types(eqlog, identifiers).format_with("", |typ, f| {
@@ -663,12 +819,12 @@ impl<'a> Display for IterName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let IterName(relation, query_spec) = self;
         let relation_snake = relation.to_case(Snake);
-        let dirty_str = if query_spec.only_dirty {
-            "dirty"
-        } else {
-            "all"
+        let age_str = match query_spec.age {
+            QueryAge::New => "new",
+            QueryAge::Old => "old",
+            QueryAge::All => "all",
         };
-        write!(f, "{relation_snake}.iter_{dirty_str}")?;
+        write!(f, "{relation_snake}.iter_{age_str}")?;
         for p in query_spec.projections.iter() {
             write!(f, "_{p}")?;
         }
@@ -744,7 +900,7 @@ fn write_pub_function_eval_fn(
     let query = QuerySpec {
         projections: (0..dom.len()).collect(),
         diagonals: BTreeSet::new(),
-        only_dirty: false,
+        age: QueryAge::All,
     };
     let iter = IterName(relation, &query);
     let args0 = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
@@ -927,8 +1083,7 @@ fn write_new_element_internal(
             self.{type_snake}_equalities.increase_size_to(old_len + 1);
             let el = {type_camel}::from(u32::try_from(old_len).unwrap());
 
-            self.{type_snake}_dirty.insert(el);
-            self.{type_snake}_all.insert(el);
+            self.{type_snake}_new.insert(el);
 
             assert!(self.{type_snake}_weights.len() == old_len);
             self.{type_snake}_weights.push(0);
@@ -1059,8 +1214,8 @@ fn write_equate_elements(
 
             self.{type_snake}_equalities.union_roots_into(child, root);
             
-            self.{type_snake}_all.remove(&child);
-            self.{type_snake}_dirty.remove(&child);
+            self.{type_snake}_old.remove(&child);
+            self.{type_snake}_new.remove(&child);
             self.{type_snake}_uprooted.push(child);
         }}
     "}
@@ -1099,7 +1254,7 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
         /// The iterator yields canonical representatives only.
         #[allow(dead_code)]
         pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
-            self.{sort_snake}_all.iter().copied()
+            self.{sort_snake}_new.iter().chain(self.{sort_snake}_old.iter()).copied()
         }}
     "}
 }
@@ -1469,11 +1624,7 @@ fn display_if_stmt_header<'a>(
                 "}?;
             }
             FlatIfStmt::Relation(rel_stmt) => {
-                let FlatIfStmtRelation {
-                    rel,
-                    args,
-                    only_dirty,
-                } = rel_stmt;
+                let FlatIfStmtRelation { rel, args, age } = rel_stmt;
                 let RelationInfo {
                     diagonals,
                     in_projections,
@@ -1486,7 +1637,7 @@ fn display_if_stmt_header<'a>(
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
                     projections: in_projections.keys().copied().collect(),
-                    only_dirty: *only_dirty,
+                    age: *age,
                 };
                 let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
                 let relation_camel = relation.to_case(UpperCamel);
@@ -1510,18 +1661,33 @@ fn display_if_stmt_header<'a>(
                 write!(f, ") {{\n")?;
             }
             FlatIfStmt::Type(type_stmt) => {
-                let FlatIfStmtType { var, only_dirty } = type_stmt;
-                let dirty_str = if *only_dirty { "dirty" } else { "all" };
+                let FlatIfStmtType { var, age } = type_stmt;
                 let typ = format!(
                     "{}",
                     display_type(*analysis.var_types.get(var).unwrap(), eqlog, identifiers)
                 );
                 let typ_snake = typ.to_case(Snake);
                 let var = display_var(*var);
-                writedoc! {f, "
-                    #[allow(unused_variables)]
-                    for {var} in self.{typ_snake}_{dirty_str}.iter().copied() {{
-                "}?;
+                match age {
+                    QueryAge::New => {
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in self.{typ_snake}_new.iter().copied() {{
+                        "}?;
+                    }
+                    QueryAge::Old => {
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in self.{typ_snake}_old.iter().copied() {{
+                        "}?;
+                    }
+                    QueryAge::All => {
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in self.{typ_snake}_old.iter().chain(self.{typ_snake}_new.iter()).copied() {{
+                        "}?;
+                    }
+                }
             }
         };
 
@@ -1569,7 +1735,7 @@ fn display_surj_then<'a>(
                 let query_spec = QuerySpec {
                     projections: (0..args.len()).collect(),
                     diagonals: BTreeSet::new(),
-                    only_dirty: false,
+                    age: QueryAge::All,
                 };
                 let iter_name = IterName(relation_camel.as_str(), &query_spec);
                 writedoc! {f, "
@@ -1743,7 +1909,9 @@ fn write_drop_dirt_fn(
         });
     let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
         let sort_snake = sort.to_case(Snake);
-        f(&format_args!("self.{sort_snake}_dirty.clear();"))
+        f(&format_args!(
+            "self.{sort_snake}_old.append(&mut self.{sort_snake}_new);"
+        ))
     });
 
     writedoc! {out, "
@@ -1834,9 +2002,9 @@ fn write_new_fn(
     for sort in iter_types(eqlog, identifiers) {
         let sort_snake = sort.to_case(Snake);
         write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
-        write!(out, "{}_dirty: BTreeSet::new(),\n", sort_snake)?;
         write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
-        write!(out, "{}_all: BTreeSet::new(),\n", sort_snake)?;
+        write!(out, "{sort_snake}_new: BTreeSet::new(),\n")?;
+        write!(out, "{sort_snake}_old: BTreeSet::new(),\n")?;
         write!(out, "{sort_snake}_uprooted: Vec::new(),\n")?;
     }
     for (relation, _) in iter_relation_arities(eqlog, identifiers) {
@@ -2082,9 +2250,10 @@ pub fn write_module(
 
     for (rel, arity) in iter_relation_arities(eqlog, identifiers) {
         write_relation_struct(out, rel, &arity)?;
-        let index = index_selection.get(rel).unwrap();
-        write_table_struct(out, rel, &arity, index)?;
-        write_table_impl(out, rel, &arity, index)?;
+        let index_selection = index_selection.get(rel).unwrap();
+        let indices: BTreeSet<&IndexSpec> = index_selection.values().flatten().collect();
+        write_table_struct(out, rel, &arity, &indices)?;
+        write_table_impl(out, rel, &arity, &indices, &index_selection)?;
         write_table_display_impl(out, rel)?;
     }
     for (func, arity) in iter_func_arities(eqlog, identifiers) {

@@ -14,17 +14,24 @@ pub struct FlatStmtEqual {
     pub rhs: FlatVar,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub enum QueryAge {
+    New,
+    Old,
+    All,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtRelation {
     pub rel: Rel,
     pub args: Vec<FlatVar>,
-    pub only_dirty: bool,
+    pub age: QueryAge,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtType {
     pub var: FlatVar,
-    pub only_dirty: bool,
+    pub age: QueryAge,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -89,7 +96,7 @@ impl FlatIfStmtRelation {
         let FlatIfStmtRelation {
             rel: _,
             args,
-            only_dirty: _,
+            age: _,
         } = self;
         args.iter().copied()
     }
@@ -97,7 +104,7 @@ impl FlatIfStmtRelation {
 
 impl FlatIfStmtType {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
-        let FlatIfStmtType { var, only_dirty: _ } = self;
+        let FlatIfStmtType { var, age: _ } = self;
         once(*var)
     }
 }

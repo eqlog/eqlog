@@ -39,12 +39,12 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let dirty_rel = FlatIfStmtRelation {
         rel,
         args: rel_args0,
-        only_dirty: true,
+        age: QueryAge::New,
     };
     let non_dirty_rel = FlatIfStmtRelation {
         rel,
         args: rel_args1,
-        only_dirty: false,
+        age: QueryAge::All,
     };
     let eq = FlatStmtEqual {
         lhs: result0,

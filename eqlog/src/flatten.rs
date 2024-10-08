@@ -2,6 +2,7 @@ use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use eqlog_eqlog::*;
 use maplit::btreemap;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -92,11 +93,11 @@ fn flatten_if_arbitrary(
                 .into_iter()
                 .map(|el| *el_vars.get(&el).unwrap())
                 .collect();
-            let only_dirty = false;
+            let age = QueryAge::All;
             stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
     }
@@ -104,18 +105,16 @@ fn flatten_if_arbitrary(
     for el in iter_els(cod, eqlog) {
         if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
             let var = *el_vars.get(&el).unwrap();
-            let only_dirty = false;
-            stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
-                var,
-                only_dirty,
-            })));
+            let age = QueryAge::All;
+            stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
     }
 
     stmts
 }
 
-/// Returns a list of list of if statements which together match the delta given by `morphism` with fresh data.
+/// Returns a list of list of if statements which together match the delta given by `morphism` with
+/// fresh data and the domain of `morphism` with arbitrary data.
 ///
 /// In contrast to [flatten_if_arbitrary], the output blocks assume that *no* data has been matched
 /// so far.
@@ -166,11 +165,15 @@ fn flatten_if_fresh(
             .cloned()
             .enumerate()
         {
-            let only_dirty = i == fresh_rel_index;
+            let age = match i.cmp(&fresh_rel_index) {
+                Ordering::Less => QueryAge::All,
+                Ordering::Equal => QueryAge::New,
+                Ordering::Greater => QueryAge::Old,
+            };
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
 
@@ -179,11 +182,8 @@ fn flatten_if_fresh(
             .chain(arbitrary_type_els.iter())
             .copied()
         {
-            let only_dirty = false;
-            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
-                var,
-                only_dirty,
-            })));
+            let age = QueryAge::All;
+            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
 
         blocks.push(block);
@@ -197,11 +197,11 @@ fn flatten_if_fresh(
             .chain(arbitrary_rel_tuples.iter())
             .cloned()
         {
-            let only_dirty = false;
+            let age = QueryAge::Old;
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
-                only_dirty,
+                age,
             })));
         }
 
@@ -211,11 +211,12 @@ fn flatten_if_fresh(
             .copied()
             .enumerate()
         {
-            let only_dirty = i == fresh_type_el_index;
-            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
-                var,
-                only_dirty,
-            })));
+            let age = match i.cmp(&fresh_type_el_index) {
+                Ordering::Less => QueryAge::All,
+                Ordering::Equal => QueryAge::New,
+                Ordering::Greater => QueryAge::Old,
+            };
+            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
         }
 
         blocks.push(block);
