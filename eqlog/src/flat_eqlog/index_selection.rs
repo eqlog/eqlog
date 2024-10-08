@@ -168,7 +168,7 @@ pub fn select_indices<'a>(
     // Every relation if stmt needs a QuerySpec.
     for (if_stmt_rel, info) in if_stmt_rel_infos {
         let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
-        let rel = format!("{}", rel.display(eqlog, identifiers));
+        let rel = format!("{}", display_rel(*rel, eqlog, identifiers));
         let RelationInfo {
             diagonals,
             in_projections,
