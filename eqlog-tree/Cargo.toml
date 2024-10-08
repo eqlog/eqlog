@@ -16,6 +16,7 @@ path = "../eqlog-eqlog-tree"
 [features]
 default = ["rebuild"]
 rebuild = []
+rustfmt = []
 
 # The remainder of this file must be kept in sync with the
 # dependencies of the  eqlog crate:
