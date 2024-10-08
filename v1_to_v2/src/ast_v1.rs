@@ -84,44 +84,6 @@ impl TermUniverse {
     }
 }
 
-struct SubtermIterator<'a> {
-    universe: &'a TermUniverse,
-    stack: Vec<(Term, usize)>,
-}
-
-impl<'a> Iterator for SubtermIterator<'a> {
-    type Item = Term;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (tm, next_child) = match self.stack.pop() {
-            Some(top) => top,
-            None => return None,
-        };
-
-        use TermData::*;
-        let mut child = match self.universe.data(tm) {
-            Variable(_) | Wildcard => return Some(tm),
-            Application(_, args) if args.len() == next_child => return Some(tm),
-            Application(_, args) => {
-                debug_assert!(next_child < args.len());
-                args[next_child]
-            }
-        };
-
-        self.stack.push((tm, next_child + 1));
-        while let Application(_, args) = self.universe.data(child) {
-            match args.first() {
-                None => break,
-                Some(arg) => {
-                    self.stack.push((child, 1));
-                    child = *arg;
-                }
-            }
-        }
-        Some(child)
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Template)]
 #[template(
     source = r#"{%- match (self.universe.data_ref(self.term)) -%}
