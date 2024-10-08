@@ -243,15 +243,22 @@ rule scope_single_child_scopes {
     then exit_scope(child) = parent_exit;
 }
 
-rule scope_extension_siblings_scopes {
-    if scope_extension_siblings(first_child, second_child, parent);
+rule scope_extension_siblings_parent_first {
+    if scope_extension_siblings(first_child, _, parent);
     if parent_entry = entry_scope(parent);
-    if parent_exit = exit_scope(parent);
-    if first_child_exit = exit_scope(first_child);
-
     then entry_scope(first_child) = parent_entry;
-    then entry_scope(second_child) = first_child_exit;
-    then exit_scope(second_child) = parent_exit;
+}
+
+rule scope_extension_siblings_first_second {
+    if scope_extension_siblings(first_child, second_child, _);
+    if first_exit = exit_scope(first_child);
+    then entry_scope(second_child) = first_exit;
+}
+
+rule scope_extension_siblings_second_parent {
+    if scope_extension_siblings(_, second_child, parent);
+    if second_exit = exit_scope(second_child);
+    then exit_scope(parent) = second_exit;
 }
 
 rule scopes_rule {

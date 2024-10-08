@@ -1,4 +1,4 @@
-// src-digest: CD0CDAB6EB90B9E808BCF9F19FEA64B1531E5973551D624B2A2189E3193E005C
+// src-digest: E0FA02DDDF9D836F36DF436DE36EBBFE017A20ABD1AC736B66BD42B2BEE5885D
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -10055,24 +10055,30 @@ struct ScopeExtensionSiblings(
 );
 #[derive(Clone, Hash, Debug)]
 struct ScopeExtensionSiblingsTable {
+    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
     index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
     element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<ScopeExtensionSiblings>>,
 }
 impl ScopeExtensionSiblingsTable {
     #[allow(unused)]
-    const WEIGHT: usize = 9;
+    const WEIGHT: usize = 15;
     fn new() -> Self {
         Self {
+            index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
             index_all_2_0_1: BTreeSet::new(),
             element_index_rule_descendant_node: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: ScopeExtensionSiblings) -> bool {
-        if self.index_all_2_0_1.insert(Self::permute_2_0_1(t)) {
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
+            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_rule_descendant_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -10102,7 +10108,7 @@ impl ScopeExtensionSiblingsTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: ScopeExtensionSiblings) -> bool {
-        self.index_all_2_0_1.contains(&Self::permute_2_0_1(t))
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
     }
     fn drop_dirt(&mut self) {
         self.index_dirty_0_1_2.clear();
@@ -10123,6 +10129,18 @@ impl ScopeExtensionSiblingsTable {
         )
     }
     #[allow(unused)]
+    fn permute_1_0_2(t: ScopeExtensionSiblings) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> ScopeExtensionSiblings {
+        ScopeExtensionSiblings(
+            RuleDescendantNode::from(t.1),
+            RuleDescendantNode::from(t.0),
+            RuleDescendantNode::from(t.2),
+        )
+    }
+    #[allow(unused)]
     fn permute_2_0_1(t: ScopeExtensionSiblings) -> (u32, u32, u32) {
         (t.2.into(), t.0.into(), t.1.into())
     }
@@ -10138,16 +10156,29 @@ impl ScopeExtensionSiblingsTable {
     fn iter_all(&self) -> impl '_ + Iterator<Item = ScopeExtensionSiblings> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_2_0_1
+        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_0_1)
+            .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = ScopeExtensionSiblings> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
         self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(
+        &self,
+        arg0: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = ScopeExtensionSiblings> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN, u32::MIN);
+        let max = (arg0, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1_2)
@@ -10162,27 +10193,25 @@ impl ScopeExtensionSiblingsTable {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg2, arg0, arg1);
-        let max = (arg2, arg0, arg1);
-        self.index_all_2_0_1
+        let min = (arg0, arg1, arg2);
+        let max = (arg0, arg1, arg2);
+        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_0_1)
+            .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
-    fn iter_all_0_2(
+    fn iter_all_1(
         &self,
-        arg0: RuleDescendantNode,
-        arg2: RuleDescendantNode,
+        arg1: RuleDescendantNode,
     ) -> impl '_ + Iterator<Item = ScopeExtensionSiblings> {
-        let arg0 = arg0.0;
-        let arg2 = arg2.0;
-        let min = (arg2, arg0, u32::MIN);
-        let max = (arg2, arg0, u32::MAX);
-        self.index_all_2_0_1
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN, u32::MIN);
+        let max = (arg1, u32::MAX, u32::MAX);
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_0_1)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_all_2(
@@ -10210,8 +10239,10 @@ impl ScopeExtensionSiblingsTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_2_0_1.remove(&Self::permute_2_0_1(t)) {
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -35617,7 +35648,9 @@ impl Eqlog {
                 self.entry_exit_scope_total_0(&mut delta);
                 self.exit_scope_extends_entry_scope_0(&mut delta);
                 self.scope_single_child_scopes_0(&mut delta);
-                self.scope_extension_siblings_scopes_0(&mut delta);
+                self.scope_extension_siblings_parent_first_0(&mut delta);
+                self.scope_extension_siblings_first_second_0(&mut delta);
+                self.scope_extension_siblings_second_parent_0(&mut delta);
                 self.scopes_rule_0(&mut delta);
                 self.scopes_stmt_list_cons_0(&mut delta);
                 self.scopes_stmt_block_list_cons_0(&mut delta);
@@ -35697,7 +35730,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_97_0(&mut delta);
+                self.anonymous_rule_99_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -56281,34 +56314,32 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_0(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_parent_first_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.scope_extension_siblings_scopes_1(delta);
-            self.scope_extension_siblings_scopes_2(delta);
-            self.scope_extension_siblings_scopes_5(delta);
-            self.scope_extension_siblings_scopes_8(delta);
-            self.scope_extension_siblings_scopes_11(delta);
+            self.scope_extension_siblings_parent_first_1(delta);
+            self.scope_extension_siblings_parent_first_2(delta);
+            self.scope_extension_siblings_parent_first_5(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_1(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_parent_first_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_2(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_parent_first_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ScopeExtensionSiblings(tm0, tm1, tm2) in self.scope_extension_siblings.iter_dirty()
             {
-                self.scope_extension_siblings_scopes_3(delta, tm0, tm1, tm2);
+                self.scope_extension_siblings_parent_first_3(delta, tm0, tm1, tm2);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_3(
+    fn scope_extension_siblings_parent_first_3(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -56316,12 +56347,12 @@ impl Eqlog {
         tm2: RuleDescendantNode,
     ) {
         for _ in [()] {
-            self.scope_extension_siblings_scopes_4(delta, tm0, tm1, tm2);
+            self.scope_extension_siblings_parent_first_4(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_4(
+    fn scope_extension_siblings_parent_first_4(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
@@ -56331,13 +56362,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
-                self.scope_extension_siblings_scopes_6(delta, tm0, tm1, tm2, tm3);
+                self.scope_extension_siblings_parent_first_6(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_5(&self, delta: &mut ModelDelta) {
+    fn scope_extension_siblings_parent_first_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm2, tm3) in self.entry_scope.iter_dirty() {
@@ -56345,142 +56376,197 @@ impl Eqlog {
                 for ScopeExtensionSiblings(tm0, tm1, _) in
                     self.scope_extension_siblings.iter_all_2(tm2)
                 {
-                    self.scope_extension_siblings_scopes_6(delta, tm0, tm1, tm2, tm3);
+                    self.scope_extension_siblings_parent_first_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_6(
+    fn scope_extension_siblings_parent_first_6(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDescendantNode,
         tm1: RuleDescendantNode,
         tm2: RuleDescendantNode,
         tm3: Scope,
-    ) {
-        for _ in [()] {
-            self.scope_extension_siblings_scopes_7(delta, tm0, tm1, tm2, tm3);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: RuleDescendantNode,
-        tm1: RuleDescendantNode,
-        tm2: RuleDescendantNode,
-        tm3: Scope,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ExitScope(_, tm4) in self.exit_scope.iter_all_0(tm2) {
-                self.scope_extension_siblings_scopes_9(delta, tm0, tm1, tm3, tm2, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ExitScope(tm2, tm4) in self.exit_scope.iter_dirty() {
-                #[allow(unused_variables)]
-                for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
-                    #[allow(unused_variables)]
-                    for ScopeExtensionSiblings(tm0, tm1, _) in
-                        self.scope_extension_siblings.iter_all_2(tm2)
-                    {
-                        self.scope_extension_siblings_scopes_9(delta, tm0, tm1, tm3, tm2, tm4);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_9(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: RuleDescendantNode,
-        tm1: RuleDescendantNode,
-        tm3: Scope,
-        tm2: RuleDescendantNode,
-        tm4: Scope,
-    ) {
-        for _ in [()] {
-            self.scope_extension_siblings_scopes_10(delta, tm0, tm1, tm3, tm2, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_10(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: RuleDescendantNode,
-        tm1: RuleDescendantNode,
-        tm3: Scope,
-        tm2: RuleDescendantNode,
-        tm4: Scope,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ExitScope(_, tm5) in self.exit_scope.iter_all_0(tm0) {
-                self.scope_extension_siblings_scopes_12(delta, tm1, tm3, tm2, tm4, tm0, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_11(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ExitScope(tm0, tm5) in self.exit_scope.iter_dirty() {
-                #[allow(unused_variables)]
-                for ExitScope(tm2, tm4) in self.exit_scope.iter_all() {
-                    #[allow(unused_variables)]
-                    for ScopeExtensionSiblings(_, tm1, _) in
-                        self.scope_extension_siblings.iter_all_0_2(tm0, tm2)
-                    {
-                        #[allow(unused_variables)]
-                        for EntryScope(_, tm3) in self.entry_scope.iter_all_0(tm2) {
-                            self.scope_extension_siblings_scopes_12(
-                                delta, tm1, tm3, tm2, tm4, tm0, tm5,
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scope_extension_siblings_scopes_12(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: RuleDescendantNode,
-        tm3: Scope,
-        tm2: RuleDescendantNode,
-        tm4: Scope,
-        tm0: RuleDescendantNode,
-        tm5: Scope,
     ) {
         for _ in [()] {
             let exists_already = self.entry_scope.iter_all_0_1(tm0, tm3).next().is_some();
             if !exists_already {
                 delta.new_entry_scope.push(EntryScope(tm0, tm3));
             }
+        }
+    }
 
-            let exists_already = self.entry_scope.iter_all_0_1(tm1, tm5).next().is_some();
-            if !exists_already {
-                delta.new_entry_scope.push(EntryScope(tm1, tm5));
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.scope_extension_siblings_first_second_1(delta);
+            self.scope_extension_siblings_first_second_2(delta);
+            self.scope_extension_siblings_first_second_5(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ScopeExtensionSiblings(tm0, tm1, tm2) in self.scope_extension_siblings.iter_dirty()
+            {
+                self.scope_extension_siblings_first_second_3(delta, tm0, tm1, tm2);
             }
+        }
+    }
 
-            let exists_already = self.exit_scope.iter_all_0_1(tm1, tm4).next().is_some();
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_3(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scope_extension_siblings_first_second_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm0) {
+                self.scope_extension_siblings_first_second_6(delta, tm1, tm2, tm0, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ExitScope(tm0, tm3) in self.exit_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for ScopeExtensionSiblings(_, tm1, tm2) in
+                    self.scope_extension_siblings.iter_all_0(tm0)
+                {
+                    self.scope_extension_siblings_first_second_6(delta, tm1, tm2, tm0, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_first_second_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+        tm0: RuleDescendantNode,
+        tm3: Scope,
+    ) {
+        for _ in [()] {
+            let exists_already = self.entry_scope.iter_all_0_1(tm1, tm3).next().is_some();
             if !exists_already {
-                delta.new_exit_scope.push(ExitScope(tm1, tm4));
+                delta.new_entry_scope.push(EntryScope(tm1, tm3));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.scope_extension_siblings_second_parent_1(delta);
+            self.scope_extension_siblings_second_parent_2(delta);
+            self.scope_extension_siblings_second_parent_5(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ScopeExtensionSiblings(tm0, tm1, tm2) in self.scope_extension_siblings.iter_dirty()
+            {
+                self.scope_extension_siblings_second_parent_3(delta, tm0, tm1, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_3(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            self.scope_extension_siblings_second_parent_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ExitScope(_, tm3) in self.exit_scope.iter_all_0(tm1) {
+                self.scope_extension_siblings_second_parent_6(delta, tm0, tm2, tm1, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ExitScope(tm1, tm3) in self.exit_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for ScopeExtensionSiblings(tm0, _, tm2) in
+                    self.scope_extension_siblings.iter_all_1(tm1)
+                {
+                    self.scope_extension_siblings_second_parent_6(delta, tm0, tm2, tm1, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_siblings_second_parent_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDescendantNode,
+        tm2: RuleDescendantNode,
+        tm1: RuleDescendantNode,
+        tm3: Scope,
+    ) {
+        for _ in [()] {
+            let exists_already = self.exit_scope.iter_all_0_1(tm2, tm3).next().is_some();
+            if !exists_already {
+                delta.new_exit_scope.push(ExitScope(tm2, tm3));
             }
         }
     }
@@ -65670,27 +65756,27 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_97_1(delta);
-            self.anonymous_rule_97_3(delta);
-            self.anonymous_rule_97_6(delta);
-            self.anonymous_rule_97_9(delta);
-            self.anonymous_rule_97_12(delta);
-            self.anonymous_rule_97_15(delta);
-            self.anonymous_rule_97_18(delta);
+            self.anonymous_rule_99_1(delta);
+            self.anonymous_rule_99_3(delta);
+            self.anonymous_rule_99_6(delta);
+            self.anonymous_rule_99_9(delta);
+            self.anonymous_rule_99_12(delta);
+            self.anonymous_rule_99_15(delta);
+            self.anonymous_rule_99_18(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_97_2(delta);
+            self.anonymous_rule_99_2(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -65700,29 +65786,29 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_97_4(delta, tm0);
+            self.anonymous_rule_99_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_3(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_97_4(delta, tm0);
+                self.anonymous_rule_99_4(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_99_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_97_5(delta, tm0);
+            self.anonymous_rule_99_5(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_99_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -65732,32 +65818,32 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_97_7(delta, tm0, tm1);
+            self.anonymous_rule_99_7(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_97_7(delta, tm0, tm1);
+                    self.anonymous_rule_99_7(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_99_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_97_8(delta, tm0, tm1);
+            self.anonymous_rule_99_8(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_99_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -65767,12 +65853,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_97_10(delta, tm0, tm1, tm2);
+            self.anonymous_rule_99_10(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_9(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -65780,7 +65866,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_97_10(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_99_10(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -65788,7 +65874,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_10(
+    fn anonymous_rule_99_10(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65796,12 +65882,12 @@ impl Eqlog {
         tm2: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_97_11(delta, tm0, tm1, tm2);
+            self.anonymous_rule_99_11(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_11(
+    fn anonymous_rule_99_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65817,12 +65903,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_97_13(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_99_13(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -65832,7 +65918,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_97_13(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_99_13(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -65841,7 +65927,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_13(
+    fn anonymous_rule_99_13(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65850,12 +65936,12 @@ impl Eqlog {
         tm3: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_97_14(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_99_14(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_14(
+    fn anonymous_rule_99_14(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65872,12 +65958,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_97_16(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_99_16(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_15(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -65889,7 +65975,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_97_16(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_99_16(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -65899,7 +65985,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_16(
+    fn anonymous_rule_99_16(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65909,12 +65995,12 @@ impl Eqlog {
         tm4: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_97_17(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_99_17(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_17(
+    fn anonymous_rule_99_17(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65932,12 +66018,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_97_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_99_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_18(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_99_18(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -65951,7 +66037,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_97_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_99_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -65962,7 +66048,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_97_19(
+    fn anonymous_rule_99_19(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
