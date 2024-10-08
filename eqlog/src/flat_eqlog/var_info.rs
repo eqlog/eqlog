@@ -112,7 +112,11 @@ pub fn relation_info_rec<'a>(
                 FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
                 FlatIfStmt::Relation(rel_if_stmt) => {
                     let fixed_vars = fixed_vars.get(&ByAddress(tail)).unwrap();
-                    let FlatIfStmtRelation { rel, args, age: _ } = rel_if_stmt;
+                    let FlatIfStmtRelation {
+                        rel: _,
+                        args,
+                        age: _,
+                    } = rel_if_stmt;
 
                     let info = RelationInfo {
                         diagonals: diagonals(args.as_slice()),

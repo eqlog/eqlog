@@ -95,17 +95,7 @@ pub struct IndexSpec {
     pub age: IndexAge,
 }
 
-fn is_prefix(prefix: &BTreeSet<usize>, order: &[usize]) -> bool {
-    let count = order.iter().take_while(|el| prefix.contains(el)).count();
-    count == prefix.len()
-}
-
 impl IndexSpec {
-    //pub fn can_serve(&self, query: &[QuerySpec]) -> bool {
-    //    self.age == query.age
-    //        && query.diagonals == self.diagonals
-    //        && is_prefix(&query.projections, &self.order)
-    //}
     pub fn from_query_spec_chain(arity_len: usize, chain: &[QuerySpec]) -> Self {
         let empty_projections = BTreeSet::new();
         let full_projections: BTreeSet<usize> = (0..arity_len).collect();

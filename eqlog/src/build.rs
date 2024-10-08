@@ -20,7 +20,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{exit, Command};
+use std::process::exit;
 
 fn whipe_comments(source: &str) -> String {
     let lines: Vec<String> = source
