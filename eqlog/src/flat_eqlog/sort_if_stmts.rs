@@ -1,4 +1,3 @@
-use eqlog_eqlog::Eqlog;
 use itertools::Itertools;
 use std::collections::BTreeSet;
 
@@ -88,34 +87,18 @@ fn less_variables_is_better() {
     assert!(few_vars > many_vars);
 }
 
-fn if_stmt_goodness(
-    stmt: &FlatIfStmt,
-    fixed_vars: &BTreeSet<FlatVar>,
-    eqlog: &Eqlog,
-) -> IfStmtGoodness {
+fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
     let is_equal = matches!(stmt, FlatIfStmt::Equal(_));
     let age = match stmt {
         FlatIfStmt::Equal(_) => QueryAge::All,
         FlatIfStmt::Relation(FlatIfStmtRelation { age, .. }) => *age,
         FlatIfStmt::Type(FlatIfStmtType { age, .. }) => *age,
     };
-    let mut new_variables = stmt
+    let new_variables = stmt
         .iter_vars()
         .unique()
         .filter(|var| !fixed_vars.contains(&var))
         .count();
-    if let FlatIfStmt::Relation(FlatIfStmtRelation { rel, args, .. }) = stmt {
-        let is_func = eqlog
-            .iter_func_rel()
-            .find(|(_, func_rel)| eqlog.are_equal_rel(*rel, *func_rel))
-            .is_some();
-
-        let last_is_new = args.last().map_or(false, |arg| !fixed_vars.contains(arg));
-        if is_func && last_is_new {
-            new_variables -= 1;
-        }
-    }
-
     IfStmtGoodness {
         is_equal,
         age,
@@ -123,22 +106,14 @@ fn if_stmt_goodness(
     }
 }
 
-fn find_best_index(
-    stmts: &[FlatIfStmt],
-    fixed_vars: &BTreeSet<FlatVar>,
-    eqlog: &Eqlog,
-) -> Option<usize> {
-    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], fixed_vars, eqlog))
+fn find_best_index(stmts: &[FlatIfStmt], fixed_vars: &BTreeSet<FlatVar>) -> Option<usize> {
+    (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], fixed_vars))
 }
 
-fn sort_if_block<'a>(
-    if_stmts: &mut [FlatIfStmt],
-    fixed_vars: &mut BTreeSet<FlatVar>,
-    eqlog: &Eqlog,
-) {
+fn sort_if_block<'a>(if_stmts: &mut [FlatIfStmt], fixed_vars: &mut BTreeSet<FlatVar>) {
     for sorted_until in 0..if_stmts.len() {
         let best_index = sorted_until
-            + find_best_index(&if_stmts[sorted_until..], fixed_vars, eqlog)
+            + find_best_index(&if_stmts[sorted_until..], fixed_vars)
                 .expect("a non-empty slice of if statements should have a best element");
         fixed_vars.extend(if_stmts[best_index].iter_vars());
         if_stmts.swap(sorted_until, best_index);
@@ -156,11 +131,7 @@ fn if_stmt(stmt: &FlatStmt) -> Option<&FlatIfStmt> {
 ///
 /// `fixed_vars` should be the set of variables that are already fixed by prior statements.
 /// This function extends `fixed_vars` by the variables that occur in `stmts`.
-fn sort_if_stmts_rec<'a>(
-    stmts: &mut [FlatStmt],
-    fixed_vars: &mut BTreeSet<FlatVar>,
-    eqlog: &Eqlog,
-) {
+fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatVar>) {
     let stmt_groups = slice_group_by_mut(stmts, |before, after| {
         if_stmt(before).is_some() == if_stmt(after).is_some()
     });
@@ -173,7 +144,7 @@ fn sort_if_stmts_rec<'a>(
                 .map(|stmt| if_stmt(stmt).expect("Stmts in if stmt group should be if stmts"))
                 .cloned()
                 .collect();
-            sort_if_block(if_stmts.as_mut_slice(), fixed_vars, eqlog);
+            sort_if_block(if_stmts.as_mut_slice(), fixed_vars);
             assert_eq!(
                 stmt_group.len(),
                 if_stmts.len(),
@@ -198,9 +169,9 @@ fn sort_if_stmts_rec<'a>(
 }
 
 /// A pass that optimizes the order of  consecutive [FlatIfStmt] in `rule`.
-pub fn sort_if_stmts<'a>(rule: &mut FlatRule, eqlog: &Eqlog) {
+pub fn sort_if_stmts<'a>(rule: &mut FlatRule) {
     for func in rule.funcs.iter_mut() {
         let mut fixed_vars = func.args.iter().cloned().collect();
-        sort_if_stmts_rec(&mut func.body, &mut fixed_vars, &eqlog);
+        sort_if_stmts_rec(&mut func.body, &mut fixed_vars);
     }
 }
