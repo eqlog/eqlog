@@ -191,7 +191,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         let mut flat_rule = flatten(rule, &eqlog, &identifiers);
         // Necessary here for explicit rules, but not for implicit functionality rules, since the
         // latter are already ordered reasonably.
-        sort_if_stmts(&mut flat_rule);
+        sort_if_stmts(&mut flat_rule, &eqlog);
         flat_rule
     }));
 
