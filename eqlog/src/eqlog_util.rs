@@ -47,14 +47,24 @@ pub fn iter_vars<'a>(
 }
 
 pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
-    let mut result = Vec::new();
+    let mut conss = Vec::new();
+    let mut snocs = Vec::new();
     loop {
         let cons_entry = eqlog
             .iter_cons_el_list()
             .find(|(_, _, cons_els)| eqlog.are_equal_el_list(*cons_els, els));
         if let Some((head_el, tail_els, _)) = cons_entry {
-            result.push(head_el);
+            conss.push(head_el);
             els = tail_els;
+            continue;
+        }
+
+        let snoc_entry = eqlog
+            .iter_snoc_el_list()
+            .find(|(_, _, snoc_els)| eqlog.are_equal_el_list(*snoc_els, els));
+        if let Some((init_els, last_el, _)) = snoc_entry {
+            snocs.push(last_el);
+            els = init_els;
             continue;
         }
 
@@ -65,18 +75,52 @@ pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
         break;
     }
 
-    result
+    conss.into_iter().chain(snocs.into_iter().rev()).collect()
 }
 
+//pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
+//    let mut result = Vec::new();
+//    loop {
+//        let cons_entry = eqlog
+//            .iter_cons_type_list()
+//            .find(|(_, _, cons_types)| eqlog.are_equal_type_list(*cons_types, types));
+//        if let Some((head_type, tail_types, _)) = cons_entry {
+//            result.push(head_type);
+//            types = tail_types;
+//            continue;
+//        }
+//
+//        let nil = eqlog
+//            .nil_type_list()
+//            .expect("nil_type_list should be defined if there exists a type list");
+//        assert!(
+//            eqlog.are_equal_type_list(types, nil),
+//            "a type_list should be either nil or cons"
+//        );
+//        break;
+//    }
+//
+//    result
+//}
 pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
-    let mut result = Vec::new();
+    let mut conss = Vec::new();
+    let mut snocs = Vec::new();
     loop {
         let cons_entry = eqlog
             .iter_cons_type_list()
             .find(|(_, _, cons_types)| eqlog.are_equal_type_list(*cons_types, types));
         if let Some((head_type, tail_types, _)) = cons_entry {
-            result.push(head_type);
+            conss.push(head_type);
             types = tail_types;
+            continue;
+        }
+
+        let snoc_entry = eqlog
+            .iter_snoc_type_list()
+            .find(|(_, _, snoc_types)| eqlog.are_equal_type_list(*snoc_types, types));
+        if let Some((init_types, last_type, _)) = snoc_entry {
+            snocs.push(last_type);
+            types = init_types;
             continue;
         }
 
@@ -90,7 +134,7 @@ pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
         break;
     }
 
-    result
+    conss.into_iter().chain(snocs.into_iter().rev()).collect()
 }
 
 pub fn iter_in_ker<'a>(

@@ -1,4 +1,4 @@
-// src-digest: E0FA02DDDF9D836F36DF436DE36EBBFE017A20ABD1AC736B66BD42B2BEE5885D
+// src-digest: 64F0CE7FD20B45A949E91001166C6320B1D2E03D99186A48338DD40884B84117
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -24994,7 +24994,7 @@ struct SnocTypeList(pub TypeList, pub Type, pub TypeList);
 struct SnocTypeListTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
     element_index_type: BTreeMap<Type, Vec<SnocTypeList>>,
     element_index_type_list: BTreeMap<TypeList, Vec<SnocTypeList>>,
 }
@@ -25005,16 +25005,16 @@ impl SnocTypeListTable {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_0_2: BTreeSet::new(),
+            index_all_2_0_1: BTreeSet::new(),
             element_index_type: BTreeMap::new(),
             element_index_type_list: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: SnocTypeList) -> bool {
-        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
+        if self.index_all_2_0_1.insert(Self::permute_2_0_1(t)) {
+            self.index_all_0_1_2.insert(Self::permute_0_1_2(t));
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
 
             match self.element_index_type_list.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -25044,7 +25044,7 @@ impl SnocTypeListTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: SnocTypeList) -> bool {
-        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+        self.index_all_2_0_1.contains(&Self::permute_2_0_1(t))
     }
     fn drop_dirt(&mut self) {
         self.index_dirty_0_1_2.clear();
@@ -25061,37 +25061,27 @@ impl SnocTypeListTable {
         SnocTypeList(TypeList::from(t.0), Type::from(t.1), TypeList::from(t.2))
     }
     #[allow(unused)]
-    fn permute_1_0_2(t: SnocTypeList) -> (u32, u32, u32) {
-        (t.1.into(), t.0.into(), t.2.into())
+    fn permute_2_0_1(t: SnocTypeList) -> (u32, u32, u32) {
+        (t.2.into(), t.0.into(), t.1.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> SnocTypeList {
-        SnocTypeList(TypeList::from(t.1), Type::from(t.0), TypeList::from(t.2))
+    fn permute_inverse_2_0_1(t: (u32, u32, u32)) -> SnocTypeList {
+        SnocTypeList(TypeList::from(t.1), Type::from(t.2), TypeList::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = SnocTypeList> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_0_1_2
+        self.index_all_2_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_2_0_1)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = SnocTypeList> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
         self.index_dirty_0_1_2
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_0_1_2)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: TypeList) -> impl '_ + Iterator<Item = SnocTypeList> {
-        let arg0 = arg0.0;
-        let min = (arg0, u32::MIN, u32::MIN);
-        let max = (arg0, u32::MAX, u32::MAX);
-        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1_2)
@@ -25117,22 +25107,37 @@ impl SnocTypeListTable {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg0, arg1, arg2);
-        let max = (arg0, arg1, arg2);
-        self.index_all_0_1_2
+        let min = (arg2, arg0, arg1);
+        let max = (arg2, arg0, arg1);
+        self.index_all_2_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_2_0_1)
     }
     #[allow(dead_code)]
-    fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = SnocTypeList> {
-        let arg1 = arg1.0;
-        let min = (arg1, u32::MIN, u32::MIN);
-        let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_0_2
+    fn iter_all_0_2(
+        &self,
+        arg0: TypeList,
+        arg2: TypeList,
+    ) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg0 = arg0.0;
+        let arg2 = arg2.0;
+        let min = (arg2, arg0, u32::MIN);
+        let max = (arg2, arg0, u32::MAX);
+        self.index_all_2_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_0_2)
+            .map(Self::permute_inverse_2_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_2(&self, arg2: TypeList) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg2 = arg2.0;
+        let min = (arg2, u32::MIN, u32::MIN);
+        let max = (arg2, u32::MAX, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
     }
     #[allow(dead_code)]
     fn drain_with_element_type(&mut self, tm: Type) -> Vec<SnocTypeList> {
@@ -25144,9 +25149,9 @@ impl SnocTypeListTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            if self.index_all_2_0_1.remove(&Self::permute_2_0_1(t)) {
+                self.index_all_0_1_2.remove(&Self::permute_0_1_2(t));
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -25165,9 +25170,9 @@ impl SnocTypeListTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            if self.index_all_2_0_1.remove(&Self::permute_2_0_1(t)) {
+                self.index_all_0_1_2.remove(&Self::permute_0_1_2(t));
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -27873,6 +27878,17 @@ impl SnocElListTable {
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_2(&self, arg0: ElList, arg2: ElList) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg0 = arg0.0;
+        let arg2 = arg2.0;
+        let min = (arg2, arg0, u32::MIN);
+        let max = (arg2, arg0, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
     }
     #[allow(dead_code)]
     fn iter_all_1(&self, arg1: El) -> impl '_ + Iterator<Item = SnocElList> {
@@ -35683,8 +35699,6 @@ impl Eqlog {
                 self.scopes_desugared_case_list_0(&mut delta);
                 self.type_list_nil_not_cons_0(&mut delta);
                 self.type_list_cons_injective_0(&mut delta);
-                self.snoc_type_list_nil_0(&mut delta);
-                self.snoc_type_list_cons_0(&mut delta);
                 self.semantic_decl_type_0(&mut delta);
                 self.semantic_decl_enum_0(&mut delta);
                 self.semantic_arg_types_nil_0(&mut delta);
@@ -35700,21 +35714,23 @@ impl Eqlog {
                 self.rel_constructors_func_total_0(&mut delta);
                 self.arity_laws_0(&mut delta);
                 self.el_list_cons_injective_0(&mut delta);
+                self.el_list_snoc_injective_0(&mut delta);
                 self.el_list_cons_nil_0(&mut delta);
-                self.snoc_cons_el_list_nil_0(&mut delta);
-                self.cons_snoc_el_list_nil_0(&mut delta);
-                self.snoc_cons_el_list_0(&mut delta);
-                self.cons_snoc_el_list_0(&mut delta);
+                self.el_list_snoc_nil_0(&mut delta);
                 self.nil_els_structure_0(&mut delta);
                 self.cons_els_structure_0(&mut delta);
+                self.snoc_els_structure_0(&mut delta);
                 self.var_structure_0(&mut delta);
                 self.nil_el_types_0(&mut delta);
                 self.cons_el_types_0(&mut delta);
                 self.cons_el_types_reverse_0(&mut delta);
+                self.snoc_el_types_0(&mut delta);
+                self.snoc_el_types_reverse_0(&mut delta);
                 self.rel_app_types_0(&mut delta);
                 self.rel_app_func_app_0(&mut delta);
                 self.rel_app_constrained_0(&mut delta);
                 self.constrained_head_tail_0(&mut delta);
+                self.constrained_init_snoc_0(&mut delta);
                 self.dom_total_0(&mut delta);
                 self.cod_total_0(&mut delta);
                 self.map_el_structure_0(&mut delta);
@@ -35723,6 +35739,7 @@ impl Eqlog {
                 self.map_els_defined_0(&mut delta);
                 self.map_nil_els_0(&mut delta);
                 self.map_cons_els_0(&mut delta);
+                self.map_snoc_els_0(&mut delta);
                 self.map_var_0(&mut delta);
                 self.map_rel_app_0(&mut delta);
                 self.map_preserves_el_type_0(&mut delta);
@@ -35730,7 +35747,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_99_0(&mut delta);
+                self.anonymous_rule_100_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -35746,6 +35763,7 @@ impl Eqlog {
                 self.type_list_len_total_0(&mut delta);
                 self.type_list_len_nil_0(&mut delta);
                 self.type_list_len_cons_0(&mut delta);
+                self.type_list_len_snoc_0(&mut delta);
                 self.term_list_len_total_0(&mut delta);
                 self.term_list_len_nil_0(&mut delta);
                 self.term_list_len_cons_0(&mut delta);
@@ -61310,186 +61328,6 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn snoc_type_list_nil_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.snoc_type_list_nil_1(delta);
-            self.snoc_type_list_nil_2(delta);
-            self.snoc_type_list_nil_3(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_nil_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_nil_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocTypeList(_, tm1, tm2) in self.snoc_type_list.iter_all_0(tm0) {
-                    self.snoc_type_list_nil_4(delta, tm0, tm1, tm2);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_nil_3(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for NilTypeList(_) in self.nil_type_list.iter_all_0(tm0) {
-                    self.snoc_type_list_nil_4(delta, tm0, tm1, tm2);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_nil_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: TypeList,
-        tm1: Type,
-        tm2: TypeList,
-    ) {
-        for _ in [()] {
-            let exists_already = self
-                .cons_type_list
-                .iter_all_0_1_2(tm1, tm0, tm2)
-                .next()
-                .is_some();
-            if !exists_already {
-                delta.new_cons_type_list.push(ConsTypeList(tm1, tm0, tm2));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.snoc_type_list_cons_1(delta);
-            self.snoc_type_list_cons_2(delta);
-            self.snoc_type_list_cons_3(delta);
-            self.snoc_type_list_cons_6(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocTypeList(_, tm3, tm4) in self.snoc_type_list.iter_all_0(tm2) {
-                    self.snoc_type_list_cons_4(delta, tm0, tm1, tm2, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_3(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocTypeList(tm2, tm3, tm4) in self.snoc_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsTypeList(tm0, tm1, _) in self.cons_type_list.iter_all_2(tm2) {
-                    self.snoc_type_list_cons_4(delta, tm0, tm1, tm2, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: Type,
-        tm1: TypeList,
-        tm2: TypeList,
-        tm3: Type,
-        tm4: TypeList,
-    ) {
-        for _ in [()] {
-            self.snoc_type_list_cons_5(delta, tm0, tm1, tm2, tm3, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_5(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: Type,
-        tm1: TypeList,
-        tm2: TypeList,
-        tm3: Type,
-        tm4: TypeList,
-    ) {
-        for _ in [()] {
-            let tm5 = match self.snoc_type_list.iter_all_0_1(tm1, tm3).next() {
-                Some(SnocTypeList(_, _, res)) => res,
-                None => {
-                    delta
-                        .new_snoc_type_list_def
-                        .push(SnocTypeListArgs(tm1, tm3));
-                    break;
-                }
-            };
-
-            self.snoc_type_list_cons_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocTypeList(tm1, tm3, tm5) in self.snoc_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocTypeList(tm2, _, tm4) in self.snoc_type_list.iter_all_1(tm3) {
-                    #[allow(unused_variables)]
-                    for ConsTypeList(tm0, _, _) in self.cons_type_list.iter_all_1_2(tm1, tm2) {
-                        self.snoc_type_list_cons_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_type_list_cons_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: Type,
-        tm2: TypeList,
-        tm4: TypeList,
-        tm1: TypeList,
-        tm3: Type,
-        tm5: TypeList,
-    ) {
-        for _ in [()] {
-            let exists_already = self
-                .cons_type_list
-                .iter_all_0_1_2(tm0, tm5, tm4)
-                .next()
-                .is_some();
-            if !exists_already {
-                delta.new_cons_type_list.push(ConsTypeList(tm0, tm5, tm4));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
     fn semantic_decl_type_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.semantic_decl_type_1(delta);
@@ -63367,6 +63205,67 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn el_list_snoc_injective_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.el_list_snoc_injective_1(delta);
+            self.el_list_snoc_injective_2(delta);
+            self.el_list_snoc_injective_3(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn el_list_snoc_injective_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn el_list_snoc_injective_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm0, tm1, tm4) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm2, tm3, _) in self.snoc_el_list.iter_all_2(tm4) {
+                    self.el_list_snoc_injective_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn el_list_snoc_injective_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm2, tm3, tm4) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm0, tm1, _) in self.snoc_el_list.iter_all_2(tm4) {
+                    self.el_list_snoc_injective_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn el_list_snoc_injective_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: El,
+        tm2: ElList,
+        tm3: El,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            delta.new_el_list_equalities.push((tm0, tm2));
+
+            delta.new_el_list_equalities.push((tm2, tm0));
+
+            delta.new_el_equalities.push((tm1, tm3));
+
+            delta.new_el_equalities.push((tm3, tm1));
+        }
+    }
+
+    #[allow(unused_variables)]
     fn el_list_cons_nil_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.el_list_cons_nil_1(delta);
@@ -63424,354 +63323,58 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn snoc_cons_el_list_nil_0(&self, delta: &mut ModelDelta) {
+    fn el_list_snoc_nil_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.snoc_cons_el_list_nil_1(delta);
-            self.snoc_cons_el_list_nil_2(delta);
-            self.snoc_cons_el_list_nil_3(delta);
+            self.el_list_snoc_nil_1(delta);
+            self.el_list_snoc_nil_2(delta);
+            self.el_list_snoc_nil_3(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn snoc_cons_el_list_nil_1(&self, delta: &mut ModelDelta) {
+    fn el_list_snoc_nil_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn snoc_cons_el_list_nil_2(&self, delta: &mut ModelDelta) {
+    fn el_list_snoc_nil_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
+            for NilElList(tm2, tm3) in self.nil_el_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for SnocElList(_, tm2, tm3) in self.snoc_el_list.iter_all_0(tm1) {
-                    self.snoc_cons_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
+                for SnocElList(tm0, tm1, _) in self.snoc_el_list.iter_all_2(tm3) {
+                    self.el_list_snoc_nil_4(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn snoc_cons_el_list_nil_3(&self, delta: &mut ModelDelta) {
+    fn el_list_snoc_nil_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SnocElList(tm1, tm2, tm3) in self.snoc_el_list.iter_dirty() {
+            for SnocElList(tm0, tm1, tm3) in self.snoc_el_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for NilElList(tm0, _) in self.nil_el_list.iter_all_1(tm1) {
-                    self.snoc_cons_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
+                for NilElList(tm2, _) in self.nil_el_list.iter_all_1(tm3) {
+                    self.el_list_snoc_nil_4(delta, tm0, tm1, tm2, tm3);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn snoc_cons_el_list_nil_4(
+    fn el_list_snoc_nil_4(
         &self,
         delta: &mut ModelDelta,
-        tm0: Structure,
-        tm1: ElList,
-        tm2: El,
+        tm0: ElList,
+        tm1: El,
+        tm2: Structure,
         tm3: ElList,
     ) {
         for _ in [()] {
-            let exists_already = self
-                .cons_el_list
-                .iter_all_0_1_2(tm2, tm1, tm3)
-                .next()
-                .is_some();
+            let exists_already = self.absurd.iter_all().next().is_some();
             if !exists_already {
-                delta.new_cons_el_list.push(ConsElList(tm2, tm1, tm3));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_nil_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.cons_snoc_el_list_nil_1(delta);
-            self.cons_snoc_el_list_nil_2(delta);
-            self.cons_snoc_el_list_nil_3(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_nil_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_nil_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for NilElList(tm1, tm2) in self.nil_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsElList(tm0, _, tm3) in self.cons_el_list.iter_all_1(tm2) {
-                    self.cons_snoc_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_nil_3(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm0, tm2, tm3) in self.cons_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for NilElList(tm1, _) in self.nil_el_list.iter_all_1(tm2) {
-                    self.cons_snoc_el_list_nil_4(delta, tm0, tm1, tm2, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_nil_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm1: Structure,
-        tm2: ElList,
-        tm3: ElList,
-    ) {
-        for _ in [()] {
-            let exists_already = self
-                .snoc_el_list
-                .iter_all_0_1_2(tm2, tm0, tm3)
-                .next()
-                .is_some();
-            if !exists_already {
-                delta.new_snoc_el_list.push(SnocElList(tm2, tm0, tm3));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.snoc_cons_el_list_1(delta);
-            self.snoc_cons_el_list_2(delta);
-            self.snoc_cons_el_list_3(delta);
-            self.snoc_cons_el_list_6(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocElList(_, tm3, tm4) in self.snoc_el_list.iter_all_0(tm2) {
-                    self.snoc_cons_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_3(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocElList(tm2, tm3, tm4) in self.snoc_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsElList(tm0, tm1, _) in self.cons_el_list.iter_all_2(tm2) {
-                    self.snoc_cons_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm1: ElList,
-        tm2: ElList,
-        tm3: El,
-        tm4: ElList,
-    ) {
-        for _ in [()] {
-            self.snoc_cons_el_list_5(delta, tm0, tm1, tm2, tm3, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_5(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm1: ElList,
-        tm2: ElList,
-        tm3: El,
-        tm4: ElList,
-    ) {
-        for _ in [()] {
-            let tm5 = match self.snoc_el_list.iter_all_0_1(tm1, tm3).next() {
-                Some(SnocElList(_, _, res)) => res,
-                None => {
-                    delta.new_snoc_el_list_def.push(SnocElListArgs(tm1, tm3));
-                    break;
-                }
-            };
-
-            self.snoc_cons_el_list_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocElList(tm1, tm3, tm5) in self.snoc_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocElList(tm2, _, tm4) in self.snoc_el_list.iter_all_1(tm3) {
-                    #[allow(unused_variables)]
-                    for ConsElList(tm0, _, _) in self.cons_el_list.iter_all_1_2(tm1, tm2) {
-                        self.snoc_cons_el_list_7(delta, tm0, tm2, tm4, tm1, tm3, tm5);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn snoc_cons_el_list_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm2: ElList,
-        tm4: ElList,
-        tm1: ElList,
-        tm3: El,
-        tm5: ElList,
-    ) {
-        for _ in [()] {
-            let exists_already = self
-                .cons_el_list
-                .iter_all_0_1_2(tm0, tm5, tm4)
-                .next()
-                .is_some();
-            if !exists_already {
-                delta.new_cons_el_list.push(ConsElList(tm0, tm5, tm4));
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.cons_snoc_el_list_1(delta);
-            self.cons_snoc_el_list_2(delta);
-            self.cons_snoc_el_list_3(delta);
-            self.cons_snoc_el_list_6(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm0, tm3, tm4) in self.cons_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocElList(tm1, tm2, _) in self.snoc_el_list.iter_all_2(tm3) {
-                    self.cons_snoc_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_3(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocElList(tm1, tm2, tm3) in self.snoc_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsElList(tm0, _, tm4) in self.cons_el_list.iter_all_1(tm3) {
-                    self.cons_snoc_el_list_4(delta, tm0, tm1, tm2, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm1: ElList,
-        tm2: El,
-        tm3: ElList,
-        tm4: ElList,
-    ) {
-        for _ in [()] {
-            self.cons_snoc_el_list_5(delta, tm0, tm1, tm2, tm3, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_5(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: El,
-        tm1: ElList,
-        tm2: El,
-        tm3: ElList,
-        tm4: ElList,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(_, _, tm5) in self.cons_el_list.iter_all_0_1(tm0, tm1) {
-                self.cons_snoc_el_list_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_6(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm0, tm1, tm5) in self.cons_el_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocElList(_, tm2, tm3) in self.snoc_el_list.iter_all_0(tm1) {
-                    #[allow(unused_variables)]
-                    for ConsElList(_, _, tm4) in self.cons_el_list.iter_all_0_1(tm0, tm3) {
-                        self.cons_snoc_el_list_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn cons_snoc_el_list_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: El,
-        tm3: ElList,
-        tm4: ElList,
-        tm0: El,
-        tm1: ElList,
-        tm5: ElList,
-    ) {
-        for _ in [()] {
-            let exists_already = self
-                .snoc_el_list
-                .iter_all_0_1_2(tm5, tm2, tm4)
-                .next()
-                .is_some();
-            if !exists_already {
-                delta.new_snoc_el_list.push(SnocElList(tm5, tm2, tm4));
+                delta.new_absurd.push(Absurd());
             }
         }
     }
@@ -63881,6 +63484,82 @@ impl Eqlog {
             let exists_already = self.els_structure.iter_all_0_1(tm1, tm3).next().is_some();
             if !exists_already {
                 delta.new_els_structure.push(ElsStructure(tm1, tm3));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_els_structure_1(delta);
+            self.snoc_els_structure_2(delta);
+            self.snoc_els_structure_5(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
+                self.snoc_els_structure_3(delta, tm0, tm1, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_3(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            self.snoc_els_structure_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_4(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElStructure(_, tm3) in self.el_structure.iter_all_0(tm1) {
+                self.snoc_els_structure_6(delta, tm0, tm2, tm1, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElStructure(tm1, tm3) in self.el_structure.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm0, _, tm2) in self.snoc_el_list.iter_all_1(tm1) {
+                    self.snoc_els_structure_6(delta, tm0, tm2, tm1, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_els_structure_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm2: ElList,
+        tm1: El,
+        tm3: Structure,
+    ) {
+        for _ in [()] {
+            let exists_already = self.els_structure.iter_all_0_1(tm2, tm3).next().is_some();
+            if !exists_already {
+                delta.new_els_structure.push(ElsStructure(tm2, tm3));
+            }
+
+            let exists_already = self.els_structure.iter_all_0_1(tm0, tm3).next().is_some();
+            if !exists_already {
+                delta.new_els_structure.push(ElsStructure(tm0, tm3));
             }
         }
     }
@@ -64270,6 +63949,288 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn snoc_el_types_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_el_types_1(delta);
+            self.snoc_el_types_2(delta);
+            self.snoc_el_types_5(delta);
+            self.snoc_el_types_8(delta);
+            self.snoc_el_types_11(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
+                self.snoc_el_types_3(delta, tm0, tm1, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_3(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            self.snoc_el_types_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_4(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElTypes(_, tm3) in self.el_types.iter_all_0(tm0) {
+                self.snoc_el_types_6(delta, tm1, tm2, tm0, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElTypes(tm0, tm3) in self.el_types.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(_, tm1, tm2) in self.snoc_el_list.iter_all_0(tm0) {
+                    self.snoc_el_types_6(delta, tm1, tm2, tm0, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: El,
+        tm2: ElList,
+        tm0: ElList,
+        tm3: TypeList,
+    ) {
+        for _ in [()] {
+            self.snoc_el_types_7(delta, tm1, tm2, tm0, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: El,
+        tm2: ElList,
+        tm0: ElList,
+        tm3: TypeList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElType(_, tm4) in self.el_type.iter_all_0(tm1) {
+                self.snoc_el_types_9(delta, tm2, tm0, tm3, tm1, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElType(tm1, tm4) in self.el_type.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm0, _, tm2) in self.snoc_el_list.iter_all_1(tm1) {
+                    #[allow(unused_variables)]
+                    for ElTypes(_, tm3) in self.el_types.iter_all_0(tm0) {
+                        self.snoc_el_types_9(delta, tm2, tm0, tm3, tm1, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: ElList,
+        tm0: ElList,
+        tm3: TypeList,
+        tm1: El,
+        tm4: Type,
+    ) {
+        for _ in [()] {
+            self.snoc_el_types_10(delta, tm2, tm0, tm3, tm1, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: ElList,
+        tm0: ElList,
+        tm3: TypeList,
+        tm1: El,
+        tm4: Type,
+    ) {
+        for _ in [()] {
+            let tm5 = match self.snoc_type_list.iter_all_0_1(tm3, tm4).next() {
+                Some(SnocTypeList(_, _, res)) => res,
+                None => {
+                    delta
+                        .new_snoc_type_list_def
+                        .push(SnocTypeListArgs(tm3, tm4));
+                    break;
+                }
+            };
+
+            self.snoc_el_types_12(delta, tm2, tm0, tm1, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm3, tm4, tm5) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElTypes(tm0, _) in self.el_types.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for ElType(tm1, _) in self.el_type.iter_all_1(tm4) {
+                        #[allow(unused_variables)]
+                        for SnocElList(_, _, tm2) in self.snoc_el_list.iter_all_0_1(tm0, tm1) {
+                            self.snoc_el_types_12(delta, tm2, tm0, tm1, tm3, tm4, tm5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: ElList,
+        tm0: ElList,
+        tm1: El,
+        tm3: TypeList,
+        tm4: Type,
+        tm5: TypeList,
+    ) {
+        for _ in [()] {
+            let exists_already = self.el_types.iter_all_0_1(tm2, tm5).next().is_some();
+            if !exists_already {
+                delta.new_el_types.push(ElTypes(tm2, tm5));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.snoc_el_types_reverse_1(delta);
+            self.snoc_el_types_reverse_2(delta);
+            self.snoc_el_types_reverse_5(delta);
+            self.snoc_el_types_reverse_6(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
+                self.snoc_el_types_reverse_3(delta, tm0, tm1, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_3(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            self.snoc_el_types_reverse_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_4(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElTypes(_, tm5) in self.el_types.iter_all_0(tm2) {
+                #[allow(unused_variables)]
+                for SnocTypeList(tm3, tm4, _) in self.snoc_type_list.iter_all_2(tm5) {
+                    self.snoc_el_types_reverse_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ElTypes(tm2, tm5) in self.el_types.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm0, tm1, _) in self.snoc_el_list.iter_all_2(tm2) {
+                    #[allow(unused_variables)]
+                    for SnocTypeList(tm3, tm4, _) in self.snoc_type_list.iter_all_2(tm5) {
+                        self.snoc_el_types_reverse_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm3, tm4, tm5) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElTypes(tm2, _) in self.el_types.iter_all_1(tm5) {
+                    #[allow(unused_variables)]
+                    for SnocElList(tm0, tm1, _) in self.snoc_el_list.iter_all_2(tm2) {
+                        self.snoc_el_types_reverse_7(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn snoc_el_types_reverse_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: El,
+        tm2: ElList,
+        tm3: TypeList,
+        tm4: Type,
+        tm5: TypeList,
+    ) {
+        for _ in [()] {
+            let exists_already = self.el_types.iter_all_0_1(tm0, tm3).next().is_some();
+            if !exists_already {
+                delta.new_el_types.push(ElTypes(tm0, tm3));
+            }
+
+            let exists_already = self.el_type.iter_all_0_1(tm1, tm4).next().is_some();
+            if !exists_already {
+                delta.new_el_type.push(ElType(tm1, tm4));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
     fn rel_app_types_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.rel_app_types_1(delta);
@@ -64498,6 +64459,61 @@ impl Eqlog {
             let exists_already = self.constrained_els.iter_all_0(tm1).next().is_some();
             if !exists_already {
                 delta.new_constrained_els.push(ConstrainedEls(tm1));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn constrained_init_snoc_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.constrained_init_snoc_1(delta);
+            self.constrained_init_snoc_2(delta);
+            self.constrained_init_snoc_3(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn constrained_init_snoc_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn constrained_init_snoc_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConstrainedEls(tm2) in self.constrained_els.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm0, tm1, _) in self.snoc_el_list.iter_all_2(tm2) {
+                    self.constrained_init_snoc_4(delta, tm0, tm1, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn constrained_init_snoc_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ConstrainedEls(_) in self.constrained_els.iter_all_0(tm2) {
+                    self.constrained_init_snoc_4(delta, tm0, tm1, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn constrained_init_snoc_4(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
+        for _ in [()] {
+            let exists_already = self.constrained_els.iter_all_0(tm0).next().is_some();
+            if !exists_already {
+                delta.new_constrained_els.push(ConstrainedEls(tm0));
+            }
+
+            let exists_already = self.constrained_el.iter_all_0(tm1).next().is_some();
+            if !exists_already {
+                delta.new_constrained_el.push(ConstrainedEl(tm1));
             }
         }
     }
@@ -65274,6 +65290,185 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn map_snoc_els_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.map_snoc_els_1(delta);
+            self.map_snoc_els_2(delta);
+            self.map_snoc_els_3(delta);
+            self.map_snoc_els_6(delta);
+            self.map_snoc_els_9(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm1, tm2, tm3) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for MapEls(tm0, _, tm4) in self.map_els.iter_all_1(tm3) {
+                    self.map_snoc_els_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEls(tm0, tm3, tm4) in self.map_els.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocElList(tm1, tm2, _) in self.snoc_el_list.iter_all_2(tm3) {
+                    self.map_snoc_els_4(delta, tm0, tm1, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Morphism,
+        tm1: ElList,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            self.map_snoc_els_5(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Morphism,
+        tm1: ElList,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+    ) {
+        for _ in [()] {
+            let tm5 = match self.map_els.iter_all_0_1(tm0, tm1).next() {
+                Some(MapEls(_, _, res)) => res,
+                None => {
+                    delta.new_map_els_def.push(MapElsArgs(tm0, tm1));
+                    break;
+                }
+            };
+
+            self.map_snoc_els_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEls(tm0, tm1, tm5) in self.map_els.iter_dirty() {
+                #[allow(unused_variables)]
+                for MapEls(_, tm3, tm4) in self.map_els.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for SnocElList(_, tm2, _) in self.snoc_el_list.iter_all_0_2(tm1, tm3) {
+                        self.map_snoc_els_7(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+        tm0: Morphism,
+        tm1: ElList,
+        tm5: ElList,
+    ) {
+        for _ in [()] {
+            self.map_snoc_els_8(delta, tm2, tm3, tm4, tm0, tm1, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_8(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: El,
+        tm3: ElList,
+        tm4: ElList,
+        tm0: Morphism,
+        tm1: ElList,
+        tm5: ElList,
+    ) {
+        for _ in [()] {
+            let tm6 = match self.map_el.iter_all_0_1(tm0, tm2).next() {
+                Some(MapEl(_, _, res)) => res,
+                None => {
+                    delta.new_map_el_def.push(MapElArgs(tm0, tm2));
+                    break;
+                }
+            };
+
+            self.map_snoc_els_10(delta, tm3, tm4, tm1, tm5, tm0, tm2, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_9(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEl(tm0, tm2, tm6) in self.map_el.iter_dirty() {
+                #[allow(unused_variables)]
+                for MapEls(_, tm1, tm5) in self.map_els.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for SnocElList(_, _, tm3) in self.snoc_el_list.iter_all_0_1(tm1, tm2) {
+                        #[allow(unused_variables)]
+                        for MapEls(_, _, tm4) in self.map_els.iter_all_0_1(tm0, tm3) {
+                            self.map_snoc_els_10(delta, tm3, tm4, tm1, tm5, tm0, tm2, tm6);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_snoc_els_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm3: ElList,
+        tm4: ElList,
+        tm1: ElList,
+        tm5: ElList,
+        tm0: Morphism,
+        tm2: El,
+        tm6: El,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .snoc_el_list
+                .iter_all_0_1_2(tm5, tm6, tm4)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta.new_snoc_el_list.push(SnocElList(tm5, tm6, tm4));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
     fn map_var_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.map_var_1(delta);
@@ -65756,27 +65951,27 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_99_1(delta);
-            self.anonymous_rule_99_3(delta);
-            self.anonymous_rule_99_6(delta);
-            self.anonymous_rule_99_9(delta);
-            self.anonymous_rule_99_12(delta);
-            self.anonymous_rule_99_15(delta);
-            self.anonymous_rule_99_18(delta);
+            self.anonymous_rule_100_1(delta);
+            self.anonymous_rule_100_3(delta);
+            self.anonymous_rule_100_6(delta);
+            self.anonymous_rule_100_9(delta);
+            self.anonymous_rule_100_12(delta);
+            self.anonymous_rule_100_15(delta);
+            self.anonymous_rule_100_18(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_99_2(delta);
+            self.anonymous_rule_100_2(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -65786,29 +65981,29 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_99_4(delta, tm0);
+            self.anonymous_rule_100_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_3(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_99_4(delta, tm0);
+                self.anonymous_rule_100_4(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_100_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_99_5(delta, tm0);
+            self.anonymous_rule_100_5(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_100_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -65818,32 +66013,32 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_99_7(delta, tm0, tm1);
+            self.anonymous_rule_100_7(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_99_7(delta, tm0, tm1);
+                    self.anonymous_rule_100_7(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_100_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_99_8(delta, tm0, tm1);
+            self.anonymous_rule_100_8(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_100_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -65853,12 +66048,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_99_10(delta, tm0, tm1, tm2);
+            self.anonymous_rule_100_10(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_9(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -65866,7 +66061,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_99_10(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_100_10(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -65874,7 +66069,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_10(
+    fn anonymous_rule_100_10(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65882,12 +66077,12 @@ impl Eqlog {
         tm2: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_99_11(delta, tm0, tm1, tm2);
+            self.anonymous_rule_100_11(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_11(
+    fn anonymous_rule_100_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65903,12 +66098,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_99_13(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_100_13(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -65918,7 +66113,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_99_13(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_100_13(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -65927,7 +66122,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_13(
+    fn anonymous_rule_100_13(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65936,12 +66131,12 @@ impl Eqlog {
         tm3: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_99_14(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_100_14(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_14(
+    fn anonymous_rule_100_14(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65958,12 +66153,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_99_16(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_100_16(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_15(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -65975,7 +66170,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_99_16(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_100_16(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -65985,7 +66180,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_16(
+    fn anonymous_rule_100_16(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65995,12 +66190,12 @@ impl Eqlog {
         tm4: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_99_17(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_100_17(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_17(
+    fn anonymous_rule_100_17(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -66018,12 +66213,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_99_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_100_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_18(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_100_18(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -66037,7 +66232,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_99_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_100_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -66048,7 +66243,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_99_19(
+    fn anonymous_rule_100_19(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -68195,6 +68390,138 @@ impl Eqlog {
         tm2: TypeList,
         tm3: Nat,
         tm1: TypeList,
+        tm4: Nat,
+    ) {
+        for _ in [()] {
+            let exists_already = self.succ.iter_all_0_1(tm4, tm3).next().is_some();
+            if !exists_already {
+                delta.new_succ.push(Succ(tm4, tm3));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.type_list_len_snoc_1(delta);
+            self.type_list_len_snoc_2(delta);
+            self.type_list_len_snoc_5(delta);
+            self.type_list_len_snoc_8(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
+                self.type_list_len_snoc_3(delta, tm0, tm1, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_3(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeList,
+        tm1: Type,
+        tm2: TypeList,
+    ) {
+        for _ in [()] {
+            self.type_list_len_snoc_4(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeList,
+        tm1: Type,
+        tm2: TypeList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeListLen(_, tm3) in self.type_list_len.iter_all_0(tm2) {
+                self.type_list_len_snoc_6(delta, tm0, tm1, tm2, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeListLen(tm2, tm3) in self.type_list_len.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocTypeList(tm0, tm1, _) in self.snoc_type_list.iter_all_2(tm2) {
+                    self.type_list_len_snoc_6(delta, tm0, tm1, tm2, tm3);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeList,
+        tm1: Type,
+        tm2: TypeList,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            self.type_list_len_snoc_7(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: TypeList,
+        tm1: Type,
+        tm2: TypeList,
+        tm3: Nat,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeListLen(_, tm4) in self.type_list_len.iter_all_0(tm0) {
+                self.type_list_len_snoc_9(delta, tm1, tm2, tm3, tm0, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeListLen(tm0, tm4) in self.type_list_len.iter_dirty() {
+                #[allow(unused_variables)]
+                for TypeListLen(tm2, tm3) in self.type_list_len.iter_all() {
+                    #[allow(unused_variables)]
+                    for SnocTypeList(_, tm1, _) in self.snoc_type_list.iter_all_0_2(tm0, tm2) {
+                        self.type_list_len_snoc_9(delta, tm1, tm2, tm3, tm0, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_list_len_snoc_9(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Type,
+        tm2: TypeList,
+        tm3: Nat,
+        tm0: TypeList,
         tm4: Nat,
     ) {
         for _ in [()] {

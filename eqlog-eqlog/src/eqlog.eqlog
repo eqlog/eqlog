@@ -528,6 +528,8 @@ type Type;
 type TypeList;
 func nil_type_list() -> TypeList;
 func cons_type_list(head: Type, tail: TypeList) -> TypeList;
+func snoc_type_list(init: TypeList, last: Type) -> TypeList;
+
 rule type_list_nil_not_cons {
     if nil_type_list() = cons_type_list(_, _);
     then absurd();
@@ -536,17 +538,6 @@ rule type_list_cons_injective {
     if cons_type_list(head_0, tail_0) = cons_type_list(head_1, tail_1);
     then head_0 = head_1;
     then tail_0 = tail_1;
-}
-
-func snoc_type_list(init: TypeList, last: Type) -> TypeList;
-rule snoc_type_list_nil {
-    if ts = snoc_type_list(nil_type_list(), last);
-    then ts = cons_type_list(last, nil_type_list());
-}
-rule snoc_type_list_cons {
-    if ts = snoc_type_list(cons_type_list(head, middle), last);
-    then tail := snoc_type_list(middle, last)!;
-    then ts = cons_type_list(head, tail);
 }
 
 func semantic_type(Ident) -> Type;
@@ -689,37 +680,25 @@ type El;
 type ElList;
 func nil_el_list(Structure) -> ElList;
 func cons_el_list(head: El, tail: ElList) -> ElList;
+func snoc_el_list(init: ElList, last: El) -> ElList;
 
 rule el_list_cons_injective {
     if cons_el_list(head_0, tail_0) = cons_el_list(head_1, tail_1);
     then head_0 = head_1;
     then tail_0 = tail_1;
 }
+rule el_list_snoc_injective {
+    if snoc_el_list(init_0, last_0) = snoc_el_list(init_1, last_1);
+    then init_0 = init_1;
+    then last_0 = last_1;
+}
 rule el_list_cons_nil {
     if cons_el_list(_, _) = nil_el_list(_);
     then absurd();
 }
-
-func snoc_el_list(init: ElList, last: El) -> ElList;
-
-rule snoc_cons_el_list_nil {
-    if els = snoc_el_list(nil_el_list(strct), last);
-    then els = cons_el_list(last, nil_el_list(strct));
-}
-rule cons_snoc_el_list_nil {
-    if els = cons_el_list(last, nil_el_list(strct));
-    then els = snoc_el_list(nil_el_list(strct), last);
-}
-
-rule snoc_cons_el_list {
-    if els = snoc_el_list(cons_el_list(head, middle), last);
-    then tail := snoc_el_list(middle, last)!;
-    then els = cons_el_list(head, tail);
-}
-rule cons_snoc_el_list {
-    if els = cons_el_list(head, snoc_el_list(middle, last));
-    if init = cons_el_list(head, middle);
-    then els = snoc_el_list(init, last);
+rule el_list_snoc_nil {
+    if snoc_el_list(_, _) = nil_el_list(_);
+    then absurd();
 }
 
 pred rel_app(Rel, ElList);
@@ -739,6 +718,12 @@ rule cons_els_structure {
     if head_structure = el_structure(head);
     then head_structure = els_structure(els);
     then head_structure = els_structure(tail);
+}
+rule snoc_els_structure {
+    if els = snoc_el_list(init, last);
+    if last_structure = el_structure(last);
+    then last_structure = els_structure(els);
+    then last_structure = els_structure(init);
 }
 
 rule var_structure {
@@ -767,6 +752,20 @@ rule cons_el_types_reverse {
     if el_types(els, cons_type_list(head_type, tail_types));
     then el_type(head, head_type);
     then el_types(tail, tail_types);
+}
+
+rule snoc_el_types {
+    if els = snoc_el_list(init, last);
+    if el_types(init, init_types);
+    if el_type(last, last_type);
+    then snoc_type_list(init_types, last_type)!;
+    then el_types(els, snoc_type_list(init_types, last_type));
+}
+rule snoc_el_types_reverse {
+    if els = snoc_el_list(init, last);
+    if el_types(els, snoc_type_list(init_types, last_type));
+    then el_types(init, init_types);
+    then el_type(last, last_type);
 }
 
 rule rel_app_types {
@@ -799,6 +798,11 @@ rule constrained_head_tail {
     if constrained_els(cons_el_list(head, tail));
     then constrained_el(head);
     then constrained_els(tail);
+}
+rule constrained_init_snoc {
+    if constrained_els(snoc_el_list(init, last));
+    then constrained_els(init);
+    then constrained_el(last);
 }
 
 // ## Morphisms
@@ -843,7 +847,7 @@ rule map_els_defined {
     then map_els(mor, els)!;
 }
 
-// Morphisms commute with nil and cons.
+// Morphisms commute with nil, cons and snoc.
 rule map_nil_els {
     if mapped = map_els(mor, nil_el_list(_));
     if cod = cod(mor);
@@ -854,6 +858,12 @@ rule map_cons_els {
     then map_el(mor, head)!;
     then map_els(mor, tail)!;
     then mapped = cons_el_list(map_el(mor, head), map_els(mor, tail));
+}
+rule map_snoc_els {
+    if mapped = map_els(mor, snoc_el_list(init, last));
+    then map_els(mor, init)!;
+    then map_el(mor, last)!;
+    then mapped = snoc_el_list(map_els(mor, init), map_el(mor, last));
 }
 
 // Morphisms commute with relations and variables.
@@ -1033,6 +1043,12 @@ rule type_list_len_cons {
     if len = type_list_len(tys);
     if tail_len = type_list_len(tail);
     then len = succ(tail_len);
+}
+rule type_list_len_snoc {
+    if tys = snoc_type_list(init, _);
+    if len = type_list_len(tys);
+    if init_len = type_list_len(init);
+    then len = succ(init_len);
 }
 
 func term_list_len(TermListNode) -> Nat;
