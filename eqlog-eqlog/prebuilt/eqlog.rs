@@ -1,4 +1,4 @@
-// src-digest: 64F0CE7FD20B45A949E91001166C6320B1D2E03D99186A48338DD40884B84117
+// src-digest: 4686A2258A74A5175EE4B0B9330EA965770D88C6EB4C7E30A194271D95318F1F
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -710,6 +710,14 @@ impl fmt::Display for Nat {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
+}
+
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum TypeListEnum {
+    NilTypeList(),
+    ConsTypeList(Type, TypeList),
+    SnocTypeList(TypeList, Type),
 }
 
 #[allow(unused)]
@@ -24770,7 +24778,7 @@ impl fmt::Display for NilTypeListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("nil_type_list"))
+            .with(Header("NilTypeList"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -24784,9 +24792,9 @@ impl fmt::Display for NilTypeListTable {
 struct ConsTypeList(pub Type, pub TypeList, pub TypeList);
 #[derive(Clone, Hash, Debug)]
 struct ConsTypeListTable {
-    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_2_1_0: BTreeSet<(u32, u32, u32)>,
+    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
     element_index_type: BTreeMap<Type, Vec<ConsTypeList>>,
     element_index_type_list: BTreeMap<TypeList, Vec<ConsTypeList>>,
 }
@@ -24795,18 +24803,18 @@ impl ConsTypeListTable {
     const WEIGHT: usize = 12;
     fn new() -> Self {
         Self {
-            index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_2_1_0: BTreeSet::new(),
+            index_all_1_0_2: BTreeSet::new(),
+            index_all_2_0_1: BTreeSet::new(),
             element_index_type: BTreeMap::new(),
             element_index_type_list: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: ConsTypeList) -> bool {
-        if self.index_all_2_1_0.insert(Self::permute_2_1_0(t)) {
-            self.index_all_0_1_2.insert(Self::permute_0_1_2(t));
+        if self.index_all_1_0_2.insert(Self::permute_1_0_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_type.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -24836,7 +24844,7 @@ impl ConsTypeListTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: ConsTypeList) -> bool {
-        self.index_all_2_1_0.contains(&Self::permute_2_1_0(t))
+        self.index_all_1_0_2.contains(&Self::permute_1_0_2(t))
     }
     fn drop_dirt(&mut self) {
         self.index_dirty_0_1_2.clear();
@@ -24853,21 +24861,29 @@ impl ConsTypeListTable {
         ConsTypeList(Type::from(t.0), TypeList::from(t.1), TypeList::from(t.2))
     }
     #[allow(unused)]
-    fn permute_2_1_0(t: ConsTypeList) -> (u32, u32, u32) {
-        (t.2.into(), t.1.into(), t.0.into())
+    fn permute_1_0_2(t: ConsTypeList) -> (u32, u32, u32) {
+        (t.1.into(), t.0.into(), t.2.into())
     }
     #[allow(unused)]
-    fn permute_inverse_2_1_0(t: (u32, u32, u32)) -> ConsTypeList {
-        ConsTypeList(Type::from(t.2), TypeList::from(t.1), TypeList::from(t.0))
+    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> ConsTypeList {
+        ConsTypeList(Type::from(t.1), TypeList::from(t.0), TypeList::from(t.2))
+    }
+    #[allow(unused)]
+    fn permute_2_0_1(t: ConsTypeList) -> (u32, u32, u32) {
+        (t.2.into(), t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_2_0_1(t: (u32, u32, u32)) -> ConsTypeList {
+        ConsTypeList(Type::from(t.1), TypeList::from(t.2), TypeList::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = ConsTypeList> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_2_1_0
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_1_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = ConsTypeList> {
@@ -24882,12 +24898,12 @@ impl ConsTypeListTable {
     fn iter_all_0_1(&self, arg0: Type, arg1: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
-        let min = (arg0, arg1, u32::MIN);
-        let max = (arg0, arg1, u32::MAX);
-        self.index_all_0_1_2
+        let min = (arg1, arg0, u32::MIN);
+        let max = (arg1, arg0, u32::MAX);
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_all_0_1_2(
@@ -24899,37 +24915,32 @@ impl ConsTypeListTable {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg2, arg1, arg0);
-        let max = (arg2, arg1, arg0);
-        self.index_all_2_1_0
+        let min = (arg1, arg0, arg2);
+        let max = (arg1, arg0, arg2);
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_1_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
-    fn iter_all_1_2(
-        &self,
-        arg1: TypeList,
-        arg2: TypeList,
-    ) -> impl '_ + Iterator<Item = ConsTypeList> {
+    fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
         let arg1 = arg1.0;
-        let arg2 = arg2.0;
-        let min = (arg2, arg1, u32::MIN);
-        let max = (arg2, arg1, u32::MAX);
-        self.index_all_2_1_0
+        let min = (arg1, u32::MIN, u32::MIN);
+        let max = (arg1, u32::MAX, u32::MAX);
+        self.index_all_1_0_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_1_0)
+            .map(Self::permute_inverse_1_0_2)
     }
     #[allow(dead_code)]
     fn iter_all_2(&self, arg2: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
         let arg2 = arg2.0;
         let min = (arg2, u32::MIN, u32::MIN);
         let max = (arg2, u32::MAX, u32::MAX);
-        self.index_all_2_1_0
+        self.index_all_2_0_1
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_1_0)
+            .map(Self::permute_inverse_2_0_1)
     }
     #[allow(dead_code)]
     fn drain_with_element_type(&mut self, tm: Type) -> Vec<ConsTypeList> {
@@ -24941,9 +24952,9 @@ impl ConsTypeListTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_2_1_0.remove(&Self::permute_2_1_0(t)) {
-                self.index_all_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_1_0_2.remove(&Self::permute_1_0_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -24962,9 +24973,9 @@ impl ConsTypeListTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_2_1_0.remove(&Self::permute_2_1_0(t)) {
-                self.index_all_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_1_0_2.remove(&Self::permute_1_0_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -24978,7 +24989,7 @@ impl fmt::Display for ConsTypeListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("cons_type_list"))
+            .with(Header("ConsTypeList"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -25012,9 +25023,9 @@ impl SnocTypeListTable {
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: SnocTypeList) -> bool {
-        if self.index_all_2_0_1.insert(Self::permute_2_0_1(t)) {
-            self.index_all_0_1_2.insert(Self::permute_0_1_2(t));
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+            self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_type_list.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -25044,7 +25055,7 @@ impl SnocTypeListTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: SnocTypeList) -> bool {
-        self.index_all_2_0_1.contains(&Self::permute_2_0_1(t))
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
     }
     fn drop_dirt(&mut self) {
         self.index_dirty_0_1_2.clear();
@@ -25072,16 +25083,26 @@ impl SnocTypeListTable {
     fn iter_all(&self) -> impl '_ + Iterator<Item = SnocTypeList> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_2_0_1
+        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_0_1)
+            .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = SnocTypeList> {
         let min = (u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX);
         self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: TypeList) -> impl '_ + Iterator<Item = SnocTypeList> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN, u32::MIN);
+        let max = (arg0, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1_2)
@@ -25107,27 +25128,12 @@ impl SnocTypeListTable {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg2, arg0, arg1);
-        let max = (arg2, arg0, arg1);
-        self.index_all_2_0_1
+        let min = (arg0, arg1, arg2);
+        let max = (arg0, arg1, arg2);
+        self.index_all_0_1_2
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_2_0_1)
-    }
-    #[allow(dead_code)]
-    fn iter_all_0_2(
-        &self,
-        arg0: TypeList,
-        arg2: TypeList,
-    ) -> impl '_ + Iterator<Item = SnocTypeList> {
-        let arg0 = arg0.0;
-        let arg2 = arg2.0;
-        let min = (arg2, arg0, u32::MIN);
-        let max = (arg2, arg0, u32::MAX);
-        self.index_all_2_0_1
-            .range((Bound::Included(&min), Bound::Included(&max)))
-            .copied()
-            .map(Self::permute_inverse_2_0_1)
+            .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
     fn iter_all_2(&self, arg2: TypeList) -> impl '_ + Iterator<Item = SnocTypeList> {
@@ -25149,9 +25155,9 @@ impl SnocTypeListTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_2_0_1.remove(&Self::permute_2_0_1(t)) {
-                self.index_all_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -25170,9 +25176,9 @@ impl SnocTypeListTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_2_0_1.remove(&Self::permute_2_0_1(t)) {
-                self.index_all_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -25186,7 +25192,7 @@ impl fmt::Display for SnocTypeListTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("snoc_type_list"))
+            .with(Header("SnocTypeList"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -33000,15 +33006,11 @@ struct ModelDelta {
     new_cons_type_list_def: Vec<ConsTypeListArgs>,
     new_snoc_type_list_def: Vec<SnocTypeListArgs>,
     new_semantic_type_def: Vec<SemanticTypeArgs>,
-    new_semantic_arg_types_def: Vec<SemanticArgTypesArgs>,
     new_semantic_pred_def: Vec<SemanticPredArgs>,
-    new_pred_arity_def: Vec<PredArityArgs>,
     new_semantic_func_def: Vec<SemanticFuncArgs>,
-    new_domain_def: Vec<DomainArgs>,
     new_codomain_def: Vec<CodomainArgs>,
     new_pred_rel_def: Vec<PredRelArgs>,
     new_func_rel_def: Vec<FuncRelArgs>,
-    new_arity_def: Vec<ArityArgs>,
     new_dom_def: Vec<DomArgs>,
     new_cod_def: Vec<CodArgs>,
     new_nil_el_list_def: Vec<NilElListArgs>,
@@ -33789,23 +33791,15 @@ impl ModelDelta {
 
             new_semantic_type_def: Vec::new(),
 
-            new_semantic_arg_types_def: Vec::new(),
-
             new_semantic_pred_def: Vec::new(),
 
-            new_pred_arity_def: Vec::new(),
-
             new_semantic_func_def: Vec::new(),
-
-            new_domain_def: Vec::new(),
 
             new_codomain_def: Vec::new(),
 
             new_pred_rel_def: Vec::new(),
 
             new_func_rel_def: Vec::new(),
-
-            new_arity_def: Vec::new(),
 
             new_dom_def: Vec::new(),
 
@@ -33991,10 +33985,6 @@ impl ModelDelta {
             model.equate_type(lhs, rhs);
         }
 
-        for (lhs, rhs) in self.new_type_list_equalities.iter().copied() {
-            model.equate_type_list(lhs, rhs);
-        }
-
         for (lhs, rhs) in self.new_pred_equalities.iter().copied() {
             model.equate_pred(lhs, rhs);
         }
@@ -34029,6 +34019,10 @@ impl ModelDelta {
 
         for (lhs, rhs) in self.new_nat_equalities.iter().copied() {
             model.equate_nat(lhs, rhs);
+        }
+
+        for (lhs, rhs) in self.new_type_list_equalities.iter().copied() {
+            model.equate_type_list(lhs, rhs);
         }
 
         for (lhs, rhs) in self.new_rel_equalities.iter().copied() {
@@ -34987,24 +34981,12 @@ impl ModelDelta {
             model.define_semantic_type(tm0);
         }
 
-        for SemanticArgTypesArgs(tm0) in self.new_semantic_arg_types_def.drain(..) {
-            model.define_semantic_arg_types(tm0);
-        }
-
         for SemanticPredArgs(tm0) in self.new_semantic_pred_def.drain(..) {
             model.define_semantic_pred(tm0);
         }
 
-        for PredArityArgs(tm0) in self.new_pred_arity_def.drain(..) {
-            model.define_pred_arity(tm0);
-        }
-
         for SemanticFuncArgs(tm0) in self.new_semantic_func_def.drain(..) {
             model.define_semantic_func(tm0);
-        }
-
-        for DomainArgs(tm0) in self.new_domain_def.drain(..) {
-            model.define_domain(tm0);
         }
 
         for CodomainArgs(tm0) in self.new_codomain_def.drain(..) {
@@ -35017,10 +34999,6 @@ impl ModelDelta {
 
         for FuncRelArgs(tm0) in self.new_func_rel_def.drain(..) {
             model.define_func_rel(tm0);
-        }
-
-        for ArityArgs(tm0) in self.new_arity_def.drain(..) {
-            model.define_arity(tm0);
         }
 
         for DomArgs(tm0) in self.new_dom_def.drain(..) {
@@ -37813,44 +37791,6 @@ impl Eqlog {
         self.type_dirty.remove(&child);
         self.type_uprooted.push(child);
     }
-    /// Adjoins a new element of type [TypeList].
-    #[allow(dead_code)]
-    fn new_type_list_internal(&mut self) -> TypeList {
-        let old_len = self.type_list_equalities.len();
-        self.type_list_equalities.increase_size_to(old_len + 1);
-        let el = TypeList::from(u32::try_from(old_len).unwrap());
-
-        self.type_list_dirty.insert(el);
-        self.type_list_all.insert(el);
-
-        assert!(self.type_list_weights.len() == old_len);
-        self.type_list_weights.push(0);
-
-        el
-    }
-    /// Enforces the equality `lhs = rhs`.
-    #[allow(dead_code)]
-    pub fn equate_type_list(&mut self, mut lhs: TypeList, mut rhs: TypeList) {
-        lhs = self.type_list_equalities.root(lhs);
-        rhs = self.type_list_equalities.root(rhs);
-        if lhs == rhs {
-            return;
-        }
-
-        let lhs_weight = self.type_list_weights[lhs.0 as usize];
-        let rhs_weight = self.type_list_weights[rhs.0 as usize];
-        let (root, child) = if lhs_weight >= rhs_weight {
-            (lhs, rhs)
-        } else {
-            (rhs, lhs)
-        };
-
-        self.type_list_equalities.union_roots_into(child, root);
-
-        self.type_list_all.remove(&child);
-        self.type_list_dirty.remove(&child);
-        self.type_list_uprooted.push(child);
-    }
     /// Adjoins a new element of type [Pred].
     #[allow(dead_code)]
     fn new_pred_internal(&mut self) -> Pred {
@@ -38193,6 +38133,44 @@ impl Eqlog {
         self.nat_dirty.remove(&child);
         self.nat_uprooted.push(child);
     }
+    /// Adjoins a new element of type [TypeList].
+    #[allow(dead_code)]
+    fn new_type_list_internal(&mut self) -> TypeList {
+        let old_len = self.type_list_equalities.len();
+        self.type_list_equalities.increase_size_to(old_len + 1);
+        let el = TypeList::from(u32::try_from(old_len).unwrap());
+
+        self.type_list_dirty.insert(el);
+        self.type_list_all.insert(el);
+
+        assert!(self.type_list_weights.len() == old_len);
+        self.type_list_weights.push(0);
+
+        el
+    }
+    /// Enforces the equality `lhs = rhs`.
+    #[allow(dead_code)]
+    pub fn equate_type_list(&mut self, mut lhs: TypeList, mut rhs: TypeList) {
+        lhs = self.type_list_equalities.root(lhs);
+        rhs = self.type_list_equalities.root(rhs);
+        if lhs == rhs {
+            return;
+        }
+
+        let lhs_weight = self.type_list_weights[lhs.0 as usize];
+        let rhs_weight = self.type_list_weights[rhs.0 as usize];
+        let (root, child) = if lhs_weight >= rhs_weight {
+            (lhs, rhs)
+        } else {
+            (rhs, lhs)
+        };
+
+        self.type_list_equalities.union_roots_into(child, root);
+
+        self.type_list_all.remove(&child);
+        self.type_list_dirty.remove(&child);
+        self.type_list_uprooted.push(child);
+    }
     /// Adjoins a new element of type [Rel].
     #[allow(dead_code)]
     fn new_rel_internal(&mut self) -> Rel {
@@ -38371,11 +38349,6 @@ impl Eqlog {
     pub fn new_type(&mut self) -> Type {
         self.new_type_internal()
     }
-    /// Adjoins a new element of type [TypeList].
-    #[allow(dead_code)]
-    pub fn new_type_list(&mut self) -> TypeList {
-        self.new_type_list_internal()
-    }
     /// Adjoins a new element of type [Pred].
     #[allow(dead_code)]
     pub fn new_pred(&mut self) -> Pred {
@@ -38420,6 +38393,15 @@ impl Eqlog {
     #[allow(dead_code)]
     pub fn new_nat(&mut self) -> Nat {
         self.new_nat_internal()
+    }
+    /// Adjoins a new element of type [TypeList].
+    #[allow(dead_code)]
+    pub fn new_type_list(&mut self, value: TypeListEnum) -> TypeList {
+        match value {
+            TypeListEnum::NilTypeList() => self.define_nil_type_list(),
+            TypeListEnum::ConsTypeList(tm0, tm1) => self.define_cons_type_list(tm0, tm1),
+            TypeListEnum::SnocTypeList(tm0, tm1) => self.define_snoc_type_list(tm0, tm1),
+        }
     }
     /// Adjoins a new element of type [Rel].
     #[allow(dead_code)]
@@ -39875,12 +39857,12 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `nil_type_list()`.
+    /// Evaluates `NilTypeList()`.
     #[allow(dead_code)]
     pub fn nil_type_list(&self) -> Option<TypeList> {
         self.nil_type_list.iter_all().next().map(|t| t.0)
     }
-    /// Returns an iterator over `nil_type_list` constants.
+    /// Returns an iterator over `NilTypeList` constants.
     /// The iterator may yield more than one element if the model is not closed.
 
     #[allow(dead_code)]
@@ -39898,7 +39880,7 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `cons_type_list(arg0, arg1)`.
+    /// Evaluates `ConsTypeList(arg0, arg1)`.
     #[allow(dead_code)]
     pub fn cons_type_list(&self, mut arg0: Type, mut arg1: TypeList) -> Option<TypeList> {
         arg0 = self.root_type(arg0);
@@ -39908,7 +39890,7 @@ impl Eqlog {
             .next()
             .map(|t| t.2)
     }
-    /// Returns an iterator over tuples in the graph of the `cons_type_list` function.
+    /// Returns an iterator over tuples in the graph of the `ConsTypeList` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
@@ -39934,7 +39916,7 @@ impl Eqlog {
         }
     }
 
-    /// Evaluates `snoc_type_list(arg0, arg1)`.
+    /// Evaluates `SnocTypeList(arg0, arg1)`.
     #[allow(dead_code)]
     pub fn snoc_type_list(&self, mut arg0: TypeList, mut arg1: Type) -> Option<TypeList> {
         arg0 = self.root_type_list(arg0);
@@ -39944,7 +39926,7 @@ impl Eqlog {
             .next()
             .map(|t| t.2)
     }
-    /// Returns an iterator over tuples in the graph of the `snoc_type_list` function.
+    /// Returns an iterator over tuples in the graph of the `SnocTypeList` function.
     /// The relation yielded by the iterator need not be functional if the model is not closed.
 
     #[allow(dead_code)]
@@ -41783,42 +41765,6 @@ impl Eqlog {
             }
         }
     }
-    /// Enforces that `nil_type_list()` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_nil_type_list(&mut self) -> TypeList {
-        match self.nil_type_list() {
-            Some(result) => result,
-            None => {
-                let tm0 = self.new_type_list_internal();
-                self.insert_nil_type_list(tm0);
-                tm0
-            }
-        }
-    }
-    /// Enforces that `cons_type_list(tm0, tm1)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_cons_type_list(&mut self, tm0: Type, tm1: TypeList) -> TypeList {
-        match self.cons_type_list(tm0, tm1) {
-            Some(result) => result,
-            None => {
-                let tm2 = self.new_type_list_internal();
-                self.insert_cons_type_list(tm0, tm1, tm2);
-                tm2
-            }
-        }
-    }
-    /// Enforces that `snoc_type_list(tm0, tm1)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_snoc_type_list(&mut self, tm0: TypeList, tm1: Type) -> TypeList {
-        match self.snoc_type_list(tm0, tm1) {
-            Some(result) => result,
-            None => {
-                let tm2 = self.new_type_list_internal();
-                self.insert_snoc_type_list(tm0, tm1, tm2);
-                tm2
-            }
-        }
-    }
     /// Enforces that `semantic_type(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
     pub fn define_semantic_type(&mut self, tm0: Ident) -> Type {
@@ -41827,18 +41773,6 @@ impl Eqlog {
             None => {
                 let tm1 = self.new_type_internal();
                 self.insert_semantic_type(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `semantic_arg_types(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_semantic_arg_types(&mut self, tm0: ArgDeclListNode) -> TypeList {
-        match self.semantic_arg_types(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_type_list_internal();
-                self.insert_semantic_arg_types(tm0, tm1);
                 tm1
             }
         }
@@ -41855,18 +41789,6 @@ impl Eqlog {
             }
         }
     }
-    /// Enforces that `pred_arity(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_pred_arity(&mut self, tm0: Pred) -> TypeList {
-        match self.pred_arity(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_type_list_internal();
-                self.insert_pred_arity(tm0, tm1);
-                tm1
-            }
-        }
-    }
     /// Enforces that `semantic_func(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
     pub fn define_semantic_func(&mut self, tm0: Ident) -> Func {
@@ -41879,18 +41801,6 @@ impl Eqlog {
             }
         }
     }
-    /// Enforces that `domain(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_domain(&mut self, tm0: Func) -> TypeList {
-        match self.domain(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_type_list_internal();
-                self.insert_domain(tm0, tm1);
-                tm1
-            }
-        }
-    }
     /// Enforces that `codomain(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
     pub fn define_codomain(&mut self, tm0: Func) -> Type {
@@ -41899,18 +41809,6 @@ impl Eqlog {
             None => {
                 let tm1 = self.new_type_internal();
                 self.insert_codomain(tm0, tm1);
-                tm1
-            }
-        }
-    }
-    /// Enforces that `arity(tm0)` is defined, adjoining a new element if necessary.
-    #[allow(dead_code)]
-    pub fn define_arity(&mut self, tm0: Rel) -> TypeList {
-        match self.arity(tm0) {
-            Some(result) => result,
-            None => {
-                let tm1 = self.new_type_list_internal();
-                self.insert_arity(tm0, tm1);
                 tm1
             }
         }
@@ -42296,6 +42194,42 @@ impl Eqlog {
                 let tm1 = self.new_enum_decl_node_internal();
                 self.insert_cases_determined_enum(tm0, tm1);
                 tm1
+            }
+        }
+    }
+    /// Enforces that `nil_type_list()` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_nil_type_list(&mut self) -> TypeList {
+        match self.nil_type_list() {
+            Some(result) => result,
+            None => {
+                let tm0 = self.new_type_list_internal();
+                self.insert_nil_type_list(tm0);
+                tm0
+            }
+        }
+    }
+    /// Enforces that `cons_type_list(tm0, tm1)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_cons_type_list(&mut self, tm0: Type, tm1: TypeList) -> TypeList {
+        match self.cons_type_list(tm0, tm1) {
+            Some(result) => result,
+            None => {
+                let tm2 = self.new_type_list_internal();
+                self.insert_cons_type_list(tm0, tm1, tm2);
+                tm2
+            }
+        }
+    }
+    /// Enforces that `snoc_type_list(tm0, tm1)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_snoc_type_list(&mut self, tm0: TypeList, tm1: Type) -> TypeList {
+        match self.snoc_type_list(tm0, tm1) {
+            Some(result) => result,
+            None => {
+                let tm2 = self.new_type_list_internal();
+                self.insert_snoc_type_list(tm0, tm1, tm2);
+                tm2
             }
         }
     }
@@ -53598,7 +53532,6 @@ impl Eqlog {
         self.rule_descendant_node_uprooted.clear();
         self.scope_uprooted.clear();
         self.type_uprooted.clear();
-        self.type_list_uprooted.clear();
         self.pred_uprooted.clear();
         self.func_uprooted.clear();
         self.structure_uprooted.clear();
@@ -53608,6 +53541,7 @@ impl Eqlog {
         self.morphism_uprooted.clear();
         self.symbol_kind_uprooted.clear();
         self.nat_uprooted.clear();
+        self.type_list_uprooted.clear();
         self.rel_uprooted.clear();
     }
     fn is_dirty(&self) -> bool {
@@ -54462,45 +54396,6 @@ impl Eqlog {
     fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for NilTypeList(tm1) in self.nil_type_list.iter_all() {
-                    delta.new_type_list_equalities.push((tm0, tm1));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsTypeList(_, _, tm3) in self.cons_type_list.iter_all_0_1(tm0, tm1) {
-                    delta.new_type_list_equalities.push((tm2, tm3));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocTypeList(_, _, tm3) in self.snoc_type_list.iter_all_0_1(tm0, tm1) {
-                    delta.new_type_list_equalities.push((tm2, tm3));
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
             for SemanticType(tm0, tm1) in self.semantic_type.iter_dirty() {
                 #[allow(unused_variables)]
                 for SemanticType(_, tm2) in self.semantic_type.iter_all_0(tm0) {
@@ -54511,7 +54406,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm0, tm1) in self.semantic_arg_types.iter_dirty() {
@@ -54524,7 +54419,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm0, tm1) in self.semantic_pred.iter_dirty() {
@@ -54537,7 +54432,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm0, tm1) in self.pred_arity.iter_dirty() {
@@ -54550,7 +54445,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm0, tm1) in self.semantic_func.iter_dirty() {
@@ -54563,7 +54458,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Domain(tm0, tm1) in self.domain.iter_dirty() {
@@ -54576,7 +54471,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm0, tm1) in self.codomain.iter_dirty() {
@@ -54589,7 +54484,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Arity(tm0, tm1) in self.arity.iter_dirty() {
@@ -54602,7 +54497,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
@@ -54615,7 +54510,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
@@ -54628,7 +54523,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
@@ -54641,7 +54536,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
@@ -54654,7 +54549,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
@@ -54667,7 +54562,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
@@ -54680,7 +54575,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
@@ -54693,7 +54588,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Dom(tm0, tm1) in self.dom.iter_dirty() {
@@ -54706,7 +54601,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm1) in self.cod.iter_dirty() {
@@ -54719,7 +54614,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
@@ -54732,7 +54627,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm1, tm2) in self.map_els.iter_dirty() {
@@ -54745,7 +54640,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
@@ -54758,7 +54653,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm0) in self.pred_symbol.iter_dirty() {
@@ -54771,7 +54666,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm0) in self.func_symbol.iter_dirty() {
@@ -54784,7 +54679,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm0) in self.rule_symbol.iter_dirty() {
@@ -54797,7 +54692,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm0) in self.enum_symbol.iter_dirty() {
@@ -54810,7 +54705,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm0) in self.ctor_symbol.iter_dirty() {
@@ -54823,7 +54718,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Zero(tm0) in self.zero.iter_dirty() {
@@ -54836,7 +54731,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Succ(tm0, tm1) in self.succ.iter_dirty() {
@@ -54849,7 +54744,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
@@ -54862,7 +54757,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
@@ -54875,7 +54770,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm1) in self.before_rule_structure.iter_dirty() {
@@ -54888,7 +54783,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm0, tm1, tm2) in self.if_atom_morphism.iter_dirty() {
@@ -54901,7 +54796,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm0, tm1, tm2) in self.then_atom_morphism.iter_dirty() {
@@ -54914,7 +54809,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BranchStmtMorphism(tm0, tm1, tm2) in self.branch_stmt_morphism.iter_dirty() {
@@ -54929,7 +54824,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtMorphism(tm0, tm1, tm2) in self.match_stmt_morphism.iter_dirty() {
@@ -54943,7 +54838,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm0, tm1, tm2) in self.semantic_name.iter_dirty() {
@@ -54956,7 +54851,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
@@ -54969,7 +54864,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
@@ -54982,7 +54877,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
@@ -54995,7 +54890,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm0, tm1) in self.match_case_pattern_ctor.iter_dirty() {
@@ -55008,13 +54903,52 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm0, tm1) in self.cases_determined_enum.iter_dirty() {
                 #[allow(unused_variables)]
                 for CasesDeterminedEnum(_, tm2) in self.cases_determined_enum.iter_all_0(tm0) {
                     delta.new_enum_decl_node_equalities.push((tm1, tm2));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for NilTypeList(tm1) in self.nil_type_list.iter_all() {
+                    delta.new_type_list_equalities.push((tm0, tm1));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ConsTypeList(_, _, tm3) in self.cons_type_list.iter_all_0_1(tm0, tm1) {
+                    delta.new_type_list_equalities.push((tm2, tm3));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for SnocTypeList(_, _, tm3) in self.snoc_type_list.iter_all_0_1(tm0, tm1) {
+                    delta.new_type_list_equalities.push((tm2, tm3));
                 }
             }
         }
@@ -68372,9 +68306,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for TypeListLen(tm1, tm4) in self.type_list_len.iter_dirty() {
                 #[allow(unused_variables)]
-                for TypeListLen(tm2, tm3) in self.type_list_len.iter_all() {
+                for ConsTypeList(tm0, _, tm2) in self.cons_type_list.iter_all_1(tm1) {
                     #[allow(unused_variables)]
-                    for ConsTypeList(tm0, _, _) in self.cons_type_list.iter_all_1_2(tm1, tm2) {
+                    for TypeListLen(_, tm3) in self.type_list_len.iter_all_0(tm2) {
                         self.type_list_len_cons_9(delta, tm0, tm2, tm3, tm1, tm4);
                     }
                 }
@@ -68504,9 +68438,9 @@ impl Eqlog {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm4) in self.type_list_len.iter_dirty() {
                 #[allow(unused_variables)]
-                for TypeListLen(tm2, tm3) in self.type_list_len.iter_all() {
+                for SnocTypeList(_, tm1, tm2) in self.snoc_type_list.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for SnocTypeList(_, tm1, _) in self.snoc_type_list.iter_all_0_2(tm0, tm2) {
+                    for TypeListLen(_, tm3) in self.type_list_len.iter_all_0(tm2) {
                         self.type_list_len_snoc_9(delta, tm1, tm2, tm3, tm0, tm4);
                     }
                 }

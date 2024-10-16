@@ -525,17 +525,18 @@ rule scopes_desugared_case_list {
 // ## Semantic types, predicates and functions
 
 type Type;
-type TypeList;
-func nil_type_list() -> TypeList;
-func cons_type_list(head: Type, tail: TypeList) -> TypeList;
-func snoc_type_list(init: TypeList, last: Type) -> TypeList;
+enum TypeList {
+    NilTypeList(),
+    ConsTypeList(head: Type, tail: TypeList),
+    SnocTypeList(init: TypeList, last: Type)
+}
 
 rule type_list_nil_not_cons {
-    if nil_type_list() = cons_type_list(_, _);
+    if NilTypeList() = ConsTypeList(_, _);
     then absurd();
 }
 rule type_list_cons_injective {
-    if cons_type_list(head_0, tail_0) = cons_type_list(head_1, tail_1);
+    if ConsTypeList(head_0, tail_0) = ConsTypeList(head_1, tail_1);
     then head_0 = head_1;
     then tail_0 = tail_1;
 }
@@ -553,16 +554,16 @@ rule semantic_decl_enum {
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
 rule semantic_arg_types_nil {
     if nil_arg_decl_list_node(n);
-    then nil_type_list()!;
-    then semantic_arg_types(n) = nil_type_list();
+    then NilTypeList()!;
+    then semantic_arg_types(n) = NilTypeList();
 }
 rule semantic_arg_types_cons {
     if cons_arg_decl_list_node(arg_decls, head, tail);
     if arg_decl_node_type(head, head_type_name);
     if head_type = semantic_type(head_type_name);
     if tail_types = semantic_arg_types(tail);
-    then cons_type_list(head_type, tail_types)!;
-    then semantic_arg_types(arg_decls) = cons_type_list(head_type, tail_types);
+    then ConsTypeList(head_type, tail_types)!;
+    then semantic_arg_types(arg_decls) = ConsTypeList(head_type, tail_types);
 }
 
 type Pred;
@@ -644,7 +645,7 @@ func arity(Rel) -> TypeList;
 //    if rel = FuncRel(function);
 //    if dom = domain(function);
 //    if cod = codomain(function);
-//    then tys := cons_type_list(cod, dom)!;
+//    then tys := ConsTypeList(cod, dom)!;
 //    then arity(rel) = tys;
 //}
 rule arity_laws {
@@ -657,7 +658,7 @@ rule arity_laws {
         FuncRel(function) => {
             if dom = domain(function);
             if cod = codomain(function);
-            then tys := snoc_type_list(dom, cod)!;
+            then tys := SnocTypeList(dom, cod)!;
             then arity(rel) = tys;
         }
         //NegatedPredRel(predicate) => {
@@ -737,19 +738,19 @@ pred el_types(ElList, TypeList);
 
 rule nil_el_types {
     if els = nil_el_list(_);
-    then nil_type_list()!;
-    then el_types(els, nil_type_list());
+    then NilTypeList()!;
+    then el_types(els, NilTypeList());
 }
 rule cons_el_types {
     if els = cons_el_list(head, tail);
     if el_type(head, head_type);
     if el_types(tail, tail_types);
-    then cons_type_list(head_type, tail_types)!;
-    then el_types(els, cons_type_list(head_type, tail_types));
+    then ConsTypeList(head_type, tail_types)!;
+    then el_types(els, ConsTypeList(head_type, tail_types));
 }
 rule cons_el_types_reverse {
     if els = cons_el_list(head, tail);
-    if el_types(els, cons_type_list(head_type, tail_types));
+    if el_types(els, ConsTypeList(head_type, tail_types));
     then el_type(head, head_type);
     then el_types(tail, tail_types);
 }
@@ -758,12 +759,12 @@ rule snoc_el_types {
     if els = snoc_el_list(init, last);
     if el_types(init, init_types);
     if el_type(last, last_type);
-    then snoc_type_list(init_types, last_type)!;
-    then el_types(els, snoc_type_list(init_types, last_type));
+    then SnocTypeList(init_types, last_type)!;
+    then el_types(els, SnocTypeList(init_types, last_type));
 }
 rule snoc_el_types_reverse {
     if els = snoc_el_list(init, last);
-    if el_types(els, snoc_type_list(init_types, last_type));
+    if el_types(els, SnocTypeList(init_types, last_type));
     then el_types(init, init_types);
     then el_type(last, last_type);
 }
@@ -1034,18 +1035,18 @@ rule type_list_len_total {
     then type_list_len(tys)!;
 }
 rule type_list_len_nil {
-    if tys = nil_type_list();
+    if tys = NilTypeList();
     if len = type_list_len(tys);
     then len = zero();
 }
 rule type_list_len_cons {
-    if tys = cons_type_list(_, tail);
+    if tys = ConsTypeList(_, tail);
     if len = type_list_len(tys);
     if tail_len = type_list_len(tail);
     then len = succ(tail_len);
 }
 rule type_list_len_snoc {
-    if tys = snoc_type_list(init, _);
+    if tys = SnocTypeList(init, _);
     if len = type_list_len(tys);
     if init_len = type_list_len(init);
     then len = succ(init_len);
