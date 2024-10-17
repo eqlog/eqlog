@@ -839,26 +839,27 @@ rule map_el_defined {
     then map_el(mor, el)!;
 }
 // Morphisms commute with nil, cons and snoc.
-rule map_nil_els {
-    if dom(mor) = d;
-    if cod(mor) = c;
-    if dom_els = NilElList(d);
-    then cod_nil := NilElList(c)!;
-    then map_els(mor, dom_els) = cod_nil;
-}
-rule map_cons_els {
-    if dom_els = ConsElList(head, tail);
-    if cod_head = map_el(mor, head);
-    if cod_tail = map_els(mor, tail);
-    then cod_cons := ConsElList(cod_head, cod_tail)!;
-    then map_els(mor, dom_els) = cod_cons;
-}
-rule map_snoc_els {
-    if dom_els = SnocElList(init, last);
-    if cod_init = map_els(mor, init);
-    if cod_last = map_el(mor, last);
-    then cod_snoc := SnocElList(cod_init, cod_last)!;
-    then map_els(mor, dom_els) = cod_snoc;
+rule map_els_defined {
+    if els_structure(els) = dom(mor);
+    match els {
+        NilElList(_) => {
+            if c = cod(mor);
+            then cod_nil := NilElList(c)!;
+            then map_els(mor, els) = cod_nil;
+        }
+        ConsElList(head, tail) => {
+            if cod_head = map_el(mor, head);
+            if cod_tail = map_els(mor, tail);
+            then cod_cons := ConsElList(cod_head, cod_tail)!;
+            then map_els(mor, els) = cod_cons;
+        }
+        SnocElList(init, last) => {
+            if cod_init = map_els(mor, init);
+            if cod_last = map_el(mor, last);
+            then cod_snoc := SnocElList(cod_init, cod_last)!;
+            then map_els(mor, els) = cod_snoc;
+        }
+    }
 }
 
 // Morphisms commute with relations and variables.

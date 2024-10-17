@@ -1,4 +1,4 @@
-// src-digest: 866B4C4AD2394A84B6975E8979CBF1145DCF041DC58ED28E4AA7F7056318C5EF
+// src-digest: C1AAEFC0545CEE12D5DD2DA123A9D831264595281FECBDA93D9323046F335CC3
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -27592,7 +27592,7 @@ struct ConsElList(pub El, pub ElList, pub ElList);
 struct ConsElListTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
     index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
     element_index_el: BTreeMap<El, Vec<ConsElList>>,
     element_index_el_list: BTreeMap<ElList, Vec<ConsElList>>,
@@ -27604,7 +27604,7 @@ impl ConsElListTable {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_0_2: BTreeSet::new(),
+            index_all_1_2_0: BTreeSet::new(),
             index_all_2_0_1: BTreeSet::new(),
             element_index_el: BTreeMap::new(),
             element_index_el_list: BTreeMap::new(),
@@ -27614,7 +27614,7 @@ impl ConsElListTable {
     fn insert(&mut self, t: ConsElList) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
+            self.index_all_1_2_0.insert(Self::permute_1_2_0(t));
             self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_el.get_mut(&t.0) {
@@ -27662,12 +27662,12 @@ impl ConsElListTable {
         ConsElList(El::from(t.0), ElList::from(t.1), ElList::from(t.2))
     }
     #[allow(unused)]
-    fn permute_1_0_2(t: ConsElList) -> (u32, u32, u32) {
-        (t.1.into(), t.0.into(), t.2.into())
+    fn permute_1_2_0(t: ConsElList) -> (u32, u32, u32) {
+        (t.1.into(), t.2.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> ConsElList {
-        ConsElList(El::from(t.1), ElList::from(t.0), ElList::from(t.2))
+    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> ConsElList {
+        ConsElList(El::from(t.2), ElList::from(t.0), ElList::from(t.1))
     }
     #[allow(unused)]
     fn permute_2_0_1(t: ConsElList) -> (u32, u32, u32) {
@@ -27734,14 +27734,36 @@ impl ConsElListTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
+    fn iter_all_0_2(&self, arg0: El, arg2: ElList) -> impl '_ + Iterator<Item = ConsElList> {
+        let arg0 = arg0.0;
+        let arg2 = arg2.0;
+        let min = (arg2, arg0, u32::MIN);
+        let max = (arg2, arg0, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
+    }
+    #[allow(dead_code)]
     fn iter_all_1(&self, arg1: ElList) -> impl '_ + Iterator<Item = ConsElList> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
         let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_0_2
+        self.index_all_1_2_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_0_2)
+            .map(Self::permute_inverse_1_2_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_1_2(&self, arg1: ElList, arg2: ElList) -> impl '_ + Iterator<Item = ConsElList> {
+        let arg1 = arg1.0;
+        let arg2 = arg2.0;
+        let min = (arg1, arg2, u32::MIN);
+        let max = (arg1, arg2, u32::MAX);
+        self.index_all_1_2_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_2_0)
     }
     #[allow(dead_code)]
     fn iter_all_2(&self, arg2: ElList) -> impl '_ + Iterator<Item = ConsElList> {
@@ -27765,7 +27787,7 @@ impl ConsElListTable {
             let t = ts[i];
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
@@ -27787,7 +27809,7 @@ impl ConsElListTable {
             let t = ts[i];
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
@@ -27818,7 +27840,7 @@ struct SnocElList(pub ElList, pub El, pub ElList);
 struct SnocElListTable {
     index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
     index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_all_1_0_2: BTreeSet<(u32, u32, u32)>,
+    index_all_1_2_0: BTreeSet<(u32, u32, u32)>,
     index_all_2_0_1: BTreeSet<(u32, u32, u32)>,
     element_index_el: BTreeMap<El, Vec<SnocElList>>,
     element_index_el_list: BTreeMap<ElList, Vec<SnocElList>>,
@@ -27830,7 +27852,7 @@ impl SnocElListTable {
         Self {
             index_all_0_1_2: BTreeSet::new(),
             index_dirty_0_1_2: BTreeSet::new(),
-            index_all_1_0_2: BTreeSet::new(),
+            index_all_1_2_0: BTreeSet::new(),
             index_all_2_0_1: BTreeSet::new(),
             element_index_el: BTreeMap::new(),
             element_index_el_list: BTreeMap::new(),
@@ -27840,7 +27862,7 @@ impl SnocElListTable {
     fn insert(&mut self, t: SnocElList) -> bool {
         if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
             self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
-            self.index_all_1_0_2.insert(Self::permute_1_0_2(t));
+            self.index_all_1_2_0.insert(Self::permute_1_2_0(t));
             self.index_all_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_el_list.get_mut(&t.0) {
@@ -27888,12 +27910,12 @@ impl SnocElListTable {
         SnocElList(ElList::from(t.0), El::from(t.1), ElList::from(t.2))
     }
     #[allow(unused)]
-    fn permute_1_0_2(t: SnocElList) -> (u32, u32, u32) {
-        (t.1.into(), t.0.into(), t.2.into())
+    fn permute_1_2_0(t: SnocElList) -> (u32, u32, u32) {
+        (t.1.into(), t.2.into(), t.0.into())
     }
     #[allow(unused)]
-    fn permute_inverse_1_0_2(t: (u32, u32, u32)) -> SnocElList {
-        SnocElList(ElList::from(t.1), El::from(t.0), ElList::from(t.2))
+    fn permute_inverse_1_2_0(t: (u32, u32, u32)) -> SnocElList {
+        SnocElList(ElList::from(t.2), El::from(t.0), ElList::from(t.1))
     }
     #[allow(unused)]
     fn permute_2_0_1(t: SnocElList) -> (u32, u32, u32) {
@@ -27960,14 +27982,36 @@ impl SnocElListTable {
             .map(Self::permute_inverse_0_1_2)
     }
     #[allow(dead_code)]
+    fn iter_all_0_2(&self, arg0: ElList, arg2: ElList) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg0 = arg0.0;
+        let arg2 = arg2.0;
+        let min = (arg2, arg0, u32::MIN);
+        let max = (arg2, arg0, u32::MAX);
+        self.index_all_2_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_2_0_1)
+    }
+    #[allow(dead_code)]
     fn iter_all_1(&self, arg1: El) -> impl '_ + Iterator<Item = SnocElList> {
         let arg1 = arg1.0;
         let min = (arg1, u32::MIN, u32::MIN);
         let max = (arg1, u32::MAX, u32::MAX);
-        self.index_all_1_0_2
+        self.index_all_1_2_0
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_1_0_2)
+            .map(Self::permute_inverse_1_2_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_1_2(&self, arg1: El, arg2: ElList) -> impl '_ + Iterator<Item = SnocElList> {
+        let arg1 = arg1.0;
+        let arg2 = arg2.0;
+        let min = (arg1, arg2, u32::MIN);
+        let max = (arg1, arg2, u32::MAX);
+        self.index_all_1_2_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_2_0)
     }
     #[allow(dead_code)]
     fn iter_all_2(&self, arg2: ElList) -> impl '_ + Iterator<Item = SnocElList> {
@@ -27991,7 +28035,7 @@ impl SnocElListTable {
             let t = ts[i];
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
@@ -28013,7 +28057,7 @@ impl SnocElListTable {
             let t = ts[i];
             if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
                 self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
-                self.index_all_1_0_2.remove(&Self::permute_1_0_2(t));
+                self.index_all_1_2_0.remove(&Self::permute_1_2_0(t));
                 self.index_all_2_0_1.remove(&Self::permute_2_0_1(t));
                 i += 1;
             } else {
@@ -28223,16 +28267,18 @@ struct ElsStructure(pub ElList, pub Structure);
 struct ElsStructureTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
     element_index_el_list: BTreeMap<ElList, Vec<ElsStructure>>,
     element_index_structure: BTreeMap<Structure, Vec<ElsStructure>>,
 }
 impl ElsStructureTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             element_index_el_list: BTreeMap::new(),
             element_index_structure: BTreeMap::new(),
         }
@@ -28241,6 +28287,7 @@ impl ElsStructureTable {
     fn insert(&mut self, t: ElsStructure) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_el_list.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -28278,6 +28325,14 @@ impl ElsStructureTable {
     #[allow(unused)]
     fn permute_inverse_0_1(t: (u32, u32)) -> ElsStructure {
         ElsStructure(ElList::from(t.0), Structure::from(t.1))
+    }
+    #[allow(unused)]
+    fn permute_1_0(t: ElsStructure) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> ElsStructure {
+        ElsStructure(ElList::from(t.1), Structure::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = ElsStructure> {
@@ -28323,6 +28378,16 @@ impl ElsStructureTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = ElsStructure> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_el_list(&mut self, tm: ElList) -> Vec<ElsStructure> {
         let mut ts = match self.element_index_el_list.remove(&tm) {
             None => Vec::new(),
@@ -28334,6 +28399,7 @@ impl ElsStructureTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -28354,6 +28420,7 @@ impl ElsStructureTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -35758,9 +35825,7 @@ impl Eqlog {
                 self.cod_total_0(&mut delta);
                 self.map_el_structure_0(&mut delta);
                 self.map_el_defined_0(&mut delta);
-                self.map_nil_els_0(&mut delta);
-                self.map_cons_els_0(&mut delta);
-                self.map_snoc_els_0(&mut delta);
+                self.map_els_defined_0(&mut delta);
                 self.map_var_0(&mut delta);
                 self.map_rel_app_0(&mut delta);
                 self.map_preserves_el_type_0(&mut delta);
@@ -35768,7 +35833,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_98_0(&mut delta);
+                self.anonymous_rule_96_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -64773,88 +64838,123 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_0(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.map_nil_els_1(delta);
-            self.map_nil_els_2(delta);
-            self.map_nil_els_5(delta);
-            self.map_nil_els_8(delta);
-            self.map_nil_els_11(delta);
+            self.map_els_defined_1(delta);
+            self.map_els_defined_2(delta);
+            self.map_els_defined_3(delta);
+            self.map_els_defined_8(delta);
+            self.map_els_defined_11(delta);
+            self.map_els_defined_14(delta);
+            self.map_els_defined_17(delta);
+            self.map_els_defined_20(delta);
+            self.map_els_defined_23(delta);
+            self.map_els_defined_26(delta);
+            self.map_els_defined_29(delta);
+            self.map_els_defined_32(delta);
+            self.map_els_defined_35(delta);
+            self.map_els_defined_38(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_1(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_2(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for Dom(tm0, tm1) in self.dom.iter_dirty() {
-                self.map_nil_els_3(delta, tm0, tm1);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_nil_els_3(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
-        for _ in [()] {
-            self.map_nil_els_4(delta, tm0, tm1);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_nil_els_4(&self, delta: &mut ModelDelta, tm0: Morphism, tm1: Structure) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
-                self.map_nil_els_6(delta, tm1, tm0, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_nil_els_5(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for Cod(tm0, tm2) in self.cod.iter_dirty() {
+            for ElsStructure(tm0, tm2) in self.els_structure.iter_dirty() {
                 #[allow(unused_variables)]
-                for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
-                    self.map_nil_els_6(delta, tm1, tm0, tm2);
+                for Dom(tm1, _) in self.dom.iter_all_1(tm2) {
+                    self.map_els_defined_4(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_6(&self, delta: &mut ModelDelta, tm1: Structure, tm0: Morphism, tm2: Structure) {
-        for _ in [()] {
-            self.map_nil_els_7(delta, tm1, tm0, tm2);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_nil_els_7(&self, delta: &mut ModelDelta, tm1: Structure, tm0: Morphism, tm2: Structure) {
+    fn map_els_defined_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for NilElList(_, tm3) in self.nil_el_list.iter_all_0(tm1) {
-                self.map_nil_els_9(delta, tm1, tm0, tm2, tm3);
+            for Dom(tm1, tm2) in self.dom.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                    self.map_els_defined_4(delta, tm0, tm1, tm2);
+                }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_8(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: Morphism,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_5(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: Morphism,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_6(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: Morphism,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_7(delta, tm0, tm1, tm2);
+            self.map_els_defined_10(delta, tm0, tm1, tm2);
+            self.map_els_defined_13(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: Morphism,
+        tm2: Structure,
+    ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for NilElList(tm1, tm3) in self.nil_el_list.iter_dirty() {
+            for NilElList(tm3, _) in self.nil_el_list.iter_all_1(tm0) {
+                self.map_els_defined_9(delta, tm1, tm2, tm3, tm0);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_8(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for NilElList(tm3, tm0) in self.nil_el_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for Dom(tm0, _) in self.dom.iter_all_1(tm1) {
+                for ElsStructure(_, tm2) in self.els_structure.iter_all_0(tm0) {
                     #[allow(unused_variables)]
-                    for Cod(_, tm2) in self.cod.iter_all_0(tm0) {
-                        self.map_nil_els_9(delta, tm1, tm0, tm2, tm3);
+                    for Dom(tm1, _) in self.dom.iter_all_1(tm2) {
+                        self.map_els_defined_9(delta, tm1, tm2, tm3, tm0);
                     }
                 }
             }
@@ -64862,53 +64962,424 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_9(
+    fn map_els_defined_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: Structure,
-        tm0: Morphism,
+        tm1: Morphism,
         tm2: Structure,
-        tm3: ElList,
+        tm3: Structure,
+        tm0: ElList,
     ) {
         for _ in [()] {
-            self.map_nil_els_10(delta, tm1, tm0, tm2, tm3);
+            self.map_els_defined_16(delta, tm1, tm2, tm3, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_10(
+    fn map_els_defined_10(
         &self,
         delta: &mut ModelDelta,
-        tm1: Structure,
-        tm0: Morphism,
+        tm0: ElList,
+        tm1: Morphism,
         tm2: Structure,
-        tm3: ElList,
     ) {
         for _ in [()] {
-            let tm4 = match self.nil_el_list.iter_all_0(tm2).next() {
+            #[allow(unused_variables)]
+            for ConsElList(tm4, tm5, _) in self.cons_el_list.iter_all_2(tm0) {
+                self.map_els_defined_12(delta, tm1, tm2, tm4, tm5, tm0);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ConsElList(tm4, tm5, tm0) in self.cons_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElsStructure(_, tm2) in self.els_structure.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for Dom(tm1, _) in self.dom.iter_all_1(tm2) {
+                        self.map_els_defined_12(delta, tm1, tm2, tm4, tm5, tm0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Morphism,
+        tm2: Structure,
+        tm4: El,
+        tm5: ElList,
+        tm0: ElList,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_19(delta, tm1, tm2, tm4, tm5, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ElList,
+        tm1: Morphism,
+        tm2: Structure,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm6, tm7, _) in self.snoc_el_list.iter_all_2(tm0) {
+                self.map_els_defined_15(delta, tm1, tm2, tm6, tm7, tm0);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_14(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SnocElList(tm6, tm7, tm0) in self.snoc_el_list.iter_dirty() {
+                #[allow(unused_variables)]
+                for ElsStructure(_, tm2) in self.els_structure.iter_all_0(tm0) {
+                    #[allow(unused_variables)]
+                    for Dom(tm1, _) in self.dom.iter_all_1(tm2) {
+                        self.map_els_defined_15(delta, tm1, tm2, tm6, tm7, tm0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_15(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Morphism,
+        tm2: Structure,
+        tm6: ElList,
+        tm7: El,
+        tm0: ElList,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_22(delta, tm1, tm2, tm6, tm7, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_16(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Morphism,
+        tm2: Structure,
+        tm3: Structure,
+        tm0: ElList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Cod(_, tm8) in self.cod.iter_all_0(tm1) {
+                self.map_els_defined_18(delta, tm2, tm3, tm0, tm1, tm8);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_17(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for Cod(tm1, tm8) in self.cod.iter_dirty() {
+                #[allow(unused_variables)]
+                for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                        #[allow(unused_variables)]
+                        for NilElList(tm3, _) in self.nil_el_list.iter_all_1(tm0) {
+                            self.map_els_defined_18(delta, tm2, tm3, tm0, tm1, tm8);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_18(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm3: Structure,
+        tm0: ElList,
+        tm1: Morphism,
+        tm8: Structure,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_31(delta, tm2, tm3, tm0, tm1, tm8);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_19(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Morphism,
+        tm2: Structure,
+        tm4: El,
+        tm5: ElList,
+        tm0: ElList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEl(_, _, tm9) in self.map_el.iter_all_0_1(tm1, tm4) {
+                self.map_els_defined_21(delta, tm2, tm5, tm0, tm1, tm4, tm9);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_20(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEl(tm1, tm4, tm9) in self.map_el.iter_dirty() {
+                #[allow(unused_variables)]
+                for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                        #[allow(unused_variables)]
+                        for ConsElList(_, tm5, _) in self.cons_el_list.iter_all_0_2(tm4, tm0) {
+                            self.map_els_defined_21(delta, tm2, tm5, tm0, tm1, tm4, tm9);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_21(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm5: ElList,
+        tm0: ElList,
+        tm1: Morphism,
+        tm4: El,
+        tm9: El,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_25(delta, tm2, tm5, tm0, tm1, tm4, tm9);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_22(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Morphism,
+        tm2: Structure,
+        tm6: ElList,
+        tm7: El,
+        tm0: ElList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEls(_, _, tm10) in self.map_els.iter_all_0_1(tm1, tm6) {
+                self.map_els_defined_24(delta, tm2, tm7, tm0, tm1, tm6, tm10);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_23(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEls(tm1, tm6, tm10) in self.map_els.iter_dirty() {
+                #[allow(unused_variables)]
+                for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                        #[allow(unused_variables)]
+                        for SnocElList(_, tm7, _) in self.snoc_el_list.iter_all_0_2(tm6, tm0) {
+                            self.map_els_defined_24(delta, tm2, tm7, tm0, tm1, tm6, tm10);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_24(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm7: El,
+        tm0: ElList,
+        tm1: Morphism,
+        tm6: ElList,
+        tm10: ElList,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_28(delta, tm2, tm7, tm0, tm1, tm6, tm10);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_25(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm5: ElList,
+        tm0: ElList,
+        tm1: Morphism,
+        tm4: El,
+        tm9: El,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEls(_, _, tm11) in self.map_els.iter_all_0_1(tm1, tm5) {
+                self.map_els_defined_27(delta, tm2, tm0, tm4, tm9, tm1, tm5, tm11);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_26(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEls(tm1, tm5, tm11) in self.map_els.iter_dirty() {
+                #[allow(unused_variables)]
+                for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                        #[allow(unused_variables)]
+                        for ConsElList(tm4, _, _) in self.cons_el_list.iter_all_1_2(tm5, tm0) {
+                            #[allow(unused_variables)]
+                            for MapEl(_, _, tm9) in self.map_el.iter_all_0_1(tm1, tm4) {
+                                self.map_els_defined_27(delta, tm2, tm0, tm4, tm9, tm1, tm5, tm11);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_27(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm0: ElList,
+        tm4: El,
+        tm9: El,
+        tm1: Morphism,
+        tm5: ElList,
+        tm11: ElList,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_34(delta, tm2, tm0, tm4, tm9, tm1, tm5, tm11);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_28(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm7: El,
+        tm0: ElList,
+        tm1: Morphism,
+        tm6: ElList,
+        tm10: ElList,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEl(_, _, tm12) in self.map_el.iter_all_0_1(tm1, tm7) {
+                self.map_els_defined_30(delta, tm2, tm0, tm6, tm10, tm1, tm7, tm12);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_29(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for MapEl(tm1, tm7, tm12) in self.map_el.iter_dirty() {
+                #[allow(unused_variables)]
+                for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                    #[allow(unused_variables)]
+                    for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                        #[allow(unused_variables)]
+                        for SnocElList(tm6, _, _) in self.snoc_el_list.iter_all_1_2(tm7, tm0) {
+                            #[allow(unused_variables)]
+                            for MapEls(_, _, tm10) in self.map_els.iter_all_0_1(tm1, tm6) {
+                                self.map_els_defined_30(delta, tm2, tm0, tm6, tm10, tm1, tm7, tm12);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_30(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm0: ElList,
+        tm6: ElList,
+        tm10: ElList,
+        tm1: Morphism,
+        tm7: El,
+        tm12: El,
+    ) {
+        for _ in [()] {
+            self.map_els_defined_37(delta, tm2, tm0, tm6, tm10, tm1, tm7, tm12);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn map_els_defined_31(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: Structure,
+        tm3: Structure,
+        tm0: ElList,
+        tm1: Morphism,
+        tm8: Structure,
+    ) {
+        for _ in [()] {
+            let tm13 = match self.nil_el_list.iter_all_0(tm8).next() {
                 Some(NilElList(_, res)) => res,
                 None => {
-                    delta.new_nil_el_list_def.push(NilElListArgs(tm2));
+                    delta.new_nil_el_list_def.push(NilElListArgs(tm8));
                     break;
                 }
             };
 
-            self.map_nil_els_12(delta, tm1, tm0, tm2, tm3, tm4);
+            self.map_els_defined_33(delta, tm2, tm3, tm0, tm1, tm8, tm13);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_11(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_32(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for NilElList(tm2, tm4) in self.nil_el_list.iter_dirty() {
+            for NilElList(tm8, tm13) in self.nil_el_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for Cod(tm0, _) in self.cod.iter_all_1(tm2) {
+                for Cod(tm1, _) in self.cod.iter_all_1(tm8) {
                     #[allow(unused_variables)]
-                    for Dom(_, tm1) in self.dom.iter_all_0(tm0) {
+                    for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
                         #[allow(unused_variables)]
-                        for NilElList(_, tm3) in self.nil_el_list.iter_all_0(tm1) {
-                            self.map_nil_els_12(delta, tm1, tm0, tm2, tm3, tm4);
+                        for ElsStructure(tm0, _) in self.els_structure.iter_all_1(tm2) {
+                            #[allow(unused_variables)]
+                            for NilElList(tm3, _) in self.nil_el_list.iter_all_1(tm0) {
+                                self.map_els_defined_33(delta, tm2, tm3, tm0, tm1, tm8, tm13);
+                            }
                         }
                     }
                 }
@@ -64917,180 +65388,70 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_nil_els_12(
+    fn map_els_defined_33(
         &self,
         delta: &mut ModelDelta,
-        tm1: Structure,
-        tm0: Morphism,
         tm2: Structure,
-        tm3: ElList,
-        tm4: ElList,
+        tm3: Structure,
+        tm0: ElList,
+        tm1: Morphism,
+        tm8: Structure,
+        tm13: ElList,
     ) {
         for _ in [()] {
-            let exists_already = self.map_els.iter_all_0_1_2(tm0, tm3, tm4).next().is_some();
+            let exists_already = self.map_els.iter_all_0_1_2(tm1, tm0, tm13).next().is_some();
             if !exists_already {
-                delta.new_map_els.push(MapEls(tm0, tm3, tm4));
+                delta.new_map_els.push(MapEls(tm1, tm0, tm13));
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.map_cons_els_1(delta);
-            self.map_cons_els_2(delta);
-            self.map_cons_els_5(delta);
-            self.map_cons_els_8(delta);
-            self.map_cons_els_11(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
-                self.map_cons_els_3(delta, tm0, tm1, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_3(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
-        for _ in [()] {
-            self.map_cons_els_4(delta, tm0, tm1, tm2);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_4(&self, delta: &mut ModelDelta, tm0: El, tm1: ElList, tm2: ElList) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEl(tm3, _, tm4) in self.map_el.iter_all_1(tm0) {
-                self.map_cons_els_6(delta, tm1, tm2, tm3, tm0, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_5(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEl(tm3, tm0, tm4) in self.map_el.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsElList(_, tm1, tm2) in self.cons_el_list.iter_all_0(tm0) {
-                    self.map_cons_els_6(delta, tm1, tm2, tm3, tm0, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_6(
+    fn map_els_defined_34(
         &self,
         delta: &mut ModelDelta,
-        tm1: ElList,
-        tm2: ElList,
-        tm3: Morphism,
-        tm0: El,
+        tm2: Structure,
+        tm0: ElList,
         tm4: El,
-    ) {
-        for _ in [()] {
-            self.map_cons_els_7(delta, tm1, tm2, tm3, tm0, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: ElList,
-        tm2: ElList,
-        tm3: Morphism,
-        tm0: El,
-        tm4: El,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEls(_, _, tm5) in self.map_els.iter_all_0_1(tm3, tm1) {
-                self.map_cons_els_9(delta, tm2, tm0, tm4, tm3, tm1, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEls(tm3, tm1, tm5) in self.map_els.iter_dirty() {
-                #[allow(unused_variables)]
-                for ConsElList(tm0, _, tm2) in self.cons_el_list.iter_all_1(tm1) {
-                    #[allow(unused_variables)]
-                    for MapEl(_, _, tm4) in self.map_el.iter_all_0_1(tm3, tm0) {
-                        self.map_cons_els_9(delta, tm2, tm0, tm4, tm3, tm1, tm5);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_9(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: ElList,
-        tm0: El,
-        tm4: El,
-        tm3: Morphism,
-        tm1: ElList,
+        tm9: El,
+        tm1: Morphism,
         tm5: ElList,
+        tm11: ElList,
     ) {
         for _ in [()] {
-            self.map_cons_els_10(delta, tm2, tm0, tm4, tm3, tm1, tm5);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_cons_els_10(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: ElList,
-        tm0: El,
-        tm4: El,
-        tm3: Morphism,
-        tm1: ElList,
-        tm5: ElList,
-    ) {
-        for _ in [()] {
-            let tm6 = match self.cons_el_list.iter_all_0_1(tm4, tm5).next() {
+            let tm14 = match self.cons_el_list.iter_all_0_1(tm9, tm11).next() {
                 Some(ConsElList(_, _, res)) => res,
                 None => {
-                    delta.new_cons_el_list_def.push(ConsElListArgs(tm4, tm5));
+                    delta.new_cons_el_list_def.push(ConsElListArgs(tm9, tm11));
                     break;
                 }
             };
 
-            self.map_cons_els_12(delta, tm2, tm0, tm4, tm3, tm1, tm5, tm6);
+            self.map_els_defined_36(delta, tm2, tm0, tm4, tm9, tm1, tm5, tm11, tm14);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_11(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_35(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ConsElList(tm4, tm5, tm6) in self.cons_el_list.iter_dirty() {
+            for ConsElList(tm9, tm11, tm14) in self.cons_el_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for MapEls(tm3, tm1, _) in self.map_els.iter_all_2(tm5) {
+                for MapEls(tm1, tm5, _) in self.map_els.iter_all_2(tm11) {
                     #[allow(unused_variables)]
-                    for MapEl(_, tm0, _) in self.map_el.iter_all_0_2(tm3, tm4) {
+                    for MapEl(_, tm4, _) in self.map_el.iter_all_0_2(tm1, tm9) {
                         #[allow(unused_variables)]
-                        for ConsElList(_, _, tm2) in self.cons_el_list.iter_all_0_1(tm0, tm1) {
-                            self.map_cons_els_12(delta, tm2, tm0, tm4, tm3, tm1, tm5, tm6);
+                        for ConsElList(_, _, tm0) in self.cons_el_list.iter_all_0_1(tm4, tm5) {
+                            #[allow(unused_variables)]
+                            for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for ElsStructure(_, _) in self.els_structure.iter_all_0_1(tm0, tm2)
+                                {
+                                    self.map_els_defined_36(
+                                        delta, tm2, tm0, tm4, tm9, tm1, tm5, tm11, tm14,
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -65099,182 +65460,72 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_cons_els_12(
+    fn map_els_defined_36(
         &self,
         delta: &mut ModelDelta,
-        tm2: ElList,
-        tm0: El,
+        tm2: Structure,
+        tm0: ElList,
         tm4: El,
-        tm3: Morphism,
-        tm1: ElList,
+        tm9: El,
+        tm1: Morphism,
         tm5: ElList,
-        tm6: ElList,
+        tm11: ElList,
+        tm14: ElList,
     ) {
         for _ in [()] {
-            let exists_already = self.map_els.iter_all_0_1_2(tm3, tm2, tm6).next().is_some();
+            let exists_already = self.map_els.iter_all_0_1_2(tm1, tm0, tm14).next().is_some();
             if !exists_already {
-                delta.new_map_els.push(MapEls(tm3, tm2, tm6));
+                delta.new_map_els.push(MapEls(tm1, tm0, tm14));
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn map_snoc_els_0(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            self.map_snoc_els_1(delta);
-            self.map_snoc_els_2(delta);
-            self.map_snoc_els_5(delta);
-            self.map_snoc_els_8(delta);
-            self.map_snoc_els_11(delta);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_1(&self, delta: &mut ModelDelta) {
-        for _ in [()] {}
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_2(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
-                self.map_snoc_els_3(delta, tm0, tm1, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_3(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
-        for _ in [()] {
-            self.map_snoc_els_4(delta, tm0, tm1, tm2);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_4(&self, delta: &mut ModelDelta, tm0: ElList, tm1: El, tm2: ElList) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEls(tm3, _, tm4) in self.map_els.iter_all_1(tm0) {
-                self.map_snoc_els_6(delta, tm1, tm2, tm3, tm0, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_5(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEls(tm3, tm0, tm4) in self.map_els.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocElList(_, tm1, tm2) in self.snoc_el_list.iter_all_0(tm0) {
-                    self.map_snoc_els_6(delta, tm1, tm2, tm3, tm0, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_6(
+    fn map_els_defined_37(
         &self,
         delta: &mut ModelDelta,
-        tm1: El,
-        tm2: ElList,
-        tm3: Morphism,
+        tm2: Structure,
         tm0: ElList,
-        tm4: ElList,
+        tm6: ElList,
+        tm10: ElList,
+        tm1: Morphism,
+        tm7: El,
+        tm12: El,
     ) {
         for _ in [()] {
-            self.map_snoc_els_7(delta, tm1, tm2, tm3, tm0, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm1: El,
-        tm2: ElList,
-        tm3: Morphism,
-        tm0: ElList,
-        tm4: ElList,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEl(_, _, tm5) in self.map_el.iter_all_0_1(tm3, tm1) {
-                self.map_snoc_els_9(delta, tm2, tm0, tm4, tm3, tm1, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for MapEl(tm3, tm1, tm5) in self.map_el.iter_dirty() {
-                #[allow(unused_variables)]
-                for SnocElList(tm0, _, tm2) in self.snoc_el_list.iter_all_1(tm1) {
-                    #[allow(unused_variables)]
-                    for MapEls(_, _, tm4) in self.map_els.iter_all_0_1(tm3, tm0) {
-                        self.map_snoc_els_9(delta, tm2, tm0, tm4, tm3, tm1, tm5);
-                    }
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_9(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: ElList,
-        tm0: ElList,
-        tm4: ElList,
-        tm3: Morphism,
-        tm1: El,
-        tm5: El,
-    ) {
-        for _ in [()] {
-            self.map_snoc_els_10(delta, tm2, tm0, tm4, tm3, tm1, tm5);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn map_snoc_els_10(
-        &self,
-        delta: &mut ModelDelta,
-        tm2: ElList,
-        tm0: ElList,
-        tm4: ElList,
-        tm3: Morphism,
-        tm1: El,
-        tm5: El,
-    ) {
-        for _ in [()] {
-            let tm6 = match self.snoc_el_list.iter_all_0_1(tm4, tm5).next() {
+            let tm15 = match self.snoc_el_list.iter_all_0_1(tm10, tm12).next() {
                 Some(SnocElList(_, _, res)) => res,
                 None => {
-                    delta.new_snoc_el_list_def.push(SnocElListArgs(tm4, tm5));
+                    delta.new_snoc_el_list_def.push(SnocElListArgs(tm10, tm12));
                     break;
                 }
             };
 
-            self.map_snoc_els_12(delta, tm2, tm0, tm4, tm3, tm1, tm5, tm6);
+            self.map_els_defined_39(delta, tm2, tm0, tm6, tm10, tm1, tm7, tm12, tm15);
         }
     }
 
     #[allow(unused_variables)]
-    fn map_snoc_els_11(&self, delta: &mut ModelDelta) {
+    fn map_els_defined_38(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for SnocElList(tm4, tm5, tm6) in self.snoc_el_list.iter_dirty() {
+            for SnocElList(tm10, tm12, tm15) in self.snoc_el_list.iter_dirty() {
                 #[allow(unused_variables)]
-                for MapEls(tm3, tm0, _) in self.map_els.iter_all_2(tm4) {
+                for MapEls(tm1, tm6, _) in self.map_els.iter_all_2(tm10) {
                     #[allow(unused_variables)]
-                    for MapEl(_, tm1, _) in self.map_el.iter_all_0_2(tm3, tm5) {
+                    for MapEl(_, tm7, _) in self.map_el.iter_all_0_2(tm1, tm12) {
                         #[allow(unused_variables)]
-                        for SnocElList(_, _, tm2) in self.snoc_el_list.iter_all_0_1(tm0, tm1) {
-                            self.map_snoc_els_12(delta, tm2, tm0, tm4, tm3, tm1, tm5, tm6);
+                        for SnocElList(_, _, tm0) in self.snoc_el_list.iter_all_0_1(tm6, tm7) {
+                            #[allow(unused_variables)]
+                            for Dom(_, tm2) in self.dom.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for ElsStructure(_, _) in self.els_structure.iter_all_0_1(tm0, tm2)
+                                {
+                                    self.map_els_defined_39(
+                                        delta, tm2, tm0, tm6, tm10, tm1, tm7, tm12, tm15,
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -65283,21 +65534,22 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn map_snoc_els_12(
+    fn map_els_defined_39(
         &self,
         delta: &mut ModelDelta,
-        tm2: ElList,
+        tm2: Structure,
         tm0: ElList,
-        tm4: ElList,
-        tm3: Morphism,
-        tm1: El,
-        tm5: El,
         tm6: ElList,
+        tm10: ElList,
+        tm1: Morphism,
+        tm7: El,
+        tm12: El,
+        tm15: ElList,
     ) {
         for _ in [()] {
-            let exists_already = self.map_els.iter_all_0_1_2(tm3, tm2, tm6).next().is_some();
+            let exists_already = self.map_els.iter_all_0_1_2(tm1, tm0, tm15).next().is_some();
             if !exists_already {
-                delta.new_map_els.push(MapEls(tm3, tm2, tm6));
+                delta.new_map_els.push(MapEls(tm1, tm0, tm15));
             }
         }
     }
@@ -65785,27 +66037,27 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_98_1(delta);
-            self.anonymous_rule_98_3(delta);
-            self.anonymous_rule_98_6(delta);
-            self.anonymous_rule_98_9(delta);
-            self.anonymous_rule_98_12(delta);
-            self.anonymous_rule_98_15(delta);
-            self.anonymous_rule_98_18(delta);
+            self.anonymous_rule_96_1(delta);
+            self.anonymous_rule_96_3(delta);
+            self.anonymous_rule_96_6(delta);
+            self.anonymous_rule_96_9(delta);
+            self.anonymous_rule_96_12(delta);
+            self.anonymous_rule_96_15(delta);
+            self.anonymous_rule_96_18(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_98_2(delta);
+            self.anonymous_rule_96_2(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -65815,29 +66067,29 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_98_4(delta, tm0);
+            self.anonymous_rule_96_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_3(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_98_4(delta, tm0);
+                self.anonymous_rule_96_4(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_96_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_98_5(delta, tm0);
+            self.anonymous_rule_96_5(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_96_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -65847,32 +66099,32 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_98_7(delta, tm0, tm1);
+            self.anonymous_rule_96_7(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_98_7(delta, tm0, tm1);
+                    self.anonymous_rule_96_7(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_96_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_98_8(delta, tm0, tm1);
+            self.anonymous_rule_96_8(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_96_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -65882,12 +66134,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_98_10(delta, tm0, tm1, tm2);
+            self.anonymous_rule_96_10(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_9(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -65895,7 +66147,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_98_10(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_96_10(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -65903,7 +66155,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_10(
+    fn anonymous_rule_96_10(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65911,12 +66163,12 @@ impl Eqlog {
         tm2: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_98_11(delta, tm0, tm1, tm2);
+            self.anonymous_rule_96_11(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_11(
+    fn anonymous_rule_96_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65932,12 +66184,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_98_13(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_96_13(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -65947,7 +66199,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_98_13(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_96_13(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -65956,7 +66208,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_13(
+    fn anonymous_rule_96_13(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65965,12 +66217,12 @@ impl Eqlog {
         tm3: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_98_14(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_96_14(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_14(
+    fn anonymous_rule_96_14(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -65987,12 +66239,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_98_16(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_96_16(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_15(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -66004,7 +66256,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_98_16(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_96_16(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -66014,7 +66266,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_16(
+    fn anonymous_rule_96_16(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -66024,12 +66276,12 @@ impl Eqlog {
         tm4: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_98_17(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_96_17(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_17(
+    fn anonymous_rule_96_17(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -66047,12 +66299,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_98_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_96_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_18(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_96_18(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -66066,7 +66318,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_98_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_96_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -66077,7 +66329,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_98_19(
+    fn anonymous_rule_96_19(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
