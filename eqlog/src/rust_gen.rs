@@ -1185,6 +1185,95 @@ fn display_new_enum_element<'a>(
     })
 }
 
+fn display_enum_cases_fn<'a>(
+    enum_decl: EnumDeclNode,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let enum_ident = eqlog
+            .iter_enum_decl()
+            .find_map(|(enum_decl0, enum_ident, _)| {
+                if enum_decl0 == enum_decl {
+                    Some(enum_ident)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        let enum_name = identifiers.get(&enum_ident).unwrap();
+        let enum_name_camel = enum_name.to_case(UpperCamel);
+        let enum_name_camel = enum_name_camel.as_str();
+        let enum_name_snake = enum_name.to_case(Snake);
+
+        let ctors = eqlog.iter_ctor_enum().filter_map(|(ctor, enum_decl0)| {
+            if eqlog.are_equal_enum_decl_node(enum_decl0, enum_decl) {
+                Some(ctor)
+            } else {
+                None
+            }
+        });
+
+        let ctor_value_iters = ctors
+            .map(|ctor| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let ctor_ident = eqlog
+                        .iter_ctor_decl()
+                        .find_map(|(ctor0, ident, _)| {
+                            if eqlog.are_equal_ctor_decl_node(ctor, ctor0) {
+                                Some(ident)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap();
+                    let ctor_name = identifiers.get(&ctor_ident).unwrap();
+                    let ctor_name_snake = ctor_name.to_case(Snake);
+                    let ctor_name_camel = ctor_name.to_case(UpperCamel);
+
+                    let ctor_func: Func = eqlog.semantic_func(ctor_ident).unwrap();
+                    let arg_num = type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog).len();
+
+                    let ctor_arg_vars = (0..arg_num).map(FlatVar);
+                    let result_var = FlatVar(arg_num);
+                    let tuple_vars = ctor_arg_vars.clone().chain(once(result_var));
+
+                    let ctor_arg_vars = ctor_arg_vars.map(display_var).format(", ");
+                    let result_var = display_var(result_var);
+                    let tuple_vars = tuple_vars.map(display_var).format(", ");
+
+                    // TODO: We probably want to use an index insted of a linear search here.
+                    // However, this function is not needed during the close method, so those
+                    // indices should only exist when the host program uses this function, probably
+                    // lazily. But we don't have machinery for index lifetimes yet.
+                    writedoc! {f, "
+                        .chain(self.iter_{ctor_name_snake}().filter_map(move |({tuple_vars})| {{
+                            if el == {result_var} {{
+                                Some({enum_name_camel}Enum::{ctor_name_camel}({ctor_arg_vars}))
+                            }} else {{
+                                None
+                            }}
+                        }}))
+                    "}
+                })
+            })
+            .format("\n");
+
+        // We need to allow the unused parens here in case of nullary constructors. For those, the
+        // iter_{ctor_name_snake} function yields elements instead of tuples, but the argument to
+        // the closure we pass to filter_map above still has parens around the single variable.
+        writedoc! {f, "
+            /// Returns an iterator over ways to destructure an [{enum_name_camel}] element.
+            #[allow(dead_code)]
+            pub fn {enum_name_snake}_cases<'a>(&'a self, el: {enum_name_camel}) -> impl 'a + Iterator<Item = {enum_name_camel}Enum> {{
+            let el = self.{enum_name_snake}_equalities.root_const(el);
+            #[allow(unused_parens)]
+            [].into_iter(){ctor_value_iters}
+            }}
+        "}
+    })
+}
+
 fn write_equate_elements(
     out: &mut impl Write,
     typ: Type,
@@ -2141,6 +2230,11 @@ fn write_theory_impl(
             out,
             "{}",
             display_new_enum_element(enum_decl, eqlog, identifiers)
+        )?;
+        write!(
+            out,
+            "{}",
+            display_enum_cases_fn(enum_decl, eqlog, identifiers)
         )?;
     }
 
