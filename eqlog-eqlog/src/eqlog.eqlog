@@ -104,12 +104,16 @@ pred rule_decl(node: RuleDeclNode, stmts: StmtListNode);
 // This is defined for non-anonymous RuleDeclNode elements only.
 func rule_name(RuleDeclNode) -> Ident;
 
+type ModelDeclNode;
+pred model_decl(node: ModelDeclNode, name: Ident, body: DeclListNode);
+
 type DeclNode;
 pred decl_node_type(DeclNode, TypeDeclNode);
 pred decl_node_pred(DeclNode, PredDeclNode);
 pred decl_node_func(DeclNode, FuncDeclNode);
 pred decl_node_rule(DeclNode, RuleDeclNode);
 pred decl_node_enum(DeclNode, EnumDeclNode);
+pred decl_node_model(DeclNode, ModelDeclNode);
 
 type DeclListNode;
 pred nil_decl_list_node(DeclListNode);
@@ -128,6 +132,7 @@ func pred_decl_node_loc(PredDeclNode) -> Loc;
 func func_decl_node_loc(FuncDeclNode) -> Loc;
 func ctor_decl_node_loc(CtorDeclNode) -> Loc;
 func enum_decl_node_loc(EnumDeclNode) -> Loc;
+func model_decl_node_loc(ModelDeclNode) -> Loc;
 func term_node_loc(TermNode) -> Loc;
 func term_list_node_loc(TermListNode) -> Loc;
 func match_case_node_loc(MatchCaseNode) -> Loc;

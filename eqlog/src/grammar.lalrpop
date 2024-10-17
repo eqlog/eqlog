@@ -321,6 +321,19 @@ EnumDecl: EnumDeclNode = {
     }
 }
 
+ModelDecl: ModelDeclNode = {
+    <l: @L> "model" <name: Id> "{" <members: Decl*> "}" <r: @R> => {
+        let model_decl = eqlog.new_model_decl_node();
+        let members = decl_list_node(members.as_slice(), eqlog);
+        eqlog.insert_model_decl(model_decl, name, members);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_model_decl_node_loc(model_decl, loc);
+
+        model_decl
+    }
+}
+
 Decl: DeclNode = {
     <typ: TypeDecl> => {
         let decl = eqlog.new_decl_node();
@@ -345,6 +358,11 @@ Decl: DeclNode = {
     <enum_decl: EnumDecl> => {
         let decl = eqlog.new_decl_node();
         eqlog.insert_decl_node_enum(decl, enum_decl);
+        decl
+    },
+    <model_decl: ModelDecl> => {
+        let decl = eqlog.new_decl_node();
+        eqlog.insert_decl_node_model(decl, model_decl);
         decl
     },
 }
