@@ -1,4 +1,4 @@
-// src-digest: C1AAEFC0545CEE12D5DD2DA123A9D831264595281FECBDA93D9323046F335CC3
+// src-digest: F78032C97EA50DB1249C9C3B00F2F19FB5452F2D94055FFE5EEC995D9AD2C11B
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -389,18 +389,18 @@ impl fmt::Display for RuleDeclNode {
 }
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct DeclNode(pub u32);
-impl Into<u32> for DeclNode {
+pub struct ModelDeclNode(pub u32);
+impl Into<u32> for ModelDeclNode {
     fn into(self) -> u32 {
         self.0
     }
 }
-impl From<u32> for DeclNode {
+impl From<u32> for ModelDeclNode {
     fn from(x: u32) -> Self {
-        DeclNode(x)
+        ModelDeclNode(x)
     }
 }
-impl fmt::Display for DeclNode {
+impl fmt::Display for ModelDeclNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -419,6 +419,24 @@ impl From<u32> for DeclListNode {
     }
 }
 impl fmt::Display for DeclListNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+#[allow(dead_code)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct DeclNode(pub u32);
+impl Into<u32> for DeclNode {
+    fn into(self) -> u32 {
+        self.0
+    }
+}
+impl From<u32> for DeclNode {
+    fn from(x: u32) -> Self {
+        DeclNode(x)
+    }
+}
+impl fmt::Display for DeclNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -8458,6 +8476,191 @@ impl fmt::Display for RuleDeclTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ModelDecl(pub ModelDeclNode, pub Ident, pub DeclListNode);
+#[derive(Clone, Hash, Debug)]
+struct ModelDeclTable {
+    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    element_index_decl_list_node: BTreeMap<DeclListNode, Vec<ModelDecl>>,
+    element_index_ident: BTreeMap<Ident, Vec<ModelDecl>>,
+    element_index_model_decl_node: BTreeMap<ModelDeclNode, Vec<ModelDecl>>,
+}
+impl ModelDeclTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 9;
+    fn new() -> Self {
+        Self {
+            index_all_0_1_2: BTreeSet::new(),
+            index_dirty_0_1_2: BTreeSet::new(),
+            element_index_decl_list_node: BTreeMap::new(),
+            element_index_ident: BTreeMap::new(),
+            element_index_model_decl_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ModelDecl) -> bool {
+        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
+            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+
+            match self.element_index_model_decl_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_model_decl_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_ident.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_ident.insert(t.1, vec![t]);
+                }
+            };
+
+            match self.element_index_decl_list_node.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_decl_list_node.insert(t.2, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ModelDecl) -> bool {
+        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1_2.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1_2.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1_2(t: ModelDecl) -> (u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> ModelDecl {
+        ModelDecl(
+            ModelDeclNode::from(t.0),
+            Ident::from(t.1),
+            DeclListNode::from(t.2),
+        )
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ModelDecl> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ModelDecl> {
+        let min = (u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1_2(
+        &self,
+        arg0: ModelDeclNode,
+        arg1: Ident,
+        arg2: DeclListNode,
+    ) -> impl '_ + Iterator<Item = ModelDecl> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let arg2 = arg2.0;
+        let min = (arg0, arg1, arg2);
+        let max = (arg0, arg1, arg2);
+        self.index_all_0_1_2
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_decl_list_node(&mut self, tm: DeclListNode) -> Vec<ModelDecl> {
+        let mut ts = match self.element_index_decl_list_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<ModelDecl> {
+        let mut ts = match self.element_index_ident.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_model_decl_node(&mut self, tm: ModelDeclNode) -> Vec<ModelDecl> {
+        let mut ts = match self.element_index_model_decl_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
+                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for ModelDeclTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("model_decl"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct DeclNodeType(pub DeclNode, pub TypeDeclNode);
 #[derive(Clone, Hash, Debug)]
 struct DeclNodeTypeTable {
@@ -9198,6 +9401,156 @@ impl fmt::Display for DeclNodeEnumTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("decl_node_enum"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct DeclNodeModel(pub DeclNode, pub ModelDeclNode);
+#[derive(Clone, Hash, Debug)]
+struct DeclNodeModelTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+    element_index_decl_node: BTreeMap<DeclNode, Vec<DeclNodeModel>>,
+    element_index_model_decl_node: BTreeMap<ModelDeclNode, Vec<DeclNodeModel>>,
+}
+impl DeclNodeModelTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            element_index_decl_node: BTreeMap::new(),
+            element_index_model_decl_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: DeclNodeModel) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_decl_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_decl_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_model_decl_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_model_decl_node.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: DeclNodeModel) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: DeclNodeModel) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> DeclNodeModel {
+        DeclNodeModel(DeclNode::from(t.0), ModelDeclNode::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = DeclNodeModel> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = DeclNodeModel> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: DeclNode,
+        arg1: ModelDeclNode,
+    ) -> impl '_ + Iterator<Item = DeclNodeModel> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1);
+        let max = (arg0, arg1);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_decl_node(&mut self, tm: DeclNode) -> Vec<DeclNodeModel> {
+        let mut ts = match self.element_index_decl_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_model_decl_node(&mut self, tm: ModelDeclNode) -> Vec<DeclNodeModel> {
+        let mut ts = match self.element_index_model_decl_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for DeclNodeModelTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("decl_node_model"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -19149,6 +19502,166 @@ impl fmt::Display for EnumDeclNodeLocTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("enum_decl_node_loc"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ModelDeclNodeLoc(pub ModelDeclNode, pub Loc);
+#[derive(Clone, Hash, Debug)]
+struct ModelDeclNodeLocTable {
+    index_all_0_1: BTreeSet<(u32, u32)>,
+    index_dirty_0_1: BTreeSet<(u32, u32)>,
+    element_index_loc: BTreeMap<Loc, Vec<ModelDeclNodeLoc>>,
+    element_index_model_decl_node: BTreeMap<ModelDeclNode, Vec<ModelDeclNodeLoc>>,
+}
+impl ModelDeclNodeLocTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 6;
+    fn new() -> Self {
+        Self {
+            index_all_0_1: BTreeSet::new(),
+            index_dirty_0_1: BTreeSet::new(),
+            element_index_loc: BTreeMap::new(),
+            element_index_model_decl_node: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: ModelDeclNodeLoc) -> bool {
+        if self.index_all_0_1.insert(Self::permute_0_1(t)) {
+            self.index_dirty_0_1.insert(Self::permute_0_1(t));
+
+            match self.element_index_model_decl_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_model_decl_node.insert(t.0, vec![t]);
+                }
+            };
+
+            match self.element_index_loc.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_loc.insert(t.1, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: ModelDeclNodeLoc) -> bool {
+        self.index_all_0_1.contains(&Self::permute_0_1(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0_1.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0_1.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0_1(t: ModelDeclNodeLoc) -> (u32, u32) {
+        (t.0.into(), t.1.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_0_1(t: (u32, u32)) -> ModelDeclNodeLoc {
+        ModelDeclNodeLoc(ModelDeclNode::from(t.0), Loc::from(t.1))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = ModelDeclNodeLoc> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = ModelDeclNodeLoc> {
+        let min = (u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX);
+        self.index_dirty_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: ModelDeclNode) -> impl '_ + Iterator<Item = ModelDeclNodeLoc> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN);
+        let max = (arg0, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1(
+        &self,
+        arg0: ModelDeclNode,
+        arg1: Loc,
+    ) -> impl '_ + Iterator<Item = ModelDeclNodeLoc> {
+        let arg0 = arg0.0;
+        let arg1 = arg1.0;
+        let min = (arg0, arg1);
+        let max = (arg0, arg1);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_loc(&mut self, tm: Loc) -> Vec<ModelDeclNodeLoc> {
+        let mut ts = match self.element_index_loc.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_model_decl_node(&mut self, tm: ModelDeclNode) -> Vec<ModelDeclNodeLoc> {
+        let mut ts = match self.element_index_model_decl_node.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
+                self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for ModelDeclNodeLocTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("model_decl_node_loc"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -32704,6 +33217,8 @@ struct CtorDeclNodeLocArgs(pub CtorDeclNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct EnumDeclNodeLocArgs(pub EnumDeclNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct ModelDeclNodeLocArgs(pub ModelDeclNode);
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct TermNodeLocArgs(pub TermNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct TermListNodeLocArgs(pub TermListNode);
@@ -32898,11 +33413,13 @@ struct ModelDelta {
     new_nil_stmt_block_list_node: Vec<NilStmtBlockListNode>,
     new_cons_stmt_block_list_node: Vec<ConsStmtBlockListNode>,
     new_rule_decl: Vec<RuleDecl>,
+    new_model_decl: Vec<ModelDecl>,
     new_decl_node_type: Vec<DeclNodeType>,
     new_decl_node_pred: Vec<DeclNodePred>,
     new_decl_node_func: Vec<DeclNodeFunc>,
     new_decl_node_rule: Vec<DeclNodeRule>,
     new_decl_node_enum: Vec<DeclNodeEnum>,
+    new_decl_node_model: Vec<DeclNodeModel>,
     new_nil_decl_list_node: Vec<NilDeclListNode>,
     new_cons_decl_list_node: Vec<ConsDeclListNode>,
     new_decls_module_node: Vec<DeclsModuleNode>,
@@ -32968,6 +33485,7 @@ struct ModelDelta {
     new_func_decl_node_loc: Vec<FuncDeclNodeLoc>,
     new_ctor_decl_node_loc: Vec<CtorDeclNodeLoc>,
     new_enum_decl_node_loc: Vec<EnumDeclNodeLoc>,
+    new_model_decl_node_loc: Vec<ModelDeclNodeLoc>,
     new_term_node_loc: Vec<TermNodeLoc>,
     new_term_list_node_loc: Vec<TermListNodeLoc>,
     new_match_case_node_loc: Vec<MatchCaseNodeLoc>,
@@ -33066,8 +33584,9 @@ struct ModelDelta {
     new_stmt_node_equalities: Vec<(StmtNode, StmtNode)>,
     new_stmt_block_list_node_equalities: Vec<(StmtBlockListNode, StmtBlockListNode)>,
     new_rule_decl_node_equalities: Vec<(RuleDeclNode, RuleDeclNode)>,
-    new_decl_node_equalities: Vec<(DeclNode, DeclNode)>,
+    new_model_decl_node_equalities: Vec<(ModelDeclNode, ModelDeclNode)>,
     new_decl_list_node_equalities: Vec<(DeclListNode, DeclListNode)>,
+    new_decl_node_equalities: Vec<(DeclNode, DeclNode)>,
     new_module_node_equalities: Vec<(ModuleNode, ModuleNode)>,
     new_loc_equalities: Vec<(Loc, Loc)>,
     new_rule_descendant_node_equalities: Vec<(RuleDescendantNode, RuleDescendantNode)>,
@@ -33095,6 +33614,7 @@ struct ModelDelta {
     new_func_decl_node_loc_def: Vec<FuncDeclNodeLocArgs>,
     new_ctor_decl_node_loc_def: Vec<CtorDeclNodeLocArgs>,
     new_enum_decl_node_loc_def: Vec<EnumDeclNodeLocArgs>,
+    new_model_decl_node_loc_def: Vec<ModelDeclNodeLocArgs>,
     new_term_node_loc_def: Vec<TermNodeLocArgs>,
     new_term_list_node_loc_def: Vec<TermListNodeLocArgs>,
     new_match_case_node_loc_def: Vec<MatchCaseNodeLocArgs>,
@@ -33296,17 +33816,23 @@ pub struct Eqlog {
     rule_decl_node_weights: Vec<usize>,
     rule_decl_node_uprooted: Vec<RuleDeclNode>,
 
-    decl_node_equalities: Unification<DeclNode>,
-    decl_node_all: BTreeSet<DeclNode>,
-    decl_node_dirty: BTreeSet<DeclNode>,
-    decl_node_weights: Vec<usize>,
-    decl_node_uprooted: Vec<DeclNode>,
+    model_decl_node_equalities: Unification<ModelDeclNode>,
+    model_decl_node_all: BTreeSet<ModelDeclNode>,
+    model_decl_node_dirty: BTreeSet<ModelDeclNode>,
+    model_decl_node_weights: Vec<usize>,
+    model_decl_node_uprooted: Vec<ModelDeclNode>,
 
     decl_list_node_equalities: Unification<DeclListNode>,
     decl_list_node_all: BTreeSet<DeclListNode>,
     decl_list_node_dirty: BTreeSet<DeclListNode>,
     decl_list_node_weights: Vec<usize>,
     decl_list_node_uprooted: Vec<DeclListNode>,
+
+    decl_node_equalities: Unification<DeclNode>,
+    decl_node_all: BTreeSet<DeclNode>,
+    decl_node_dirty: BTreeSet<DeclNode>,
+    decl_node_weights: Vec<usize>,
+    decl_node_uprooted: Vec<DeclNode>,
 
     module_node_equalities: Unification<ModuleNode>,
     module_node_all: BTreeSet<ModuleNode>,
@@ -33442,11 +33968,13 @@ pub struct Eqlog {
     nil_stmt_block_list_node: NilStmtBlockListNodeTable,
     cons_stmt_block_list_node: ConsStmtBlockListNodeTable,
     rule_decl: RuleDeclTable,
+    model_decl: ModelDeclTable,
     decl_node_type: DeclNodeTypeTable,
     decl_node_pred: DeclNodePredTable,
     decl_node_func: DeclNodeFuncTable,
     decl_node_rule: DeclNodeRuleTable,
     decl_node_enum: DeclNodeEnumTable,
+    decl_node_model: DeclNodeModelTable,
     nil_decl_list_node: NilDeclListNodeTable,
     cons_decl_list_node: ConsDeclListNodeTable,
     decls_module_node: DeclsModuleNodeTable,
@@ -33512,6 +34040,7 @@ pub struct Eqlog {
     func_decl_node_loc: FuncDeclNodeLocTable,
     ctor_decl_node_loc: CtorDeclNodeLocTable,
     enum_decl_node_loc: EnumDeclNodeLocTable,
+    model_decl_node_loc: ModelDeclNodeLocTable,
     term_node_loc: TermNodeLocTable,
     term_list_node_loc: TermListNodeLocTable,
     match_case_node_loc: MatchCaseNodeLocTable,
@@ -33633,11 +34162,13 @@ impl ModelDelta {
             new_nil_stmt_block_list_node: Vec::new(),
             new_cons_stmt_block_list_node: Vec::new(),
             new_rule_decl: Vec::new(),
+            new_model_decl: Vec::new(),
             new_decl_node_type: Vec::new(),
             new_decl_node_pred: Vec::new(),
             new_decl_node_func: Vec::new(),
             new_decl_node_rule: Vec::new(),
             new_decl_node_enum: Vec::new(),
+            new_decl_node_model: Vec::new(),
             new_nil_decl_list_node: Vec::new(),
             new_cons_decl_list_node: Vec::new(),
             new_decls_module_node: Vec::new(),
@@ -33703,6 +34234,7 @@ impl ModelDelta {
             new_func_decl_node_loc: Vec::new(),
             new_ctor_decl_node_loc: Vec::new(),
             new_enum_decl_node_loc: Vec::new(),
+            new_model_decl_node_loc: Vec::new(),
             new_term_node_loc: Vec::new(),
             new_term_list_node_loc: Vec::new(),
             new_match_case_node_loc: Vec::new(),
@@ -33801,8 +34333,9 @@ impl ModelDelta {
             new_stmt_node_equalities: Vec::new(),
             new_stmt_block_list_node_equalities: Vec::new(),
             new_rule_decl_node_equalities: Vec::new(),
-            new_decl_node_equalities: Vec::new(),
+            new_model_decl_node_equalities: Vec::new(),
             new_decl_list_node_equalities: Vec::new(),
+            new_decl_node_equalities: Vec::new(),
             new_module_node_equalities: Vec::new(),
             new_loc_equalities: Vec::new(),
             new_rule_descendant_node_equalities: Vec::new(),
@@ -33840,6 +34373,8 @@ impl ModelDelta {
             new_ctor_decl_node_loc_def: Vec::new(),
 
             new_enum_decl_node_loc_def: Vec::new(),
+
+            new_model_decl_node_loc_def: Vec::new(),
 
             new_term_node_loc_def: Vec::new(),
 
@@ -34077,6 +34612,10 @@ impl ModelDelta {
             model.equate_rule_decl_node(lhs, rhs);
         }
 
+        for (lhs, rhs) in self.new_model_decl_node_equalities.iter().copied() {
+            model.equate_model_decl_node(lhs, rhs);
+        }
+
         for (lhs, rhs) in self.new_decl_node_equalities.iter().copied() {
             model.equate_decl_node(lhs, rhs);
         }
@@ -34302,6 +34841,10 @@ impl ModelDelta {
             model.insert_rule_decl(tm0, tm1);
         }
 
+        for ModelDecl(tm0, tm1, tm2) in self.new_model_decl.drain(..) {
+            model.insert_model_decl(tm0, tm1, tm2);
+        }
+
         for DeclNodeType(tm0, tm1) in self.new_decl_node_type.drain(..) {
             model.insert_decl_node_type(tm0, tm1);
         }
@@ -34320,6 +34863,10 @@ impl ModelDelta {
 
         for DeclNodeEnum(tm0, tm1) in self.new_decl_node_enum.drain(..) {
             model.insert_decl_node_enum(tm0, tm1);
+        }
+
+        for DeclNodeModel(tm0, tm1) in self.new_decl_node_model.drain(..) {
+            model.insert_decl_node_model(tm0, tm1);
         }
 
         for NilDeclListNode(tm0) in self.new_nil_decl_list_node.drain(..) {
@@ -34585,6 +35132,10 @@ impl ModelDelta {
 
         for EnumDeclNodeLoc(tm0, tm1) in self.new_enum_decl_node_loc.drain(..) {
             model.insert_enum_decl_node_loc(tm0, tm1);
+        }
+
+        for ModelDeclNodeLoc(tm0, tm1) in self.new_model_decl_node_loc.drain(..) {
+            model.insert_model_decl_node_loc(tm0, tm1);
         }
 
         for TermNodeLoc(tm0, tm1) in self.new_term_node_loc.drain(..) {
@@ -34943,6 +35494,10 @@ impl ModelDelta {
 
         for EnumDeclNodeLocArgs(tm0) in self.new_enum_decl_node_loc_def.drain(..) {
             model.define_enum_decl_node_loc(tm0);
+        }
+
+        for ModelDeclNodeLocArgs(tm0) in self.new_model_decl_node_loc_def.drain(..) {
+            model.define_model_decl_node_loc(tm0);
         }
 
         for TermNodeLocArgs(tm0) in self.new_term_node_loc_def.drain(..) {
@@ -35349,16 +35904,21 @@ impl Eqlog {
             rule_decl_node_weights: Vec::new(),
             rule_decl_node_all: BTreeSet::new(),
             rule_decl_node_uprooted: Vec::new(),
-            decl_node_equalities: Unification::new(),
-            decl_node_dirty: BTreeSet::new(),
-            decl_node_weights: Vec::new(),
-            decl_node_all: BTreeSet::new(),
-            decl_node_uprooted: Vec::new(),
+            model_decl_node_equalities: Unification::new(),
+            model_decl_node_dirty: BTreeSet::new(),
+            model_decl_node_weights: Vec::new(),
+            model_decl_node_all: BTreeSet::new(),
+            model_decl_node_uprooted: Vec::new(),
             decl_list_node_equalities: Unification::new(),
             decl_list_node_dirty: BTreeSet::new(),
             decl_list_node_weights: Vec::new(),
             decl_list_node_all: BTreeSet::new(),
             decl_list_node_uprooted: Vec::new(),
+            decl_node_equalities: Unification::new(),
+            decl_node_dirty: BTreeSet::new(),
+            decl_node_weights: Vec::new(),
+            decl_node_all: BTreeSet::new(),
+            decl_node_uprooted: Vec::new(),
             module_node_equalities: Unification::new(),
             module_node_dirty: BTreeSet::new(),
             module_node_weights: Vec::new(),
@@ -35477,11 +36037,13 @@ impl Eqlog {
             nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),
             cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),
             rule_decl: RuleDeclTable::new(),
+            model_decl: ModelDeclTable::new(),
             decl_node_type: DeclNodeTypeTable::new(),
             decl_node_pred: DeclNodePredTable::new(),
             decl_node_func: DeclNodeFuncTable::new(),
             decl_node_rule: DeclNodeRuleTable::new(),
             decl_node_enum: DeclNodeEnumTable::new(),
+            decl_node_model: DeclNodeModelTable::new(),
             nil_decl_list_node: NilDeclListNodeTable::new(),
             cons_decl_list_node: ConsDeclListNodeTable::new(),
             decls_module_node: DeclsModuleNodeTable::new(),
@@ -35547,6 +36109,7 @@ impl Eqlog {
             func_decl_node_loc: FuncDeclNodeLocTable::new(),
             ctor_decl_node_loc: CtorDeclNodeLocTable::new(),
             enum_decl_node_loc: EnumDeclNodeLocTable::new(),
+            model_decl_node_loc: ModelDeclNodeLocTable::new(),
             term_node_loc: TermNodeLocTable::new(),
             term_list_node_loc: TermListNodeLocTable::new(),
             match_case_node_loc: MatchCaseNodeLocTable::new(),
@@ -35737,6 +36300,7 @@ impl Eqlog {
                 self.implicit_functionality_85_0(&mut delta);
                 self.implicit_functionality_86_0(&mut delta);
                 self.implicit_functionality_87_0(&mut delta);
+                self.implicit_functionality_88_0(&mut delta);
                 self.real_virt_ident_total_0(&mut delta);
                 self.virt_real_ident_retraction_0(&mut delta);
                 self.rule_descendant_rule_total_0(&mut delta);
@@ -36420,25 +36984,25 @@ impl Eqlog {
         self.root_rule_decl_node(lhs) == self.root_rule_decl_node(rhs)
     }
 
-    /// Returns and iterator over elements of sort `DeclNode`.
+    /// Returns and iterator over elements of sort `ModelDeclNode`.
     /// The iterator yields canonical representatives only.
     #[allow(dead_code)]
-    pub fn iter_decl_node(&self) -> impl '_ + Iterator<Item = DeclNode> {
-        self.decl_node_all.iter().copied()
+    pub fn iter_model_decl_node(&self) -> impl '_ + Iterator<Item = ModelDeclNode> {
+        self.model_decl_node_all.iter().copied()
     }
     /// Returns the canonical representative of the equivalence class of `el`.
     #[allow(dead_code)]
-    pub fn root_decl_node(&self, el: DeclNode) -> DeclNode {
-        if el.0 as usize >= self.decl_node_equalities.len() {
+    pub fn root_model_decl_node(&self, el: ModelDeclNode) -> ModelDeclNode {
+        if el.0 as usize >= self.model_decl_node_equalities.len() {
             el
         } else {
-            self.decl_node_equalities.root_const(el)
+            self.model_decl_node_equalities.root_const(el)
         }
     }
     /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
     #[allow(dead_code)]
-    pub fn are_equal_decl_node(&self, lhs: DeclNode, rhs: DeclNode) -> bool {
-        self.root_decl_node(lhs) == self.root_decl_node(rhs)
+    pub fn are_equal_model_decl_node(&self, lhs: ModelDeclNode, rhs: ModelDeclNode) -> bool {
+        self.root_model_decl_node(lhs) == self.root_model_decl_node(rhs)
     }
 
     /// Returns and iterator over elements of sort `DeclListNode`.
@@ -36460,6 +37024,27 @@ impl Eqlog {
     #[allow(dead_code)]
     pub fn are_equal_decl_list_node(&self, lhs: DeclListNode, rhs: DeclListNode) -> bool {
         self.root_decl_list_node(lhs) == self.root_decl_list_node(rhs)
+    }
+
+    /// Returns and iterator over elements of sort `DeclNode`.
+    /// The iterator yields canonical representatives only.
+    #[allow(dead_code)]
+    pub fn iter_decl_node(&self) -> impl '_ + Iterator<Item = DeclNode> {
+        self.decl_node_all.iter().copied()
+    }
+    /// Returns the canonical representative of the equivalence class of `el`.
+    #[allow(dead_code)]
+    pub fn root_decl_node(&self, el: DeclNode) -> DeclNode {
+        if el.0 as usize >= self.decl_node_equalities.len() {
+            el
+        } else {
+            self.decl_node_equalities.root_const(el)
+        }
+    }
+    /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
+    #[allow(dead_code)]
+    pub fn are_equal_decl_node(&self, lhs: DeclNode, rhs: DeclNode) -> bool {
+        self.root_decl_node(lhs) == self.root_decl_node(rhs)
     }
 
     /// Returns and iterator over elements of sort `ModuleNode`.
@@ -37626,6 +38211,46 @@ impl Eqlog {
         self.rule_decl_node_dirty.remove(&child);
         self.rule_decl_node_uprooted.push(child);
     }
+    /// Adjoins a new element of type [ModelDeclNode].
+    #[allow(dead_code)]
+    fn new_model_decl_node_internal(&mut self) -> ModelDeclNode {
+        let old_len = self.model_decl_node_equalities.len();
+        self.model_decl_node_equalities
+            .increase_size_to(old_len + 1);
+        let el = ModelDeclNode::from(u32::try_from(old_len).unwrap());
+
+        self.model_decl_node_dirty.insert(el);
+        self.model_decl_node_all.insert(el);
+
+        assert!(self.model_decl_node_weights.len() == old_len);
+        self.model_decl_node_weights.push(0);
+
+        el
+    }
+    /// Enforces the equality `lhs = rhs`.
+    #[allow(dead_code)]
+    pub fn equate_model_decl_node(&mut self, mut lhs: ModelDeclNode, mut rhs: ModelDeclNode) {
+        lhs = self.model_decl_node_equalities.root(lhs);
+        rhs = self.model_decl_node_equalities.root(rhs);
+        if lhs == rhs {
+            return;
+        }
+
+        let lhs_weight = self.model_decl_node_weights[lhs.0 as usize];
+        let rhs_weight = self.model_decl_node_weights[rhs.0 as usize];
+        let (root, child) = if lhs_weight >= rhs_weight {
+            (lhs, rhs)
+        } else {
+            (rhs, lhs)
+        };
+
+        self.model_decl_node_equalities
+            .union_roots_into(child, root);
+
+        self.model_decl_node_all.remove(&child);
+        self.model_decl_node_dirty.remove(&child);
+        self.model_decl_node_uprooted.push(child);
+    }
     /// Adjoins a new element of type [DeclNode].
     #[allow(dead_code)]
     fn new_decl_node_internal(&mut self) -> DeclNode {
@@ -38421,6 +39046,11 @@ impl Eqlog {
     pub fn new_rule_decl_node(&mut self) -> RuleDeclNode {
         self.new_rule_decl_node_internal()
     }
+    /// Adjoins a new element of type [ModelDeclNode].
+    #[allow(dead_code)]
+    pub fn new_model_decl_node(&mut self) -> ModelDeclNode {
+        self.new_model_decl_node_internal()
+    }
     /// Adjoins a new element of type [DeclNode].
     #[allow(dead_code)]
     pub fn new_decl_node(&mut self) -> DeclNode {
@@ -38838,6 +39468,37 @@ impl Eqlog {
 
             let weight1 = &mut self.loc_weights[tm1.0 as usize];
             *weight1 = weight1.saturating_add(EnumDeclNodeLocTable::WEIGHT);
+        }
+    }
+
+    /// Evaluates `model_decl_node_loc(arg0)`.
+    #[allow(dead_code)]
+    pub fn model_decl_node_loc(&self, mut arg0: ModelDeclNode) -> Option<Loc> {
+        arg0 = self.root_model_decl_node(arg0);
+        self.model_decl_node_loc
+            .iter_all_0(arg0)
+            .next()
+            .map(|t| t.1)
+    }
+    /// Returns an iterator over tuples in the graph of the `model_decl_node_loc` function.
+    /// The relation yielded by the iterator need not be functional if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_model_decl_node_loc(&self) -> impl '_ + Iterator<Item = (ModelDeclNode, Loc)> {
+        self.model_decl_node_loc.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes the equation `model_decl_node_loc(tm0) = tm1` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_model_decl_node_loc(&mut self, mut tm0: ModelDeclNode, mut tm1: Loc) {
+        tm0 = self.model_decl_node_equalities.root(tm0);
+        tm1 = self.loc_equalities.root(tm1);
+        if self.model_decl_node_loc.insert(ModelDeclNodeLoc(tm0, tm1)) {
+            let weight0 = &mut self.model_decl_node_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(ModelDeclNodeLocTable::WEIGHT);
+
+            let weight1 = &mut self.loc_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(ModelDeclNodeLocTable::WEIGHT);
         }
     }
 
@@ -41471,6 +42132,18 @@ impl Eqlog {
             }
         }
     }
+    /// Enforces that `model_decl_node_loc(tm0)` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_model_decl_node_loc(&mut self, tm0: ModelDeclNode) -> Loc {
+        match self.model_decl_node_loc(tm0) {
+            Some(result) => result,
+            None => {
+                let tm1 = self.new_loc_internal();
+                self.insert_model_decl_node_loc(tm0, tm1);
+                tm1
+            }
+        }
+    }
     /// Enforces that `term_node_loc(tm0)` is defined, adjoining a new element if necessary.
     #[allow(dead_code)]
     pub fn define_term_node_loc(&mut self, tm0: TermNode) -> Loc {
@@ -43756,6 +44429,51 @@ impl Eqlog {
         }
     }
 
+    /// Returns `true` if `model_decl(arg0, arg1, arg2)` holds.
+    #[allow(dead_code)]
+    pub fn model_decl(
+        &self,
+        mut arg0: ModelDeclNode,
+        mut arg1: Ident,
+        mut arg2: DeclListNode,
+    ) -> bool {
+        arg0 = self.root_model_decl_node(arg0);
+        arg1 = self.root_ident(arg1);
+        arg2 = self.root_decl_list_node(arg2);
+        self.model_decl.contains(ModelDecl(arg0, arg1, arg2))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `model_decl` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_model_decl(
+        &self,
+    ) -> impl '_ + Iterator<Item = (ModelDeclNode, Ident, DeclListNode)> {
+        self.model_decl.iter_all().map(|t| (t.0, t.1, t.2))
+    }
+    /// Makes `model_decl(tm0, tm1, tm2)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_model_decl(
+        &mut self,
+        mut tm0: ModelDeclNode,
+        mut tm1: Ident,
+        mut tm2: DeclListNode,
+    ) {
+        tm0 = self.model_decl_node_equalities.root(tm0);
+        tm1 = self.ident_equalities.root(tm1);
+        tm2 = self.decl_list_node_equalities.root(tm2);
+        if self.model_decl.insert(ModelDecl(tm0, tm1, tm2)) {
+            let weight0 = &mut self.model_decl_node_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(ModelDeclTable::WEIGHT);
+
+            let weight1 = &mut self.ident_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(ModelDeclTable::WEIGHT);
+
+            let weight2 = &mut self.decl_list_node_weights[tm2.0 as usize];
+            *weight2 = weight2.saturating_add(ModelDeclTable::WEIGHT);
+        }
+    }
+
     /// Returns `true` if `decl_node_type(arg0, arg1)` holds.
     #[allow(dead_code)]
     pub fn decl_node_type(&self, mut arg0: DeclNode, mut arg1: TypeDeclNode) -> bool {
@@ -43893,6 +44611,34 @@ impl Eqlog {
 
             let weight1 = &mut self.enum_decl_node_weights[tm1.0 as usize];
             *weight1 = weight1.saturating_add(DeclNodeEnumTable::WEIGHT);
+        }
+    }
+
+    /// Returns `true` if `decl_node_model(arg0, arg1)` holds.
+    #[allow(dead_code)]
+    pub fn decl_node_model(&self, mut arg0: DeclNode, mut arg1: ModelDeclNode) -> bool {
+        arg0 = self.root_decl_node(arg0);
+        arg1 = self.root_model_decl_node(arg1);
+        self.decl_node_model.contains(DeclNodeModel(arg0, arg1))
+    }
+    /// Returns an iterator over tuples of elements satisfying the `decl_node_model` predicate.
+
+    #[allow(dead_code)]
+    pub fn iter_decl_node_model(&self) -> impl '_ + Iterator<Item = (DeclNode, ModelDeclNode)> {
+        self.decl_node_model.iter_all().map(|t| (t.0, t.1))
+    }
+    /// Makes `decl_node_model(tm0, tm1)` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_decl_node_model(&mut self, mut tm0: DeclNode, mut tm1: ModelDeclNode) {
+        tm0 = self.decl_node_equalities.root(tm0);
+        tm1 = self.model_decl_node_equalities.root(tm1);
+        if self.decl_node_model.insert(DeclNodeModel(tm0, tm1)) {
+            let weight0 = &mut self.decl_node_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(DeclNodeModelTable::WEIGHT);
+
+            let weight1 = &mut self.model_decl_node_weights[tm1.0 as usize];
+            *weight1 = weight1.saturating_add(DeclNodeModelTable::WEIGHT);
         }
     }
 
@@ -47480,6 +48226,88 @@ impl Eqlog {
             }
         }
 
+        for el in self.decl_list_node_uprooted.iter().copied() {
+            let ts = self.model_decl.drain_with_element_decl_list_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ModelDeclTable::WEIGHT);
+
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ModelDeclTable::WEIGHT);
+
+                let weight2 = &mut self.decl_list_node_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(ModelDeclTable::WEIGHT);
+
+                t.0 = self.root_model_decl_node(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_decl_list_node(t.2);
+                if self.model_decl.insert(t) {
+                    let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ModelDeclTable::WEIGHT);
+
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ModelDeclTable::WEIGHT);
+
+                    let weight2 = &mut self.decl_list_node_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(ModelDeclTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.ident_uprooted.iter().copied() {
+            let ts = self.model_decl.drain_with_element_ident(el);
+            for mut t in ts {
+                let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ModelDeclTable::WEIGHT);
+
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ModelDeclTable::WEIGHT);
+
+                let weight2 = &mut self.decl_list_node_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(ModelDeclTable::WEIGHT);
+
+                t.0 = self.root_model_decl_node(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_decl_list_node(t.2);
+                if self.model_decl.insert(t) {
+                    let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ModelDeclTable::WEIGHT);
+
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ModelDeclTable::WEIGHT);
+
+                    let weight2 = &mut self.decl_list_node_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(ModelDeclTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.model_decl_node_uprooted.iter().copied() {
+            let ts = self.model_decl.drain_with_element_model_decl_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ModelDeclTable::WEIGHT);
+
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ModelDeclTable::WEIGHT);
+
+                let weight2 = &mut self.decl_list_node_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(ModelDeclTable::WEIGHT);
+
+                t.0 = self.root_model_decl_node(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_decl_list_node(t.2);
+                if self.model_decl.insert(t) {
+                    let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ModelDeclTable::WEIGHT);
+
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ModelDeclTable::WEIGHT);
+
+                    let weight2 = &mut self.decl_list_node_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(ModelDeclTable::WEIGHT);
+                }
+            }
+        }
+
         for el in self.decl_node_uprooted.iter().copied() {
             let ts = self.decl_node_type.drain_with_element_decl_node(el);
             for mut t in ts {
@@ -47681,6 +48509,47 @@ impl Eqlog {
 
                     let weight1 = &mut self.enum_decl_node_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(DeclNodeEnumTable::WEIGHT);
+                }
+            }
+        }
+
+        for el in self.decl_node_uprooted.iter().copied() {
+            let ts = self.decl_node_model.drain_with_element_decl_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(DeclNodeModelTable::WEIGHT);
+
+                let weight1 = &mut self.model_decl_node_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(DeclNodeModelTable::WEIGHT);
+
+                t.0 = self.root_decl_node(t.0);
+                t.1 = self.root_model_decl_node(t.1);
+                if self.decl_node_model.insert(t) {
+                    let weight0 = &mut self.decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(DeclNodeModelTable::WEIGHT);
+
+                    let weight1 = &mut self.model_decl_node_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(DeclNodeModelTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.model_decl_node_uprooted.iter().copied() {
+            let ts = self.decl_node_model.drain_with_element_model_decl_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(DeclNodeModelTable::WEIGHT);
+
+                let weight1 = &mut self.model_decl_node_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(DeclNodeModelTable::WEIGHT);
+
+                t.0 = self.root_decl_node(t.0);
+                t.1 = self.root_model_decl_node(t.1);
+                if self.decl_node_model.insert(t) {
+                    let weight0 = &mut self.decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(DeclNodeModelTable::WEIGHT);
+
+                    let weight1 = &mut self.model_decl_node_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(DeclNodeModelTable::WEIGHT);
                 }
             }
         }
@@ -50170,6 +51039,49 @@ impl Eqlog {
 
                     let weight1 = &mut self.loc_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(EnumDeclNodeLocTable::WEIGHT);
+                }
+            }
+        }
+
+        for el in self.loc_uprooted.iter().copied() {
+            let ts = self.model_decl_node_loc.drain_with_element_loc(el);
+            for mut t in ts {
+                let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ModelDeclNodeLocTable::WEIGHT);
+
+                let weight1 = &mut self.loc_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ModelDeclNodeLocTable::WEIGHT);
+
+                t.0 = self.root_model_decl_node(t.0);
+                t.1 = self.root_loc(t.1);
+                if self.model_decl_node_loc.insert(t) {
+                    let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ModelDeclNodeLocTable::WEIGHT);
+
+                    let weight1 = &mut self.loc_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ModelDeclNodeLocTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.model_decl_node_uprooted.iter().copied() {
+            let ts = self
+                .model_decl_node_loc
+                .drain_with_element_model_decl_node(el);
+            for mut t in ts {
+                let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ModelDeclNodeLocTable::WEIGHT);
+
+                let weight1 = &mut self.loc_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ModelDeclNodeLocTable::WEIGHT);
+
+                t.0 = self.root_model_decl_node(t.0);
+                t.1 = self.root_loc(t.1);
+                if self.model_decl_node_loc.insert(t) {
+                    let weight0 = &mut self.model_decl_node_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ModelDeclNodeLocTable::WEIGHT);
+
+                    let weight1 = &mut self.loc_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ModelDeclNodeLocTable::WEIGHT);
                 }
             }
         }
@@ -53612,6 +54524,7 @@ impl Eqlog {
         self.stmt_list_node_uprooted.clear();
         self.stmt_block_list_node_uprooted.clear();
         self.rule_decl_node_uprooted.clear();
+        self.model_decl_node_uprooted.clear();
         self.decl_node_uprooted.clear();
         self.decl_list_node_uprooted.clear();
         self.module_node_uprooted.clear();
@@ -53671,11 +54584,13 @@ impl Eqlog {
             || self.nil_stmt_block_list_node.is_dirty()
             || self.cons_stmt_block_list_node.is_dirty()
             || self.rule_decl.is_dirty()
+            || self.model_decl.is_dirty()
             || self.decl_node_type.is_dirty()
             || self.decl_node_pred.is_dirty()
             || self.decl_node_func.is_dirty()
             || self.decl_node_rule.is_dirty()
             || self.decl_node_enum.is_dirty()
+            || self.decl_node_model.is_dirty()
             || self.nil_decl_list_node.is_dirty()
             || self.cons_decl_list_node.is_dirty()
             || self.decls_module_node.is_dirty()
@@ -53741,6 +54656,7 @@ impl Eqlog {
             || self.func_decl_node_loc.is_dirty()
             || self.ctor_decl_node_loc.is_dirty()
             || self.enum_decl_node_loc.is_dirty()
+            || self.model_decl_node_loc.is_dirty()
             || self.term_node_loc.is_dirty()
             || self.term_list_node_loc.is_dirty()
             || self.match_case_node_loc.is_dirty()
@@ -53839,8 +54755,9 @@ impl Eqlog {
             || !self.stmt_node_dirty.is_empty()
             || !self.stmt_block_list_node_dirty.is_empty()
             || !self.rule_decl_node_dirty.is_empty()
-            || !self.decl_node_dirty.is_empty()
+            || !self.model_decl_node_dirty.is_empty()
             || !self.decl_list_node_dirty.is_empty()
+            || !self.decl_node_dirty.is_empty()
             || !self.module_node_dirty.is_empty()
             || !self.loc_dirty.is_empty()
             || !self.rule_descendant_node_dirty.is_empty()
@@ -53878,8 +54795,9 @@ impl Eqlog {
             || !self.stmt_node_uprooted.is_empty()
             || !self.stmt_block_list_node_uprooted.is_empty()
             || !self.rule_decl_node_uprooted.is_empty()
-            || !self.decl_node_uprooted.is_empty()
+            || !self.model_decl_node_uprooted.is_empty()
             || !self.decl_list_node_uprooted.is_empty()
+            || !self.decl_node_uprooted.is_empty()
             || !self.module_node_uprooted.is_empty()
             || !self.loc_uprooted.is_empty()
             || !self.rule_descendant_node_uprooted.is_empty()
@@ -54032,6 +54950,19 @@ impl Eqlog {
     fn implicit_functionality_10_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
+            for ModelDeclNodeLoc(tm0, tm1) in self.model_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for ModelDeclNodeLoc(_, tm2) in self.model_decl_node_loc.iter_all_0(tm0) {
+                    delta.new_loc_equalities.push((tm1, tm2));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_11_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
             for TermNodeLoc(tm0, tm1) in self.term_node_loc.iter_dirty() {
                 #[allow(unused_variables)]
                 for TermNodeLoc(_, tm2) in self.term_node_loc.iter_all_0(tm0) {
@@ -54042,7 +54973,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_11_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_12_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListNodeLoc(tm0, tm1) in self.term_list_node_loc.iter_dirty() {
@@ -54055,7 +54986,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_12_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_13_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCaseNodeLoc(tm0, tm1) in self.match_case_node_loc.iter_dirty() {
@@ -54068,7 +54999,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_13_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_14_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for OptTermNodeLoc(tm0, tm1) in self.opt_term_node_loc.iter_dirty() {
@@ -54081,7 +55012,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_14_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_15_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomNodeLoc(tm0, tm1) in self.if_atom_node_loc.iter_dirty() {
@@ -54094,7 +55025,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_15_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_16_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomNodeLoc(tm0, tm1) in self.then_atom_node_loc.iter_dirty() {
@@ -54107,7 +55038,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_16_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_17_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtNodeLoc(tm0, tm1) in self.stmt_node_loc.iter_dirty() {
@@ -54120,7 +55051,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_17_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_18_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for StmtListNodeLoc(tm0, tm1) in self.stmt_list_node_loc.iter_dirty() {
@@ -54133,7 +55064,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_18_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_19_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDeclNodeLoc(tm0, tm1) in self.rule_decl_node_loc.iter_dirty() {
@@ -54146,7 +55077,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_19_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_20_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DeclNodeLoc(tm0, tm1) in self.decl_node_loc.iter_dirty() {
@@ -54159,7 +55090,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_20_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_21_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DeclListNodeLoc(tm0, tm1) in self.decl_list_node_loc.iter_dirty() {
@@ -54172,7 +55103,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_21_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_22_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ModuleNodeLoc(tm0, tm1) in self.module_node_loc.iter_dirty() {
@@ -54185,7 +55116,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_22_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_23_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantRule(tm0, tm1) in self.rule_descendant_rule.iter_dirty() {
@@ -54198,7 +55129,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_23_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_24_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTerm(tm0, tm1) in self.rule_descendant_term.iter_dirty() {
@@ -54211,7 +55142,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_24_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_25_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantTermList(tm0, tm1) in self.rule_descendant_term_list.iter_dirty() {
@@ -54225,7 +55156,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_25_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_26_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantOptTerm(tm0, tm1) in self.rule_descendant_opt_term.iter_dirty() {
@@ -54238,7 +55169,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_26_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_27_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantIfAtom(tm0, tm1) in self.rule_descendant_if_atom.iter_dirty() {
@@ -54251,7 +55182,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_27_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_28_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantThenAtom(tm0, tm1) in self.rule_descendant_then_atom.iter_dirty() {
@@ -54265,7 +55196,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_28_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_29_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCase(tm0, tm1) in self.rule_descendant_match_case.iter_dirty() {
@@ -54280,7 +55211,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_29_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_30_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantMatchCaseList(tm0, tm1) in
@@ -54297,7 +55228,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_30_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_31_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmt(tm0, tm1) in self.rule_descendant_stmt.iter_dirty() {
@@ -54310,7 +55241,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_31_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_32_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm0, tm1) in self.rule_descendant_stmt_list.iter_dirty() {
@@ -54324,7 +55255,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_32_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_33_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtBlockList(tm0, tm1) in
@@ -54341,7 +55272,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_33_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_34_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EntryScope(tm0, tm1) in self.entry_scope.iter_dirty() {
@@ -54354,7 +55285,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_34_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_35_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm0, tm1) in self.exit_scope.iter_dirty() {
@@ -54367,7 +55298,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_35_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_36_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm0, tm1) in self.ctor_enum.iter_dirty() {
@@ -54380,7 +55311,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_36_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_37_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorsEnum(tm0, tm1) in self.ctors_enum.iter_dirty() {
@@ -54393,7 +55324,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_37_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_38_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDiscriminee(tm0, tm1) in self.cases_discriminee.iter_dirty() {
@@ -54406,7 +55337,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_38_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_39_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CaseDiscriminee(tm0, tm1) in self.case_discriminee.iter_dirty() {
@@ -54419,7 +55350,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_39_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_40_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityAtom(tm0, tm1) in
@@ -54436,7 +55367,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_40_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_41_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm1) in
@@ -54453,7 +55384,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_41_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_42_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(tm0, tm1) in self.desugared_case_block.iter_dirty() {
@@ -54466,7 +55397,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_42_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm0, tm1) in self.desugared_case_block_list.iter_dirty() {
@@ -54480,7 +55411,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm0, tm1) in self.semantic_type.iter_dirty() {
@@ -54493,7 +55424,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm0, tm1) in self.semantic_arg_types.iter_dirty() {
@@ -54506,7 +55437,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm0, tm1) in self.semantic_pred.iter_dirty() {
@@ -54519,7 +55450,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm0, tm1) in self.pred_arity.iter_dirty() {
@@ -54532,7 +55463,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm0, tm1) in self.semantic_func.iter_dirty() {
@@ -54545,7 +55476,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Domain(tm0, tm1) in self.domain.iter_dirty() {
@@ -54558,7 +55489,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm0, tm1) in self.codomain.iter_dirty() {
@@ -54571,7 +55502,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Arity(tm0, tm1) in self.arity.iter_dirty() {
@@ -54584,7 +55515,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
@@ -54597,7 +55528,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
@@ -54610,7 +55541,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
@@ -54623,7 +55554,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
@@ -54636,7 +55567,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Dom(tm0, tm1) in self.dom.iter_dirty() {
@@ -54649,7 +55580,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm1) in self.cod.iter_dirty() {
@@ -54662,7 +55593,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
@@ -54675,7 +55606,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm1, tm2) in self.map_els.iter_dirty() {
@@ -54688,7 +55619,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
@@ -54701,7 +55632,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm0) in self.pred_symbol.iter_dirty() {
@@ -54714,7 +55645,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm0) in self.func_symbol.iter_dirty() {
@@ -54727,7 +55658,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm0) in self.rule_symbol.iter_dirty() {
@@ -54740,7 +55671,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm0) in self.enum_symbol.iter_dirty() {
@@ -54753,7 +55684,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm0) in self.ctor_symbol.iter_dirty() {
@@ -54766,7 +55697,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Zero(tm0) in self.zero.iter_dirty() {
@@ -54779,7 +55710,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Succ(tm0, tm1) in self.succ.iter_dirty() {
@@ -54792,7 +55723,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
@@ -54805,7 +55736,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
@@ -54818,7 +55749,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm1) in self.before_rule_structure.iter_dirty() {
@@ -54831,7 +55762,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm0, tm1, tm2) in self.if_atom_morphism.iter_dirty() {
@@ -54844,7 +55775,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm0, tm1, tm2) in self.then_atom_morphism.iter_dirty() {
@@ -54857,7 +55788,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BranchStmtMorphism(tm0, tm1, tm2) in self.branch_stmt_morphism.iter_dirty() {
@@ -54872,7 +55803,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtMorphism(tm0, tm1, tm2) in self.match_stmt_morphism.iter_dirty() {
@@ -54886,7 +55817,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm0, tm1, tm2) in self.semantic_name.iter_dirty() {
@@ -54899,7 +55830,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
@@ -54912,7 +55843,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
@@ -54925,7 +55856,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
@@ -54938,7 +55869,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm0, tm1) in self.match_case_pattern_ctor.iter_dirty() {
@@ -54951,7 +55882,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm0, tm1) in self.cases_determined_enum.iter_dirty() {
@@ -54964,7 +55895,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
@@ -54977,7 +55908,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
@@ -54990,7 +55921,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
@@ -55003,7 +55934,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredRel(tm0, tm1) in self.pred_rel.iter_dirty() {
@@ -55016,7 +55947,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
@@ -55029,7 +55960,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
@@ -55042,7 +55973,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
@@ -55055,7 +55986,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_88_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
@@ -79931,11 +80862,13 @@ impl Eqlog {
         self.nil_stmt_block_list_node.drop_dirt();
         self.cons_stmt_block_list_node.drop_dirt();
         self.rule_decl.drop_dirt();
+        self.model_decl.drop_dirt();
         self.decl_node_type.drop_dirt();
         self.decl_node_pred.drop_dirt();
         self.decl_node_func.drop_dirt();
         self.decl_node_rule.drop_dirt();
         self.decl_node_enum.drop_dirt();
+        self.decl_node_model.drop_dirt();
         self.nil_decl_list_node.drop_dirt();
         self.cons_decl_list_node.drop_dirt();
         self.decls_module_node.drop_dirt();
@@ -80001,6 +80934,7 @@ impl Eqlog {
         self.func_decl_node_loc.drop_dirt();
         self.ctor_decl_node_loc.drop_dirt();
         self.enum_decl_node_loc.drop_dirt();
+        self.model_decl_node_loc.drop_dirt();
         self.term_node_loc.drop_dirt();
         self.term_list_node_loc.drop_dirt();
         self.match_case_node_loc.drop_dirt();
@@ -80100,8 +81034,9 @@ impl Eqlog {
         self.stmt_node_dirty.clear();
         self.stmt_block_list_node_dirty.clear();
         self.rule_decl_node_dirty.clear();
-        self.decl_node_dirty.clear();
+        self.model_decl_node_dirty.clear();
         self.decl_list_node_dirty.clear();
+        self.decl_node_dirty.clear();
         self.module_node_dirty.clear();
         self.loc_dirty.clear();
         self.rule_descendant_node_dirty.clear();
@@ -80332,9 +81267,9 @@ impl fmt::Display for Eqlog {
                     .header_intersection('┬'),
             )
             .fmt(f)?;
-        self.decl_node_equalities
+        self.model_decl_node_equalities
             .class_table()
-            .with(Header("DeclNode"))
+            .with(Header("ModelDeclNode"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -80345,6 +81280,16 @@ impl fmt::Display for Eqlog {
         self.decl_list_node_equalities
             .class_table()
             .with(Header("DeclListNode"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)?;
+        self.decl_node_equalities
+            .class_table()
+            .with(Header("DeclNode"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -80550,11 +81495,13 @@ impl fmt::Display for Eqlog {
         self.nil_stmt_block_list_node.fmt(f)?;
         self.cons_stmt_block_list_node.fmt(f)?;
         self.rule_decl.fmt(f)?;
+        self.model_decl.fmt(f)?;
         self.decl_node_type.fmt(f)?;
         self.decl_node_pred.fmt(f)?;
         self.decl_node_func.fmt(f)?;
         self.decl_node_rule.fmt(f)?;
         self.decl_node_enum.fmt(f)?;
+        self.decl_node_model.fmt(f)?;
         self.nil_decl_list_node.fmt(f)?;
         self.cons_decl_list_node.fmt(f)?;
         self.decls_module_node.fmt(f)?;
@@ -80620,6 +81567,7 @@ impl fmt::Display for Eqlog {
         self.func_decl_node_loc.fmt(f)?;
         self.ctor_decl_node_loc.fmt(f)?;
         self.enum_decl_node_loc.fmt(f)?;
+        self.model_decl_node_loc.fmt(f)?;
         self.term_node_loc.fmt(f)?;
         self.term_list_node_loc.fmt(f)?;
         self.match_case_node_loc.fmt(f)?;
