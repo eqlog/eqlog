@@ -11,5 +11,8 @@ fn one_plus_zero() {
 
     model.close();
     let zero_cases: BTreeSet<ZCase> = model.z_cases(zero).collect();
-    assert_eq!(zero_cases, btreeset! {ZCase::Zero(), ZCase::Succ(zero)});
+    assert_eq!(
+        zero_cases,
+        btreeset! {ZCase::Zero(), ZCase::Prede(succ_zero)}
+    );
 }
