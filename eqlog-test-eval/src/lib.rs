@@ -20,6 +20,7 @@ eqlog_mod!(nat);
 eqlog_mod!(matches);
 eqlog_mod!(matches_rel);
 eqlog_mod!(triple_join);
+eqlog_mod!(int);
 
 mod category_mod;
 #[cfg(test)]
@@ -40,6 +41,8 @@ mod monoid_test;
 mod branches_test;
 #[cfg(test)]
 mod inference_test;
+#[cfg(test)]
+mod int_test;
 #[cfg(test)]
 mod matches_rel_test;
 #[cfg(test)]

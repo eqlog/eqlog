@@ -1,0 +1,14 @@
+enum Z {
+    Zero(),
+    Succ(n: Z),
+    Prede(n: Z)
+}
+
+rule succ_pred {
+    if n = Succ(Prede(m));
+    then n = m;
+}
+rule pred_succ {
+    if n = Prede(Succ(m));
+    then n = m;
+}
