@@ -15,4 +15,8 @@ fn one_plus_zero() {
         zero_cases,
         btreeset! {ZCase::Zero(), ZCase::Prede(succ_zero)}
     );
+    assert_eq!(model.z_case(zero), ZCase::Zero());
+
+    let succ_zero_cases: BTreeSet<ZCase> = model.z_cases(succ_zero).collect();
+    assert_eq!(succ_zero_cases, btreeset! {ZCase::Succ(zero)});
 }

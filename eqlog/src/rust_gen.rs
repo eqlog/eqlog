@@ -1270,6 +1270,12 @@ fn display_enum_cases_fn<'a>(
             #[allow(unused_parens)]
             [].into_iter(){ctor_value_iters}
             }}
+
+            /// Returns the first way to destructure an [{enum_name_camel}] element.
+            #[allow(dead_code)]
+            pub fn {enum_name_snake}_case(&self, el: {enum_name_camel}) -> {enum_name_camel}Case {{
+                self.{enum_name_snake}_cases(el).next().unwrap()
+            }}
         "}
     })
 }
