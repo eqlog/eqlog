@@ -135,7 +135,7 @@ fn display_enum<'a>(
         writedoc! {f, "
             #[allow(unused)]
             #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-            pub enum {enum_name}Enum {{
+            pub enum {enum_name}Case {{
             {ctors}
             }}
         "}
@@ -1165,7 +1165,7 @@ fn display_new_enum_element<'a>(
                     let func_vars = ctor_vars.clone();
 
                     writedoc! {f, "
-                        {enum_name_camel}Enum::{ctor_name_camel}({ctor_vars}) => {{
+                        {enum_name_camel}Case::{ctor_name_camel}({ctor_vars}) => {{
                             self.define_{ctor_name_snake}({func_vars})
                         }}
                     "}
@@ -1176,7 +1176,7 @@ fn display_new_enum_element<'a>(
         writedoc! {f, "
             /// Adjoins a new element of type [{enum_name_camel}].
             #[allow(dead_code)]
-            pub fn new_{enum_name_snake}(&mut self, value: {enum_name_camel}Enum) -> {enum_name_camel} {{
+            pub fn new_{enum_name_snake}(&mut self, value: {enum_name_camel}Case) -> {enum_name_camel} {{
                 match value {{
                     {match_branches}
                 }}
@@ -1249,7 +1249,7 @@ fn display_enum_cases_fn<'a>(
                     writedoc! {f, "
                         .chain(self.iter_{ctor_name_snake}().filter_map(move |({tuple_vars})| {{
                             if el == {result_var} {{
-                                Some({enum_name_camel}Enum::{ctor_name_camel}({ctor_arg_vars}))
+                                Some({enum_name_camel}Case::{ctor_name_camel}({ctor_arg_vars}))
                             }} else {{
                                 None
                             }}
@@ -1265,7 +1265,7 @@ fn display_enum_cases_fn<'a>(
         writedoc! {f, "
             /// Returns an iterator over ways to destructure an [{enum_name_camel}] element.
             #[allow(dead_code)]
-            pub fn {enum_name_snake}_cases<'a>(&'a self, el: {enum_name_camel}) -> impl 'a + Iterator<Item = {enum_name_camel}Enum> {{
+            pub fn {enum_name_snake}_cases<'a>(&'a self, el: {enum_name_camel}) -> impl 'a + Iterator<Item = {enum_name_camel}Case> {{
             let el = self.{enum_name_snake}_equalities.root_const(el);
             #[allow(unused_parens)]
             [].into_iter(){ctor_value_iters}

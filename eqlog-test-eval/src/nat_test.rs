@@ -4,9 +4,9 @@ use crate::nat::*;
 fn one_plus_zero() {
     let mut nats = Nat::new();
 
-    let zero = nats.new_n(NEnum::Zero());
-    let one = nats.new_n(NEnum::Succ(zero));
-    let two = nats.new_n(NEnum::Succ(one));
+    let zero = nats.new_n(NCase::Zero());
+    let one = nats.new_n(NCase::Succ(zero));
+    let two = nats.new_n(NCase::Succ(one));
 
     let zero0 = nats.define_zero();
     let one0 = nats.define_succ(zero0);
