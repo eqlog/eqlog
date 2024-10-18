@@ -222,9 +222,13 @@ rule scope_extension_vars {
     then var_in_scope(ident, extension);
 }
 
+func global_scope() -> Scope;
 func entry_scope(RuleDescendantNode) -> Scope;
 func exit_scope(RuleDescendantNode) -> Scope;
 
+rule global_scope_total {
+    then global_scope()!;
+}
 rule entry_exit_scope_total {
     if descendant: RuleDescendantNode;
     then entry_scope(descendant)!;
@@ -266,7 +270,12 @@ rule scope_extension_siblings_second_parent {
     then exit_scope(parent) = second_exit;
 }
 
-rule scopes_rule {
+rule scopes_global_rule {
+    if rule_entry_scope = entry_scope(rule_descendant_rule(_));
+    if gs = global_scope();
+    then scope_extension(gs, rule_entry_scope);
+}
+rule scopes_rule_stmts {
     if rule_decl(rul, stmts);
 
     if descendant_rule = rule_descendant_rule(rul);

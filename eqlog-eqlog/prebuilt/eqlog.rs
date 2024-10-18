@@ -1,4 +1,4 @@
-// src-digest: F78032C97EA50DB1249C9C3B00F2F19FB5452F2D94055FFE5EEC995D9AD2C11B
+// src-digest: 5D7EBF7854E616270909B8FFA663CA7C7E8AB070745257879E2E7A8F172440A2
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -21585,16 +21585,18 @@ struct RuleDescendantRule(pub RuleDeclNode, pub RuleDescendantNode);
 struct RuleDescendantRuleTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
     element_index_rule_decl_node: BTreeMap<RuleDeclNode, Vec<RuleDescendantRule>>,
     element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantRule>>,
 }
 impl RuleDescendantRuleTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             element_index_rule_decl_node: BTreeMap::new(),
             element_index_rule_descendant_node: BTreeMap::new(),
         }
@@ -21603,6 +21605,7 @@ impl RuleDescendantRuleTable {
     fn insert(&mut self, t: RuleDescendantRule) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_rule_decl_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -21640,6 +21643,14 @@ impl RuleDescendantRuleTable {
     #[allow(unused)]
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantRule {
         RuleDescendantRule(RuleDeclNode::from(t.0), RuleDescendantNode::from(t.1))
+    }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleDescendantRule) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantRule {
+        RuleDescendantRule(RuleDeclNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantRule> {
@@ -21685,6 +21696,19 @@ impl RuleDescendantRuleTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantRule> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_rule_decl_node(&mut self, tm: RuleDeclNode) -> Vec<RuleDescendantRule> {
         let mut ts = match self.element_index_rule_decl_node.remove(&tm) {
             None => Vec::new(),
@@ -21696,6 +21720,7 @@ impl RuleDescendantRuleTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -21719,6 +21744,7 @@ impl RuleDescendantRuleTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -23498,6 +23524,122 @@ impl fmt::Display for RuleDescendantStmtBlockListTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("rule_descendant_stmt_block_list"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬'),
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct GlobalScope(pub Scope);
+#[derive(Clone, Hash, Debug)]
+struct GlobalScopeTable {
+    index_all_0: BTreeSet<(u32,)>,
+    index_dirty_0: BTreeSet<(u32,)>,
+    element_index_scope: BTreeMap<Scope, Vec<GlobalScope>>,
+}
+impl GlobalScopeTable {
+    #[allow(unused)]
+    const WEIGHT: usize = 3;
+    fn new() -> Self {
+        Self {
+            index_all_0: BTreeSet::new(),
+            index_dirty_0: BTreeSet::new(),
+            element_index_scope: BTreeMap::new(),
+        }
+    }
+    #[allow(dead_code)]
+    fn insert(&mut self, t: GlobalScope) -> bool {
+        if self.index_all_0.insert(Self::permute_0(t)) {
+            self.index_dirty_0.insert(Self::permute_0(t));
+
+            match self.element_index_scope.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_scope.insert(t.0, vec![t]);
+                }
+            };
+
+            true
+        } else {
+            false
+        }
+    }
+    #[allow(dead_code)]
+    fn contains(&self, t: GlobalScope) -> bool {
+        self.index_all_0.contains(&Self::permute_0(t))
+    }
+    fn drop_dirt(&mut self) {
+        self.index_dirty_0.clear();
+    }
+    fn is_dirty(&self) -> bool {
+        !self.index_dirty_0.is_empty()
+    }
+    #[allow(unused)]
+    fn permute_0(t: GlobalScope) -> (u32,) {
+        (t.0.into(),)
+    }
+    #[allow(unused)]
+    fn permute_inverse_0(t: (u32,)) -> GlobalScope {
+        GlobalScope(Scope::from(t.0))
+    }
+    #[allow(dead_code)]
+    fn iter_all(&self) -> impl '_ + Iterator<Item = GlobalScope> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = GlobalScope> {
+        let min = (u32::MIN,);
+        let max = (u32::MAX,);
+        self.index_dirty_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: Scope) -> impl '_ + Iterator<Item = GlobalScope> {
+        let arg0 = arg0.0;
+        let min = (arg0,);
+        let max = (arg0,);
+        self.index_all_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0)
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_scope(&mut self, tm: Scope) -> Vec<GlobalScope> {
+        let mut ts = match self.element_index_scope.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0.remove(&Self::permute_0(t)) {
+                self.index_dirty_0.remove(&Self::permute_0(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+}
+impl fmt::Display for GlobalScopeTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("global_scope"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -33265,6 +33407,8 @@ struct RuleDescendantStmtListArgs(pub StmtListNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RuleDescendantStmtBlockListArgs(pub StmtBlockListNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct GlobalScopeArgs();
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct EntryScopeArgs(pub RuleDescendantNode);
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ExitScopeArgs(pub RuleDescendantNode);
@@ -33509,6 +33653,7 @@ struct ModelDelta {
     new_rule_descendant_stmt: Vec<RuleDescendantStmt>,
     new_rule_descendant_stmt_list: Vec<RuleDescendantStmtList>,
     new_rule_descendant_stmt_block_list: Vec<RuleDescendantStmtBlockList>,
+    new_global_scope: Vec<GlobalScope>,
     new_entry_scope: Vec<EntryScope>,
     new_exit_scope: Vec<ExitScope>,
     new_ctor_enum: Vec<CtorEnum>,
@@ -33638,6 +33783,7 @@ struct ModelDelta {
     new_rule_descendant_stmt_def: Vec<RuleDescendantStmtArgs>,
     new_rule_descendant_stmt_list_def: Vec<RuleDescendantStmtListArgs>,
     new_rule_descendant_stmt_block_list_def: Vec<RuleDescendantStmtBlockListArgs>,
+    new_global_scope_def: Vec<GlobalScopeArgs>,
     new_entry_scope_def: Vec<EntryScopeArgs>,
     new_exit_scope_def: Vec<ExitScopeArgs>,
     new_ctor_enum_def: Vec<CtorEnumArgs>,
@@ -34064,6 +34210,7 @@ pub struct Eqlog {
     rule_descendant_stmt: RuleDescendantStmtTable,
     rule_descendant_stmt_list: RuleDescendantStmtListTable,
     rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,
+    global_scope: GlobalScopeTable,
     entry_scope: EntryScopeTable,
     exit_scope: ExitScopeTable,
     ctor_enum: CtorEnumTable,
@@ -34258,6 +34405,7 @@ impl ModelDelta {
             new_rule_descendant_stmt: Vec::new(),
             new_rule_descendant_stmt_list: Vec::new(),
             new_rule_descendant_stmt_block_list: Vec::new(),
+            new_global_scope: Vec::new(),
             new_entry_scope: Vec::new(),
             new_exit_scope: Vec::new(),
             new_ctor_enum: Vec::new(),
@@ -34421,6 +34569,8 @@ impl ModelDelta {
             new_rule_descendant_stmt_list_def: Vec::new(),
 
             new_rule_descendant_stmt_block_list_def: Vec::new(),
+
+            new_global_scope_def: Vec::new(),
 
             new_entry_scope_def: Vec::new(),
 
@@ -35234,6 +35384,10 @@ impl ModelDelta {
             model.insert_rule_descendant_stmt_block_list(tm0, tm1);
         }
 
+        for GlobalScope(tm0) in self.new_global_scope.drain(..) {
+            model.insert_global_scope(tm0);
+        }
+
         for EntryScope(tm0, tm1) in self.new_entry_scope.drain(..) {
             model.insert_entry_scope(tm0, tm1);
         }
@@ -35594,6 +35748,10 @@ impl ModelDelta {
             self.new_rule_descendant_stmt_block_list_def.drain(..)
         {
             model.define_rule_descendant_stmt_block_list(tm0);
+        }
+
+        for GlobalScopeArgs() in self.new_global_scope_def.drain(..) {
+            model.define_global_scope();
         }
 
         for EntryScopeArgs(tm0) in self.new_entry_scope_def.drain(..) {
@@ -36133,6 +36291,7 @@ impl Eqlog {
             rule_descendant_stmt: RuleDescendantStmtTable::new(),
             rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),
             rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),
+            global_scope: GlobalScopeTable::new(),
             entry_scope: EntryScopeTable::new(),
             exit_scope: ExitScopeTable::new(),
             ctor_enum: CtorEnumTable::new(),
@@ -36301,6 +36460,7 @@ impl Eqlog {
                 self.implicit_functionality_86_0(&mut delta);
                 self.implicit_functionality_87_0(&mut delta);
                 self.implicit_functionality_88_0(&mut delta);
+                self.implicit_functionality_89_0(&mut delta);
                 self.real_virt_ident_total_0(&mut delta);
                 self.virt_real_ident_retraction_0(&mut delta);
                 self.rule_descendant_rule_total_0(&mut delta);
@@ -36315,13 +36475,15 @@ impl Eqlog {
                 self.rule_descendant_stmt_list_total_0(&mut delta);
                 self.rule_descendant_stmt_block_list_total_0(&mut delta);
                 self.scope_extension_vars_0(&mut delta);
+                self.global_scope_total_0(&mut delta);
                 self.entry_exit_scope_total_0(&mut delta);
                 self.exit_scope_extends_entry_scope_0(&mut delta);
                 self.scope_single_child_scopes_0(&mut delta);
                 self.scope_extension_siblings_parent_first_0(&mut delta);
                 self.scope_extension_siblings_first_second_0(&mut delta);
                 self.scope_extension_siblings_second_parent_0(&mut delta);
-                self.scopes_rule_0(&mut delta);
+                self.scopes_global_rule_0(&mut delta);
+                self.scopes_rule_stmts_0(&mut delta);
                 self.scopes_stmt_list_cons_0(&mut delta);
                 self.scopes_stmt_block_list_cons_0(&mut delta);
                 self.scopes_stmt_if_0(&mut delta);
@@ -36397,7 +36559,7 @@ impl Eqlog {
                 self.in_ker_rule_0(&mut delta);
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
-                self.anonymous_rule_96_0(&mut delta);
+                self.anonymous_rule_98_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -40294,6 +40456,29 @@ impl Eqlog {
         }
     }
 
+    /// Evaluates `global_scope()`.
+    #[allow(dead_code)]
+    pub fn global_scope(&self) -> Option<Scope> {
+        self.global_scope.iter_all().next().map(|t| t.0)
+    }
+    /// Returns an iterator over `global_scope` constants.
+    /// The iterator may yield more than one element if the model is not closed.
+
+    #[allow(dead_code)]
+    pub fn iter_global_scope(&self) -> impl '_ + Iterator<Item = Scope> {
+        self.global_scope.iter_all().map(|t| t.0)
+    }
+    /// Makes the equation `global_scope() = tm0` hold.
+
+    #[allow(dead_code)]
+    pub fn insert_global_scope(&mut self, mut tm0: Scope) {
+        tm0 = self.scope_equalities.root(tm0);
+        if self.global_scope.insert(GlobalScope(tm0)) {
+            let weight0 = &mut self.scope_weights[tm0.0 as usize];
+            *weight0 = weight0.saturating_add(GlobalScopeTable::WEIGHT);
+        }
+    }
+
     /// Evaluates `entry_scope(arg0)`.
     #[allow(dead_code)]
     pub fn entry_scope(&self, mut arg0: RuleDescendantNode) -> Option<Scope> {
@@ -42423,6 +42608,18 @@ impl Eqlog {
                 let tm1 = self.new_rule_descendant_node_internal();
                 self.insert_rule_descendant_stmt_block_list(tm0, tm1);
                 tm1
+            }
+        }
+    }
+    /// Enforces that `global_scope()` is defined, adjoining a new element if necessary.
+    #[allow(dead_code)]
+    pub fn define_global_scope(&mut self) -> Scope {
+        match self.global_scope() {
+            Some(result) => result,
+            None => {
+                let tm0 = self.new_scope_internal();
+                self.insert_global_scope(tm0);
+                tm0
             }
         }
     }
@@ -52081,6 +52278,20 @@ impl Eqlog {
             }
         }
 
+        for el in self.scope_uprooted.iter().copied() {
+            let ts = self.global_scope.drain_with_element_scope(el);
+            for mut t in ts {
+                let weight0 = &mut self.scope_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(GlobalScopeTable::WEIGHT);
+
+                t.0 = self.root_scope(t.0);
+                if self.global_scope.insert(t) {
+                    let weight0 = &mut self.scope_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(GlobalScopeTable::WEIGHT);
+                }
+            }
+        }
+
         for el in self.rule_descendant_node_uprooted.iter().copied() {
             let ts = self.entry_scope.drain_with_element_rule_descendant_node(el);
             for mut t in ts {
@@ -54680,6 +54891,7 @@ impl Eqlog {
             || self.rule_descendant_stmt.is_dirty()
             || self.rule_descendant_stmt_list.is_dirty()
             || self.rule_descendant_stmt_block_list.is_dirty()
+            || self.global_scope.is_dirty()
             || self.entry_scope.is_dirty()
             || self.exit_scope.is_dirty()
             || self.ctor_enum.is_dirty()
@@ -55275,6 +55487,19 @@ impl Eqlog {
     fn implicit_functionality_34_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for GlobalScope(tm1) in self.global_scope.iter_all() {
+                    delta.new_scope_equalities.push((tm0, tm1));
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn implicit_functionality_35_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
             for EntryScope(tm0, tm1) in self.entry_scope.iter_dirty() {
                 #[allow(unused_variables)]
                 for EntryScope(_, tm2) in self.entry_scope.iter_all_0(tm0) {
@@ -55285,7 +55510,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_35_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_36_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ExitScope(tm0, tm1) in self.exit_scope.iter_dirty() {
@@ -55298,7 +55523,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_36_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_37_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorEnum(tm0, tm1) in self.ctor_enum.iter_dirty() {
@@ -55311,7 +55536,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_37_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_38_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorsEnum(tm0, tm1) in self.ctors_enum.iter_dirty() {
@@ -55324,7 +55549,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_38_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_39_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDiscriminee(tm0, tm1) in self.cases_discriminee.iter_dirty() {
@@ -55337,7 +55562,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_39_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_40_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CaseDiscriminee(tm0, tm1) in self.case_discriminee.iter_dirty() {
@@ -55350,7 +55575,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_40_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_41_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityAtom(tm0, tm1) in
@@ -55367,7 +55592,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_41_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_42_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseEqualityStmt(tm0, tm1) in
@@ -55384,7 +55609,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_42_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlock(tm0, tm1) in self.desugared_case_block.iter_dirty() {
@@ -55397,7 +55622,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_43_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for DesugaredCaseBlockList(tm0, tm1) in self.desugared_case_block_list.iter_dirty() {
@@ -55411,7 +55636,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_44_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticType(tm0, tm1) in self.semantic_type.iter_dirty() {
@@ -55424,7 +55649,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_45_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticArgTypes(tm0, tm1) in self.semantic_arg_types.iter_dirty() {
@@ -55437,7 +55662,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_46_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticPred(tm0, tm1) in self.semantic_pred.iter_dirty() {
@@ -55450,7 +55675,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_47_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredArity(tm0, tm1) in self.pred_arity.iter_dirty() {
@@ -55463,7 +55688,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_48_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticFunc(tm0, tm1) in self.semantic_func.iter_dirty() {
@@ -55476,7 +55701,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_49_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Domain(tm0, tm1) in self.domain.iter_dirty() {
@@ -55489,7 +55714,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_50_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Codomain(tm0, tm1) in self.codomain.iter_dirty() {
@@ -55502,7 +55727,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_51_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Arity(tm0, tm1) in self.arity.iter_dirty() {
@@ -55515,7 +55740,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_52_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Var(tm0, tm1, tm2) in self.var.iter_dirty() {
@@ -55528,7 +55753,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_53_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElStructure(tm0, tm1) in self.el_structure.iter_dirty() {
@@ -55541,7 +55766,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_54_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ElsStructure(tm0, tm1) in self.els_structure.iter_dirty() {
@@ -55554,7 +55779,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_55_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncApp(tm0, tm1, tm2) in self.func_app.iter_dirty() {
@@ -55567,7 +55792,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_56_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Dom(tm0, tm1) in self.dom.iter_dirty() {
@@ -55580,7 +55805,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_57_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Cod(tm0, tm1) in self.cod.iter_dirty() {
@@ -55593,7 +55818,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_58_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEl(tm0, tm1, tm2) in self.map_el.iter_dirty() {
@@ -55606,7 +55831,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_59_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MapEls(tm0, tm1, tm2) in self.map_els.iter_dirty() {
@@ -55619,7 +55844,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_60_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
@@ -55632,7 +55857,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_61_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm0) in self.pred_symbol.iter_dirty() {
@@ -55645,7 +55870,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_62_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm0) in self.func_symbol.iter_dirty() {
@@ -55658,7 +55883,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_63_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm0) in self.rule_symbol.iter_dirty() {
@@ -55671,7 +55896,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_64_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm0) in self.enum_symbol.iter_dirty() {
@@ -55684,7 +55909,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_65_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm0) in self.ctor_symbol.iter_dirty() {
@@ -55697,7 +55922,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_66_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Zero(tm0) in self.zero.iter_dirty() {
@@ -55710,7 +55935,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_67_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for Succ(tm0, tm1) in self.succ.iter_dirty() {
@@ -55723,7 +55948,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_68_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeListLen(tm0, tm1) in self.type_list_len.iter_dirty() {
@@ -55736,7 +55961,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_69_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TermListLen(tm0, tm1) in self.term_list_len.iter_dirty() {
@@ -55749,7 +55974,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_70_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BeforeRuleStructure(tm0, tm1) in self.before_rule_structure.iter_dirty() {
@@ -55762,7 +55987,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_71_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for IfAtomMorphism(tm0, tm1, tm2) in self.if_atom_morphism.iter_dirty() {
@@ -55775,7 +56000,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_72_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ThenAtomMorphism(tm0, tm1, tm2) in self.then_atom_morphism.iter_dirty() {
@@ -55788,7 +56013,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_73_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for BranchStmtMorphism(tm0, tm1, tm2) in self.branch_stmt_morphism.iter_dirty() {
@@ -55803,7 +56028,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_74_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchStmtMorphism(tm0, tm1, tm2) in self.match_stmt_morphism.iter_dirty() {
@@ -55817,7 +56042,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_75_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticName(tm0, tm1, tm2) in self.semantic_name.iter_dirty() {
@@ -55830,7 +56055,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_76_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEl(tm0, tm1, tm2) in self.semantic_el.iter_dirty() {
@@ -55843,7 +56068,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_77_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SemanticEls(tm0, tm1, tm2) in self.semantic_els.iter_dirty() {
@@ -55856,7 +56081,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_78_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for WildcardName(tm0, tm1) in self.wildcard_name.iter_dirty() {
@@ -55869,7 +56094,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_79_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for MatchCasePatternCtor(tm0, tm1) in self.match_case_pattern_ctor.iter_dirty() {
@@ -55882,7 +56107,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_80_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CasesDeterminedEnum(tm0, tm1) in self.cases_determined_enum.iter_dirty() {
@@ -55895,7 +56120,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_81_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilTypeList(tm0) in self.nil_type_list.iter_dirty() {
@@ -55908,7 +56133,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_82_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsTypeList(tm0, tm1, tm2) in self.cons_type_list.iter_dirty() {
@@ -55921,7 +56146,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_83_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SnocTypeList(tm0, tm1, tm2) in self.snoc_type_list.iter_dirty() {
@@ -55934,7 +56159,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_84_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredRel(tm0, tm1) in self.pred_rel.iter_dirty() {
@@ -55947,7 +56172,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_85_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncRel(tm0, tm1) in self.func_rel.iter_dirty() {
@@ -55960,7 +56185,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_86_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for NilElList(tm0, tm1) in self.nil_el_list.iter_dirty() {
@@ -55973,7 +56198,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_87_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_88_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for ConsElList(tm0, tm1, tm2) in self.cons_el_list.iter_dirty() {
@@ -55986,7 +56211,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn implicit_functionality_88_0(&self, delta: &mut ModelDelta) {
+    fn implicit_functionality_89_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for SnocElList(tm0, tm1, tm2) in self.snoc_el_list.iter_dirty() {
@@ -56931,6 +57156,51 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn global_scope_total_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.global_scope_total_1(delta);
+            self.global_scope_total_3(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn global_scope_total_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.global_scope_total_2(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn global_scope_total_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            let tm0 = match self.global_scope.iter_all().next() {
+                Some(GlobalScope(res)) => res,
+                None => {
+                    delta.new_global_scope_def.push(GlobalScopeArgs());
+                    break;
+                }
+            };
+
+            self.global_scope_total_4(delta, tm0);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn global_scope_total_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.global_scope_total_4(delta, tm0);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn global_scope_total_4(&self, delta: &mut ModelDelta, tm0: Scope) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
     fn entry_exit_scope_total_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.entry_exit_scope_total_1(delta);
@@ -57542,62 +57812,165 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_0(&self, delta: &mut ModelDelta) {
+    fn scopes_global_rule_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.scopes_rule_1(delta);
-            self.scopes_rule_2(delta);
-            self.scopes_rule_5(delta);
-            self.scopes_rule_8(delta);
+            self.scopes_global_rule_1(delta);
+            self.scopes_global_rule_2(delta);
+            self.scopes_global_rule_3(delta);
+            self.scopes_global_rule_6(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_1(&self, delta: &mut ModelDelta) {
+    fn scopes_global_rule_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {}
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_2(&self, delta: &mut ModelDelta) {
+    fn scopes_global_rule_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
-                self.scopes_rule_3(delta, tm0, tm1);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scopes_rule_3(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm1: StmtListNode) {
-        for _ in [()] {
-            self.scopes_rule_4(delta, tm0, tm1);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scopes_rule_4(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm1: StmtListNode) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for RuleDescendantRule(_, tm2) in self.rule_descendant_rule.iter_all_0(tm0) {
-                self.scopes_rule_6(delta, tm1, tm0, tm2);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn scopes_rule_5(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for RuleDescendantRule(tm0, tm2) in self.rule_descendant_rule.iter_dirty() {
+            for RuleDescendantRule(tm0, tm1) in self.rule_descendant_rule.iter_dirty() {
                 #[allow(unused_variables)]
-                for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                    self.scopes_rule_6(delta, tm1, tm0, tm2);
+                for EntryScope(_, tm2) in self.entry_scope.iter_all_0(tm1) {
+                    self.scopes_global_rule_4(delta, tm0, tm1, tm2);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_6(
+    fn scopes_global_rule_3(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EntryScope(tm1, tm2) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantRule(tm0, _) in self.rule_descendant_rule.iter_all_1(tm1) {
+                    self.scopes_global_rule_4(delta, tm0, tm1, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_global_rule_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDeclNode,
+        tm1: RuleDescendantNode,
+        tm2: Scope,
+    ) {
+        for _ in [()] {
+            self.scopes_global_rule_5(delta, tm0, tm1, tm2);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_global_rule_5(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDeclNode,
+        tm1: RuleDescendantNode,
+        tm2: Scope,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for GlobalScope(tm3) in self.global_scope.iter_all() {
+                self.scopes_global_rule_7(delta, tm0, tm1, tm2, tm3);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_global_rule_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for GlobalScope(tm3) in self.global_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for EntryScope(tm1, tm2) in self.entry_scope.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantRule(tm0, _) in self.rule_descendant_rule.iter_all_1(tm1) {
+                        self.scopes_global_rule_7(delta, tm0, tm1, tm2, tm3);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_global_rule_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: RuleDeclNode,
+        tm1: RuleDescendantNode,
+        tm2: Scope,
+        tm3: Scope,
+    ) {
+        for _ in [()] {
+            let exists_already = self.scope_extension.iter_all_0_1(tm3, tm2).next().is_some();
+            if !exists_already {
+                delta.new_scope_extension.push(ScopeExtension(tm3, tm2));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.scopes_rule_stmts_1(delta);
+            self.scopes_rule_stmts_2(delta);
+            self.scopes_rule_stmts_5(delta);
+            self.scopes_rule_stmts_8(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
+                self.scopes_rule_stmts_3(delta, tm0, tm1);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_3(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm1: StmtListNode) {
+        for _ in [()] {
+            self.scopes_rule_stmts_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_4(&self, delta: &mut ModelDelta, tm0: RuleDeclNode, tm1: StmtListNode) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleDescendantRule(_, tm2) in self.rule_descendant_rule.iter_all_0(tm0) {
+                self.scopes_rule_stmts_6(delta, tm1, tm0, tm2);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleDescendantRule(tm0, tm2) in self.rule_descendant_rule.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
+                    self.scopes_rule_stmts_6(delta, tm1, tm0, tm2);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scopes_rule_stmts_6(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -57605,12 +57978,12 @@ impl Eqlog {
         tm2: RuleDescendantNode,
     ) {
         for _ in [()] {
-            self.scopes_rule_7(delta, tm1, tm0, tm2);
+            self.scopes_rule_stmts_7(delta, tm1, tm0, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_7(
+    fn scopes_rule_stmts_7(
         &self,
         delta: &mut ModelDelta,
         tm1: StmtListNode,
@@ -57620,13 +57993,13 @@ impl Eqlog {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(_, tm3) in self.rule_descendant_stmt_list.iter_all_0(tm1) {
-                self.scopes_rule_9(delta, tm0, tm2, tm1, tm3);
+                self.scopes_rule_stmts_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_8(&self, delta: &mut ModelDelta) {
+    fn scopes_rule_stmts_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleDescendantStmtList(tm1, tm3) in self.rule_descendant_stmt_list.iter_dirty() {
@@ -57634,7 +58007,7 @@ impl Eqlog {
                 for RuleDecl(tm0, _) in self.rule_decl.iter_all_1(tm1) {
                     #[allow(unused_variables)]
                     for RuleDescendantRule(_, tm2) in self.rule_descendant_rule.iter_all_0(tm0) {
-                        self.scopes_rule_9(delta, tm0, tm2, tm1, tm3);
+                        self.scopes_rule_stmts_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -57642,7 +58015,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn scopes_rule_9(
+    fn scopes_rule_stmts_9(
         &self,
         delta: &mut ModelDelta,
         tm0: RuleDeclNode,
@@ -66968,27 +67341,27 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_0(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_96_1(delta);
-            self.anonymous_rule_96_3(delta);
-            self.anonymous_rule_96_6(delta);
-            self.anonymous_rule_96_9(delta);
-            self.anonymous_rule_96_12(delta);
-            self.anonymous_rule_96_15(delta);
-            self.anonymous_rule_96_18(delta);
+            self.anonymous_rule_98_1(delta);
+            self.anonymous_rule_98_3(delta);
+            self.anonymous_rule_98_6(delta);
+            self.anonymous_rule_98_9(delta);
+            self.anonymous_rule_98_12(delta);
+            self.anonymous_rule_98_15(delta);
+            self.anonymous_rule_98_18(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_1(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_1(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.anonymous_rule_96_2(delta);
+            self.anonymous_rule_98_2(delta);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_2(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             let tm0 = match self.type_symbol.iter_all().next() {
                 Some(TypeSymbol(res)) => res,
@@ -66998,29 +67371,29 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_96_4(delta, tm0);
+            self.anonymous_rule_98_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_3(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_3(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for TypeSymbol(tm0) in self.type_symbol.iter_dirty() {
-                self.anonymous_rule_96_4(delta, tm0);
+                self.anonymous_rule_98_4(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_98_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_96_5(delta, tm0);
+            self.anonymous_rule_98_5(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+    fn anonymous_rule_98_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
         for _ in [()] {
             let tm1 = match self.pred_symbol.iter_all().next() {
                 Some(PredSymbol(res)) => res,
@@ -67030,32 +67403,32 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_96_7(delta, tm0, tm1);
+            self.anonymous_rule_98_7(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_6(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for PredSymbol(tm1) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                    self.anonymous_rule_96_7(delta, tm0, tm1);
+                    self.anonymous_rule_98_7(delta, tm0, tm1);
                 }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_98_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
-            self.anonymous_rule_96_8(delta, tm0, tm1);
+            self.anonymous_rule_98_8(delta, tm0, tm1);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+    fn anonymous_rule_98_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
         for _ in [()] {
             let tm2 = match self.func_symbol.iter_all().next() {
                 Some(FuncSymbol(res)) => res,
@@ -67065,12 +67438,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_96_10(delta, tm0, tm1, tm2);
+            self.anonymous_rule_98_10(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_9(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for FuncSymbol(tm2) in self.func_symbol.iter_dirty() {
@@ -67078,7 +67451,7 @@ impl Eqlog {
                 for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                     #[allow(unused_variables)]
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
-                        self.anonymous_rule_96_10(delta, tm0, tm1, tm2);
+                        self.anonymous_rule_98_10(delta, tm0, tm1, tm2);
                     }
                 }
             }
@@ -67086,7 +67459,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_10(
+    fn anonymous_rule_98_10(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -67094,12 +67467,12 @@ impl Eqlog {
         tm2: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_96_11(delta, tm0, tm1, tm2);
+            self.anonymous_rule_98_11(delta, tm0, tm1, tm2);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_11(
+    fn anonymous_rule_98_11(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -67115,12 +67488,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_96_13(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_98_13(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_12(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_12(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
@@ -67130,7 +67503,7 @@ impl Eqlog {
                     for TypeSymbol(tm0) in self.type_symbol.iter_all() {
                         #[allow(unused_variables)]
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
-                            self.anonymous_rule_96_13(delta, tm0, tm1, tm2, tm3);
+                            self.anonymous_rule_98_13(delta, tm0, tm1, tm2, tm3);
                         }
                     }
                 }
@@ -67139,7 +67512,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_13(
+    fn anonymous_rule_98_13(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -67148,12 +67521,12 @@ impl Eqlog {
         tm3: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_96_14(delta, tm0, tm1, tm2, tm3);
+            self.anonymous_rule_98_14(delta, tm0, tm1, tm2, tm3);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_14(
+    fn anonymous_rule_98_14(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -67170,12 +67543,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_96_16(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_98_16(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_15(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_15(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
@@ -67187,7 +67560,7 @@ impl Eqlog {
                         for PredSymbol(tm1) in self.pred_symbol.iter_all() {
                             #[allow(unused_variables)]
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
-                                self.anonymous_rule_96_16(delta, tm0, tm1, tm2, tm3, tm4);
+                                self.anonymous_rule_98_16(delta, tm0, tm1, tm2, tm3, tm4);
                             }
                         }
                     }
@@ -67197,7 +67570,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_16(
+    fn anonymous_rule_98_16(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -67207,12 +67580,12 @@ impl Eqlog {
         tm4: SymbolKind,
     ) {
         for _ in [()] {
-            self.anonymous_rule_96_17(delta, tm0, tm1, tm2, tm3, tm4);
+            self.anonymous_rule_98_17(delta, tm0, tm1, tm2, tm3, tm4);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_17(
+    fn anonymous_rule_98_17(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -67230,12 +67603,12 @@ impl Eqlog {
                 }
             };
 
-            self.anonymous_rule_96_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+            self.anonymous_rule_98_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
         }
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_18(&self, delta: &mut ModelDelta) {
+    fn anonymous_rule_98_18(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
             for CtorSymbol(tm5) in self.ctor_symbol.iter_dirty() {
@@ -67249,7 +67622,7 @@ impl Eqlog {
                             for FuncSymbol(tm2) in self.func_symbol.iter_all() {
                                 #[allow(unused_variables)]
                                 for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                                    self.anonymous_rule_96_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+                                    self.anonymous_rule_98_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                                 }
                             }
                         }
@@ -67260,7 +67633,7 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn anonymous_rule_96_19(
+    fn anonymous_rule_98_19(
         &self,
         delta: &mut ModelDelta,
         tm0: SymbolKind,
@@ -80958,6 +81331,7 @@ impl Eqlog {
         self.rule_descendant_stmt.drop_dirt();
         self.rule_descendant_stmt_list.drop_dirt();
         self.rule_descendant_stmt_block_list.drop_dirt();
+        self.global_scope.drop_dirt();
         self.entry_scope.drop_dirt();
         self.exit_scope.drop_dirt();
         self.ctor_enum.drop_dirt();
@@ -81591,6 +81965,7 @@ impl fmt::Display for Eqlog {
         self.rule_descendant_stmt.fmt(f)?;
         self.rule_descendant_stmt_list.fmt(f)?;
         self.rule_descendant_stmt_block_list.fmt(f)?;
+        self.global_scope.fmt(f)?;
         self.entry_scope.fmt(f)?;
         self.exit_scope.fmt(f)?;
         self.ctor_enum.fmt(f)?;
