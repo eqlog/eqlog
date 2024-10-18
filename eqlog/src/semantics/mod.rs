@@ -260,12 +260,12 @@ pub fn iter_symbol_declared_twice_errors<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    let mut symbols: BTreeMap<Ident, Vec<Loc>> = BTreeMap::new();
-    for (name, _, loc) in eqlog.iter_defined_symbol() {
-        symbols.entry(name).or_insert(Vec::new()).push(loc);
+    let mut symbols: BTreeMap<(Scope, Ident), Vec<Loc>> = BTreeMap::new();
+    for (scope, name, _, loc) in eqlog.iter_defined_symbol() {
+        symbols.entry((scope, name)).or_insert(Vec::new()).push(loc);
     }
 
-    symbols.into_iter().filter_map(|(ident, locs)| {
+    symbols.into_iter().filter_map(|((scope, ident), locs)| {
         if locs.len() <= 1 {
             return None;
         }
@@ -296,11 +296,12 @@ pub fn iter_symbol_lookup_errors<'a>(
     // In case of multiple declared of a symbol, symbol lookup should go through if at least on
     // declaration is of the right kind. Since the SymbolDeclaredTwice error is probably the root
     // cause, it should be reported with higher preference.
-    let mut declared_symbols: BTreeMap<Ident, Vec<(SymbolKindEnum, Location)>> = BTreeMap::new();
-    for (name, kind, loc) in eqlog.iter_defined_symbol() {
+    let mut declared_symbols: BTreeMap<(Scope, Ident), Vec<(SymbolKindEnum, Location)>> =
+        BTreeMap::new();
+    for (scope, name, kind, loc) in eqlog.iter_defined_symbol() {
         let location = *locations.get(&loc).unwrap();
         declared_symbols
-            .entry(name)
+            .entry((scope, name))
             .or_insert(Vec::new())
             .push((symbol_kind(kind, eqlog), location));
     }
@@ -310,23 +311,24 @@ pub fn iter_symbol_lookup_errors<'a>(
 
     eqlog
         .iter_should_be_symbol()
-        .map(|(ident, kind, loc)| (ident, vec![symbol_kind(kind, eqlog)], loc))
+        .map(|(ident, kind, scope, loc)| (ident, vec![symbol_kind(kind, eqlog)], scope, loc))
         .chain(
             eqlog
                 .iter_should_be_symbol_2()
-                .map(|(ident, kind1, kind2, loc)| {
+                .map(|(ident, kind1, kind2, scope, loc)| {
                     (
                         ident,
                         vec![symbol_kind(kind1, eqlog), symbol_kind(kind2, eqlog)],
+                        scope,
                         loc,
                     )
                 }),
         )
-        .filter_map(move |(ident, expected_kinds, loc)| {
+        .filter_map(move |(ident, expected_kinds, scope, loc)| {
             let name: &str = identifiers.get(&ident).unwrap().as_str();
             let location = *locations.get(&loc).unwrap();
 
-            let decls: &[(SymbolKindEnum, Location)] = match declared_symbols.get(&ident) {
+            let decls: &[(SymbolKindEnum, Location)] = match declared_symbols.get(&(scope, ident)) {
                 None => {
                     return Some(CompileError::UndeclaredSymbol {
                         name: name.to_string(),
@@ -411,7 +413,7 @@ pub fn iter_symbol_casing_errors<'a>(
 ) -> impl 'a + Iterator<Item = CompileError> {
     eqlog
         .iter_defined_symbol()
-        .filter_map(|(ident, kind, loc)| {
+        .filter_map(|(_scope, ident, kind, loc)| {
             let name: &str = identifiers.get(&ident).unwrap().as_str();
 
             let location = *locations.get(&loc).unwrap();

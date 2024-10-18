@@ -1,4 +1,4 @@
-// src-digest: 5D7EBF7854E616270909B8FFA663CA7C7E8AB070745257879E2E7A8F172440A2
+// src-digest: 6DE855F3012DA07D1CA1C0FE1616CE1212BF432D07DCD61DAE4D5AE19FA0F3AA
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -11951,50 +11951,59 @@ impl fmt::Display for RelTupleInImgTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DefinedSymbol(pub Ident, pub SymbolKind, pub Loc);
+struct DefinedSymbol(pub Scope, pub Ident, pub SymbolKind, pub Loc);
 #[derive(Clone, Hash, Debug)]
 struct DefinedSymbolTable {
-    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_all_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
+    index_dirty_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
     element_index_ident: BTreeMap<Ident, Vec<DefinedSymbol>>,
     element_index_loc: BTreeMap<Loc, Vec<DefinedSymbol>>,
+    element_index_scope: BTreeMap<Scope, Vec<DefinedSymbol>>,
     element_index_symbol_kind: BTreeMap<SymbolKind, Vec<DefinedSymbol>>,
 }
 impl DefinedSymbolTable {
     #[allow(unused)]
-    const WEIGHT: usize = 9;
+    const WEIGHT: usize = 12;
     fn new() -> Self {
         Self {
-            index_all_0_1_2: BTreeSet::new(),
-            index_dirty_0_1_2: BTreeSet::new(),
+            index_all_0_1_2_3: BTreeSet::new(),
+            index_dirty_0_1_2_3: BTreeSet::new(),
             element_index_ident: BTreeMap::new(),
             element_index_loc: BTreeMap::new(),
+            element_index_scope: BTreeMap::new(),
             element_index_symbol_kind: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: DefinedSymbol) -> bool {
-        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
-            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+        if self.index_all_0_1_2_3.insert(Self::permute_0_1_2_3(t)) {
+            self.index_dirty_0_1_2_3.insert(Self::permute_0_1_2_3(t));
 
-            match self.element_index_ident.get_mut(&t.0) {
+            match self.element_index_scope.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_ident.insert(t.0, vec![t]);
+                    self.element_index_scope.insert(t.0, vec![t]);
                 }
             };
 
-            match self.element_index_symbol_kind.get_mut(&t.1) {
+            match self.element_index_ident.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_symbol_kind.insert(t.1, vec![t]);
+                    self.element_index_ident.insert(t.1, vec![t]);
                 }
             };
 
-            match self.element_index_loc.get_mut(&t.2) {
+            match self.element_index_symbol_kind.get_mut(&t.2) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_loc.insert(t.2, vec![t]);
+                    self.element_index_symbol_kind.insert(t.2, vec![t]);
+                }
+            };
+
+            match self.element_index_loc.get_mut(&t.3) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_loc.insert(t.3, vec![t]);
                 }
             };
 
@@ -12005,56 +12014,73 @@ impl DefinedSymbolTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: DefinedSymbol) -> bool {
-        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+        self.index_all_0_1_2_3.contains(&Self::permute_0_1_2_3(t))
     }
     fn drop_dirt(&mut self) {
-        self.index_dirty_0_1_2.clear();
+        self.index_dirty_0_1_2_3.clear();
     }
     fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1_2.is_empty()
+        !self.index_dirty_0_1_2_3.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1_2(t: DefinedSymbol) -> (u32, u32, u32) {
-        (t.0.into(), t.1.into(), t.2.into())
+    fn permute_0_1_2_3(t: DefinedSymbol) -> (u32, u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into(), t.3.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> DefinedSymbol {
-        DefinedSymbol(Ident::from(t.0), SymbolKind::from(t.1), Loc::from(t.2))
+    fn permute_inverse_0_1_2_3(t: (u32, u32, u32, u32)) -> DefinedSymbol {
+        DefinedSymbol(
+            Scope::from(t.0),
+            Ident::from(t.1),
+            SymbolKind::from(t.2),
+            Loc::from(t.3),
+        )
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = DefinedSymbol> {
-        let min = (u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_0_1_2
+        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = DefinedSymbol> {
-        let min = (u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_dirty_0_1_2
+        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1_2(
+    fn iter_all_0(&self, arg0: Scope) -> impl '_ + Iterator<Item = DefinedSymbol> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN, u32::MIN, u32::MIN);
+        let max = (arg0, u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2_3
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2_3)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0_1_2_3(
         &self,
-        arg0: Ident,
-        arg1: SymbolKind,
-        arg2: Loc,
+        arg0: Scope,
+        arg1: Ident,
+        arg2: SymbolKind,
+        arg3: Loc,
     ) -> impl '_ + Iterator<Item = DefinedSymbol> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg0, arg1, arg2);
-        let max = (arg0, arg1, arg2);
-        self.index_all_0_1_2
+        let arg3 = arg3.0;
+        let min = (arg0, arg1, arg2, arg3);
+        let max = (arg0, arg1, arg2, arg3);
+        self.index_all_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
     fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<DefinedSymbol> {
@@ -12066,8 +12092,8 @@ impl DefinedSymbolTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12086,8 +12112,28 @@ impl DefinedSymbolTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_scope(&mut self, tm: Scope) -> Vec<DefinedSymbol> {
+        let mut ts = match self.element_index_scope.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12106,8 +12152,8 @@ impl DefinedSymbolTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12132,31 +12178,33 @@ impl fmt::Display for DefinedSymbolTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ShouldBeSymbol(pub Ident, pub SymbolKind, pub Loc);
+struct ShouldBeSymbol(pub Ident, pub SymbolKind, pub Scope, pub Loc);
 #[derive(Clone, Hash, Debug)]
 struct ShouldBeSymbolTable {
-    index_all_0_1_2: BTreeSet<(u32, u32, u32)>,
-    index_dirty_0_1_2: BTreeSet<(u32, u32, u32)>,
+    index_all_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
+    index_dirty_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
     element_index_ident: BTreeMap<Ident, Vec<ShouldBeSymbol>>,
     element_index_loc: BTreeMap<Loc, Vec<ShouldBeSymbol>>,
+    element_index_scope: BTreeMap<Scope, Vec<ShouldBeSymbol>>,
     element_index_symbol_kind: BTreeMap<SymbolKind, Vec<ShouldBeSymbol>>,
 }
 impl ShouldBeSymbolTable {
     #[allow(unused)]
-    const WEIGHT: usize = 9;
+    const WEIGHT: usize = 12;
     fn new() -> Self {
         Self {
-            index_all_0_1_2: BTreeSet::new(),
-            index_dirty_0_1_2: BTreeSet::new(),
+            index_all_0_1_2_3: BTreeSet::new(),
+            index_dirty_0_1_2_3: BTreeSet::new(),
             element_index_ident: BTreeMap::new(),
             element_index_loc: BTreeMap::new(),
+            element_index_scope: BTreeMap::new(),
             element_index_symbol_kind: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: ShouldBeSymbol) -> bool {
-        if self.index_all_0_1_2.insert(Self::permute_0_1_2(t)) {
-            self.index_dirty_0_1_2.insert(Self::permute_0_1_2(t));
+        if self.index_all_0_1_2_3.insert(Self::permute_0_1_2_3(t)) {
+            self.index_dirty_0_1_2_3.insert(Self::permute_0_1_2_3(t));
 
             match self.element_index_ident.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -12172,10 +12220,17 @@ impl ShouldBeSymbolTable {
                 }
             };
 
-            match self.element_index_loc.get_mut(&t.2) {
+            match self.element_index_scope.get_mut(&t.2) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_loc.insert(t.2, vec![t]);
+                    self.element_index_scope.insert(t.2, vec![t]);
+                }
+            };
+
+            match self.element_index_loc.get_mut(&t.3) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_loc.insert(t.3, vec![t]);
                 }
             };
 
@@ -12186,56 +12241,63 @@ impl ShouldBeSymbolTable {
     }
     #[allow(dead_code)]
     fn contains(&self, t: ShouldBeSymbol) -> bool {
-        self.index_all_0_1_2.contains(&Self::permute_0_1_2(t))
+        self.index_all_0_1_2_3.contains(&Self::permute_0_1_2_3(t))
     }
     fn drop_dirt(&mut self) {
-        self.index_dirty_0_1_2.clear();
+        self.index_dirty_0_1_2_3.clear();
     }
     fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1_2.is_empty()
+        !self.index_dirty_0_1_2_3.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1_2(t: ShouldBeSymbol) -> (u32, u32, u32) {
-        (t.0.into(), t.1.into(), t.2.into())
+    fn permute_0_1_2_3(t: ShouldBeSymbol) -> (u32, u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into(), t.3.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1_2(t: (u32, u32, u32)) -> ShouldBeSymbol {
-        ShouldBeSymbol(Ident::from(t.0), SymbolKind::from(t.1), Loc::from(t.2))
+    fn permute_inverse_0_1_2_3(t: (u32, u32, u32, u32)) -> ShouldBeSymbol {
+        ShouldBeSymbol(
+            Ident::from(t.0),
+            SymbolKind::from(t.1),
+            Scope::from(t.2),
+            Loc::from(t.3),
+        )
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = ShouldBeSymbol> {
-        let min = (u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_0_1_2
+        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = ShouldBeSymbol> {
-        let min = (u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX);
-        self.index_dirty_0_1_2
+        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1_2(
+    fn iter_all_0_1_2_3(
         &self,
         arg0: Ident,
         arg1: SymbolKind,
-        arg2: Loc,
+        arg2: Scope,
+        arg3: Loc,
     ) -> impl '_ + Iterator<Item = ShouldBeSymbol> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
-        let min = (arg0, arg1, arg2);
-        let max = (arg0, arg1, arg2);
-        self.index_all_0_1_2
+        let arg3 = arg3.0;
+        let min = (arg0, arg1, arg2, arg3);
+        let max = (arg0, arg1, arg2, arg3);
+        self.index_all_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2)
+            .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
     fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<ShouldBeSymbol> {
@@ -12247,8 +12309,8 @@ impl ShouldBeSymbolTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12267,8 +12329,28 @@ impl ShouldBeSymbolTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_scope(&mut self, tm: Scope) -> Vec<ShouldBeSymbol> {
+        let mut ts = match self.element_index_scope.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12287,8 +12369,8 @@ impl ShouldBeSymbolTable {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2.remove(&Self::permute_0_1_2(t)) {
-                self.index_dirty_0_1_2.remove(&Self::permute_0_1_2(t));
+            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12313,31 +12395,40 @@ impl fmt::Display for ShouldBeSymbolTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct ShouldBeSymbol2(pub Ident, pub SymbolKind, pub SymbolKind, pub Loc);
+struct ShouldBeSymbol2(
+    pub Ident,
+    pub SymbolKind,
+    pub SymbolKind,
+    pub Scope,
+    pub Loc,
+);
 #[derive(Clone, Hash, Debug)]
 struct ShouldBeSymbol2Table {
-    index_all_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
-    index_dirty_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
+    index_all_0_1_2_3_4: BTreeSet<(u32, u32, u32, u32, u32)>,
+    index_dirty_0_1_2_3_4: BTreeSet<(u32, u32, u32, u32, u32)>,
     element_index_ident: BTreeMap<Ident, Vec<ShouldBeSymbol2>>,
     element_index_loc: BTreeMap<Loc, Vec<ShouldBeSymbol2>>,
+    element_index_scope: BTreeMap<Scope, Vec<ShouldBeSymbol2>>,
     element_index_symbol_kind: BTreeMap<SymbolKind, Vec<ShouldBeSymbol2>>,
 }
 impl ShouldBeSymbol2Table {
     #[allow(unused)]
-    const WEIGHT: usize = 12;
+    const WEIGHT: usize = 15;
     fn new() -> Self {
         Self {
-            index_all_0_1_2_3: BTreeSet::new(),
-            index_dirty_0_1_2_3: BTreeSet::new(),
+            index_all_0_1_2_3_4: BTreeSet::new(),
+            index_dirty_0_1_2_3_4: BTreeSet::new(),
             element_index_ident: BTreeMap::new(),
             element_index_loc: BTreeMap::new(),
+            element_index_scope: BTreeMap::new(),
             element_index_symbol_kind: BTreeMap::new(),
         }
     }
     #[allow(dead_code)]
     fn insert(&mut self, t: ShouldBeSymbol2) -> bool {
-        if self.index_all_0_1_2_3.insert(Self::permute_0_1_2_3(t)) {
-            self.index_dirty_0_1_2_3.insert(Self::permute_0_1_2_3(t));
+        if self.index_all_0_1_2_3_4.insert(Self::permute_0_1_2_3_4(t)) {
+            self.index_dirty_0_1_2_3_4
+                .insert(Self::permute_0_1_2_3_4(t));
 
             match self.element_index_ident.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -12360,10 +12451,17 @@ impl ShouldBeSymbol2Table {
                 }
             };
 
-            match self.element_index_loc.get_mut(&t.3) {
+            match self.element_index_scope.get_mut(&t.3) {
                 Some(tuple_vec) => tuple_vec.push(t),
                 None => {
-                    self.element_index_loc.insert(t.3, vec![t]);
+                    self.element_index_scope.insert(t.3, vec![t]);
+                }
+            };
+
+            match self.element_index_loc.get_mut(&t.4) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => {
+                    self.element_index_loc.insert(t.4, vec![t]);
                 }
             };
 
@@ -12374,63 +12472,67 @@ impl ShouldBeSymbol2Table {
     }
     #[allow(dead_code)]
     fn contains(&self, t: ShouldBeSymbol2) -> bool {
-        self.index_all_0_1_2_3.contains(&Self::permute_0_1_2_3(t))
+        self.index_all_0_1_2_3_4
+            .contains(&Self::permute_0_1_2_3_4(t))
     }
     fn drop_dirt(&mut self) {
-        self.index_dirty_0_1_2_3.clear();
+        self.index_dirty_0_1_2_3_4.clear();
     }
     fn is_dirty(&self) -> bool {
-        !self.index_dirty_0_1_2_3.is_empty()
+        !self.index_dirty_0_1_2_3_4.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1_2_3(t: ShouldBeSymbol2) -> (u32, u32, u32, u32) {
-        (t.0.into(), t.1.into(), t.2.into(), t.3.into())
+    fn permute_0_1_2_3_4(t: ShouldBeSymbol2) -> (u32, u32, u32, u32, u32) {
+        (t.0.into(), t.1.into(), t.2.into(), t.3.into(), t.4.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1_2_3(t: (u32, u32, u32, u32)) -> ShouldBeSymbol2 {
+    fn permute_inverse_0_1_2_3_4(t: (u32, u32, u32, u32, u32)) -> ShouldBeSymbol2 {
         ShouldBeSymbol2(
             Ident::from(t.0),
             SymbolKind::from(t.1),
             SymbolKind::from(t.2),
-            Loc::from(t.3),
+            Scope::from(t.3),
+            Loc::from(t.4),
         )
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = ShouldBeSymbol2> {
-        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
-        self.index_all_0_1_2_3
+        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2_3_4
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2_3)
+            .map(Self::permute_inverse_0_1_2_3_4)
     }
     #[allow(dead_code)]
     fn iter_dirty(&self) -> impl '_ + Iterator<Item = ShouldBeSymbol2> {
-        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
-        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
-        self.index_dirty_0_1_2_3
+        let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN, u32::MIN);
+        let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX, u32::MAX);
+        self.index_dirty_0_1_2_3_4
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2_3)
+            .map(Self::permute_inverse_0_1_2_3_4)
     }
     #[allow(dead_code)]
-    fn iter_all_0_1_2_3(
+    fn iter_all_0_1_2_3_4(
         &self,
         arg0: Ident,
         arg1: SymbolKind,
         arg2: SymbolKind,
-        arg3: Loc,
+        arg3: Scope,
+        arg4: Loc,
     ) -> impl '_ + Iterator<Item = ShouldBeSymbol2> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
         let arg3 = arg3.0;
-        let min = (arg0, arg1, arg2, arg3);
-        let max = (arg0, arg1, arg2, arg3);
-        self.index_all_0_1_2_3
+        let arg4 = arg4.0;
+        let min = (arg0, arg1, arg2, arg3, arg4);
+        let max = (arg0, arg1, arg2, arg3, arg4);
+        self.index_all_0_1_2_3_4
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
-            .map(Self::permute_inverse_0_1_2_3)
+            .map(Self::permute_inverse_0_1_2_3_4)
     }
     #[allow(dead_code)]
     fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<ShouldBeSymbol2> {
@@ -12442,8 +12544,9 @@ impl ShouldBeSymbol2Table {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
-                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
+            if self.index_all_0_1_2_3_4.remove(&Self::permute_0_1_2_3_4(t)) {
+                self.index_dirty_0_1_2_3_4
+                    .remove(&Self::permute_0_1_2_3_4(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12462,8 +12565,30 @@ impl ShouldBeSymbol2Table {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
-                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
+            if self.index_all_0_1_2_3_4.remove(&Self::permute_0_1_2_3_4(t)) {
+                self.index_dirty_0_1_2_3_4
+                    .remove(&Self::permute_0_1_2_3_4(t));
+                i += 1;
+            } else {
+                ts.swap_remove(i);
+            }
+        }
+
+        ts
+    }
+    #[allow(dead_code)]
+    fn drain_with_element_scope(&mut self, tm: Scope) -> Vec<ShouldBeSymbol2> {
+        let mut ts = match self.element_index_scope.remove(&tm) {
+            None => Vec::new(),
+            Some(tuples) => tuples,
+        };
+
+        let mut i = 0;
+        while i < ts.len() {
+            let t = ts[i];
+            if self.index_all_0_1_2_3_4.remove(&Self::permute_0_1_2_3_4(t)) {
+                self.index_dirty_0_1_2_3_4
+                    .remove(&Self::permute_0_1_2_3_4(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -12482,8 +12607,9 @@ impl ShouldBeSymbol2Table {
         let mut i = 0;
         while i < ts.len() {
             let t = ts[i];
-            if self.index_all_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
-                self.index_dirty_0_1_2_3.remove(&Self::permute_0_1_2_3(t));
+            if self.index_all_0_1_2_3_4.remove(&Self::permute_0_1_2_3_4(t)) {
+                self.index_dirty_0_1_2_3_4
+                    .remove(&Self::permute_0_1_2_3_4(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -22292,16 +22418,18 @@ struct RuleDescendantIfAtom(pub IfAtomNode, pub RuleDescendantNode);
 struct RuleDescendantIfAtomTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
     element_index_if_atom_node: BTreeMap<IfAtomNode, Vec<RuleDescendantIfAtom>>,
     element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantIfAtom>>,
 }
 impl RuleDescendantIfAtomTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             element_index_if_atom_node: BTreeMap::new(),
             element_index_rule_descendant_node: BTreeMap::new(),
         }
@@ -22310,6 +22438,7 @@ impl RuleDescendantIfAtomTable {
     fn insert(&mut self, t: RuleDescendantIfAtom) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_if_atom_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -22347,6 +22476,14 @@ impl RuleDescendantIfAtomTable {
     #[allow(unused)]
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantIfAtom {
         RuleDescendantIfAtom(IfAtomNode::from(t.0), RuleDescendantNode::from(t.1))
+    }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleDescendantIfAtom) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantIfAtom {
+        RuleDescendantIfAtom(IfAtomNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
@@ -22392,6 +22529,19 @@ impl RuleDescendantIfAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantIfAtom> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_if_atom_node(&mut self, tm: IfAtomNode) -> Vec<RuleDescendantIfAtom> {
         let mut ts = match self.element_index_if_atom_node.remove(&tm) {
             None => Vec::new(),
@@ -22403,6 +22553,7 @@ impl RuleDescendantIfAtomTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -22426,6 +22577,7 @@ impl RuleDescendantIfAtomTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -22455,16 +22607,18 @@ struct RuleDescendantThenAtom(pub ThenAtomNode, pub RuleDescendantNode);
 struct RuleDescendantThenAtomTable {
     index_all_0_1: BTreeSet<(u32, u32)>,
     index_dirty_0_1: BTreeSet<(u32, u32)>,
+    index_all_1_0: BTreeSet<(u32, u32)>,
     element_index_rule_descendant_node: BTreeMap<RuleDescendantNode, Vec<RuleDescendantThenAtom>>,
     element_index_then_atom_node: BTreeMap<ThenAtomNode, Vec<RuleDescendantThenAtom>>,
 }
 impl RuleDescendantThenAtomTable {
     #[allow(unused)]
-    const WEIGHT: usize = 6;
+    const WEIGHT: usize = 8;
     fn new() -> Self {
         Self {
             index_all_0_1: BTreeSet::new(),
             index_dirty_0_1: BTreeSet::new(),
+            index_all_1_0: BTreeSet::new(),
             element_index_rule_descendant_node: BTreeMap::new(),
             element_index_then_atom_node: BTreeMap::new(),
         }
@@ -22473,6 +22627,7 @@ impl RuleDescendantThenAtomTable {
     fn insert(&mut self, t: RuleDescendantThenAtom) -> bool {
         if self.index_all_0_1.insert(Self::permute_0_1(t)) {
             self.index_dirty_0_1.insert(Self::permute_0_1(t));
+            self.index_all_1_0.insert(Self::permute_1_0(t));
 
             match self.element_index_then_atom_node.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -22510,6 +22665,14 @@ impl RuleDescendantThenAtomTable {
     #[allow(unused)]
     fn permute_inverse_0_1(t: (u32, u32)) -> RuleDescendantThenAtom {
         RuleDescendantThenAtom(ThenAtomNode::from(t.0), RuleDescendantNode::from(t.1))
+    }
+    #[allow(unused)]
+    fn permute_1_0(t: RuleDescendantThenAtom) -> (u32, u32) {
+        (t.1.into(), t.0.into())
+    }
+    #[allow(unused)]
+    fn permute_inverse_1_0(t: (u32, u32)) -> RuleDescendantThenAtom {
+        RuleDescendantThenAtom(ThenAtomNode::from(t.1), RuleDescendantNode::from(t.0))
     }
     #[allow(dead_code)]
     fn iter_all(&self) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
@@ -22555,6 +22718,19 @@ impl RuleDescendantThenAtomTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_1(
+        &self,
+        arg1: RuleDescendantNode,
+    ) -> impl '_ + Iterator<Item = RuleDescendantThenAtom> {
+        let arg1 = arg1.0;
+        let min = (arg1, u32::MIN);
+        let max = (arg1, u32::MAX);
+        self.index_all_1_0
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_1_0)
+    }
+    #[allow(dead_code)]
     fn drain_with_element_rule_descendant_node(
         &mut self,
         tm: RuleDescendantNode,
@@ -22569,6 +22745,7 @@ impl RuleDescendantThenAtomTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -22592,6 +22769,7 @@ impl RuleDescendantThenAtomTable {
             let t = ts[i];
             if self.index_all_0_1.remove(&Self::permute_0_1(t)) {
                 self.index_dirty_0_1.remove(&Self::permute_0_1(t));
+                self.index_all_1_0.remove(&Self::permute_1_0(t));
                 i += 1;
             } else {
                 ts.swap_remove(i);
@@ -35079,16 +35257,16 @@ impl ModelDelta {
             model.insert_rel_tuple_in_img(tm0, tm1, tm2);
         }
 
-        for DefinedSymbol(tm0, tm1, tm2) in self.new_defined_symbol.drain(..) {
-            model.insert_defined_symbol(tm0, tm1, tm2);
+        for DefinedSymbol(tm0, tm1, tm2, tm3) in self.new_defined_symbol.drain(..) {
+            model.insert_defined_symbol(tm0, tm1, tm2, tm3);
         }
 
-        for ShouldBeSymbol(tm0, tm1, tm2) in self.new_should_be_symbol.drain(..) {
-            model.insert_should_be_symbol(tm0, tm1, tm2);
+        for ShouldBeSymbol(tm0, tm1, tm2, tm3) in self.new_should_be_symbol.drain(..) {
+            model.insert_should_be_symbol(tm0, tm1, tm2, tm3);
         }
 
-        for ShouldBeSymbol2(tm0, tm1, tm2, tm3) in self.new_should_be_symbol_2.drain(..) {
-            model.insert_should_be_symbol_2(tm0, tm1, tm2, tm3);
+        for ShouldBeSymbol2(tm0, tm1, tm2, tm3, tm4) in self.new_should_be_symbol_2.drain(..) {
+            model.insert_should_be_symbol_2(tm0, tm1, tm2, tm3, tm4);
         }
 
         for PredArgNumShouldMatch(tm0, tm1, tm2) in self.new_pred_arg_num_should_match.drain(..) {
@@ -36560,6 +36738,7 @@ impl Eqlog {
                 self.el_in_img_rule_0(&mut delta);
                 self.rel_tuple_in_img_law_0(&mut delta);
                 self.anonymous_rule_98_0(&mut delta);
+                self.scope_extension_defined_symbol_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -45311,101 +45490,149 @@ impl Eqlog {
         }
     }
 
-    /// Returns `true` if `defined_symbol(arg0, arg1, arg2)` holds.
+    /// Returns `true` if `defined_symbol(arg0, arg1, arg2, arg3)` holds.
     #[allow(dead_code)]
-    pub fn defined_symbol(&self, mut arg0: Ident, mut arg1: SymbolKind, mut arg2: Loc) -> bool {
-        arg0 = self.root_ident(arg0);
-        arg1 = self.root_symbol_kind(arg1);
-        arg2 = self.root_loc(arg2);
+    pub fn defined_symbol(
+        &self,
+        mut arg0: Scope,
+        mut arg1: Ident,
+        mut arg2: SymbolKind,
+        mut arg3: Loc,
+    ) -> bool {
+        arg0 = self.root_scope(arg0);
+        arg1 = self.root_ident(arg1);
+        arg2 = self.root_symbol_kind(arg2);
+        arg3 = self.root_loc(arg3);
         self.defined_symbol
-            .contains(DefinedSymbol(arg0, arg1, arg2))
+            .contains(DefinedSymbol(arg0, arg1, arg2, arg3))
     }
     /// Returns an iterator over tuples of elements satisfying the `defined_symbol` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_defined_symbol(&self) -> impl '_ + Iterator<Item = (Ident, SymbolKind, Loc)> {
-        self.defined_symbol.iter_all().map(|t| (t.0, t.1, t.2))
+    pub fn iter_defined_symbol(
+        &self,
+    ) -> impl '_ + Iterator<Item = (Scope, Ident, SymbolKind, Loc)> {
+        self.defined_symbol.iter_all().map(|t| (t.0, t.1, t.2, t.3))
     }
-    /// Makes `defined_symbol(tm0, tm1, tm2)` hold.
+    /// Makes `defined_symbol(tm0, tm1, tm2, tm3)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_defined_symbol(&mut self, mut tm0: Ident, mut tm1: SymbolKind, mut tm2: Loc) {
-        tm0 = self.ident_equalities.root(tm0);
-        tm1 = self.symbol_kind_equalities.root(tm1);
-        tm2 = self.loc_equalities.root(tm2);
-        if self.defined_symbol.insert(DefinedSymbol(tm0, tm1, tm2)) {
-            let weight0 = &mut self.ident_weights[tm0.0 as usize];
+    pub fn insert_defined_symbol(
+        &mut self,
+        mut tm0: Scope,
+        mut tm1: Ident,
+        mut tm2: SymbolKind,
+        mut tm3: Loc,
+    ) {
+        tm0 = self.scope_equalities.root(tm0);
+        tm1 = self.ident_equalities.root(tm1);
+        tm2 = self.symbol_kind_equalities.root(tm2);
+        tm3 = self.loc_equalities.root(tm3);
+        if self
+            .defined_symbol
+            .insert(DefinedSymbol(tm0, tm1, tm2, tm3))
+        {
+            let weight0 = &mut self.scope_weights[tm0.0 as usize];
             *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
 
-            let weight1 = &mut self.symbol_kind_weights[tm1.0 as usize];
+            let weight1 = &mut self.ident_weights[tm1.0 as usize];
             *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
 
-            let weight2 = &mut self.loc_weights[tm2.0 as usize];
+            let weight2 = &mut self.symbol_kind_weights[tm2.0 as usize];
             *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+
+            let weight3 = &mut self.loc_weights[tm3.0 as usize];
+            *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
         }
     }
 
-    /// Returns `true` if `should_be_symbol(arg0, arg1, arg2)` holds.
+    /// Returns `true` if `should_be_symbol(arg0, arg1, arg2, arg3)` holds.
     #[allow(dead_code)]
-    pub fn should_be_symbol(&self, mut arg0: Ident, mut arg1: SymbolKind, mut arg2: Loc) -> bool {
+    pub fn should_be_symbol(
+        &self,
+        mut arg0: Ident,
+        mut arg1: SymbolKind,
+        mut arg2: Scope,
+        mut arg3: Loc,
+    ) -> bool {
         arg0 = self.root_ident(arg0);
         arg1 = self.root_symbol_kind(arg1);
-        arg2 = self.root_loc(arg2);
+        arg2 = self.root_scope(arg2);
+        arg3 = self.root_loc(arg3);
         self.should_be_symbol
-            .contains(ShouldBeSymbol(arg0, arg1, arg2))
+            .contains(ShouldBeSymbol(arg0, arg1, arg2, arg3))
     }
     /// Returns an iterator over tuples of elements satisfying the `should_be_symbol` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_should_be_symbol(&self) -> impl '_ + Iterator<Item = (Ident, SymbolKind, Loc)> {
-        self.should_be_symbol.iter_all().map(|t| (t.0, t.1, t.2))
+    pub fn iter_should_be_symbol(
+        &self,
+    ) -> impl '_ + Iterator<Item = (Ident, SymbolKind, Scope, Loc)> {
+        self.should_be_symbol
+            .iter_all()
+            .map(|t| (t.0, t.1, t.2, t.3))
     }
-    /// Makes `should_be_symbol(tm0, tm1, tm2)` hold.
+    /// Makes `should_be_symbol(tm0, tm1, tm2, tm3)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_should_be_symbol(&mut self, mut tm0: Ident, mut tm1: SymbolKind, mut tm2: Loc) {
+    pub fn insert_should_be_symbol(
+        &mut self,
+        mut tm0: Ident,
+        mut tm1: SymbolKind,
+        mut tm2: Scope,
+        mut tm3: Loc,
+    ) {
         tm0 = self.ident_equalities.root(tm0);
         tm1 = self.symbol_kind_equalities.root(tm1);
-        tm2 = self.loc_equalities.root(tm2);
-        if self.should_be_symbol.insert(ShouldBeSymbol(tm0, tm1, tm2)) {
+        tm2 = self.scope_equalities.root(tm2);
+        tm3 = self.loc_equalities.root(tm3);
+        if self
+            .should_be_symbol
+            .insert(ShouldBeSymbol(tm0, tm1, tm2, tm3))
+        {
             let weight0 = &mut self.ident_weights[tm0.0 as usize];
             *weight0 = weight0.saturating_add(ShouldBeSymbolTable::WEIGHT);
 
             let weight1 = &mut self.symbol_kind_weights[tm1.0 as usize];
             *weight1 = weight1.saturating_add(ShouldBeSymbolTable::WEIGHT);
 
-            let weight2 = &mut self.loc_weights[tm2.0 as usize];
+            let weight2 = &mut self.scope_weights[tm2.0 as usize];
             *weight2 = weight2.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+            let weight3 = &mut self.loc_weights[tm3.0 as usize];
+            *weight3 = weight3.saturating_add(ShouldBeSymbolTable::WEIGHT);
         }
     }
 
-    /// Returns `true` if `should_be_symbol_2(arg0, arg1, arg2, arg3)` holds.
+    /// Returns `true` if `should_be_symbol_2(arg0, arg1, arg2, arg3, arg4)` holds.
     #[allow(dead_code)]
     pub fn should_be_symbol_2(
         &self,
         mut arg0: Ident,
         mut arg1: SymbolKind,
         mut arg2: SymbolKind,
-        mut arg3: Loc,
+        mut arg3: Scope,
+        mut arg4: Loc,
     ) -> bool {
         arg0 = self.root_ident(arg0);
         arg1 = self.root_symbol_kind(arg1);
         arg2 = self.root_symbol_kind(arg2);
-        arg3 = self.root_loc(arg3);
+        arg3 = self.root_scope(arg3);
+        arg4 = self.root_loc(arg4);
         self.should_be_symbol_2
-            .contains(ShouldBeSymbol2(arg0, arg1, arg2, arg3))
+            .contains(ShouldBeSymbol2(arg0, arg1, arg2, arg3, arg4))
     }
     /// Returns an iterator over tuples of elements satisfying the `should_be_symbol_2` predicate.
 
     #[allow(dead_code)]
     pub fn iter_should_be_symbol_2(
         &self,
-    ) -> impl '_ + Iterator<Item = (Ident, SymbolKind, SymbolKind, Loc)> {
+    ) -> impl '_ + Iterator<Item = (Ident, SymbolKind, SymbolKind, Scope, Loc)> {
         self.should_be_symbol_2
             .iter_all()
-            .map(|t| (t.0, t.1, t.2, t.3))
+            .map(|t| (t.0, t.1, t.2, t.3, t.4))
     }
-    /// Makes `should_be_symbol_2(tm0, tm1, tm2, tm3)` hold.
+    /// Makes `should_be_symbol_2(tm0, tm1, tm2, tm3, tm4)` hold.
 
     #[allow(dead_code)]
     pub fn insert_should_be_symbol_2(
@@ -45413,15 +45640,17 @@ impl Eqlog {
         mut tm0: Ident,
         mut tm1: SymbolKind,
         mut tm2: SymbolKind,
-        mut tm3: Loc,
+        mut tm3: Scope,
+        mut tm4: Loc,
     ) {
         tm0 = self.ident_equalities.root(tm0);
         tm1 = self.symbol_kind_equalities.root(tm1);
         tm2 = self.symbol_kind_equalities.root(tm2);
-        tm3 = self.loc_equalities.root(tm3);
+        tm3 = self.scope_equalities.root(tm3);
+        tm4 = self.loc_equalities.root(tm4);
         if self
             .should_be_symbol_2
-            .insert(ShouldBeSymbol2(tm0, tm1, tm2, tm3))
+            .insert(ShouldBeSymbol2(tm0, tm1, tm2, tm3, tm4))
         {
             let weight0 = &mut self.ident_weights[tm0.0 as usize];
             *weight0 = weight0.saturating_add(ShouldBeSymbol2Table::WEIGHT);
@@ -45432,8 +45661,11 @@ impl Eqlog {
             let weight2 = &mut self.symbol_kind_weights[tm2.0 as usize];
             *weight2 = weight2.saturating_add(ShouldBeSymbol2Table::WEIGHT);
 
-            let weight3 = &mut self.loc_weights[tm3.0 as usize];
+            let weight3 = &mut self.scope_weights[tm3.0 as usize];
             *weight3 = weight3.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+            let weight4 = &mut self.loc_weights[tm4.0 as usize];
+            *weight4 = weight4.saturating_add(ShouldBeSymbol2Table::WEIGHT);
         }
     }
 
@@ -49312,81 +49544,136 @@ impl Eqlog {
         for el in self.ident_uprooted.iter().copied() {
             let ts = self.defined_symbol.drain_with_element_ident(el);
             for mut t in ts {
-                let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                let weight0 = &mut self.scope_weights[t.0 .0 as usize];
                 *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
                 *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                t.0 = self.root_ident(t.0);
-                t.1 = self.root_symbol_kind(t.1);
-                t.2 = self.root_loc(t.2);
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                t.0 = self.root_scope(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_symbol_kind(t.2);
+                t.3 = self.root_loc(t.3);
                 if self.defined_symbol.insert(t) {
-                    let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                    let weight0 = &mut self.scope_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
 
-                    let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
 
-                    let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                    let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
                 }
             }
         }
         for el in self.loc_uprooted.iter().copied() {
             let ts = self.defined_symbol.drain_with_element_loc(el);
             for mut t in ts {
-                let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                let weight0 = &mut self.scope_weights[t.0 .0 as usize];
                 *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
                 *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                t.0 = self.root_ident(t.0);
-                t.1 = self.root_symbol_kind(t.1);
-                t.2 = self.root_loc(t.2);
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                t.0 = self.root_scope(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_symbol_kind(t.2);
+                t.3 = self.root_loc(t.3);
                 if self.defined_symbol.insert(t) {
-                    let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                    let weight0 = &mut self.scope_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
 
-                    let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
 
-                    let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                    let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.scope_uprooted.iter().copied() {
+            let ts = self.defined_symbol.drain_with_element_scope(el);
+            for mut t in ts {
+                let weight0 = &mut self.scope_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                t.0 = self.root_scope(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_symbol_kind(t.2);
+                t.3 = self.root_loc(t.3);
+                if self.defined_symbol.insert(t) {
+                    let weight0 = &mut self.scope_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
+
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
+
+                    let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
                 }
             }
         }
         for el in self.symbol_kind_uprooted.iter().copied() {
             let ts = self.defined_symbol.drain_with_element_symbol_kind(el);
             for mut t in ts {
-                let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                let weight0 = &mut self.scope_weights[t.0 .0 as usize];
                 *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                let weight1 = &mut self.ident_weights[t.1 .0 as usize];
                 *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
 
-                t.0 = self.root_ident(t.0);
-                t.1 = self.root_symbol_kind(t.1);
-                t.2 = self.root_loc(t.2);
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+
+                t.0 = self.root_scope(t.0);
+                t.1 = self.root_ident(t.1);
+                t.2 = self.root_symbol_kind(t.2);
+                t.3 = self.root_loc(t.3);
                 if self.defined_symbol.insert(t) {
-                    let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                    let weight0 = &mut self.scope_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
 
-                    let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                    let weight1 = &mut self.ident_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
 
-                    let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                    let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
                 }
             }
         }
@@ -49400,12 +49687,16 @@ impl Eqlog {
                 let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
                 *weight1 = weight1.saturating_sub(ShouldBeSymbolTable::WEIGHT);
 
-                let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                let weight2 = &mut self.scope_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(ShouldBeSymbolTable::WEIGHT);
 
                 t.0 = self.root_ident(t.0);
                 t.1 = self.root_symbol_kind(t.1);
-                t.2 = self.root_loc(t.2);
+                t.2 = self.root_scope(t.2);
+                t.3 = self.root_loc(t.3);
                 if self.should_be_symbol.insert(t) {
                     let weight0 = &mut self.ident_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(ShouldBeSymbolTable::WEIGHT);
@@ -49413,8 +49704,11 @@ impl Eqlog {
                     let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(ShouldBeSymbolTable::WEIGHT);
 
-                    let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                    let weight2 = &mut self.scope_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(ShouldBeSymbolTable::WEIGHT);
                 }
             }
         }
@@ -49427,12 +49721,16 @@ impl Eqlog {
                 let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
                 *weight1 = weight1.saturating_sub(ShouldBeSymbolTable::WEIGHT);
 
-                let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                let weight2 = &mut self.scope_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(ShouldBeSymbolTable::WEIGHT);
 
                 t.0 = self.root_ident(t.0);
                 t.1 = self.root_symbol_kind(t.1);
-                t.2 = self.root_loc(t.2);
+                t.2 = self.root_scope(t.2);
+                t.3 = self.root_loc(t.3);
                 if self.should_be_symbol.insert(t) {
                     let weight0 = &mut self.ident_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(ShouldBeSymbolTable::WEIGHT);
@@ -49440,8 +49738,45 @@ impl Eqlog {
                     let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(ShouldBeSymbolTable::WEIGHT);
 
-                    let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                    let weight2 = &mut self.scope_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(ShouldBeSymbolTable::WEIGHT);
+                }
+            }
+        }
+        for el in self.scope_uprooted.iter().copied() {
+            let ts = self.should_be_symbol.drain_with_element_scope(el);
+            for mut t in ts {
+                let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                let weight2 = &mut self.scope_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                t.0 = self.root_ident(t.0);
+                t.1 = self.root_symbol_kind(t.1);
+                t.2 = self.root_scope(t.2);
+                t.3 = self.root_loc(t.3);
+                if self.should_be_symbol.insert(t) {
+                    let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+                    let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+                    let weight2 = &mut self.scope_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(ShouldBeSymbolTable::WEIGHT);
                 }
             }
         }
@@ -49454,12 +49789,16 @@ impl Eqlog {
                 let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
                 *weight1 = weight1.saturating_sub(ShouldBeSymbolTable::WEIGHT);
 
-                let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                let weight2 = &mut self.scope_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(ShouldBeSymbolTable::WEIGHT);
+
+                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(ShouldBeSymbolTable::WEIGHT);
 
                 t.0 = self.root_ident(t.0);
                 t.1 = self.root_symbol_kind(t.1);
-                t.2 = self.root_loc(t.2);
+                t.2 = self.root_scope(t.2);
+                t.3 = self.root_loc(t.3);
                 if self.should_be_symbol.insert(t) {
                     let weight0 = &mut self.ident_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(ShouldBeSymbolTable::WEIGHT);
@@ -49467,8 +49806,11 @@ impl Eqlog {
                     let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
                     *weight1 = weight1.saturating_add(ShouldBeSymbolTable::WEIGHT);
 
-                    let weight2 = &mut self.loc_weights[t.2 .0 as usize];
+                    let weight2 = &mut self.scope_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ShouldBeSymbolTable::WEIGHT);
+
+                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(ShouldBeSymbolTable::WEIGHT);
                 }
             }
         }
@@ -49485,13 +49827,17 @@ impl Eqlog {
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
 
-                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                let weight3 = &mut self.scope_weights[t.3 .0 as usize];
                 *weight3 = weight3.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                *weight4 = weight4.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
 
                 t.0 = self.root_ident(t.0);
                 t.1 = self.root_symbol_kind(t.1);
                 t.2 = self.root_symbol_kind(t.2);
-                t.3 = self.root_loc(t.3);
+                t.3 = self.root_scope(t.3);
+                t.4 = self.root_loc(t.4);
                 if self.should_be_symbol_2.insert(t) {
                     let weight0 = &mut self.ident_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(ShouldBeSymbol2Table::WEIGHT);
@@ -49502,8 +49848,11 @@ impl Eqlog {
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ShouldBeSymbol2Table::WEIGHT);
 
-                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    let weight3 = &mut self.scope_weights[t.3 .0 as usize];
                     *weight3 = weight3.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                    *weight4 = weight4.saturating_add(ShouldBeSymbol2Table::WEIGHT);
                 }
             }
         }
@@ -49519,13 +49868,17 @@ impl Eqlog {
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
 
-                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                let weight3 = &mut self.scope_weights[t.3 .0 as usize];
                 *weight3 = weight3.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                *weight4 = weight4.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
 
                 t.0 = self.root_ident(t.0);
                 t.1 = self.root_symbol_kind(t.1);
                 t.2 = self.root_symbol_kind(t.2);
-                t.3 = self.root_loc(t.3);
+                t.3 = self.root_scope(t.3);
+                t.4 = self.root_loc(t.4);
                 if self.should_be_symbol_2.insert(t) {
                     let weight0 = &mut self.ident_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(ShouldBeSymbol2Table::WEIGHT);
@@ -49536,8 +49889,52 @@ impl Eqlog {
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ShouldBeSymbol2Table::WEIGHT);
 
-                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    let weight3 = &mut self.scope_weights[t.3 .0 as usize];
                     *weight3 = weight3.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                    *weight4 = weight4.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+                }
+            }
+        }
+        for el in self.scope_uprooted.iter().copied() {
+            let ts = self.should_be_symbol_2.drain_with_element_scope(el);
+            for mut t in ts {
+                let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                *weight0 = weight0.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                *weight1 = weight1.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
+                *weight2 = weight2.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight3 = &mut self.scope_weights[t.3 .0 as usize];
+                *weight3 = weight3.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                *weight4 = weight4.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                t.0 = self.root_ident(t.0);
+                t.1 = self.root_symbol_kind(t.1);
+                t.2 = self.root_symbol_kind(t.2);
+                t.3 = self.root_scope(t.3);
+                t.4 = self.root_loc(t.4);
+                if self.should_be_symbol_2.insert(t) {
+                    let weight0 = &mut self.ident_weights[t.0 .0 as usize];
+                    *weight0 = weight0.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight1 = &mut self.symbol_kind_weights[t.1 .0 as usize];
+                    *weight1 = weight1.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
+                    *weight2 = weight2.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight3 = &mut self.scope_weights[t.3 .0 as usize];
+                    *weight3 = weight3.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                    *weight4 = weight4.saturating_add(ShouldBeSymbol2Table::WEIGHT);
                 }
             }
         }
@@ -49553,13 +49950,17 @@ impl Eqlog {
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                 *weight2 = weight2.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
 
-                let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                let weight3 = &mut self.scope_weights[t.3 .0 as usize];
                 *weight3 = weight3.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
+
+                let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                *weight4 = weight4.saturating_sub(ShouldBeSymbol2Table::WEIGHT);
 
                 t.0 = self.root_ident(t.0);
                 t.1 = self.root_symbol_kind(t.1);
                 t.2 = self.root_symbol_kind(t.2);
-                t.3 = self.root_loc(t.3);
+                t.3 = self.root_scope(t.3);
+                t.4 = self.root_loc(t.4);
                 if self.should_be_symbol_2.insert(t) {
                     let weight0 = &mut self.ident_weights[t.0 .0 as usize];
                     *weight0 = weight0.saturating_add(ShouldBeSymbol2Table::WEIGHT);
@@ -49570,8 +49971,11 @@ impl Eqlog {
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
                     *weight2 = weight2.saturating_add(ShouldBeSymbol2Table::WEIGHT);
 
-                    let weight3 = &mut self.loc_weights[t.3 .0 as usize];
+                    let weight3 = &mut self.scope_weights[t.3 .0 as usize];
                     *weight3 = weight3.saturating_add(ShouldBeSymbol2Table::WEIGHT);
+
+                    let weight4 = &mut self.loc_weights[t.4 .0 as usize];
+                    *weight4 = weight4.saturating_add(ShouldBeSymbol2Table::WEIGHT);
                 }
             }
         }
@@ -67647,12 +68051,91 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.scope_extension_defined_symbol_1(delta);
+            self.scope_extension_defined_symbol_2(delta);
+            self.scope_extension_defined_symbol_5(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ScopeExtension(tm0, tm1) in self.scope_extension.iter_dirty() {
+                self.scope_extension_defined_symbol_3(delta, tm0, tm1);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope, tm1: Scope) {
+        for _ in [()] {
+            self.scope_extension_defined_symbol_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope, tm1: Scope) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for DefinedSymbol(_, tm2, tm3, tm4) in self.defined_symbol.iter_all_0(tm0) {
+                self.scope_extension_defined_symbol_6(delta, tm1, tm0, tm2, tm3, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for DefinedSymbol(tm0, tm2, tm3, tm4) in self.defined_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for ScopeExtension(_, tm1) in self.scope_extension.iter_all_0(tm0) {
+                    self.scope_extension_defined_symbol_6(delta, tm1, tm0, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn scope_extension_defined_symbol_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Scope,
+        tm0: Scope,
+        tm2: Ident,
+        tm3: SymbolKind,
+        tm4: Loc,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .defined_symbol
+                .iter_all_0_1_2_3(tm1, tm2, tm3, tm4)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm1, tm2, tm3, tm4));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
     fn type_decl_defines_symbol_0(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             self.type_decl_defines_symbol_1(delta);
             self.type_decl_defines_symbol_2(delta);
             self.type_decl_defines_symbol_5(delta);
             self.type_decl_defines_symbol_8(delta);
+            self.type_decl_defines_symbol_11(delta);
         }
     }
 
@@ -67665,24 +68148,24 @@ impl Eqlog {
     fn type_decl_defines_symbol_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeDecl(tm0, tm1) in self.type_decl.iter_dirty() {
-                self.type_decl_defines_symbol_3(delta, tm0, tm1);
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.type_decl_defines_symbol_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn type_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: TypeDeclNode, tm1: Ident) {
+    fn type_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
-            self.type_decl_defines_symbol_4(delta, tm0, tm1);
+            self.type_decl_defines_symbol_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn type_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: TypeDeclNode, tm1: Ident) {
+    fn type_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm2) in self.type_symbol.iter_all() {
+            for TypeDecl(tm1, tm2) in self.type_decl.iter_all() {
                 self.type_decl_defines_symbol_6(delta, tm0, tm1, tm2);
             }
         }
@@ -67692,9 +68175,9 @@ impl Eqlog {
     fn type_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm2) in self.type_symbol.iter_dirty() {
+            for TypeDecl(tm1, tm2) in self.type_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for TypeDecl(tm0, tm1) in self.type_decl.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     self.type_decl_defines_symbol_6(delta, tm0, tm1, tm2);
                 }
             }
@@ -67705,9 +68188,9 @@ impl Eqlog {
     fn type_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
-        tm0: TypeDeclNode,
-        tm1: Ident,
-        tm2: SymbolKind,
+        tm0: Scope,
+        tm1: TypeDeclNode,
+        tm2: Ident,
     ) {
         for _ in [()] {
             self.type_decl_defines_symbol_7(delta, tm0, tm1, tm2);
@@ -67718,14 +68201,14 @@ impl Eqlog {
     fn type_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: TypeDeclNode,
-        tm1: Ident,
-        tm2: SymbolKind,
+        tm0: Scope,
+        tm1: TypeDeclNode,
+        tm2: Ident,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeDeclNodeLoc(_, tm3) in self.type_decl_node_loc.iter_all_0(tm0) {
-                self.type_decl_defines_symbol_9(delta, tm1, tm2, tm0, tm3);
+            for TypeSymbol(tm3) in self.type_symbol.iter_all() {
+                self.type_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3);
             }
         }
     }
@@ -67734,12 +68217,12 @@ impl Eqlog {
     fn type_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeDeclNodeLoc(tm0, tm3) in self.type_decl_node_loc.iter_dirty() {
+            for TypeSymbol(tm3) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for TypeSymbol(tm2) in self.type_symbol.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for TypeDecl(_, tm1) in self.type_decl.iter_all_0(tm0) {
-                        self.type_decl_defines_symbol_9(delta, tm1, tm2, tm0, tm3);
+                    for TypeDecl(tm1, tm2) in self.type_decl.iter_all() {
+                        self.type_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3);
                     }
                 }
             }
@@ -67750,19 +68233,72 @@ impl Eqlog {
     fn type_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: Ident,
-        tm2: SymbolKind,
-        tm0: TypeDeclNode,
-        tm3: Loc,
+        tm0: Scope,
+        tm1: TypeDeclNode,
+        tm2: Ident,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.type_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_decl_defines_symbol_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm1: TypeDeclNode,
+        tm2: Ident,
+        tm3: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeDeclNodeLoc(_, tm4) in self.type_decl_node_loc.iter_all_0(tm1) {
+                self.type_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm1, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeDeclNodeLoc(tm1, tm4) in self.type_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for TypeSymbol(tm3) in self.type_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for TypeDecl(_, tm2) in self.type_decl.iter_all_0(tm1) {
+                        #[allow(unused_variables)]
+                        for GlobalScope(tm0) in self.global_scope.iter_all() {
+                            self.type_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm1, tm4);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn type_decl_defines_symbol_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: Ident,
+        tm3: SymbolKind,
+        tm1: TypeDeclNode,
+        tm4: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .defined_symbol
-                .iter_all_0_1_2(tm1, tm2, tm3)
+                .iter_all_0_1_2_3(tm0, tm2, tm3, tm4)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_defined_symbol.push(DefinedSymbol(tm1, tm2, tm3));
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm0, tm2, tm3, tm4));
             }
         }
     }
@@ -67774,6 +68310,7 @@ impl Eqlog {
             self.enum_decl_defines_symbol_2(delta);
             self.enum_decl_defines_symbol_5(delta);
             self.enum_decl_defines_symbol_8(delta);
+            self.enum_decl_defines_symbol_11(delta);
         }
     }
 
@@ -67786,36 +68323,24 @@ impl Eqlog {
     fn enum_decl_defines_symbol_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumDecl(tm0, tm1, tm2) in self.enum_decl.iter_dirty() {
-                self.enum_decl_defines_symbol_3(delta, tm0, tm1, tm2);
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.enum_decl_defines_symbol_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_decl_defines_symbol_3(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: EnumDeclNode,
-        tm1: Ident,
-        tm2: CtorDeclListNode,
-    ) {
+    fn enum_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
-            self.enum_decl_defines_symbol_4(delta, tm0, tm1, tm2);
+            self.enum_decl_defines_symbol_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn enum_decl_defines_symbol_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: EnumDeclNode,
-        tm1: Ident,
-        tm2: CtorDeclListNode,
-    ) {
+    fn enum_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
+            for EnumDecl(tm1, tm2, tm3) in self.enum_decl.iter_all() {
                 self.enum_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
             }
         }
@@ -67825,9 +68350,9 @@ impl Eqlog {
     fn enum_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumSymbol(tm3) in self.enum_symbol.iter_dirty() {
+            for EnumDecl(tm1, tm2, tm3) in self.enum_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for EnumDecl(tm0, tm1, tm2) in self.enum_decl.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     self.enum_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
@@ -67838,10 +68363,10 @@ impl Eqlog {
     fn enum_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
-        tm0: EnumDeclNode,
-        tm1: Ident,
-        tm2: CtorDeclListNode,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm1: EnumDeclNode,
+        tm2: Ident,
+        tm3: CtorDeclListNode,
     ) {
         for _ in [()] {
             self.enum_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3);
@@ -67852,15 +68377,15 @@ impl Eqlog {
     fn enum_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: EnumDeclNode,
-        tm1: Ident,
-        tm2: CtorDeclListNode,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm1: EnumDeclNode,
+        tm2: Ident,
+        tm3: CtorDeclListNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumDeclNodeLoc(_, tm4) in self.enum_decl_node_loc.iter_all_0(tm0) {
-                self.enum_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+            for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
+                self.enum_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
@@ -67869,12 +68394,12 @@ impl Eqlog {
     fn enum_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumDeclNodeLoc(tm0, tm4) in self.enum_decl_node_loc.iter_dirty() {
+            for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for EnumDecl(_, tm1, tm2) in self.enum_decl.iter_all_0(tm0) {
-                        self.enum_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+                    for EnumDecl(tm1, tm2, tm3) in self.enum_decl.iter_all() {
+                        self.enum_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4);
                     }
                 }
             }
@@ -67885,20 +68410,75 @@ impl Eqlog {
     fn enum_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: Ident,
-        tm2: CtorDeclListNode,
-        tm3: SymbolKind,
-        tm0: EnumDeclNode,
-        tm4: Loc,
+        tm0: Scope,
+        tm1: EnumDeclNode,
+        tm2: Ident,
+        tm3: CtorDeclListNode,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.enum_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn enum_decl_defines_symbol_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm1: EnumDeclNode,
+        tm2: Ident,
+        tm3: CtorDeclListNode,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumDeclNodeLoc(_, tm5) in self.enum_decl_node_loc.iter_all_0(tm1) {
+                self.enum_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn enum_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumDeclNodeLoc(tm1, tm5) in self.enum_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for GlobalScope(tm0) in self.global_scope.iter_all() {
+                        #[allow(unused_variables)]
+                        for EnumDecl(_, tm2, tm3) in self.enum_decl.iter_all_0(tm1) {
+                            self.enum_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn enum_decl_defines_symbol_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: Ident,
+        tm3: CtorDeclListNode,
+        tm4: SymbolKind,
+        tm1: EnumDeclNode,
+        tm5: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .defined_symbol
-                .iter_all_0_1_2(tm1, tm3, tm4)
+                .iter_all_0_1_2_3(tm0, tm2, tm4, tm5)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_defined_symbol.push(DefinedSymbol(tm1, tm3, tm4));
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm0, tm2, tm4, tm5));
             }
         }
     }
@@ -67910,6 +68490,7 @@ impl Eqlog {
             self.pred_decl_defines_symbol_2(delta);
             self.pred_decl_defines_symbol_5(delta);
             self.pred_decl_defines_symbol_8(delta);
+            self.pred_decl_defines_symbol_11(delta);
         }
     }
 
@@ -67922,36 +68503,24 @@ impl Eqlog {
     fn pred_decl_defines_symbol_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_dirty() {
-                self.pred_decl_defines_symbol_3(delta, tm0, tm1, tm2);
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.pred_decl_defines_symbol_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_decl_defines_symbol_3(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: PredDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-    ) {
+    fn pred_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
-            self.pred_decl_defines_symbol_4(delta, tm0, tm1, tm2);
+            self.pred_decl_defines_symbol_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn pred_decl_defines_symbol_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: PredDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-    ) {
+    fn pred_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredSymbol(tm3) in self.pred_symbol.iter_all() {
+            for PredDecl(tm1, tm2, tm3) in self.pred_decl.iter_all() {
                 self.pred_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
             }
         }
@@ -67961,9 +68530,9 @@ impl Eqlog {
     fn pred_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredSymbol(tm3) in self.pred_symbol.iter_dirty() {
+            for PredDecl(tm1, tm2, tm3) in self.pred_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for PredDecl(tm0, tm1, tm2) in self.pred_decl.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     self.pred_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
@@ -67974,10 +68543,10 @@ impl Eqlog {
     fn pred_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
-        tm0: PredDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm1: PredDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
     ) {
         for _ in [()] {
             self.pred_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3);
@@ -67988,15 +68557,15 @@ impl Eqlog {
     fn pred_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: PredDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm1: PredDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredDeclNodeLoc(_, tm4) in self.pred_decl_node_loc.iter_all_0(tm0) {
-                self.pred_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+            for PredSymbol(tm4) in self.pred_symbol.iter_all() {
+                self.pred_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
@@ -68005,12 +68574,12 @@ impl Eqlog {
     fn pred_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredDeclNodeLoc(tm0, tm4) in self.pred_decl_node_loc.iter_dirty() {
+            for PredSymbol(tm4) in self.pred_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for PredSymbol(tm3) in self.pred_symbol.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for PredDecl(_, tm1, tm2) in self.pred_decl.iter_all_0(tm0) {
-                        self.pred_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+                    for PredDecl(tm1, tm2, tm3) in self.pred_decl.iter_all() {
+                        self.pred_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4);
                     }
                 }
             }
@@ -68021,20 +68590,75 @@ impl Eqlog {
     fn pred_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: SymbolKind,
-        tm0: PredDeclNode,
-        tm4: Loc,
+        tm0: Scope,
+        tm1: PredDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.pred_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_decl_defines_symbol_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm1: PredDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredDeclNodeLoc(_, tm5) in self.pred_decl_node_loc.iter_all_0(tm1) {
+                self.pred_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredDeclNodeLoc(tm1, tm5) in self.pred_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for PredSymbol(tm4) in self.pred_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for GlobalScope(tm0) in self.global_scope.iter_all() {
+                        #[allow(unused_variables)]
+                        for PredDecl(_, tm2, tm3) in self.pred_decl.iter_all_0(tm1) {
+                            self.pred_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_decl_defines_symbol_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: SymbolKind,
+        tm1: PredDeclNode,
+        tm5: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .defined_symbol
-                .iter_all_0_1_2(tm1, tm3, tm4)
+                .iter_all_0_1_2_3(tm0, tm2, tm4, tm5)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_defined_symbol.push(DefinedSymbol(tm1, tm3, tm4));
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm0, tm2, tm4, tm5));
             }
         }
     }
@@ -68046,6 +68670,7 @@ impl Eqlog {
             self.func_decl_defines_symbol_2(delta);
             self.func_decl_defines_symbol_5(delta);
             self.func_decl_defines_symbol_8(delta);
+            self.func_decl_defines_symbol_11(delta);
         }
     }
 
@@ -68058,38 +68683,24 @@ impl Eqlog {
     fn func_decl_defines_symbol_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_dirty() {
-                self.func_decl_defines_symbol_3(delta, tm0, tm1, tm2, tm3);
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.func_decl_defines_symbol_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_defines_symbol_3(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: FuncDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: Ident,
-    ) {
+    fn func_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
-            self.func_decl_defines_symbol_4(delta, tm0, tm1, tm2, tm3);
+            self.func_decl_defines_symbol_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn func_decl_defines_symbol_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: FuncDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: Ident,
-    ) {
+    fn func_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncSymbol(tm4) in self.func_symbol.iter_all() {
+            for FuncDecl(tm1, tm2, tm3, tm4) in self.func_decl.iter_all() {
                 self.func_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
@@ -68099,9 +68710,9 @@ impl Eqlog {
     fn func_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncSymbol(tm4) in self.func_symbol.iter_dirty() {
+            for FuncDecl(tm1, tm2, tm3, tm4) in self.func_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     self.func_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3, tm4);
                 }
             }
@@ -68112,11 +68723,11 @@ impl Eqlog {
     fn func_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
-        tm0: FuncDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: Ident,
-        tm4: SymbolKind,
+        tm0: Scope,
+        tm1: FuncDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: Ident,
     ) {
         for _ in [()] {
             self.func_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3, tm4);
@@ -68127,16 +68738,16 @@ impl Eqlog {
     fn func_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: FuncDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: Ident,
-        tm4: SymbolKind,
+        tm0: Scope,
+        tm1: FuncDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: Ident,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncDeclNodeLoc(_, tm5) in self.func_decl_node_loc.iter_all_0(tm0) {
-                self.func_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            for FuncSymbol(tm5) in self.func_symbol.iter_all() {
+                self.func_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
             }
         }
     }
@@ -68145,12 +68756,12 @@ impl Eqlog {
     fn func_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncDeclNodeLoc(tm0, tm5) in self.func_decl_node_loc.iter_dirty() {
+            for FuncSymbol(tm5) in self.func_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for FuncSymbol(tm4) in self.func_symbol.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
-                        self.func_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                    for FuncDecl(tm1, tm2, tm3, tm4) in self.func_decl.iter_all() {
+                        self.func_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
                     }
                 }
             }
@@ -68161,21 +68772,80 @@ impl Eqlog {
     fn func_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: Ident,
-        tm4: SymbolKind,
-        tm0: FuncDeclNode,
-        tm5: Loc,
+        tm0: Scope,
+        tm1: FuncDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: Ident,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.func_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_defines_symbol_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm1: FuncDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: Ident,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncDeclNodeLoc(_, tm6) in self.func_decl_node_loc.iter_all_0(tm1) {
+                self.func_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm5, tm1, tm6);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncDeclNodeLoc(tm1, tm6) in self.func_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncSymbol(tm5) in self.func_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for GlobalScope(tm0) in self.global_scope.iter_all() {
+                        #[allow(unused_variables)]
+                        for FuncDecl(_, tm2, tm3, tm4) in self.func_decl.iter_all_0(tm1) {
+                            self.func_decl_defines_symbol_12(
+                                delta, tm0, tm2, tm3, tm4, tm5, tm1, tm6,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn func_decl_defines_symbol_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: Ident,
+        tm5: SymbolKind,
+        tm1: FuncDeclNode,
+        tm6: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .defined_symbol
-                .iter_all_0_1_2(tm1, tm4, tm5)
+                .iter_all_0_1_2_3(tm0, tm2, tm5, tm6)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_defined_symbol.push(DefinedSymbol(tm1, tm4, tm5));
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm0, tm2, tm5, tm6));
             }
         }
     }
@@ -68187,6 +68857,7 @@ impl Eqlog {
             self.ctor_decl_defines_symbol_2(delta);
             self.ctor_decl_defines_symbol_5(delta);
             self.ctor_decl_defines_symbol_8(delta);
+            self.ctor_decl_defines_symbol_11(delta);
         }
     }
 
@@ -68199,36 +68870,24 @@ impl Eqlog {
     fn ctor_decl_defines_symbol_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorDecl(tm0, tm1, tm2) in self.ctor_decl.iter_dirty() {
-                self.ctor_decl_defines_symbol_3(delta, tm0, tm1, tm2);
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.ctor_decl_defines_symbol_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_defines_symbol_3(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: CtorDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-    ) {
+    fn ctor_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
-            self.ctor_decl_defines_symbol_4(delta, tm0, tm1, tm2);
+            self.ctor_decl_defines_symbol_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn ctor_decl_defines_symbol_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: CtorDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-    ) {
+    fn ctor_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorSymbol(tm3) in self.ctor_symbol.iter_all() {
+            for CtorDecl(tm1, tm2, tm3) in self.ctor_decl.iter_all() {
                 self.ctor_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
             }
         }
@@ -68238,9 +68897,9 @@ impl Eqlog {
     fn ctor_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorSymbol(tm3) in self.ctor_symbol.iter_dirty() {
+            for CtorDecl(tm1, tm2, tm3) in self.ctor_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for CtorDecl(tm0, tm1, tm2) in self.ctor_decl.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     self.ctor_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3);
                 }
             }
@@ -68251,10 +68910,10 @@ impl Eqlog {
     fn ctor_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
-        tm0: CtorDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm1: CtorDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
     ) {
         for _ in [()] {
             self.ctor_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3);
@@ -68265,15 +68924,15 @@ impl Eqlog {
     fn ctor_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: CtorDeclNode,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm1: CtorDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorDeclNodeLoc(_, tm4) in self.ctor_decl_node_loc.iter_all_0(tm0) {
-                self.ctor_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+            for CtorSymbol(tm4) in self.ctor_symbol.iter_all() {
+                self.ctor_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
@@ -68282,12 +68941,12 @@ impl Eqlog {
     fn ctor_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorDeclNodeLoc(tm0, tm4) in self.ctor_decl_node_loc.iter_dirty() {
+            for CtorSymbol(tm4) in self.ctor_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for CtorSymbol(tm3) in self.ctor_symbol.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for CtorDecl(_, tm1, tm2) in self.ctor_decl.iter_all_0(tm0) {
-                        self.ctor_decl_defines_symbol_9(delta, tm1, tm2, tm3, tm0, tm4);
+                    for CtorDecl(tm1, tm2, tm3) in self.ctor_decl.iter_all() {
+                        self.ctor_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4);
                     }
                 }
             }
@@ -68298,20 +68957,75 @@ impl Eqlog {
     fn ctor_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: Ident,
-        tm2: ArgDeclListNode,
-        tm3: SymbolKind,
-        tm0: CtorDeclNode,
-        tm4: Loc,
+        tm0: Scope,
+        tm1: CtorDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.ctor_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_defines_symbol_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm1: CtorDeclNode,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorDeclNodeLoc(_, tm5) in self.ctor_decl_node_loc.iter_all_0(tm1) {
+                self.ctor_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorDeclNodeLoc(tm1, tm5) in self.ctor_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for CtorSymbol(tm4) in self.ctor_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for GlobalScope(tm0) in self.global_scope.iter_all() {
+                        #[allow(unused_variables)]
+                        for CtorDecl(_, tm2, tm3) in self.ctor_decl.iter_all_0(tm1) {
+                            self.ctor_decl_defines_symbol_12(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn ctor_decl_defines_symbol_12(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: Ident,
+        tm3: ArgDeclListNode,
+        tm4: SymbolKind,
+        tm1: CtorDeclNode,
+        tm5: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .defined_symbol
-                .iter_all_0_1_2(tm1, tm3, tm4)
+                .iter_all_0_1_2_3(tm0, tm2, tm4, tm5)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_defined_symbol.push(DefinedSymbol(tm1, tm3, tm4));
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm0, tm2, tm4, tm5));
             }
         }
     }
@@ -68324,6 +69038,7 @@ impl Eqlog {
             self.rule_decl_defines_symbol_5(delta);
             self.rule_decl_defines_symbol_8(delta);
             self.rule_decl_defines_symbol_11(delta);
+            self.rule_decl_defines_symbol_14(delta);
         }
     }
 
@@ -68336,35 +69051,25 @@ impl Eqlog {
     fn rule_decl_defines_symbol_2(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleDecl(tm0, tm1) in self.rule_decl.iter_dirty() {
-                self.rule_decl_defines_symbol_3(delta, tm0, tm1);
+            for GlobalScope(tm0) in self.global_scope.iter_dirty() {
+                self.rule_decl_defines_symbol_3(delta, tm0);
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_decl_defines_symbol_3(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: RuleDeclNode,
-        tm1: StmtListNode,
-    ) {
+    fn rule_decl_defines_symbol_3(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
-            self.rule_decl_defines_symbol_4(delta, tm0, tm1);
+            self.rule_decl_defines_symbol_4(delta, tm0);
         }
     }
 
     #[allow(unused_variables)]
-    fn rule_decl_defines_symbol_4(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: RuleDeclNode,
-        tm1: StmtListNode,
-    ) {
+    fn rule_decl_defines_symbol_4(&self, delta: &mut ModelDelta, tm0: Scope) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
-                self.rule_decl_defines_symbol_6(delta, tm1, tm0, tm2);
+            for RuleDecl(tm1, tm2) in self.rule_decl.iter_all() {
+                self.rule_decl_defines_symbol_6(delta, tm0, tm1, tm2);
             }
         }
     }
@@ -68373,10 +69078,10 @@ impl Eqlog {
     fn rule_decl_defines_symbol_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleName(tm0, tm2) in self.rule_name.iter_dirty() {
+            for RuleDecl(tm1, tm2) in self.rule_decl.iter_dirty() {
                 #[allow(unused_variables)]
-                for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                    self.rule_decl_defines_symbol_6(delta, tm1, tm0, tm2);
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
+                    self.rule_decl_defines_symbol_6(delta, tm0, tm1, tm2);
                 }
             }
         }
@@ -68386,12 +69091,12 @@ impl Eqlog {
     fn rule_decl_defines_symbol_6(
         &self,
         delta: &mut ModelDelta,
-        tm1: StmtListNode,
-        tm0: RuleDeclNode,
-        tm2: Ident,
+        tm0: Scope,
+        tm1: RuleDeclNode,
+        tm2: StmtListNode,
     ) {
         for _ in [()] {
-            self.rule_decl_defines_symbol_7(delta, tm1, tm0, tm2);
+            self.rule_decl_defines_symbol_7(delta, tm0, tm1, tm2);
         }
     }
 
@@ -68399,14 +69104,14 @@ impl Eqlog {
     fn rule_decl_defines_symbol_7(
         &self,
         delta: &mut ModelDelta,
-        tm1: StmtListNode,
-        tm0: RuleDeclNode,
-        tm2: Ident,
+        tm0: Scope,
+        tm1: RuleDeclNode,
+        tm2: StmtListNode,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
-                self.rule_decl_defines_symbol_9(delta, tm1, tm0, tm2, tm3);
+            for RuleName(_, tm3) in self.rule_name.iter_all_0(tm1) {
+                self.rule_decl_defines_symbol_9(delta, tm0, tm2, tm1, tm3);
             }
         }
     }
@@ -68415,12 +69120,12 @@ impl Eqlog {
     fn rule_decl_defines_symbol_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleSymbol(tm3) in self.rule_symbol.iter_dirty() {
+            for RuleName(tm1, tm3) in self.rule_name.iter_dirty() {
                 #[allow(unused_variables)]
-                for RuleName(tm0, tm2) in self.rule_name.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
-                        self.rule_decl_defines_symbol_9(delta, tm1, tm0, tm2, tm3);
+                    for RuleDecl(_, tm2) in self.rule_decl.iter_all_0(tm1) {
+                        self.rule_decl_defines_symbol_9(delta, tm0, tm2, tm1, tm3);
                     }
                 }
             }
@@ -68431,13 +69136,13 @@ impl Eqlog {
     fn rule_decl_defines_symbol_9(
         &self,
         delta: &mut ModelDelta,
-        tm1: StmtListNode,
-        tm0: RuleDeclNode,
-        tm2: Ident,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm2: StmtListNode,
+        tm1: RuleDeclNode,
+        tm3: Ident,
     ) {
         for _ in [()] {
-            self.rule_decl_defines_symbol_10(delta, tm1, tm0, tm2, tm3);
+            self.rule_decl_defines_symbol_10(delta, tm0, tm2, tm1, tm3);
         }
     }
 
@@ -68445,15 +69150,15 @@ impl Eqlog {
     fn rule_decl_defines_symbol_10(
         &self,
         delta: &mut ModelDelta,
-        tm1: StmtListNode,
-        tm0: RuleDeclNode,
-        tm2: Ident,
-        tm3: SymbolKind,
+        tm0: Scope,
+        tm2: StmtListNode,
+        tm1: RuleDeclNode,
+        tm3: Ident,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleDeclNodeLoc(_, tm4) in self.rule_decl_node_loc.iter_all_0(tm0) {
-                self.rule_decl_defines_symbol_12(delta, tm1, tm2, tm3, tm0, tm4);
+            for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
+                self.rule_decl_defines_symbol_12(delta, tm0, tm2, tm1, tm3, tm4);
             }
         }
     }
@@ -68462,14 +69167,14 @@ impl Eqlog {
     fn rule_decl_defines_symbol_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for RuleDeclNodeLoc(tm0, tm4) in self.rule_decl_node_loc.iter_dirty() {
+            for RuleSymbol(tm4) in self.rule_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for RuleSymbol(tm3) in self.rule_symbol.iter_all() {
+                for GlobalScope(tm0) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for RuleDecl(_, tm1) in self.rule_decl.iter_all_0(tm0) {
+                    for RuleDecl(tm1, tm2) in self.rule_decl.iter_all() {
                         #[allow(unused_variables)]
-                        for RuleName(_, tm2) in self.rule_name.iter_all_0(tm0) {
-                            self.rule_decl_defines_symbol_12(delta, tm1, tm2, tm3, tm0, tm4);
+                        for RuleName(_, tm3) in self.rule_name.iter_all_0(tm1) {
+                            self.rule_decl_defines_symbol_12(delta, tm0, tm2, tm1, tm3, tm4);
                         }
                     }
                 }
@@ -68481,20 +69186,80 @@ impl Eqlog {
     fn rule_decl_defines_symbol_12(
         &self,
         delta: &mut ModelDelta,
-        tm1: StmtListNode,
-        tm2: Ident,
-        tm3: SymbolKind,
-        tm0: RuleDeclNode,
-        tm4: Loc,
+        tm0: Scope,
+        tm2: StmtListNode,
+        tm1: RuleDeclNode,
+        tm3: Ident,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.rule_decl_defines_symbol_13(delta, tm0, tm2, tm1, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: StmtListNode,
+        tm1: RuleDeclNode,
+        tm3: Ident,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleDeclNodeLoc(_, tm5) in self.rule_decl_node_loc.iter_all_0(tm1) {
+                self.rule_decl_defines_symbol_15(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_14(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for RuleDeclNodeLoc(tm1, tm5) in self.rule_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleSymbol(tm4) in self.rule_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDecl(_, tm2) in self.rule_decl.iter_all_0(tm1) {
+                        #[allow(unused_variables)]
+                        for RuleName(_, tm3) in self.rule_name.iter_all_0(tm1) {
+                            #[allow(unused_variables)]
+                            for GlobalScope(tm0) in self.global_scope.iter_all() {
+                                self.rule_decl_defines_symbol_15(
+                                    delta, tm0, tm2, tm3, tm4, tm1, tm5,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn rule_decl_defines_symbol_15(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: Scope,
+        tm2: StmtListNode,
+        tm3: Ident,
+        tm4: SymbolKind,
+        tm1: RuleDeclNode,
+        tm5: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .defined_symbol
-                .iter_all_0_1_2(tm2, tm3, tm4)
+                .iter_all_0_1_2_3(tm0, tm3, tm4, tm5)
                 .next()
                 .is_some();
             if !exists_already {
-                delta.new_defined_symbol.push(DefinedSymbol(tm2, tm3, tm4));
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm0, tm3, tm4, tm5));
             }
         }
     }
@@ -68507,6 +69272,7 @@ impl Eqlog {
             self.arg_decl_should_be_type_5(delta);
             self.arg_decl_should_be_type_8(delta);
             self.arg_decl_should_be_type_11(delta);
+            self.arg_decl_should_be_type_14(delta);
         }
     }
 
@@ -68536,7 +69302,7 @@ impl Eqlog {
     fn arg_decl_should_be_type_4(&self, delta: &mut ModelDelta, tm0: ArgDeclNode, tm1: Ident) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm2) in self.type_symbol.iter_all() {
+            for GlobalScope(tm2) in self.global_scope.iter_all() {
                 self.arg_decl_should_be_type_6(delta, tm0, tm1, tm2);
             }
         }
@@ -68546,7 +69312,7 @@ impl Eqlog {
     fn arg_decl_should_be_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm2) in self.type_symbol.iter_dirty() {
+            for GlobalScope(tm2) in self.global_scope.iter_dirty() {
                 #[allow(unused_variables)]
                 for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
                     self.arg_decl_should_be_type_6(delta, tm0, tm1, tm2);
@@ -68561,7 +69327,7 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm0: ArgDeclNode,
         tm1: Ident,
-        tm2: SymbolKind,
+        tm2: Scope,
     ) {
         for _ in [()] {
             self.arg_decl_should_be_type_7(delta, tm0, tm1, tm2);
@@ -68574,11 +69340,11 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm0: ArgDeclNode,
         tm1: Ident,
-        tm2: SymbolKind,
+        tm2: Scope,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
+            for TypeSymbol(tm3) in self.type_symbol.iter_all() {
                 self.arg_decl_should_be_type_9(delta, tm0, tm1, tm2, tm3);
             }
         }
@@ -68588,9 +69354,9 @@ impl Eqlog {
     fn arg_decl_should_be_type_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumSymbol(tm3) in self.enum_symbol.iter_dirty() {
+            for TypeSymbol(tm3) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for TypeSymbol(tm2) in self.type_symbol.iter_all() {
+                for GlobalScope(tm2) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
                     for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
                         self.arg_decl_should_be_type_9(delta, tm0, tm1, tm2, tm3);
@@ -68606,7 +69372,7 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm0: ArgDeclNode,
         tm1: Ident,
-        tm2: SymbolKind,
+        tm2: Scope,
         tm3: SymbolKind,
     ) {
         for _ in [()] {
@@ -68620,13 +69386,13 @@ impl Eqlog {
         delta: &mut ModelDelta,
         tm0: ArgDeclNode,
         tm1: Ident,
-        tm2: SymbolKind,
+        tm2: Scope,
         tm3: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ArgDeclNodeLoc(_, tm4) in self.arg_decl_node_loc.iter_all_0(tm0) {
-                self.arg_decl_should_be_type_12(delta, tm1, tm2, tm3, tm0, tm4);
+            for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
+                self.arg_decl_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
     }
@@ -68635,14 +69401,14 @@ impl Eqlog {
     fn arg_decl_should_be_type_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for ArgDeclNodeLoc(tm0, tm4) in self.arg_decl_node_loc.iter_dirty() {
+            for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for EnumSymbol(tm3) in self.enum_symbol.iter_all() {
+                for TypeSymbol(tm3) in self.type_symbol.iter_all() {
                     #[allow(unused_variables)]
-                    for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
+                    for GlobalScope(tm2) in self.global_scope.iter_all() {
                         #[allow(unused_variables)]
-                        for TypeSymbol(tm2) in self.type_symbol.iter_all() {
-                            self.arg_decl_should_be_type_12(delta, tm1, tm2, tm3, tm0, tm4);
+                        for ArgDeclNodeType(tm0, tm1) in self.arg_decl_node_type.iter_all() {
+                            self.arg_decl_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4);
                         }
                     }
                 }
@@ -68654,22 +69420,80 @@ impl Eqlog {
     fn arg_decl_should_be_type_12(
         &self,
         delta: &mut ModelDelta,
-        tm1: Ident,
-        tm2: SymbolKind,
-        tm3: SymbolKind,
         tm0: ArgDeclNode,
-        tm4: Loc,
+        tm1: Ident,
+        tm2: Scope,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.arg_decl_should_be_type_13(delta, tm0, tm1, tm2, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: ArgDeclNode,
+        tm1: Ident,
+        tm2: Scope,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ArgDeclNodeLoc(_, tm5) in self.arg_decl_node_loc.iter_all_0(tm0) {
+                self.arg_decl_should_be_type_15(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_14(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ArgDeclNodeLoc(tm0, tm5) in self.arg_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for ArgDeclNodeType(_, tm1) in self.arg_decl_node_type.iter_all_0(tm0) {
+                        #[allow(unused_variables)]
+                        for GlobalScope(tm2) in self.global_scope.iter_all() {
+                            #[allow(unused_variables)]
+                            for TypeSymbol(tm3) in self.type_symbol.iter_all() {
+                                self.arg_decl_should_be_type_15(
+                                    delta, tm1, tm2, tm3, tm4, tm0, tm5,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn arg_decl_should_be_type_15(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: Scope,
+        tm3: SymbolKind,
+        tm4: SymbolKind,
+        tm0: ArgDeclNode,
+        tm5: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol_2
-                .iter_all_0_1_2_3(tm1, tm2, tm3, tm4)
+                .iter_all_0_1_2_3_4(tm1, tm3, tm4, tm2, tm5)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol_2
-                    .push(ShouldBeSymbol2(tm1, tm2, tm3, tm4));
+                    .push(ShouldBeSymbol2(tm1, tm3, tm4, tm2, tm5));
             }
         }
     }
@@ -68682,6 +69506,7 @@ impl Eqlog {
             self.result_should_be_type_5(delta);
             self.result_should_be_type_8(delta);
             self.result_should_be_type_11(delta);
+            self.result_should_be_type_14(delta);
         }
     }
 
@@ -68725,7 +69550,7 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm4) in self.type_symbol.iter_all() {
+            for GlobalScope(tm4) in self.global_scope.iter_all() {
                 self.result_should_be_type_6(delta, tm0, tm1, tm2, tm3, tm4);
             }
         }
@@ -68735,7 +69560,7 @@ impl Eqlog {
     fn result_should_be_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm4) in self.type_symbol.iter_dirty() {
+            for GlobalScope(tm4) in self.global_scope.iter_dirty() {
                 #[allow(unused_variables)]
                 for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
                     self.result_should_be_type_6(delta, tm0, tm1, tm2, tm3, tm4);
@@ -68752,7 +69577,7 @@ impl Eqlog {
         tm1: Ident,
         tm2: ArgDeclListNode,
         tm3: Ident,
-        tm4: SymbolKind,
+        tm4: Scope,
     ) {
         for _ in [()] {
             self.result_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4);
@@ -68767,11 +69592,11 @@ impl Eqlog {
         tm1: Ident,
         tm2: ArgDeclListNode,
         tm3: Ident,
-        tm4: SymbolKind,
+        tm4: Scope,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumSymbol(tm5) in self.enum_symbol.iter_all() {
+            for TypeSymbol(tm5) in self.type_symbol.iter_all() {
                 self.result_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
             }
         }
@@ -68781,9 +69606,9 @@ impl Eqlog {
     fn result_should_be_type_8(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for EnumSymbol(tm5) in self.enum_symbol.iter_dirty() {
+            for TypeSymbol(tm5) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for TypeSymbol(tm4) in self.type_symbol.iter_all() {
+                for GlobalScope(tm4) in self.global_scope.iter_all() {
                     #[allow(unused_variables)]
                     for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
                         self.result_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
@@ -68801,7 +69626,7 @@ impl Eqlog {
         tm1: Ident,
         tm2: ArgDeclListNode,
         tm3: Ident,
-        tm4: SymbolKind,
+        tm4: Scope,
         tm5: SymbolKind,
     ) {
         for _ in [()] {
@@ -68817,13 +69642,13 @@ impl Eqlog {
         tm1: Ident,
         tm2: ArgDeclListNode,
         tm3: Ident,
-        tm4: SymbolKind,
+        tm4: Scope,
         tm5: SymbolKind,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncDeclNodeLoc(_, tm6) in self.func_decl_node_loc.iter_all_0(tm0) {
-                self.result_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+            for EnumSymbol(tm6) in self.enum_symbol.iter_all() {
+                self.result_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
             }
         }
     }
@@ -68832,14 +69657,14 @@ impl Eqlog {
     fn result_should_be_type_11(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncDeclNodeLoc(tm0, tm6) in self.func_decl_node_loc.iter_dirty() {
+            for EnumSymbol(tm6) in self.enum_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for EnumSymbol(tm5) in self.enum_symbol.iter_all() {
+                for TypeSymbol(tm5) in self.type_symbol.iter_all() {
                     #[allow(unused_variables)]
-                    for TypeSymbol(tm4) in self.type_symbol.iter_all() {
+                    for GlobalScope(tm4) in self.global_scope.iter_all() {
                         #[allow(unused_variables)]
-                        for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
-                            self.result_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+                        for FuncDecl(tm0, tm1, tm2, tm3) in self.func_decl.iter_all() {
+                            self.result_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
                         }
                     }
                 }
@@ -68851,24 +69676,86 @@ impl Eqlog {
     fn result_should_be_type_12(
         &self,
         delta: &mut ModelDelta,
+        tm0: FuncDeclNode,
         tm1: Ident,
         tm2: ArgDeclListNode,
         tm3: Ident,
-        tm4: SymbolKind,
+        tm4: Scope,
         tm5: SymbolKind,
+        tm6: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.result_should_be_type_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_13(
+        &self,
+        delta: &mut ModelDelta,
         tm0: FuncDeclNode,
-        tm6: Loc,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncDeclNodeLoc(_, tm7) in self.func_decl_node_loc.iter_all_0(tm0) {
+                self.result_should_be_type_15(delta, tm1, tm2, tm3, tm4, tm5, tm6, tm0, tm7);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_14(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncDeclNodeLoc(tm0, tm7) in self.func_decl_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for EnumSymbol(tm6) in self.enum_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for TypeSymbol(tm5) in self.type_symbol.iter_all() {
+                        #[allow(unused_variables)]
+                        for GlobalScope(tm4) in self.global_scope.iter_all() {
+                            #[allow(unused_variables)]
+                            for FuncDecl(_, tm1, tm2, tm3) in self.func_decl.iter_all_0(tm0) {
+                                self.result_should_be_type_15(
+                                    delta, tm1, tm2, tm3, tm4, tm5, tm6, tm0, tm7,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn result_should_be_type_15(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: ArgDeclListNode,
+        tm3: Ident,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+        tm0: FuncDeclNode,
+        tm7: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol_2
-                .iter_all_0_1_2_3(tm3, tm4, tm5, tm6)
+                .iter_all_0_1_2_3_4(tm3, tm5, tm6, tm4, tm7)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol_2
-                    .push(ShouldBeSymbol2(tm3, tm4, tm5, tm6));
+                    .push(ShouldBeSymbol2(tm3, tm5, tm6, tm4, tm7));
             }
         }
     }
@@ -68879,8 +69766,10 @@ impl Eqlog {
             self.var_atom_should_be_type_1(delta);
             self.var_atom_should_be_type_2(delta);
             self.var_atom_should_be_type_5(delta);
-            self.var_atom_should_be_type_8(delta);
-            self.var_atom_should_be_type_11(delta);
+            self.var_atom_should_be_type_6(delta);
+            self.var_atom_should_be_type_9(delta);
+            self.var_atom_should_be_type_12(delta);
+            self.var_atom_should_be_type_15(delta);
         }
     }
 
@@ -68922,8 +69811,11 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm3) in self.type_symbol.iter_all() {
-                self.var_atom_should_be_type_6(delta, tm0, tm1, tm2, tm3);
+            for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                    self.var_atom_should_be_type_7(delta, tm1, tm2, tm0, tm3, tm4);
+                }
             }
         }
     }
@@ -68932,56 +69824,12 @@ impl Eqlog {
     fn var_atom_should_be_type_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TypeSymbol(tm3) in self.type_symbol.iter_dirty() {
+            for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
                 #[allow(unused_variables)]
-                for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
-                    self.var_atom_should_be_type_6(delta, tm0, tm1, tm2, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn var_atom_should_be_type_6(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: IfAtomNode,
-        tm1: TermNode,
-        tm2: Ident,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            self.var_atom_should_be_type_7(delta, tm0, tm1, tm2, tm3);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn var_atom_should_be_type_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: IfAtomNode,
-        tm1: TermNode,
-        tm2: Ident,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
-                self.var_atom_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn var_atom_should_be_type_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for EnumSymbol(tm4) in self.enum_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for TypeSymbol(tm3) in self.type_symbol.iter_all() {
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for VarIfAtomNode(tm0, tm1, tm2) in self.var_if_atom_node.iter_all() {
-                        self.var_atom_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4);
+                    for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
+                        self.var_atom_should_be_type_7(delta, tm1, tm2, tm0, tm3, tm4);
                     }
                 }
             }
@@ -68989,50 +69837,67 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_atom_should_be_type_9(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: IfAtomNode,
-        tm1: TermNode,
-        tm2: Ident,
-        tm3: SymbolKind,
-        tm4: SymbolKind,
-    ) {
-        for _ in [()] {
-            self.var_atom_should_be_type_10(delta, tm0, tm1, tm2, tm3, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn var_atom_should_be_type_10(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: IfAtomNode,
-        tm1: TermNode,
-        tm2: Ident,
-        tm3: SymbolKind,
-        tm4: SymbolKind,
-    ) {
+    fn var_atom_should_be_type_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for IfAtomNodeLoc(_, tm5) in self.if_atom_node_loc.iter_all_0(tm0) {
-                self.var_atom_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
+                        self.var_atom_should_be_type_7(delta, tm1, tm2, tm0, tm3, tm4);
+                    }
+                }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn var_atom_should_be_type_11(&self, delta: &mut ModelDelta) {
+    fn var_atom_should_be_type_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.var_atom_should_be_type_8(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_8(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for IfAtomNodeLoc(tm0, tm5) in self.if_atom_node_loc.iter_dirty() {
+            for TypeSymbol(tm5) in self.type_symbol.iter_all() {
+                self.var_atom_should_be_type_10(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_9(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TypeSymbol(tm5) in self.type_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for EnumSymbol(tm4) in self.enum_symbol.iter_all() {
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for TypeSymbol(tm3) in self.type_symbol.iter_all() {
+                    for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3)
+                    {
                         #[allow(unused_variables)]
                         for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0) {
-                            self.var_atom_should_be_type_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                            self.var_atom_should_be_type_10(delta, tm1, tm2, tm0, tm3, tm4, tm5);
                         }
                     }
                 }
@@ -69041,26 +69906,158 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn var_atom_should_be_type_12(
+    fn var_atom_should_be_type_10(
         &self,
         delta: &mut ModelDelta,
         tm1: TermNode,
         tm2: Ident,
-        tm3: SymbolKind,
-        tm4: SymbolKind,
         tm0: IfAtomNode,
-        tm5: Loc,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.var_atom_should_be_type_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumSymbol(tm6) in self.enum_symbol.iter_all() {
+                self.var_atom_should_be_type_13(delta, tm1, tm2, tm0, tm3, tm4, tm5, tm6);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_12(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EnumSymbol(tm6) in self.enum_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for TypeSymbol(tm5) in self.type_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
+                        #[allow(unused_variables)]
+                        for RuleDescendantIfAtom(tm0, _) in
+                            self.rule_descendant_if_atom.iter_all_1(tm3)
+                        {
+                            #[allow(unused_variables)]
+                            for VarIfAtomNode(_, tm1, tm2) in self.var_if_atom_node.iter_all_0(tm0)
+                            {
+                                self.var_atom_should_be_type_13(
+                                    delta, tm1, tm2, tm0, tm3, tm4, tm5, tm6,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.var_atom_should_be_type_14(delta, tm1, tm2, tm0, tm3, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_14(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for IfAtomNodeLoc(_, tm7) in self.if_atom_node_loc.iter_all_0(tm0) {
+                self.var_atom_should_be_type_16(delta, tm1, tm2, tm3, tm4, tm5, tm6, tm0, tm7);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_15(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for IfAtomNodeLoc(tm0, tm7) in self.if_atom_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for EnumSymbol(tm6) in self.enum_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for TypeSymbol(tm5) in self.type_symbol.iter_all() {
+                        #[allow(unused_variables)]
+                        for RuleDescendantIfAtom(_, tm3) in
+                            self.rule_descendant_if_atom.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                                #[allow(unused_variables)]
+                                for VarIfAtomNode(_, tm1, tm2) in
+                                    self.var_if_atom_node.iter_all_0(tm0)
+                                {
+                                    self.var_atom_should_be_type_16(
+                                        delta, tm1, tm2, tm3, tm4, tm5, tm6, tm0, tm7,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn var_atom_should_be_type_16(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: Ident,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+        tm0: IfAtomNode,
+        tm7: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol_2
-                .iter_all_0_1_2_3(tm2, tm3, tm4, tm5)
+                .iter_all_0_1_2_3_4(tm2, tm5, tm6, tm4, tm7)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol_2
-                    .push(ShouldBeSymbol2(tm2, tm3, tm4, tm5));
+                    .push(ShouldBeSymbol2(tm2, tm5, tm6, tm4, tm7));
             }
         }
     }
@@ -69071,7 +70068,9 @@ impl Eqlog {
             self.pred_if_atom_should_be_pred_1(delta);
             self.pred_if_atom_should_be_pred_2(delta);
             self.pred_if_atom_should_be_pred_5(delta);
-            self.pred_if_atom_should_be_pred_8(delta);
+            self.pred_if_atom_should_be_pred_6(delta);
+            self.pred_if_atom_should_be_pred_9(delta);
+            self.pred_if_atom_should_be_pred_12(delta);
         }
     }
 
@@ -69113,8 +70112,11 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredSymbol(tm3) in self.pred_symbol.iter_all() {
-                self.pred_if_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
+            for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                    self.pred_if_atom_should_be_pred_7(delta, tm1, tm2, tm0, tm3, tm4);
+                }
             }
         }
     }
@@ -69123,56 +70125,12 @@ impl Eqlog {
     fn pred_if_atom_should_be_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredSymbol(tm3) in self.pred_symbol.iter_dirty() {
+            for RuleDescendantIfAtom(tm0, tm3) in self.rule_descendant_if_atom.iter_dirty() {
                 #[allow(unused_variables)]
-                for PredIfAtomNode(tm0, tm1, tm2) in self.pred_if_atom_node.iter_all() {
-                    self.pred_if_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_6(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: IfAtomNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            self.pred_if_atom_should_be_pred_7(delta, tm0, tm1, tm2, tm3);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: IfAtomNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for IfAtomNodeLoc(_, tm4) in self.if_atom_node_loc.iter_all_0(tm0) {
-                self.pred_if_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for IfAtomNodeLoc(tm0, tm4) in self.if_atom_node_loc.iter_dirty() {
-                #[allow(unused_variables)]
-                for PredSymbol(tm3) in self.pred_symbol.iter_all() {
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
-                        self.pred_if_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.pred_if_atom_should_be_pred_7(delta, tm1, tm2, tm0, tm3, tm4);
                     }
                 }
             }
@@ -69180,25 +70138,160 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_if_atom_should_be_pred_9(
+    fn pred_if_atom_should_be_pred_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
+                        self.pred_if_atom_should_be_pred_7(delta, tm1, tm2, tm0, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
         tm2: TermListNode,
-        tm3: SymbolKind,
         tm0: IfAtomNode,
-        tm4: Loc,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.pred_if_atom_should_be_pred_8(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_8(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredSymbol(tm5) in self.pred_symbol.iter_all() {
+                self.pred_if_atom_should_be_pred_10(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_9(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredSymbol(tm5) in self.pred_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantIfAtom(tm0, _) in self.rule_descendant_if_atom.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for PredIfAtomNode(_, tm1, tm2) in self.pred_if_atom_node.iter_all_0(tm0) {
+                            self.pred_if_atom_should_be_pred_10(
+                                delta, tm1, tm2, tm0, tm3, tm4, tm5,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.pred_if_atom_should_be_pred_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: IfAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for IfAtomNodeLoc(_, tm6) in self.if_atom_node_loc.iter_all_0(tm0) {
+                self.pred_if_atom_should_be_pred_13(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_12(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for IfAtomNodeLoc(tm0, tm6) in self.if_atom_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for PredSymbol(tm5) in self.pred_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantIfAtom(_, tm3) in self.rule_descendant_if_atom.iter_all_0(tm0)
+                    {
+                        #[allow(unused_variables)]
+                        for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                            #[allow(unused_variables)]
+                            for PredIfAtomNode(_, tm1, tm2) in
+                                self.pred_if_atom_node.iter_all_0(tm0)
+                            {
+                                self.pred_if_atom_should_be_pred_13(
+                                    delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_if_atom_should_be_pred_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm0: IfAtomNode,
+        tm6: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol
-                .iter_all_0_1_2(tm1, tm3, tm4)
+                .iter_all_0_1_2_3(tm1, tm5, tm4, tm6)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol
-                    .push(ShouldBeSymbol(tm1, tm3, tm4));
+                    .push(ShouldBeSymbol(tm1, tm5, tm4, tm6));
             }
         }
     }
@@ -69209,7 +70302,9 @@ impl Eqlog {
             self.pred_then_atom_should_be_pred_1(delta);
             self.pred_then_atom_should_be_pred_2(delta);
             self.pred_then_atom_should_be_pred_5(delta);
-            self.pred_then_atom_should_be_pred_8(delta);
+            self.pred_then_atom_should_be_pred_6(delta);
+            self.pred_then_atom_should_be_pred_9(delta);
+            self.pred_then_atom_should_be_pred_12(delta);
         }
     }
 
@@ -69251,8 +70346,11 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredSymbol(tm3) in self.pred_symbol.iter_all() {
-                self.pred_then_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
+            for RuleDescendantThenAtom(_, tm3) in self.rule_descendant_then_atom.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                    self.pred_then_atom_should_be_pred_7(delta, tm1, tm2, tm0, tm3, tm4);
+                }
             }
         }
     }
@@ -69261,56 +70359,12 @@ impl Eqlog {
     fn pred_then_atom_should_be_pred_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for PredSymbol(tm3) in self.pred_symbol.iter_dirty() {
+            for RuleDescendantThenAtom(tm0, tm3) in self.rule_descendant_then_atom.iter_dirty() {
                 #[allow(unused_variables)]
-                for PredThenAtomNode(tm0, tm1, tm2) in self.pred_then_atom_node.iter_all() {
-                    self.pred_then_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_6(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: ThenAtomNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            self.pred_then_atom_should_be_pred_7(delta, tm0, tm1, tm2, tm3);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: ThenAtomNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ThenAtomNodeLoc(_, tm4) in self.then_atom_node_loc.iter_all_0(tm0) {
-                self.pred_then_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for ThenAtomNodeLoc(tm0, tm4) in self.then_atom_node_loc.iter_dirty() {
-                #[allow(unused_variables)]
-                for PredSymbol(tm3) in self.pred_symbol.iter_all() {
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
                     #[allow(unused_variables)]
                     for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
-                        self.pred_then_atom_should_be_pred_9(delta, tm1, tm2, tm3, tm0, tm4);
+                        self.pred_then_atom_should_be_pred_7(delta, tm1, tm2, tm0, tm3, tm4);
                     }
                 }
             }
@@ -69318,25 +70372,165 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn pred_then_atom_should_be_pred_9(
+    fn pred_then_atom_should_be_pred_6(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantThenAtom(tm0, _) in self.rule_descendant_then_atom.iter_all_1(tm3)
+                {
+                    #[allow(unused_variables)]
+                    for PredThenAtomNode(_, tm1, tm2) in self.pred_then_atom_node.iter_all_0(tm0) {
+                        self.pred_then_atom_should_be_pred_7(delta, tm1, tm2, tm0, tm3, tm4);
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_7(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
         tm2: TermListNode,
-        tm3: SymbolKind,
         tm0: ThenAtomNode,
-        tm4: Loc,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.pred_then_atom_should_be_pred_8(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_8(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredSymbol(tm5) in self.pred_symbol.iter_all() {
+                self.pred_then_atom_should_be_pred_10(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_9(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for PredSymbol(tm5) in self.pred_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantThenAtom(tm0, _) in
+                        self.rule_descendant_then_atom.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for PredThenAtomNode(_, tm1, tm2) in
+                            self.pred_then_atom_node.iter_all_0(tm0)
+                        {
+                            self.pred_then_atom_should_be_pred_10(
+                                delta, tm1, tm2, tm0, tm3, tm4, tm5,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_10(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.pred_then_atom_should_be_pred_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: ThenAtomNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ThenAtomNodeLoc(_, tm6) in self.then_atom_node_loc.iter_all_0(tm0) {
+                self.pred_then_atom_should_be_pred_13(delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_12(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for ThenAtomNodeLoc(tm0, tm6) in self.then_atom_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for PredSymbol(tm5) in self.pred_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantThenAtom(_, tm3) in
+                        self.rule_descendant_then_atom.iter_all_0(tm0)
+                    {
+                        #[allow(unused_variables)]
+                        for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                            #[allow(unused_variables)]
+                            for PredThenAtomNode(_, tm1, tm2) in
+                                self.pred_then_atom_node.iter_all_0(tm0)
+                            {
+                                self.pred_then_atom_should_be_pred_13(
+                                    delta, tm1, tm2, tm3, tm4, tm5, tm0, tm6,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn pred_then_atom_should_be_pred_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm0: ThenAtomNode,
+        tm6: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol
-                .iter_all_0_1_2(tm1, tm3, tm4)
+                .iter_all_0_1_2_3(tm1, tm5, tm4, tm6)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol
-                    .push(ShouldBeSymbol(tm1, tm3, tm4));
+                    .push(ShouldBeSymbol(tm1, tm5, tm4, tm6));
             }
         }
     }
@@ -69347,8 +70541,10 @@ impl Eqlog {
             self.app_atom_should_be_func_1(delta);
             self.app_atom_should_be_func_2(delta);
             self.app_atom_should_be_func_5(delta);
-            self.app_atom_should_be_func_8(delta);
-            self.app_atom_should_be_func_11(delta);
+            self.app_atom_should_be_func_6(delta);
+            self.app_atom_should_be_func_9(delta);
+            self.app_atom_should_be_func_12(delta);
+            self.app_atom_should_be_func_15(delta);
         }
     }
 
@@ -69390,8 +70586,11 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncSymbol(tm3) in self.func_symbol.iter_all() {
-                self.app_atom_should_be_func_6(delta, tm0, tm1, tm2, tm3);
+            for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                    self.app_atom_should_be_func_7(delta, tm1, tm2, tm0, tm3, tm4);
+                }
             }
         }
     }
@@ -69400,56 +70599,12 @@ impl Eqlog {
     fn app_atom_should_be_func_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for FuncSymbol(tm3) in self.func_symbol.iter_dirty() {
+            for RuleDescendantTerm(tm0, tm3) in self.rule_descendant_term.iter_dirty() {
                 #[allow(unused_variables)]
-                for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
-                    self.app_atom_should_be_func_6(delta, tm0, tm1, tm2, tm3);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn app_atom_should_be_func_6(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: TermNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            self.app_atom_should_be_func_7(delta, tm0, tm1, tm2, tm3);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn app_atom_should_be_func_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: TermNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for CtorSymbol(tm4) in self.ctor_symbol.iter_all() {
-                self.app_atom_should_be_func_9(delta, tm0, tm1, tm2, tm3, tm4);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn app_atom_should_be_func_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for CtorSymbol(tm4) in self.ctor_symbol.iter_dirty() {
-                #[allow(unused_variables)]
-                for FuncSymbol(tm3) in self.func_symbol.iter_all() {
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for AppTermNode(tm0, tm1, tm2) in self.app_term_node.iter_all() {
-                        self.app_atom_should_be_func_9(delta, tm0, tm1, tm2, tm3, tm4);
+                    for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
+                        self.app_atom_should_be_func_7(delta, tm1, tm2, tm0, tm3, tm4);
                     }
                 }
             }
@@ -69457,50 +70612,66 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_atom_should_be_func_9(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: TermNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-        tm4: SymbolKind,
-    ) {
-        for _ in [()] {
-            self.app_atom_should_be_func_10(delta, tm0, tm1, tm2, tm3, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn app_atom_should_be_func_10(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: TermNode,
-        tm1: Ident,
-        tm2: TermListNode,
-        tm3: SymbolKind,
-        tm4: SymbolKind,
-    ) {
+    fn app_atom_should_be_func_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TermNodeLoc(_, tm5) in self.term_node_loc.iter_all_0(tm0) {
-                self.app_atom_should_be_func_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm3) {
+                    #[allow(unused_variables)]
+                    for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
+                        self.app_atom_should_be_func_7(delta, tm1, tm2, tm0, tm3, tm4);
+                    }
+                }
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn app_atom_should_be_func_11(&self, delta: &mut ModelDelta) {
+    fn app_atom_should_be_func_7(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.app_atom_should_be_func_8(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_8(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for TermNodeLoc(tm0, tm5) in self.term_node_loc.iter_dirty() {
+            for FuncSymbol(tm5) in self.func_symbol.iter_all() {
+                self.app_atom_should_be_func_10(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_9(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for FuncSymbol(tm5) in self.func_symbol.iter_dirty() {
                 #[allow(unused_variables)]
-                for CtorSymbol(tm4) in self.ctor_symbol.iter_all() {
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for FuncSymbol(tm3) in self.func_symbol.iter_all() {
+                    for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm3) {
                         #[allow(unused_variables)]
                         for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
-                            self.app_atom_should_be_func_12(delta, tm1, tm2, tm3, tm4, tm0, tm5);
+                            self.app_atom_should_be_func_10(delta, tm1, tm2, tm0, tm3, tm4, tm5);
                         }
                     }
                 }
@@ -69509,26 +70680,153 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn app_atom_should_be_func_12(
+    fn app_atom_should_be_func_10(
         &self,
         delta: &mut ModelDelta,
         tm1: Ident,
         tm2: TermListNode,
-        tm3: SymbolKind,
-        tm4: SymbolKind,
         tm0: TermNode,
-        tm5: Loc,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.app_atom_should_be_func_11(delta, tm1, tm2, tm0, tm3, tm4, tm5);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorSymbol(tm6) in self.ctor_symbol.iter_all() {
+                self.app_atom_should_be_func_13(delta, tm1, tm2, tm0, tm3, tm4, tm5, tm6);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_12(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorSymbol(tm6) in self.ctor_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for FuncSymbol(tm5) in self.func_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
+                        #[allow(unused_variables)]
+                        for RuleDescendantTerm(tm0, _) in self.rule_descendant_term.iter_all_1(tm3)
+                        {
+                            #[allow(unused_variables)]
+                            for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
+                                self.app_atom_should_be_func_13(
+                                    delta, tm1, tm2, tm0, tm3, tm4, tm5, tm6,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+    ) {
+        for _ in [()] {
+            self.app_atom_should_be_func_14(delta, tm1, tm2, tm0, tm3, tm4, tm5, tm6);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_14(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm0: TermNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TermNodeLoc(_, tm7) in self.term_node_loc.iter_all_0(tm0) {
+                self.app_atom_should_be_func_16(delta, tm1, tm2, tm3, tm4, tm5, tm6, tm0, tm7);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_15(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TermNodeLoc(tm0, tm7) in self.term_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for CtorSymbol(tm6) in self.ctor_symbol.iter_all() {
+                    #[allow(unused_variables)]
+                    for FuncSymbol(tm5) in self.func_symbol.iter_all() {
+                        #[allow(unused_variables)]
+                        for RuleDescendantTerm(_, tm3) in self.rule_descendant_term.iter_all_0(tm0)
+                        {
+                            #[allow(unused_variables)]
+                            for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                                #[allow(unused_variables)]
+                                for AppTermNode(_, tm1, tm2) in self.app_term_node.iter_all_0(tm0) {
+                                    self.app_atom_should_be_func_16(
+                                        delta, tm1, tm2, tm3, tm4, tm5, tm6, tm0, tm7,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn app_atom_should_be_func_16(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: Ident,
+        tm2: TermListNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: SymbolKind,
+        tm6: SymbolKind,
+        tm0: TermNode,
+        tm7: Loc,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol_2
-                .iter_all_0_1_2_3(tm1, tm3, tm4, tm5)
+                .iter_all_0_1_2_3_4(tm1, tm5, tm6, tm4, tm7)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol_2
-                    .push(ShouldBeSymbol2(tm1, tm3, tm4, tm5));
+                    .push(ShouldBeSymbol2(tm1, tm5, tm6, tm4, tm7));
             }
         }
     }
@@ -78951,8 +80249,10 @@ impl Eqlog {
             self.case_pattern_app_should_be_constructor_1(delta);
             self.case_pattern_app_should_be_constructor_2(delta);
             self.case_pattern_app_should_be_constructor_5(delta);
-            self.case_pattern_app_should_be_constructor_8(delta);
-            self.case_pattern_app_should_be_constructor_11(delta);
+            self.case_pattern_app_should_be_constructor_6(delta);
+            self.case_pattern_app_should_be_constructor_9(delta);
+            self.case_pattern_app_should_be_constructor_12(delta);
+            self.case_pattern_app_should_be_constructor_15(delta);
         }
     }
 
@@ -78994,8 +80294,11 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
-                self.case_pattern_app_should_be_constructor_6(delta, tm0, tm2, tm1, tm3, tm4);
+            for RuleDescendantMatchCase(_, tm3) in self.rule_descendant_match_case.iter_all_0(tm0) {
+                #[allow(unused_variables)]
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
+                    self.case_pattern_app_should_be_constructor_7(delta, tm1, tm2, tm0, tm3, tm4);
+                }
             }
         }
     }
@@ -79004,59 +80307,13 @@ impl Eqlog {
     fn case_pattern_app_should_be_constructor_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for AppTermNode(tm1, tm3, tm4) in self.app_term_node.iter_dirty() {
+            for RuleDescendantMatchCase(tm0, tm3) in self.rule_descendant_match_case.iter_dirty() {
                 #[allow(unused_variables)]
-                for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                    self.case_pattern_app_should_be_constructor_6(delta, tm0, tm2, tm1, tm3, tm4);
-                }
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_6(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: MatchCaseNode,
-        tm2: StmtListNode,
-        tm1: TermNode,
-        tm3: Ident,
-        tm4: TermListNode,
-    ) {
-        for _ in [()] {
-            self.case_pattern_app_should_be_constructor_7(delta, tm0, tm2, tm1, tm3, tm4);
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_7(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: MatchCaseNode,
-        tm2: StmtListNode,
-        tm1: TermNode,
-        tm3: Ident,
-        tm4: TermListNode,
-    ) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for TermNodeLoc(_, tm5) in self.term_node_loc.iter_all_0(tm1) {
-                self.case_pattern_app_should_be_constructor_9(delta, tm0, tm2, tm3, tm4, tm1, tm5);
-            }
-        }
-    }
-
-    #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_8(&self, delta: &mut ModelDelta) {
-        for _ in [()] {
-            #[allow(unused_variables)]
-            for TermNodeLoc(tm1, tm5) in self.term_node_loc.iter_dirty() {
-                #[allow(unused_variables)]
-                for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
+                for EntryScope(_, tm4) in self.entry_scope.iter_all_0(tm3) {
                     #[allow(unused_variables)]
-                    for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
-                        self.case_pattern_app_should_be_constructor_9(
-                            delta, tm0, tm2, tm3, tm4, tm1, tm5,
+                    for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
+                        self.case_pattern_app_should_be_constructor_7(
+                            delta, tm1, tm2, tm0, tm3, tm4,
                         );
                     }
                 }
@@ -79065,55 +80322,75 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_9(
-        &self,
-        delta: &mut ModelDelta,
-        tm0: MatchCaseNode,
-        tm2: StmtListNode,
-        tm3: Ident,
-        tm4: TermListNode,
-        tm1: TermNode,
-        tm5: Loc,
-    ) {
+    fn case_pattern_app_should_be_constructor_6(&self, delta: &mut ModelDelta) {
         for _ in [()] {
-            self.case_pattern_app_should_be_constructor_10(delta, tm0, tm2, tm3, tm4, tm1, tm5);
+            #[allow(unused_variables)]
+            for EntryScope(tm3, tm4) in self.entry_scope.iter_dirty() {
+                #[allow(unused_variables)]
+                for RuleDescendantMatchCase(tm0, _) in
+                    self.rule_descendant_match_case.iter_all_1(tm3)
+                {
+                    #[allow(unused_variables)]
+                    for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
+                        self.case_pattern_app_should_be_constructor_7(
+                            delta, tm1, tm2, tm0, tm3, tm4,
+                        );
+                    }
+                }
+            }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_10(
+    fn case_pattern_app_should_be_constructor_7(
         &self,
         delta: &mut ModelDelta,
-        tm0: MatchCaseNode,
-        tm2: StmtListNode,
-        tm3: Ident,
-        tm4: TermListNode,
         tm1: TermNode,
-        tm5: Loc,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+    ) {
+        for _ in [()] {
+            self.case_pattern_app_should_be_constructor_8(delta, tm1, tm2, tm0, tm3, tm4);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_8(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: TermNode,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorSymbol(tm6) in self.ctor_symbol.iter_all() {
-                self.case_pattern_app_should_be_constructor_12(
-                    delta, tm0, tm2, tm3, tm4, tm1, tm5, tm6,
+            for AppTermNode(_, tm5, tm6) in self.app_term_node.iter_all_0(tm1) {
+                self.case_pattern_app_should_be_constructor_10(
+                    delta, tm2, tm0, tm3, tm4, tm1, tm5, tm6,
                 );
             }
         }
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_11(&self, delta: &mut ModelDelta) {
+    fn case_pattern_app_should_be_constructor_9(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for CtorSymbol(tm6) in self.ctor_symbol.iter_dirty() {
+            for AppTermNode(tm1, tm5, tm6) in self.app_term_node.iter_dirty() {
                 #[allow(unused_variables)]
-                for TermNodeLoc(tm1, tm5) in self.term_node_loc.iter_all() {
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
                     #[allow(unused_variables)]
-                    for AppTermNode(_, tm3, tm4) in self.app_term_node.iter_all_0(tm1) {
+                    for RuleDescendantMatchCase(tm0, _) in
+                        self.rule_descendant_match_case.iter_all_1(tm3)
+                    {
                         #[allow(unused_variables)]
-                        for MatchCase(tm0, _, tm2) in self.match_case.iter_all_1(tm1) {
-                            self.case_pattern_app_should_be_constructor_12(
-                                delta, tm0, tm2, tm3, tm4, tm1, tm5, tm6,
+                        for MatchCase(_, _, tm2) in self.match_case.iter_all_0_1(tm0, tm1) {
+                            self.case_pattern_app_should_be_constructor_10(
+                                delta, tm2, tm0, tm3, tm4, tm1, tm5, tm6,
                             );
                         }
                     }
@@ -79123,27 +80400,168 @@ impl Eqlog {
     }
 
     #[allow(unused_variables)]
-    fn case_pattern_app_should_be_constructor_12(
+    fn case_pattern_app_should_be_constructor_10(
         &self,
         delta: &mut ModelDelta,
-        tm0: MatchCaseNode,
         tm2: StmtListNode,
-        tm3: Ident,
-        tm4: TermListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
         tm1: TermNode,
-        tm5: Loc,
-        tm6: SymbolKind,
+        tm5: Ident,
+        tm6: TermListNode,
+    ) {
+        for _ in [()] {
+            self.case_pattern_app_should_be_constructor_11(
+                delta, tm2, tm0, tm3, tm4, tm1, tm5, tm6,
+            );
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_11(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm1: TermNode,
+        tm5: Ident,
+        tm6: TermListNode,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TermNodeLoc(_, tm7) in self.term_node_loc.iter_all_0(tm1) {
+                self.case_pattern_app_should_be_constructor_13(
+                    delta, tm2, tm0, tm3, tm4, tm5, tm6, tm1, tm7,
+                );
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_12(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for TermNodeLoc(tm1, tm7) in self.term_node_loc.iter_dirty() {
+                #[allow(unused_variables)]
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantMatchCase(tm0, _) in
+                        self.rule_descendant_match_case.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for MatchCase(_, _, tm2) in self.match_case.iter_all_0_1(tm0, tm1) {
+                            #[allow(unused_variables)]
+                            for AppTermNode(_, tm5, tm6) in self.app_term_node.iter_all_0(tm1) {
+                                self.case_pattern_app_should_be_constructor_13(
+                                    delta, tm2, tm0, tm3, tm4, tm5, tm6, tm1, tm7,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_13(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: Ident,
+        tm6: TermListNode,
+        tm1: TermNode,
+        tm7: Loc,
+    ) {
+        for _ in [()] {
+            self.case_pattern_app_should_be_constructor_14(
+                delta, tm2, tm0, tm3, tm4, tm5, tm6, tm1, tm7,
+            );
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_14(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: Ident,
+        tm6: TermListNode,
+        tm1: TermNode,
+        tm7: Loc,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorSymbol(tm8) in self.ctor_symbol.iter_all() {
+                self.case_pattern_app_should_be_constructor_16(
+                    delta, tm2, tm0, tm3, tm4, tm5, tm6, tm1, tm7, tm8,
+                );
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_15(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for CtorSymbol(tm8) in self.ctor_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for EntryScope(tm3, tm4) in self.entry_scope.iter_all() {
+                    #[allow(unused_variables)]
+                    for RuleDescendantMatchCase(tm0, _) in
+                        self.rule_descendant_match_case.iter_all_1(tm3)
+                    {
+                        #[allow(unused_variables)]
+                        for MatchCase(_, tm1, tm2) in self.match_case.iter_all_0(tm0) {
+                            #[allow(unused_variables)]
+                            for TermNodeLoc(_, tm7) in self.term_node_loc.iter_all_0(tm1) {
+                                #[allow(unused_variables)]
+                                for AppTermNode(_, tm5, tm6) in self.app_term_node.iter_all_0(tm1) {
+                                    self.case_pattern_app_should_be_constructor_16(
+                                        delta, tm2, tm0, tm3, tm4, tm5, tm6, tm1, tm7, tm8,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn case_pattern_app_should_be_constructor_16(
+        &self,
+        delta: &mut ModelDelta,
+        tm2: StmtListNode,
+        tm0: MatchCaseNode,
+        tm3: RuleDescendantNode,
+        tm4: Scope,
+        tm5: Ident,
+        tm6: TermListNode,
+        tm1: TermNode,
+        tm7: Loc,
+        tm8: SymbolKind,
     ) {
         for _ in [()] {
             let exists_already = self
                 .should_be_symbol
-                .iter_all_0_1_2(tm3, tm6, tm5)
+                .iter_all_0_1_2_3(tm5, tm8, tm4, tm7)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
                     .new_should_be_symbol
-                    .push(ShouldBeSymbol(tm3, tm6, tm5));
+                    .push(ShouldBeSymbol(tm5, tm8, tm4, tm7));
             }
         }
     }
