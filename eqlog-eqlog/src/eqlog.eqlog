@@ -222,13 +222,9 @@ rule scope_extension_vars {
     then var_in_scope(ident, extension);
 }
 
-func global_scope() -> Scope;
 func entry_scope(RuleDescendantNode) -> Scope;
 func exit_scope(RuleDescendantNode) -> Scope;
 
-rule global_scope_total {
-    then global_scope()!;
-}
 rule entry_exit_scope_total {
     if descendant: RuleDescendantNode;
     then entry_scope(descendant)!;
@@ -270,11 +266,6 @@ rule scope_extension_siblings_second_parent {
     then exit_scope(parent) = second_exit;
 }
 
-rule scopes_global_rule {
-    if rule_entry_scope = entry_scope(rule_descendant_rule(_));
-    if gs = global_scope();
-    then scope_extension(gs, rule_entry_scope);
-}
 rule scopes_rule_stmts {
     if rule_decl(rul, stmts);
 
@@ -944,51 +935,86 @@ rule {
     then ctor_symbol()!;
 }
 
-pred defined_symbol(scope: Scope, Ident, SymbolKind, Loc);
+// A SymbolScope represents a set of defined symbols (types, functions, preds, ... but not variables).
+type SymbolScope;
 
-rule scope_extension_defined_symbol {
-    if scope_extension(s, t);
-    if defined_symbol(s, i, sk, l);
-    then defined_symbol(t, i, sk, l);
+func global_symbol_scope() -> SymbolScope;
+rule global_symbol_scope_total {
+    then global_symbol_scope()!;
 }
 
+// The SymbolScope attached to a (variable) Scope.
+// TODO: In a better world, we wouldn't need to distinguish `Scope`, which
+// tracks which variables have been introduced within a rule, and
+// `SymbolScope`, which tracks which symbols are available. Unfortunatey, an
+// eqlog program contains lots of different Scope elements (I think each AST
+// node in a rule that can introduce a new variable has its own scope, e.g.
+// each statement). So if we would attach the defined_symbol predicate to a
+// Scope instead of a SymbolScope, we'd have copies of the whole set symbols
+// (on the order of e.g. 1000) for each scope (on the order for 10000 or more).
+// I tried it anyway, and self-compilation time for eqlog-eqlog increased from
+// around 3 seconds to 12 seconds.
+//
+// Instead, the symbols available at a given AST node within a rule are
+// available more indirectly, by accessing a SymbolScope via the Scope. Since a
+// rule cannot introduce new symbols, all `Scope` elements in a rule can share
+// the same SymbolScope, and actually all rules in the same ambient context
+// (as of this writing just global_symbol_scope, eventually also `model` member
+// scope) can share the same SymbolScope. This way, all data attached to the
+// SymbolScope exists only once regardless of many Scope elements there are.
+
+func scope_symbols(scope: Scope) -> SymbolScope;
+// Propagate the same symbol scope through all scopes in a rule:
+rule symbol_scope_extension {
+    if scope_extension(s_0, s_1);
+    if ss = scope_symbols(s_0);
+    then scope_symbols(s_1) = ss;
+}
+rule rule_symbol_scope {
+    if scope = entry_scope(rule_descendant_rule(_));
+    if ss = global_symbol_scope();
+    then scope_symbols(scope) = ss;
+}
+
+pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
+
 rule type_decl_defines_symbol {
-    if gs = global_scope();
+    if gs = global_symbol_scope();
     if type_decl(decl, name);
     if kind = type_symbol();
     if loc = type_decl_node_loc(decl);
     then defined_symbol(gs, name, kind, loc);
 }
 rule enum_decl_defines_symbol {
-    if gs = global_scope();
+    if gs = global_symbol_scope();
     if enum_decl(decl, name, _);
     if kind = enum_symbol();
     if loc = enum_decl_node_loc(decl);
     then defined_symbol(gs, name, kind, loc);
 }
 rule pred_decl_defines_symbol {
-    if gs = global_scope();
+    if gs = global_symbol_scope();
     if pred_decl(decl, name, _);
     if kind = pred_symbol();
     if loc = pred_decl_node_loc(decl);
     then defined_symbol(gs, name, kind, loc);
 }
 rule func_decl_defines_symbol {
-    if gs = global_scope();
+    if gs = global_symbol_scope();
     if func_decl(decl, name, _, _);
     if kind = func_symbol();
     if loc = func_decl_node_loc(decl);
     then defined_symbol(gs, name, kind, loc);
 }
 rule ctor_decl_defines_symbol {
-    if gs = global_scope();
+    if gs = global_symbol_scope();
     if ctor_decl(decl, name, _);
     if kind  = ctor_symbol();
     if loc = ctor_decl_node_loc(decl);
     then defined_symbol(gs, name, kind, loc);
 }
 rule rule_decl_defines_symbol {
-    if gs = global_scope();
+    if gs = global_symbol_scope();
     if rule_decl(decl, _);
     if name = rule_name(decl);
     if kind = rule_symbol();
@@ -999,13 +1025,13 @@ rule rule_decl_defines_symbol {
 // ### Symbol lookup checks
 
 // Only one kind of symbol is allowed.
-pred should_be_symbol(name: Ident, kind: SymbolKind, scope: Scope, loc: Loc);
+pred should_be_symbol(name: Ident, kind: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
 // Two kinds of symbols are allowed, with `kind_1` being the typical one.
-pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, scope: Scope, loc: Loc);
+pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
 
 rule arg_decl_should_be_type {
     if arg_decl_node_type(arg_decl, name);
-    if scope = global_scope();
+    if scope = global_symbol_scope();
     if type_kind = type_symbol();
     if enum_kind = enum_symbol();
     if loc = arg_decl_node_loc(arg_decl);
@@ -1013,7 +1039,7 @@ rule arg_decl_should_be_type {
 }
 rule result_should_be_type {
     if func_decl(func_decl, _, _, result_type);
-    if scope = global_scope();
+    if scope = global_symbol_scope();
     if type_kind = type_symbol();
     if enum_kind = enum_symbol();
     if loc = func_decl_node_loc(func_decl);
@@ -1021,7 +1047,7 @@ rule result_should_be_type {
 }
 rule var_atom_should_be_type {
     if var_if_atom_node(atom, _, name);
-    if scope = entry_scope(rule_descendant_if_atom(atom));
+    if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if type_kind = type_symbol();
     if enum_kind = enum_symbol();
     if loc = if_atom_node_loc(atom);
@@ -1029,21 +1055,21 @@ rule var_atom_should_be_type {
 }
 rule pred_if_atom_should_be_pred {
     if pred_if_atom_node(atom, pred_name, _);
-    if scope = entry_scope(rule_descendant_if_atom(atom));
+    if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if kind = pred_symbol();
     if loc = if_atom_node_loc(atom);
     then should_be_symbol(pred_name, kind, scope, loc);
 }
 rule pred_then_atom_should_be_pred {
     if pred_then_atom_node(atom, pred_name, _);
-    if scope = entry_scope(rule_descendant_then_atom(atom));
+    if scope = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
     if kind = pred_symbol();
     if loc = then_atom_node_loc(atom);
     then should_be_symbol(pred_name, kind, scope, loc);
 }
 rule app_atom_should_be_func {
     if app_term_node(term, name, _);
-    if scope = entry_scope(rule_descendant_term(term));
+    if scope = scope_symbols(entry_scope(rule_descendant_term(term)));
     if func_kind = func_symbol();
     if ctor_kind = ctor_symbol();
     if loc = term_node_loc(term);
@@ -1691,7 +1717,7 @@ rule case_pattern_is_wildcard_defined {
 func match_case_pattern_ctor(MatchCaseNode) -> CtorDeclNode;
 rule case_pattern_app_should_be_constructor {
     if match_case(match_node, pattern, _);
-    if scope = entry_scope(rule_descendant_match_case(match_node));
+    if scope = scope_symbols(entry_scope(rule_descendant_match_case(match_node)));
     if app_term_node(pattern, func_name, _);
     if pattern_loc = term_node_loc(pattern);
     if ctor_sym = ctor_symbol();
