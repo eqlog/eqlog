@@ -31,7 +31,7 @@ fn display_func_snake<'a>(
 ) -> impl 'a + Display {
     let ident = eqlog
         .iter_semantic_func()
-        .find_map(|(ident, func0)| eqlog.are_equal_func(func, func0).then_some(ident))
+        .find_map(|(_, ident, func0)| eqlog.are_equal_func(func, func0).then_some(ident))
         .expect("should be surjective");
     format!("{}", identifiers.get(&ident).unwrap()).to_case(Snake)
 }
@@ -88,8 +88,9 @@ fn display_ctor<'a>(
             .unwrap();
 
         let ctor_name: String = identifiers.get(&ctor_ident).unwrap().to_case(UpperCamel);
+        let ss: SymbolScope = eqlog.ctor_symbol_scope(ctor).unwrap();
 
-        let ctor_func = eqlog.semantic_func(ctor_ident).unwrap();
+        let ctor_func = eqlog.semantic_func(ss, ctor_ident).unwrap();
         let domain: Vec<Type> =
             type_list_vec(eqlog.domain(ctor_func).expect("should be total"), eqlog);
 
@@ -1142,6 +1143,7 @@ fn display_new_enum_element<'a>(
         let match_branches = ctors
             .map(|ctor| {
                 FmtFn(move |f: &mut Formatter| -> Result {
+                    let ss: SymbolScope = eqlog.ctor_symbol_scope(ctor).unwrap();
                     let ctor_ident = eqlog
                         .iter_ctor_decl()
                         .find_map(|(ctor0, ident, _)| {
@@ -1156,7 +1158,7 @@ fn display_new_enum_element<'a>(
                     let ctor_name_snake = ctor_name.to_case(Snake);
                     let ctor_name_camel = ctor_name.to_case(UpperCamel);
 
-                    let ctor_func: Func = eqlog.semantic_func(ctor_ident).unwrap();
+                    let ctor_func: Func = eqlog.semantic_func(ss, ctor_ident).unwrap();
                     let ctor_arg_types: Vec<Type> =
                         type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog);
                     let ctor_vars = (0..ctor_arg_types.len())
@@ -1217,6 +1219,7 @@ fn display_enum_cases_fn<'a>(
         let ctor_value_iters = ctors
             .map(|ctor| {
                 FmtFn(move |f: &mut Formatter| -> Result {
+                    let ss = eqlog.ctor_symbol_scope(ctor).unwrap();
                     let ctor_ident = eqlog
                         .iter_ctor_decl()
                         .find_map(|(ctor0, ident, _)| {
@@ -1231,7 +1234,7 @@ fn display_enum_cases_fn<'a>(
                     let ctor_name_snake = ctor_name.to_case(Snake);
                     let ctor_name_camel = ctor_name.to_case(UpperCamel);
 
-                    let ctor_func: Func = eqlog.semantic_func(ctor_ident).unwrap();
+                    let ctor_func: Func = eqlog.semantic_func(ss, ctor_ident).unwrap();
                     let arg_num = type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog).len();
 
                     let ctor_arg_vars = (0..arg_num).map(FlatVar);
@@ -1465,7 +1468,8 @@ fn write_model_delta_struct(
 
     let new_defines = eqlog
         .iter_semantic_func()
-        .filter_map(|(ident, func)| {
+        // Are we emitting the same function too often?
+        .filter_map(|(_, ident, func)| {
             if !eqlog.function_can_be_made_defined(func) {
                 return None;
             }
@@ -1534,7 +1538,7 @@ fn write_model_delta_new_fn(
     });
     let new_defines = eqlog
         .iter_semantic_func()
-        .filter_map(|(ident, func)| {
+        .filter_map(|(_, ident, func)| {
             if !eqlog.function_can_be_made_defined(func) {
                 return None;
             }
@@ -1642,7 +1646,10 @@ fn write_model_delta_apply_def_fn(
 ) -> io::Result<()> {
     let func_defs = eqlog
         .iter_semantic_func()
-        .filter_map(|(ident, func)| {
+        // TODO: This won't work once we have more than one symbol scope, because then the same
+        // function appears in more than one symbol scope. This should result in us emitting things
+        // multiple times for the same function, which we don't want.
+        .filter_map(|(_symbol_scope, ident, func)| {
             if !eqlog.function_can_be_made_defined(func) {
                 return None;
             }

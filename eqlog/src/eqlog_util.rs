@@ -243,7 +243,7 @@ pub fn iter_func_arities<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
-    eqlog.iter_semantic_func().map(|(ident, func)| {
+    eqlog.iter_semantic_func().map(|(_, ident, func)| {
         let name = identifiers.get(&ident).unwrap().as_str();
         let domain_tys: Vec<Type> = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
         let codomain: Type = eqlog.codomain(func).unwrap();
@@ -384,7 +384,7 @@ pub fn display_rel<'a>(
     if let Some(func) = func {
         let ident = eqlog
             .iter_semantic_func()
-            .find_map(|(ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident))
+            .find_map(|(_, ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident))
             .expect("semantic_func should be surjective");
         return identifiers.get(&ident).unwrap().as_str();
     }
