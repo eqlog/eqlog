@@ -938,9 +938,91 @@ rule {
 // A SymbolScope represents a set of defined symbols (types, functions, preds, ... but not variables).
 type SymbolScope;
 
-func global_symbol_scope() -> SymbolScope;
-rule global_symbol_scope_total {
-    then global_symbol_scope()!;
+pred symbol_scope_extension(smaller: SymbolScope, larger: SymbolScope);
+
+func decl_symbol_scope(node: DeclNode) -> SymbolScope;
+func decls_symbol_scope(nodes: DeclListNode) -> SymbolScope;
+func arg_symbol_scope(arg: ArgDeclNode) -> SymbolScope;
+func args_symbol_scope(args: ArgDeclListNode) -> SymbolScope;
+func ctor_symbol_scope(ctor: CtorDeclNode) -> SymbolScope;
+func ctors_symbol_scope(ctor: CtorDeclListNode) -> SymbolScope;
+
+rule decl_symbol_scope_total {
+    if node: DeclNode;
+    then decl_symbol_scope(node)!;
+}
+rule decls_symbol_scope_total {
+    if nodes: DeclListNode;
+    then decls_symbol_scope(nodes)!;
+}
+rule arg_symbol_scope_total {
+    if arg: ArgDeclNode;
+    then arg_symbol_scope(arg)!;
+}
+rule args_symbol_scope_total {
+    if args: ArgDeclListNode;
+    then args_symbol_scope(args)!;
+}
+rule ctor_symbol_scope_total {
+    if ctor: CtorDeclNode;
+    then ctor_symbol_scope(ctor)!;
+}
+rule ctors_symbol_scope_total {
+    if ctors: CtorDeclListNode;
+    then ctors_symbol_scope(ctors)!;
+}
+
+rule decl_nodes_symbol_cons {
+    if cons_decl_list_node(nodes, head, tail);
+    if ss = decls_symbol_scope(nodes);
+    then ss = decl_symbol_scope(head);
+    then ss = decls_symbol_scope(tail);
+}
+
+rule pred_args_symbol_scope {
+    if decl_node_pred(decl, pred_decl);
+    if pred_decl(pred_decl, _, args);
+    if ss = decl_symbol_scope(decl);
+    then args_symbol_scope(args) = ss;
+}
+rule func_args_symbol_scope {
+    if decl_node_func(decl, func_decl);
+    if func_decl(func_decl, _, args, _);
+    if ss = decl_symbol_scope(decl);
+    then args_symbol_scope(args) = ss;
+}
+rule ctor_args_symbol_scope {
+    if ctor_decl(ctor, _, args);
+    if ss = ctor_symbol_scope(ctor);
+    then args_symbol_scope(args) = ss;
+}
+
+rule args_symbol_scope_cons {
+    if cons_arg_decl_list_node(args, head, tail);
+    if ss = args_symbol_scope(args);
+    then arg_symbol_scope(head) = ss;
+    then args_symbol_scope(tail) = ss;
+}
+
+rule enum_ctors_symbol_scope {
+    if decl_node_enum(decl, enum_node);
+    if enum_decl(enum_node, _, ctors);
+    if ss = decl_symbol_scope(decl);
+    then ctors_symbol_scope(ctors) = ss;
+}
+rule ctors_symbol_scope_cons {
+    if cons_ctor_decl_list_node(ctors, head, tail);
+    if ss = ctors_symbol_scope(ctors);
+    then ctor_symbol_scope(head) = ss;
+    then ctors_symbol_scope(tail) = ss;
+}
+
+rule model_symbol_scope {
+    if decl_node_model(decl, model_node);
+    if model_decl(model_node, _, body);
+    if ambient_scope = decl_symbol_scope(decl);
+    if member_scope = decls_symbol_scope(body);
+    then symbol_scope_extension(ambient_scope, member_scope);
 }
 
 // The SymbolScope attached to a (variable) Scope.
@@ -965,61 +1047,67 @@ rule global_symbol_scope_total {
 
 func scope_symbols(scope: Scope) -> SymbolScope;
 // Propagate the same symbol scope through all scopes in a rule:
-rule symbol_scope_extension {
+rule scope_extension_symbols {
     if scope_extension(s_0, s_1);
     if ss = scope_symbols(s_0);
     then scope_symbols(s_1) = ss;
 }
 rule rule_symbol_scope {
-    if scope = entry_scope(rule_descendant_rule(_));
-    if ss = global_symbol_scope();
+    if decl_node_rule(decl, rul);
+    if ss = decl_symbol_scope(decl);
+    if scope = entry_scope(rule_descendant_rule(rul));
     then scope_symbols(scope) = ss;
 }
 
 pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
 
 rule type_decl_defines_symbol {
-    if gs = global_symbol_scope();
-    if type_decl(decl, name);
+    if decl_node_type(decl, type_decl);
+    if type_decl(type_decl, name);
+    if ss = decl_symbol_scope(decl);
     if kind = type_symbol();
-    if loc = type_decl_node_loc(decl);
-    then defined_symbol(gs, name, kind, loc);
+    if loc = type_decl_node_loc(type_decl);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule enum_decl_defines_symbol {
-    if gs = global_symbol_scope();
-    if enum_decl(decl, name, _);
+    if decl_node_enum(decl, enum_decl);
+    if enum_decl(enum_decl, name, _);
+    if ss = decl_symbol_scope(decl);
     if kind = enum_symbol();
-    if loc = enum_decl_node_loc(decl);
-    then defined_symbol(gs, name, kind, loc);
+    if loc = enum_decl_node_loc(enum_decl);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule pred_decl_defines_symbol {
-    if gs = global_symbol_scope();
-    if pred_decl(decl, name, _);
+    if decl_node_pred(decl, pred_decl);
+    if pred_decl(pred_decl, name, _);
+    if ss = decl_symbol_scope(decl);
     if kind = pred_symbol();
-    if loc = pred_decl_node_loc(decl);
-    then defined_symbol(gs, name, kind, loc);
+    if loc = pred_decl_node_loc(pred_decl);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule func_decl_defines_symbol {
-    if gs = global_symbol_scope();
-    if func_decl(decl, name, _, _);
+    if decl_node_func(decl, func_decl);
+    if func_decl(func_decl, name, _, _);
+    if ss = decl_symbol_scope(decl);
     if kind = func_symbol();
-    if loc = func_decl_node_loc(decl);
-    then defined_symbol(gs, name, kind, loc);
+    if loc = func_decl_node_loc(func_decl);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule ctor_decl_defines_symbol {
-    if gs = global_symbol_scope();
-    if ctor_decl(decl, name, _);
+    if ctor_decl(ctor, name, _);
+    if ss = ctor_symbol_scope(ctor);
     if kind  = ctor_symbol();
-    if loc = ctor_decl_node_loc(decl);
-    then defined_symbol(gs, name, kind, loc);
+    if loc = ctor_decl_node_loc(ctor);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule rule_decl_defines_symbol {
-    if gs = global_symbol_scope();
-    if rule_decl(decl, _);
-    if name = rule_name(decl);
+    if decl_node_rule(decl, rul);
+    if rule_decl(rul, _);
+    if ss = decl_symbol_scope(decl);
+    if name = rule_name(rul);
     if kind = rule_symbol();
-    if loc = rule_decl_node_loc(decl);
-    then defined_symbol(gs, name, kind, loc);
+    if loc = rule_decl_node_loc(rul);
+    then defined_symbol(ss, name, kind, loc);
 }
 
 // ### Symbol lookup checks
@@ -1031,15 +1119,16 @@ pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, sco
 
 rule arg_decl_should_be_type {
     if arg_decl_node_type(arg_decl, name);
-    if scope = global_symbol_scope();
+    if ss = arg_symbol_scope(arg_decl);
     if type_kind = type_symbol();
     if enum_kind = enum_symbol();
     if loc = arg_decl_node_loc(arg_decl);
-    then should_be_symbol_2(name, type_kind, enum_kind, scope, loc);
+    then should_be_symbol_2(name, type_kind, enum_kind, ss, loc);
 }
 rule result_should_be_type {
+    if decl_node_func(decl, func_decl);
     if func_decl(func_decl, _, _, result_type);
-    if scope = global_symbol_scope();
+    if scope = decl_symbol_scope(decl);
     if type_kind = type_symbol();
     if enum_kind = enum_symbol();
     if loc = func_decl_node_loc(func_decl);
