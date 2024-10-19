@@ -530,6 +530,10 @@ rule scopes_desugared_case_list {
 // ## Semantic types, predicates and functions
 
 type Type;
+
+pred is_normal_type(ty: Type);
+pred is_enum_type(ty: Type);
+
 enum TypeList {
     NilTypeList(),
     ConsTypeList(head: Type, tail: TypeList),
@@ -546,14 +550,20 @@ rule type_list_cons_injective {
     then tail_0 = tail_1;
 }
 
-func semantic_type(Ident) -> Type;
+func semantic_type(ss: SymbolScope, Ident) -> Type;
 rule semantic_decl_type {
-    if type_decl(_, ident);
-    then semantic_type(ident)!;
+    if decl_node_type(decl, type_decl_node);
+    if type_decl(type_decl_node, ident);
+    if ss = decl_symbol_scope(decl);
+    then typ := semantic_type(ss, ident)!;
+    then is_normal_type(typ);
 }
 rule semantic_decl_enum {
-    if enum_decl(_, ident, _);
-    then semantic_type(ident)!;
+    if decl_node_enum(decl, enum_node);
+    if enum_decl(enum_node, ident, _);
+    if ss = decl_symbol_scope(decl);
+    then typ := semantic_type(ss, ident)!;
+    then is_enum_type(typ);
 }
 
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
@@ -564,8 +574,9 @@ rule semantic_arg_types_nil {
 }
 rule semantic_arg_types_cons {
     if cons_arg_decl_list_node(arg_decls, head, tail);
+    if ss = arg_symbol_scope(head);
     if arg_decl_node_type(head, head_type_name);
-    if head_type = semantic_type(head_type_name);
+    if head_type = semantic_type(ss, head_type_name);
     if tail_types = semantic_arg_types(tail);
     then ConsTypeList(head_type, tail_types)!;
     then semantic_arg_types(arg_decls) = ConsTypeList(head_type, tail_types);
@@ -602,7 +613,7 @@ rule semantic_decl_func {
         if arg_types = semantic_arg_types(arg_decls);
         then domain(function) = arg_types;
     } along {
-        if result_type = semantic_type(result_type_name);
+        if result_type = semantic_type(ss, result_type_name);
         then codomain(function) = result_type;
     }
 }
@@ -616,7 +627,7 @@ rule semantic_decl_ctor {
         then domain(function) = arg_types;
     } along {
         if enum_decl(enum_node, enum_name, _);
-        if result_type = semantic_type(enum_name);
+        if result_type = semantic_type(ss, enum_name);
         then codomain(function) = result_type;
     }
 }
@@ -1659,8 +1670,9 @@ rule pred_if_atom_semantics {
     then rel_app(rel, arg_els);
 }
 rule var_if_atom_semantics {
-    if var_if_atom_node(_, var_term, type_name);
-    if typ = semantic_type(type_name);
+    if var_if_atom_node(atom, var_term, type_name);
+    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
+    if typ = semantic_type(ss, type_name);
     if var_el = semantic_el(var_term, _);
     then el_type(var_el, typ);
 }
@@ -1759,9 +1771,10 @@ rule surjective_exempted_then_defined_term {
 // ## Enum constructor surjectivity check
 pred should_be_obtained_by_ctor(TermNode, EnumDeclNode);
 rule defined_then_should_be_given_by_ctor {
-    if defined_then_atom_node(_, _, tm);
+    if defined_then_atom_node(atom, _, tm);
+    if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
     if el = semantic_el(tm, _);
-    if el_type(el, semantic_type(ty_name));
+    if el_type(el, semantic_type(ss, ty_name));
     if enum_decl(enum_decl_node, ty_name, _);
     then should_be_obtained_by_ctor(tm, enum_decl_node);
 }
@@ -1781,8 +1794,10 @@ rule ctor_app_is_given_by_ctor {
 pred function_can_be_made_defined(Func);
 
 rule function_can_be_made_defined_if_codomain_normal_type {
-    if type_decl(_, ident);
-    if ty = semantic_type(ident);
+    if decl_node_type(decl, type_node);
+    if type_decl(type_node, ident);
+    if ss = decl_symbol_scope(decl);
+    if ty = semantic_type(ss, ident);
     if codomain(function) = ty;
     then function_can_be_made_defined(function);
 }
@@ -1903,8 +1918,9 @@ rule ctor_cases_determine_enum_cons {
 rule match_term_type_if_cases_determine_enum {
     if match_stmt_node(_, match_term, cases);
     if enum_decl_node = cases_determined_enum(cases);
+    if ss = scope_symbols(entry_scope(rule_descendant_term(match_term)));
     if enum_decl(enum_decl_node, ident, _);
-    if enum_type = semantic_type(ident);
+    if enum_type = semantic_type(ss, ident);
     if match_el = semantic_el(match_term, _);
     then el_type(match_el, enum_type);
 }
@@ -1915,7 +1931,8 @@ pred match_stmt_should_contain_ctor(StmtNode, CtorDeclNode);
 rule match_stmt_should_contain_ctor_defined {
     if match_stmt_node(stmt, match_term, _);
     if el_type(semantic_el(match_term, _), enum_type);
-    if semantic_type(enum_ident) = enum_type;
+    if ss = scope_symbols(entry_scope(rule_descendant_term(match_term)));
+    if semantic_type(ss, enum_ident) = enum_type;
     if enum_decl(enum_decl_node, enum_ident, _);
     if ctor_enum(ctor) = enum_decl_node;
     then match_stmt_should_contain_ctor(stmt, ctor);
