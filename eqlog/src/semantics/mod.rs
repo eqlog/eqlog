@@ -260,12 +260,12 @@ pub fn iter_symbol_declared_twice_errors<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    let mut symbols: BTreeMap<(Scope, Ident), Vec<Loc>> = BTreeMap::new();
+    let mut symbols: BTreeMap<(SymbolScope, Ident), Vec<Loc>> = BTreeMap::new();
     for (scope, name, _, loc) in eqlog.iter_defined_symbol() {
         symbols.entry((scope, name)).or_insert(Vec::new()).push(loc);
     }
 
-    symbols.into_iter().filter_map(|((scope, ident), locs)| {
+    symbols.into_iter().filter_map(|((_, ident), locs)| {
         if locs.len() <= 1 {
             return None;
         }
@@ -296,7 +296,7 @@ pub fn iter_symbol_lookup_errors<'a>(
     // In case of multiple declared of a symbol, symbol lookup should go through if at least on
     // declaration is of the right kind. Since the SymbolDeclaredTwice error is probably the root
     // cause, it should be reported with higher preference.
-    let mut declared_symbols: BTreeMap<(Scope, Ident), Vec<(SymbolKindEnum, Location)>> =
+    let mut declared_symbols: BTreeMap<(SymbolScope, Ident), Vec<(SymbolKindEnum, Location)>> =
         BTreeMap::new();
     for (scope, name, kind, loc) in eqlog.iter_defined_symbol() {
         let location = *locations.get(&loc).unwrap();
