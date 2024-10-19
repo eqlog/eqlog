@@ -1,4 +1,4 @@
-// src-digest: A17290DD72A0FF4A976A74B2E1EF8C49A5EBE9F1D83A5033C811DC879B78F13B
+// src-digest: 849A2302013AE879F4CB65EDB711DACA08C0918176B65AC07CC0C4D097AF3A02
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -12307,6 +12307,16 @@ impl SymbolScopeExtensionTable {
             .map(Self::permute_inverse_0_1)
     }
     #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: SymbolScope) -> impl '_ + Iterator<Item = SymbolScopeExtension> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN);
+        let max = (arg0, u32::MAX);
+        self.index_all_0_1
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1)
+    }
+    #[allow(dead_code)]
     fn iter_all_0_1(
         &self,
         arg0: SymbolScope,
@@ -12455,6 +12465,16 @@ impl DefinedSymbolTable {
         let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
         self.index_dirty_0_1_2_3
+            .range((Bound::Included(&min), Bound::Included(&max)))
+            .copied()
+            .map(Self::permute_inverse_0_1_2_3)
+    }
+    #[allow(dead_code)]
+    fn iter_all_0(&self, arg0: SymbolScope) -> impl '_ + Iterator<Item = DefinedSymbol> {
+        let arg0 = arg0.0;
+        let min = (arg0, u32::MIN, u32::MIN, u32::MIN);
+        let max = (arg0, u32::MAX, u32::MAX, u32::MAX);
+        self.index_all_0_1_2_3
             .range((Bound::Included(&min), Bound::Included(&max)))
             .copied()
             .map(Self::permute_inverse_0_1_2_3)
@@ -38291,6 +38311,7 @@ impl Eqlog {
                 self.model_symbol_scope_0(&mut delta);
                 self.scope_extension_symbols_0(&mut delta);
                 self.rule_symbol_scope_0(&mut delta);
+                self.defined_symbol_scope_extension_0(&mut delta);
                 self.type_decl_defines_symbol_0(&mut delta);
                 self.enum_decl_defines_symbol_0(&mut delta);
                 self.pred_decl_defines_symbol_0(&mut delta);
@@ -71738,6 +71759,94 @@ impl Eqlog {
             let exists_already = self.scope_symbols.iter_all_0_1(tm4, tm2).next().is_some();
             if !exists_already {
                 delta.new_scope_symbols.push(ScopeSymbols(tm4, tm2));
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_0(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            self.defined_symbol_scope_extension_1(delta);
+            self.defined_symbol_scope_extension_2(delta);
+            self.defined_symbol_scope_extension_5(delta);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_1(&self, delta: &mut ModelDelta) {
+        for _ in [()] {}
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_2(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for SymbolScopeExtension(tm0, tm1) in self.symbol_scope_extension.iter_dirty() {
+                self.defined_symbol_scope_extension_3(delta, tm0, tm1);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_3(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: SymbolScope,
+        tm1: SymbolScope,
+    ) {
+        for _ in [()] {
+            self.defined_symbol_scope_extension_4(delta, tm0, tm1);
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_4(
+        &self,
+        delta: &mut ModelDelta,
+        tm0: SymbolScope,
+        tm1: SymbolScope,
+    ) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for DefinedSymbol(_, tm2, tm3, tm4) in self.defined_symbol.iter_all_0(tm0) {
+                self.defined_symbol_scope_extension_6(delta, tm1, tm0, tm2, tm3, tm4);
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_5(&self, delta: &mut ModelDelta) {
+        for _ in [()] {
+            #[allow(unused_variables)]
+            for DefinedSymbol(tm0, tm2, tm3, tm4) in self.defined_symbol.iter_dirty() {
+                #[allow(unused_variables)]
+                for SymbolScopeExtension(_, tm1) in self.symbol_scope_extension.iter_all_0(tm0) {
+                    self.defined_symbol_scope_extension_6(delta, tm1, tm0, tm2, tm3, tm4);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn defined_symbol_scope_extension_6(
+        &self,
+        delta: &mut ModelDelta,
+        tm1: SymbolScope,
+        tm0: SymbolScope,
+        tm2: Ident,
+        tm3: SymbolKind,
+        tm4: Loc,
+    ) {
+        for _ in [()] {
+            let exists_already = self
+                .defined_symbol
+                .iter_all_0_1_2_3(tm1, tm2, tm3, tm4)
+                .next()
+                .is_some();
+            if !exists_already {
+                delta
+                    .new_defined_symbol
+                    .push(DefinedSymbol(tm1, tm2, tm3, tm4));
             }
         }
     }

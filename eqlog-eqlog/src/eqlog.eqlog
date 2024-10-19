@@ -1060,6 +1060,11 @@ rule rule_symbol_scope {
 }
 
 pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
+rule defined_symbol_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if defined_symbol(smaller, name, kind, loc);
+    then defined_symbol(larger, name, kind, loc);
+}
 
 rule type_decl_defines_symbol {
     if decl_node_type(decl, type_decl);
