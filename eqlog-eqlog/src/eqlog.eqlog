@@ -589,38 +589,36 @@ rule semantic_decl_pred {
 }
 
 type Func;
-func semantic_func(Ident) -> Func;
-rule semantic_decl_func {
-    if func_decl(_, name, _, _);
-    then semantic_func(name)!;
-}
-rule semantic_decl_func_ctor {
-    if ctor_decl(_, name, _);
-    then semantic_func(name)!;
-}
-
+func semantic_func(scope: SymbolScope, Ident) -> Func;
 func domain(Func) -> TypeList;
 func codomain(Func) -> Type;
-rule func_decl_domain_codomain {
-    if func_decl(_, func_name, arg_decls, result_type_name);
-    if function = semantic_func(func_name);
-    if domain_types = semantic_arg_types(arg_decls);
-    if result_type = semantic_type(result_type_name);
-    then domain(function) = domain_types;
-    then codomain(function) = result_type;
+
+rule semantic_decl_func {
+    if decl_node_func(decl, func_decl);
+    if func_decl(func_decl, name, arg_decls, result_type_name);
+    if ss = decl_symbol_scope(decl);
+    then function := semantic_func(ss, name)!;
+    branch {
+        if arg_types = semantic_arg_types(arg_decls);
+        then domain(function) = arg_types;
+    } along {
+        if result_type = semantic_type(result_type_name);
+        then codomain(function) = result_type;
+    }
 }
-rule ctor_decl_domain {
-    if ctor_decl(_, ctor_name, arg_decls);
-    if function = semantic_func(ctor_name);
-    if domain_types = semantic_arg_types(arg_decls);
-    then domain(function) = domain_types;
-}
-rule ctor_decl_codomain {
-    if ctor_decl(ctor, ctor_name, _);
-    if function = semantic_func(ctor_name);
-    if enum_decl(ctor_enum(ctor), enum_name, _);
-    if semantic_enum_type = semantic_type(enum_name);
-    then codomain(function) = semantic_enum_type;
+rule semantic_decl_ctor {
+    if ctor_decl(ctor, ctor_name, arg_decls);
+    if enum_node = ctor_enum(ctor);
+    if ss = ctor_symbol_scope(ctor);
+    then function := semantic_func(ss, ctor_name)!;
+    branch {
+        if arg_types = semantic_arg_types(arg_decls);
+        then domain(function) = arg_types;
+    } along {
+        if enum_decl(enum_node, enum_name, _);
+        if result_type = semantic_type(enum_name);
+        then codomain(function) = result_type;
+    }
 }
 
 enum Rel {
@@ -1248,7 +1246,8 @@ rule pred_then_atom_arg_num_should_match {
 rule app_term_arg_num_should_match {
     if app_term_node(tm, name, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(domain(semantic_func(name)));
+    if ss = scope_symbols(entry_scope(rule_descendant_term(tm)));
+    if expected_len = type_list_len(domain(semantic_func(ss, name)));
     if loc = term_node_loc(tm);
     then func_arg_num_should_match(got_len, expected_len, loc);
 }
@@ -1618,7 +1617,8 @@ rule app_term_semantics {
     if app_term_node(result_term, func_name, arg_terms);
     if result_el = semantic_el(result_term, structure);
     if func_arg_els = semantic_els(arg_terms, structure);
-    if func_rel = FuncRel(semantic_func(func_name));
+    if ss = scope_symbols(entry_scope(rule_descendant_term(result_term)));
+    if func_rel = FuncRel(semantic_func(ss, func_name));
     then rel_arg_els := SnocElList(func_arg_els, result_el)!;
     then rel_app(func_rel, rel_arg_els);
 }
@@ -1787,8 +1787,9 @@ rule function_can_be_made_defined_if_codomain_normal_type {
     then function_can_be_made_defined(function);
 }
 rule function_can_be_defined_if_constructor {
-    if ctor_decl(_, ident, _);
-    if function = semantic_func(ident);
+    if ctor_decl(ctor, ident, _);
+    if ss = ctor_symbol_scope(ctor);
+    if function = semantic_func(ss, ident);
     then function_can_be_made_defined(function);
 }
 
