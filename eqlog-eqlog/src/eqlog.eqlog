@@ -572,17 +572,18 @@ rule semantic_arg_types_cons {
 }
 
 type Pred;
-func semantic_pred(Ident) -> Pred;
-rule semantic_decl_pred {
-    if pred_decl(_, name, _);
-    then semantic_pred(name)!;
-}
-
-
+func semantic_pred(scope: SymbolScope, Ident) -> Pred;
 func pred_arity(Pred) -> TypeList;
-rule pred_arity_decl {
-    if pred_decl(_, pred_name, arg_decls);
-    if predicate = semantic_pred(pred_name);
+rule semantic_pred_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if predicate = semantic_pred(smaller, ident);
+    then semantic_pred(larger, ident) = predicate;
+}
+rule semantic_decl_pred {
+    if decl_node_pred(decl, pred_decl);
+    if pred_decl(pred_decl, name, arg_decls);
+    if ss = decl_symbol_scope(decl);
+    then predicate := semantic_pred(ss, name)!;
     if arg_types = semantic_arg_types(arg_decls);
     then pred_arity(predicate) = arg_types;
 }
@@ -1230,14 +1231,16 @@ pred func_arg_num_should_match(
 rule pred_if_atom_arg_num_should_match {
     if pred_if_atom_node(atom, name, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(pred_arity(semantic_pred(name)));
+    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
+    if expected_len = type_list_len(pred_arity(semantic_pred(ss, name)));
     if loc = if_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 rule pred_then_atom_arg_num_should_match {
     if pred_then_atom_node(atom, name, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(pred_arity(semantic_pred(name)));
+    if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
+    if expected_len = type_list_len(pred_arity(semantic_pred(ss, name)));
     if loc = then_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
@@ -1649,8 +1652,9 @@ rule equal_if_atom_semantics {
 }
 // No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
 rule pred_if_atom_semantics {
-    if pred_if_atom_node(_, predicate_name, arg_terms);
-    if rel = PredRel(semantic_pred(predicate_name));
+    if pred_if_atom_node(atom, predicate_name, arg_terms);
+    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
+    if rel = PredRel(semantic_pred(ss, predicate_name));
     if arg_els = semantic_els(arg_terms, _);
     then rel_app(rel, arg_els);
 }
@@ -1676,8 +1680,9 @@ rule defined_then_atom_semantics {
     then var_el = el;
 }
 rule pred_then_atom_semantics {
-    if pred_then_atom_node(_, predicate_name, arg_terms);
-    if rel = PredRel(semantic_pred(predicate_name));
+    if pred_then_atom_node(atom, predicate_name, arg_terms);
+    if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
+    if rel = PredRel(semantic_pred(ss, predicate_name));
     if arg_els = semantic_els(arg_terms, _);
     then rel_app(rel, arg_els);
 }
