@@ -235,7 +235,7 @@ pub fn iter_pred_arities<'a>(
 pub fn semantic_type_ident(ty: Type, eqlog: &Eqlog) -> Ident {
     eqlog
         .iter_semantic_type()
-        .find_map(|(ident, ty0)| eqlog.are_equal_type(ty0, ty).then_some(ident))
+        .find_map(|(_, ident, ty0)| eqlog.are_equal_type(ty0, ty).then_some(ident))
         .unwrap()
 }
 
@@ -282,7 +282,7 @@ pub fn iter_types<'a>(
 ) -> impl 'a + Iterator<Item = &'a str> {
     eqlog
         .iter_semantic_type()
-        .map(|(type_ident, _)| identifiers.get(&type_ident).unwrap().as_str())
+        .map(|(_, type_ident, _)| identifiers.get(&type_ident).unwrap().as_str())
 }
 
 /// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element

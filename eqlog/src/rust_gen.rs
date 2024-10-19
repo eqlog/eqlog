@@ -1458,7 +1458,7 @@ fn write_model_delta_struct(
 
     let new_equalities = eqlog
         .iter_semantic_type()
-        .format_with("\n", |(ident, _), f| {
+        .format_with("\n", |(_scope, ident, _), f| {
             let name = identifiers.get(&ident).unwrap().as_str();
             let name_snake = name.to_case(Snake);
             f(&format_args!(
@@ -1696,7 +1696,7 @@ fn display_type<'a>(
 ) -> impl 'a + Display {
     let ident = eqlog
         .iter_semantic_type()
-        .find_map(|(ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
+        .find_map(|(_scope, ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
         .expect("semantic_type should be surjective");
     identifiers.get(&ident).unwrap().as_str()
 }
@@ -2187,7 +2187,7 @@ fn write_theory_struct(
     write!(out, "/// A model of the `{name}` theory.\n")?;
     write!(out, "#[derive(Debug, Clone)]\n")?;
     write!(out, "pub struct {} {{\n", name)?;
-    for (type_ident, _) in eqlog.iter_semantic_type() {
+    for (_scope, type_ident, _) in eqlog.iter_semantic_type() {
         let type_name = identifiers.get(&type_ident).unwrap().as_str();
         write_sort_fields(out, type_name)?;
         write!(out, "\n")?;
@@ -2233,8 +2233,7 @@ fn write_theory_impl(
         write_equate_elements(out, typ, eqlog, identifiers)?;
     }
 
-    for (_, ident) in eqlog.iter_type_decl() {
-        let typ = eqlog.semantic_type(ident).unwrap();
+    for typ in eqlog.iter_type().filter(|typ| eqlog.is_normal_type(*typ)) {
         write_new_element(out, typ, eqlog, identifiers)?;
     }
 
@@ -2344,7 +2343,7 @@ pub fn write_module(
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for (ident, _) in eqlog.iter_semantic_type() {
+    for (_scope, ident, _) in eqlog.iter_semantic_type() {
         let name = identifiers.get(&ident).unwrap().as_str();
         write_sort_struct(out, name)?;
         write_sort_impl(out, name)?;
