@@ -369,7 +369,7 @@ pub fn display_rel<'a>(
     if let Some(pred) = pred {
         let ident = eqlog
             .iter_semantic_pred()
-            .find_map(|(ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
+            .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
             .expect("semantic_pred should be surjective");
         return identifiers.get(&ident).unwrap().as_str();
     }
