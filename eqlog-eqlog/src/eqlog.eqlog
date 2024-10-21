@@ -635,34 +635,18 @@ rule semantic_decl_ctor {
 enum Rel {
     PredRel(Pred),
     FuncRel(Func)
-    //NegatedPredRel(Pred),
-    //UndefinedFuncRel(Func)
 }
 
 rule rel_constructors_pred_total {
     if predicate: Pred;
     then PredRel(predicate)!;
-    //then NegatedPredRel(predicate)!;
 }
 rule rel_constructors_func_total {
     if function: Func;
     then FuncRel(function)!;
-    //then UndefinedFuncRel(function)!;
 }
 
 func arity(Rel) -> TypeList;
-//rule pred_rel_arity {
-//    if rel = PredRel(predicate);
-//    if tys = pred_arity(predicate);
-//    then arity(rel) = tys;
-//}
-//rule func_rel_arity {
-//    if rel = FuncRel(function);
-//    if dom = domain(function);
-//    if cod = codomain(function);
-//    then tys := ConsTypeList(cod, dom)!;
-//    then arity(rel) = tys;
-//}
 rule arity_laws {
     if rel: Rel;
     match rel {
@@ -676,14 +660,6 @@ rule arity_laws {
             then tys := SnocTypeList(dom, cod)!;
             then arity(rel) = tys;
         }
-        //NegatedPredRel(predicate) => {
-        //    if tys = pred_arity(predicate);
-        //    then arity(rel) = tys;
-        //}
-        //UndefinedFuncRel(function) => {
-        //    if tys = domain(function);
-        //    then arity(rel) = tys;
-        //}
     }
 }
 
