@@ -1045,8 +1045,19 @@ rule rule_symbol_scope {
     then scope_symbols(scope) = ss;
 }
 
+// A predicate tracking which symbols have are defined in a symbol scope.
+pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
+
+// A predicate tracking which symbols have are accessible in a symbols scope.
+// At the moment, symbols are accessible if they're declared in the same
+// symbols scope or a containing symbol scope.
 pred accessible_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
-rule defined_symbol_scope_extension {
+
+rule defined_symbol_is_accessible {
+    if defined_symbol(ss, name, kind, loc);
+    then accessible_symbol(ss, name, kind, loc);
+}
+rule accessible_symbol_scope_extension {
     if symbol_scope_extension(smaller, larger);
     if accessible_symbol(smaller, name, kind, loc);
     then accessible_symbol(larger, name, kind, loc);
@@ -1058,7 +1069,7 @@ rule type_decl_defines_symbol {
     if ss = decl_symbol_scope(decl);
     if kind = type_symbol();
     if loc = type_decl_node_loc(type_decl);
-    then accessible_symbol(ss, name, kind, loc);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule enum_decl_defines_symbol {
     if decl_node_enum(decl, enum_decl);
@@ -1066,7 +1077,7 @@ rule enum_decl_defines_symbol {
     if ss = decl_symbol_scope(decl);
     if kind = enum_symbol();
     if loc = enum_decl_node_loc(enum_decl);
-    then accessible_symbol(ss, name, kind, loc);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule pred_decl_defines_symbol {
     if decl_node_pred(decl, pred_decl);
@@ -1074,7 +1085,7 @@ rule pred_decl_defines_symbol {
     if ss = decl_symbol_scope(decl);
     if kind = pred_symbol();
     if loc = pred_decl_node_loc(pred_decl);
-    then accessible_symbol(ss, name, kind, loc);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule func_decl_defines_symbol {
     if decl_node_func(decl, func_decl);
@@ -1082,14 +1093,14 @@ rule func_decl_defines_symbol {
     if ss = decl_symbol_scope(decl);
     if kind = func_symbol();
     if loc = func_decl_node_loc(func_decl);
-    then accessible_symbol(ss, name, kind, loc);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule ctor_decl_defines_symbol {
     if ctor_decl(ctor, name, _);
     if ss = ctor_symbol_scope(ctor);
     if kind  = ctor_symbol();
     if loc = ctor_decl_node_loc(ctor);
-    then accessible_symbol(ss, name, kind, loc);
+    then defined_symbol(ss, name, kind, loc);
 }
 rule rule_decl_defines_symbol {
     if decl_node_rule(decl, rul);
@@ -1098,7 +1109,7 @@ rule rule_decl_defines_symbol {
     if name = rule_name(rul);
     if kind = rule_symbol();
     if loc = rule_decl_node_loc(rul);
-    then accessible_symbol(ss, name, kind, loc);
+    then defined_symbol(ss, name, kind, loc);
 }
 
 // ### Symbol lookup checks
