@@ -2191,14 +2191,19 @@ fn write_define_fn(
 /// Displays a struct that holds data for all symbols defined in a [SymbolScope].
 fn display_symbol_scope_struct<'a>(
     sym_scope: SymbolScope,
-    struct_name: &'a str,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
+        let struct_name: Ident = eqlog.symbol_scope_name(sym_scope).unwrap();
+        let struct_name_camel: String = identifiers
+            .get(&struct_name)
+            .unwrap()
+            .as_str()
+            .to_case(UpperCamel);
         writedoc! {f, "
             #[derive(Debug, Clone)]
-            pub struct {struct_name} {{
+            pub struct {struct_name_camel} {{
         "}?;
 
         let type_kind = eqlog.type_symbol().unwrap();
@@ -2409,7 +2414,7 @@ pub fn write_module(
     writeln!(
         out,
         "{}",
-        display_symbol_scope_struct(module_sym_scope, name, eqlog, identifiers)
+        display_symbol_scope_struct(module_sym_scope, eqlog, identifiers)
     )?;
     writeln!(out, "type Model = {};", name)?;
     writeln!(
