@@ -1445,55 +1445,65 @@ fn write_canonicalize_fn(
     "}
 }
 
-fn write_model_delta_struct(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let new_tuples = iter_relation_arities(eqlog, identifiers).format_with("\n", |(name, _), f| {
-        let name_snake = name.to_case(Snake);
-        let name_camel = name.to_case(UpperCamel);
-        f(&format_args!("    new_{name_snake}: Vec<{name_camel}>,"))
-    });
+fn display_symbol_scope_delta_struct<'a>(
+    sym_scope: SymbolScope,
+    struct_name: &'a str,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            #[derive(Debug, Clone)]
+            struct {struct_name}Delta {{
+        "}?;
 
-    let new_equalities = eqlog
-        .iter_semantic_type()
-        .format_with("\n", |(_scope, ident, _), f| {
-            let name = identifiers.get(&ident).unwrap().as_str();
-            let name_snake = name.to_case(Snake);
-            f(&format_args!(
-                "    new_{name_snake}_equalities: Vec<({name}, {name})>,"
-            ))
-        });
+        let type_kind = eqlog.type_symbol().unwrap();
+        let enum_kind = eqlog.enum_symbol().unwrap();
+        let pred_kind = eqlog.pred_symbol().unwrap();
+        let func_kind = eqlog.func_symbol().unwrap();
+        let ctor_kind = eqlog.ctor_symbol().unwrap();
 
-    let new_defines = eqlog
-        .iter_semantic_func()
-        // Are we emitting the same function too often?
-        .filter_map(|(_, ident, func)| {
-            if !eqlog.function_can_be_made_defined(func) {
-                return None;
+        for (sym_scope0, name, sym_kind, _loc) in eqlog.iter_defined_symbol() {
+            if !eqlog.are_equal_symbol_scope(sym_scope0, sym_scope) {
+                continue;
             }
 
-            let func_name = identifiers.get(&ident).unwrap();
-            let func_snake = func_name.to_case(Snake);
-            let func_camel = func_name.to_case(UpperCamel);
+            if eqlog.are_equal_symbol_kind(sym_kind, type_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
+            {
+                let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                let name_camel = name_snake.to_case(UpperCamel);
+                writeln!(
+                    f,
+                    "new_{name_snake}_equalities: Vec<({name_camel}, {name_camel})>,"
+                )?;
+                continue;
+            }
 
-            Some(FmtFn(move |f: &mut Formatter| -> Result {
-                writedoc! {f, "
-                        new_{func_snake}_def: Vec<{func_camel}Args>,
-                    "}
-            }))
-        })
-        .format("");
+            if !(eqlog.are_equal_symbol_kind(sym_kind, pred_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, func_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind))
+            {
+                continue;
+            }
 
-    writedoc! {out, "
-        #[derive(Debug, Clone)]
-        struct ModelDelta {{
-        {new_tuples}
-        {new_equalities}
-        {new_defines}
-        }}
-    "}
+            let relation_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+            let relation_camel = identifiers.get(&name).unwrap().as_str().to_case(UpperCamel);
+            writeln!(f, "new_{relation_snake}: Vec<{relation_camel}>,")?;
+            if eqlog.are_equal_symbol_kind(sym_kind, func_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind)
+            {
+                let func = eqlog.semantic_func(sym_scope, name).unwrap();
+                if eqlog.function_can_be_made_defined(func) {
+                    writeln!(f, "new_{relation_snake}_def: Vec<{relation_camel}Args>,")?;
+                }
+            }
+        }
+
+        writeln!(f, "}}\n")?;
+
+        Ok(())
+    })
 }
 
 fn write_model_delta_impl(
@@ -2390,22 +2400,22 @@ pub fn write_module(
 
     write!(out, "\n")?;
 
-    write_model_delta_struct(out, eqlog, identifiers)?;
     let module = eqlog
         .iter_module_node()
         .next()
         .expect("There should be exactly one module node");
+    let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
     writeln!(
         out,
         "{}",
-        display_symbol_scope_struct(
-            eqlog.module_symbol_scope(module).unwrap(),
-            name,
-            eqlog,
-            identifiers
-        )
+        display_symbol_scope_struct(module_sym_scope, name, eqlog, identifiers)
     )?;
     writeln!(out, "type Model = {};", name)?;
+    writeln!(
+        out,
+        "{}",
+        display_symbol_scope_delta_struct(module_sym_scope, "Model", eqlog, identifiers)
+    )?;
 
     write_model_delta_impl(out, eqlog, identifiers)?;
     write!(out, "\n")?;
