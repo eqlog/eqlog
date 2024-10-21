@@ -1,4 +1,4 @@
-// src-digest: CFCEEF93BDE3D5502E9CC17A8DDB86C258FAAE3D4522A0A0C44C7BD1DDA2AFE7
+// src-digest: DD5DDAEDC4CD0A72563D83BC4B5CE8DAE669800D3159336C4EC00A80E5ACAD96
 use eqlog_runtime::tabled::{
     object::Segment, Alignment, Extract, Header, Modify, Style, Table, Tabled,
 };
@@ -12571,17 +12571,17 @@ impl fmt::Display for SymbolScopeExtensionTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DefinedSymbol(pub SymbolScope, pub Ident, pub SymbolKind, pub Loc);
+struct AccessibleSymbol(pub SymbolScope, pub Ident, pub SymbolKind, pub Loc);
 #[derive(Clone, Hash, Debug)]
-struct DefinedSymbolTable {
+struct AccessibleSymbolTable {
     index_all_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
     index_dirty_0_1_2_3: BTreeSet<(u32, u32, u32, u32)>,
-    element_index_ident: BTreeMap<Ident, Vec<DefinedSymbol>>,
-    element_index_loc: BTreeMap<Loc, Vec<DefinedSymbol>>,
-    element_index_symbol_kind: BTreeMap<SymbolKind, Vec<DefinedSymbol>>,
-    element_index_symbol_scope: BTreeMap<SymbolScope, Vec<DefinedSymbol>>,
+    element_index_ident: BTreeMap<Ident, Vec<AccessibleSymbol>>,
+    element_index_loc: BTreeMap<Loc, Vec<AccessibleSymbol>>,
+    element_index_symbol_kind: BTreeMap<SymbolKind, Vec<AccessibleSymbol>>,
+    element_index_symbol_scope: BTreeMap<SymbolScope, Vec<AccessibleSymbol>>,
 }
-impl DefinedSymbolTable {
+impl AccessibleSymbolTable {
     #[allow(unused)]
     const WEIGHT: usize = 12;
     fn new() -> Self {
@@ -12595,7 +12595,7 @@ impl DefinedSymbolTable {
         }
     }
     #[allow(dead_code)]
-    fn insert(&mut self, t: DefinedSymbol) -> bool {
+    fn insert(&mut self, t: AccessibleSymbol) -> bool {
         if self.index_all_0_1_2_3.insert(Self::permute_0_1_2_3(t)) {
             self.index_dirty_0_1_2_3.insert(Self::permute_0_1_2_3(t));
 
@@ -12633,7 +12633,7 @@ impl DefinedSymbolTable {
         }
     }
     #[allow(dead_code)]
-    fn contains(&self, t: DefinedSymbol) -> bool {
+    fn contains(&self, t: AccessibleSymbol) -> bool {
         self.index_all_0_1_2_3.contains(&Self::permute_0_1_2_3(t))
     }
     fn drop_dirt(&mut self) {
@@ -12643,12 +12643,12 @@ impl DefinedSymbolTable {
         !self.index_dirty_0_1_2_3.is_empty()
     }
     #[allow(unused)]
-    fn permute_0_1_2_3(t: DefinedSymbol) -> (u32, u32, u32, u32) {
+    fn permute_0_1_2_3(t: AccessibleSymbol) -> (u32, u32, u32, u32) {
         (t.0.into(), t.1.into(), t.2.into(), t.3.into())
     }
     #[allow(unused)]
-    fn permute_inverse_0_1_2_3(t: (u32, u32, u32, u32)) -> DefinedSymbol {
-        DefinedSymbol(
+    fn permute_inverse_0_1_2_3(t: (u32, u32, u32, u32)) -> AccessibleSymbol {
+        AccessibleSymbol(
             SymbolScope::from(t.0),
             Ident::from(t.1),
             SymbolKind::from(t.2),
@@ -12656,7 +12656,7 @@ impl DefinedSymbolTable {
         )
     }
     #[allow(dead_code)]
-    fn iter_all(&self) -> impl '_ + Iterator<Item = DefinedSymbol> {
+    fn iter_all(&self) -> impl '_ + Iterator<Item = AccessibleSymbol> {
         let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
         self.index_all_0_1_2_3
@@ -12665,7 +12665,7 @@ impl DefinedSymbolTable {
             .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
-    fn iter_dirty(&self) -> impl '_ + Iterator<Item = DefinedSymbol> {
+    fn iter_dirty(&self) -> impl '_ + Iterator<Item = AccessibleSymbol> {
         let min = (u32::MIN, u32::MIN, u32::MIN, u32::MIN);
         let max = (u32::MAX, u32::MAX, u32::MAX, u32::MAX);
         self.index_dirty_0_1_2_3
@@ -12674,7 +12674,7 @@ impl DefinedSymbolTable {
             .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
-    fn iter_all_0(&self, arg0: SymbolScope) -> impl '_ + Iterator<Item = DefinedSymbol> {
+    fn iter_all_0(&self, arg0: SymbolScope) -> impl '_ + Iterator<Item = AccessibleSymbol> {
         let arg0 = arg0.0;
         let min = (arg0, u32::MIN, u32::MIN, u32::MIN);
         let max = (arg0, u32::MAX, u32::MAX, u32::MAX);
@@ -12690,7 +12690,7 @@ impl DefinedSymbolTable {
         arg1: Ident,
         arg2: SymbolKind,
         arg3: Loc,
-    ) -> impl '_ + Iterator<Item = DefinedSymbol> {
+    ) -> impl '_ + Iterator<Item = AccessibleSymbol> {
         let arg0 = arg0.0;
         let arg1 = arg1.0;
         let arg2 = arg2.0;
@@ -12703,7 +12703,7 @@ impl DefinedSymbolTable {
             .map(Self::permute_inverse_0_1_2_3)
     }
     #[allow(dead_code)]
-    fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<DefinedSymbol> {
+    fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<AccessibleSymbol> {
         let mut ts = match self.element_index_ident.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -12723,7 +12723,7 @@ impl DefinedSymbolTable {
         ts
     }
     #[allow(dead_code)]
-    fn drain_with_element_loc(&mut self, tm: Loc) -> Vec<DefinedSymbol> {
+    fn drain_with_element_loc(&mut self, tm: Loc) -> Vec<AccessibleSymbol> {
         let mut ts = match self.element_index_loc.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -12743,7 +12743,7 @@ impl DefinedSymbolTable {
         ts
     }
     #[allow(dead_code)]
-    fn drain_with_element_symbol_kind(&mut self, tm: SymbolKind) -> Vec<DefinedSymbol> {
+    fn drain_with_element_symbol_kind(&mut self, tm: SymbolKind) -> Vec<AccessibleSymbol> {
         let mut ts = match self.element_index_symbol_kind.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -12763,7 +12763,7 @@ impl DefinedSymbolTable {
         ts
     }
     #[allow(dead_code)]
-    fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<DefinedSymbol> {
+    fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<AccessibleSymbol> {
         let mut ts = match self.element_index_symbol_scope.remove(&tm) {
             None => Vec::new(),
             Some(tuples) => tuples,
@@ -12783,11 +12783,11 @@ impl DefinedSymbolTable {
         ts
     }
 }
-impl fmt::Display for DefinedSymbolTable {
+impl fmt::Display for AccessibleSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("defined_symbol"))
+            .with(Header("accessible_symbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -35760,7 +35760,7 @@ struct ModelDelta {
     new_el_in_img: Vec<ElInImg>,
     new_rel_tuple_in_img: Vec<RelTupleInImg>,
     new_symbol_scope_extension: Vec<SymbolScopeExtension>,
-    new_defined_symbol: Vec<DefinedSymbol>,
+    new_accessible_symbol: Vec<AccessibleSymbol>,
     new_should_be_symbol: Vec<ShouldBeSymbol>,
     new_should_be_symbol_2: Vec<ShouldBeSymbol2>,
     new_pred_arg_num_should_match: Vec<PredArgNumShouldMatch>,
@@ -36339,7 +36339,7 @@ pub struct Eqlog {
     el_in_img: ElInImgTable,
     rel_tuple_in_img: RelTupleInImgTable,
     symbol_scope_extension: SymbolScopeExtensionTable,
-    defined_symbol: DefinedSymbolTable,
+    accessible_symbol: AccessibleSymbolTable,
     should_be_symbol: ShouldBeSymbolTable,
     should_be_symbol_2: ShouldBeSymbol2Table,
     pred_arg_num_should_match: PredArgNumShouldMatchTable,
@@ -36543,7 +36543,7 @@ impl ModelDelta {
             new_el_in_img: Vec::new(),
             new_rel_tuple_in_img: Vec::new(),
             new_symbol_scope_extension: Vec::new(),
-            new_defined_symbol: Vec::new(),
+            new_accessible_symbol: Vec::new(),
             new_should_be_symbol: Vec::new(),
             new_should_be_symbol_2: Vec::new(),
             new_pred_arg_num_should_match: Vec::new(),
@@ -37326,8 +37326,8 @@ impl ModelDelta {
             model.insert_symbol_scope_extension(tm0, tm1);
         }
 
-        for DefinedSymbol(tm0, tm1, tm2, tm3) in self.new_defined_symbol.drain(..) {
-            model.insert_defined_symbol(tm0, tm1, tm2, tm3);
+        for AccessibleSymbol(tm0, tm1, tm2, tm3) in self.new_accessible_symbol.drain(..) {
+            model.insert_accessible_symbol(tm0, tm1, tm2, tm3);
         }
 
         for ShouldBeSymbol(tm0, tm1, tm2, tm3) in self.new_should_be_symbol.drain(..) {
@@ -38520,7 +38520,7 @@ impl Eqlog {
             el_in_img: ElInImgTable::new(),
             rel_tuple_in_img: RelTupleInImgTable::new(),
             symbol_scope_extension: SymbolScopeExtensionTable::new(),
-            defined_symbol: DefinedSymbolTable::new(),
+            accessible_symbol: AccessibleSymbolTable::new(),
             should_be_symbol: ShouldBeSymbolTable::new(),
             should_be_symbol_2: ShouldBeSymbol2Table::new(),
             pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),
@@ -48057,9 +48057,9 @@ impl Eqlog {
         }
     }
 
-    /// Returns `true` if `defined_symbol(arg0, arg1, arg2, arg3)` holds.
+    /// Returns `true` if `accessible_symbol(arg0, arg1, arg2, arg3)` holds.
     #[allow(dead_code)]
-    pub fn defined_symbol(
+    pub fn accessible_symbol(
         &self,
         mut arg0: SymbolScope,
         mut arg1: Ident,
@@ -48070,21 +48070,23 @@ impl Eqlog {
         arg1 = self.root_ident(arg1);
         arg2 = self.root_symbol_kind(arg2);
         arg3 = self.root_loc(arg3);
-        self.defined_symbol
-            .contains(DefinedSymbol(arg0, arg1, arg2, arg3))
+        self.accessible_symbol
+            .contains(AccessibleSymbol(arg0, arg1, arg2, arg3))
     }
-    /// Returns an iterator over tuples of elements satisfying the `defined_symbol` predicate.
+    /// Returns an iterator over tuples of elements satisfying the `accessible_symbol` predicate.
 
     #[allow(dead_code)]
-    pub fn iter_defined_symbol(
+    pub fn iter_accessible_symbol(
         &self,
     ) -> impl '_ + Iterator<Item = (SymbolScope, Ident, SymbolKind, Loc)> {
-        self.defined_symbol.iter_all().map(|t| (t.0, t.1, t.2, t.3))
+        self.accessible_symbol
+            .iter_all()
+            .map(|t| (t.0, t.1, t.2, t.3))
     }
-    /// Makes `defined_symbol(tm0, tm1, tm2, tm3)` hold.
+    /// Makes `accessible_symbol(tm0, tm1, tm2, tm3)` hold.
 
     #[allow(dead_code)]
-    pub fn insert_defined_symbol(
+    pub fn insert_accessible_symbol(
         &mut self,
         mut tm0: SymbolScope,
         mut tm1: Ident,
@@ -48096,20 +48098,20 @@ impl Eqlog {
         tm2 = self.symbol_kind_equalities.root(tm2);
         tm3 = self.loc_equalities.root(tm3);
         if self
-            .defined_symbol
-            .insert(DefinedSymbol(tm0, tm1, tm2, tm3))
+            .accessible_symbol
+            .insert(AccessibleSymbol(tm0, tm1, tm2, tm3))
         {
             let weight0 = &mut self.symbol_scope_weights[tm0.0 as usize];
-            *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
+            *weight0 = weight0.saturating_add(AccessibleSymbolTable::WEIGHT);
 
             let weight1 = &mut self.ident_weights[tm1.0 as usize];
-            *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
+            *weight1 = weight1.saturating_add(AccessibleSymbolTable::WEIGHT);
 
             let weight2 = &mut self.symbol_kind_weights[tm2.0 as usize];
-            *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+            *weight2 = weight2.saturating_add(AccessibleSymbolTable::WEIGHT);
 
             let weight3 = &mut self.loc_weights[tm3.0 as usize];
-            *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
+            *weight3 = weight3.saturating_add(AccessibleSymbolTable::WEIGHT);
         }
     }
 
@@ -52160,138 +52162,138 @@ impl Eqlog {
         }
 
         for el in self.ident_uprooted.iter().copied() {
-            let ts = self.defined_symbol.drain_with_element_ident(el);
+            let ts = self.accessible_symbol.drain_with_element_ident(el);
             for mut t in ts {
                 let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight2 = weight2.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight3 = weight3.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 t.0 = self.root_symbol_scope(t.0);
                 t.1 = self.root_ident(t.1);
                 t.2 = self.root_symbol_kind(t.2);
                 t.3 = self.root_loc(t.3);
-                if self.defined_symbol.insert(t) {
+                if self.accessible_symbol.insert(t) {
                     let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight2 = weight2.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight3 = weight3.saturating_add(AccessibleSymbolTable::WEIGHT);
                 }
             }
         }
         for el in self.loc_uprooted.iter().copied() {
-            let ts = self.defined_symbol.drain_with_element_loc(el);
+            let ts = self.accessible_symbol.drain_with_element_loc(el);
             for mut t in ts {
                 let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight2 = weight2.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight3 = weight3.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 t.0 = self.root_symbol_scope(t.0);
                 t.1 = self.root_ident(t.1);
                 t.2 = self.root_symbol_kind(t.2);
                 t.3 = self.root_loc(t.3);
-                if self.defined_symbol.insert(t) {
+                if self.accessible_symbol.insert(t) {
                     let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight2 = weight2.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight3 = weight3.saturating_add(AccessibleSymbolTable::WEIGHT);
                 }
             }
         }
         for el in self.symbol_kind_uprooted.iter().copied() {
-            let ts = self.defined_symbol.drain_with_element_symbol_kind(el);
+            let ts = self.accessible_symbol.drain_with_element_symbol_kind(el);
             for mut t in ts {
                 let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight2 = weight2.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight3 = weight3.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 t.0 = self.root_symbol_scope(t.0);
                 t.1 = self.root_ident(t.1);
                 t.2 = self.root_symbol_kind(t.2);
                 t.3 = self.root_loc(t.3);
-                if self.defined_symbol.insert(t) {
+                if self.accessible_symbol.insert(t) {
                     let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight2 = weight2.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight3 = weight3.saturating_add(AccessibleSymbolTable::WEIGHT);
                 }
             }
         }
         for el in self.symbol_scope_uprooted.iter().copied() {
-            let ts = self.defined_symbol.drain_with_element_symbol_scope(el);
+            let ts = self.accessible_symbol.drain_with_element_symbol_scope(el);
             for mut t in ts {
                 let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                *weight0 = weight0.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight0 = weight0.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                *weight1 = weight1.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight1 = weight1.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                *weight2 = weight2.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight2 = weight2.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                *weight3 = weight3.saturating_sub(DefinedSymbolTable::WEIGHT);
+                *weight3 = weight3.saturating_sub(AccessibleSymbolTable::WEIGHT);
 
                 t.0 = self.root_symbol_scope(t.0);
                 t.1 = self.root_ident(t.1);
                 t.2 = self.root_symbol_kind(t.2);
                 t.3 = self.root_loc(t.3);
-                if self.defined_symbol.insert(t) {
+                if self.accessible_symbol.insert(t) {
                     let weight0 = &mut self.symbol_scope_weights[t.0 .0 as usize];
-                    *weight0 = weight0.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight0 = weight0.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight1 = &mut self.ident_weights[t.1 .0 as usize];
-                    *weight1 = weight1.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight1 = weight1.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight2 = &mut self.symbol_kind_weights[t.2 .0 as usize];
-                    *weight2 = weight2.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight2 = weight2.saturating_add(AccessibleSymbolTable::WEIGHT);
 
                     let weight3 = &mut self.loc_weights[t.3 .0 as usize];
-                    *weight3 = weight3.saturating_add(DefinedSymbolTable::WEIGHT);
+                    *weight3 = weight3.saturating_add(AccessibleSymbolTable::WEIGHT);
                 }
             }
         }
@@ -58245,7 +58247,7 @@ impl Eqlog {
             || self.el_in_img.is_dirty()
             || self.rel_tuple_in_img.is_dirty()
             || self.symbol_scope_extension.is_dirty()
-            || self.defined_symbol.is_dirty()
+            || self.accessible_symbol.is_dirty()
             || self.should_be_symbol.is_dirty()
             || self.should_be_symbol_2.is_dirty()
             || self.pred_arg_num_should_match.is_dirty()
@@ -72971,7 +72973,7 @@ impl Eqlog {
     ) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DefinedSymbol(_, tm2, tm3, tm4) in self.defined_symbol.iter_all_0(tm0) {
+            for AccessibleSymbol(_, tm2, tm3, tm4) in self.accessible_symbol.iter_all_0(tm0) {
                 self.defined_symbol_scope_extension_6(delta, tm1, tm0, tm2, tm3, tm4);
             }
         }
@@ -72981,7 +72983,7 @@ impl Eqlog {
     fn defined_symbol_scope_extension_5(&self, delta: &mut ModelDelta) {
         for _ in [()] {
             #[allow(unused_variables)]
-            for DefinedSymbol(tm0, tm2, tm3, tm4) in self.defined_symbol.iter_dirty() {
+            for AccessibleSymbol(tm0, tm2, tm3, tm4) in self.accessible_symbol.iter_dirty() {
                 #[allow(unused_variables)]
                 for SymbolScopeExtension(_, tm1) in self.symbol_scope_extension.iter_all_0(tm0) {
                     self.defined_symbol_scope_extension_6(delta, tm1, tm0, tm2, tm3, tm4);
@@ -73002,14 +73004,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm1, tm2, tm3, tm4)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm1, tm2, tm3, tm4));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm1, tm2, tm3, tm4));
             }
         }
     }
@@ -73236,14 +73238,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm3, tm2, tm4, tm5)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm3, tm2, tm4, tm5));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm3, tm2, tm4, tm5));
             }
         }
     }
@@ -73477,14 +73479,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm4, tm2, tm5, tm6)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm4, tm2, tm5, tm6));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm4, tm2, tm5, tm6));
             }
         }
     }
@@ -73718,14 +73720,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm4, tm2, tm5, tm6)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm4, tm2, tm5, tm6));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm4, tm2, tm5, tm6));
             }
         }
     }
@@ -73968,14 +73970,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm5, tm2, tm6, tm7)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm5, tm2, tm6, tm7));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm5, tm2, tm6, tm7));
             }
         }
     }
@@ -74160,14 +74162,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm3, tm1, tm4, tm5)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm3, tm1, tm4, tm5));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm3, tm1, tm4, tm5));
             }
         }
     }
@@ -74458,14 +74460,14 @@ impl Eqlog {
     ) {
         for _ in [()] {
             let exists_already = self
-                .defined_symbol
+                .accessible_symbol
                 .iter_all_0_1_2_3(tm3, tm4, tm5, tm6)
                 .next()
                 .is_some();
             if !exists_already {
                 delta
-                    .new_defined_symbol
-                    .push(DefinedSymbol(tm3, tm4, tm5, tm6));
+                    .new_accessible_symbol
+                    .push(AccessibleSymbol(tm3, tm4, tm5, tm6));
             }
         }
     }
@@ -90203,7 +90205,7 @@ impl Eqlog {
         self.el_in_img.drop_dirt();
         self.rel_tuple_in_img.drop_dirt();
         self.symbol_scope_extension.drop_dirt();
-        self.defined_symbol.drop_dirt();
+        self.accessible_symbol.drop_dirt();
         self.should_be_symbol.drop_dirt();
         self.should_be_symbol_2.drop_dirt();
         self.pred_arg_num_should_match.drop_dirt();
@@ -90857,7 +90859,7 @@ impl fmt::Display for Eqlog {
         self.el_in_img.fmt(f)?;
         self.rel_tuple_in_img.fmt(f)?;
         self.symbol_scope_extension.fmt(f)?;
-        self.defined_symbol.fmt(f)?;
+        self.accessible_symbol.fmt(f)?;
         self.should_be_symbol.fmt(f)?;
         self.should_be_symbol_2.fmt(f)?;
         self.pred_arg_num_should_match.fmt(f)?;

@@ -261,7 +261,7 @@ pub fn iter_symbol_declared_twice_errors<'a>(
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     let mut symbols: BTreeMap<(SymbolScope, Ident), Vec<Loc>> = BTreeMap::new();
-    for (scope, name, _, loc) in eqlog.iter_defined_symbol() {
+    for (scope, name, _, loc) in eqlog.iter_accessible_symbol() {
         symbols.entry((scope, name)).or_insert(Vec::new()).push(loc);
     }
 
@@ -298,7 +298,7 @@ pub fn iter_symbol_lookup_errors<'a>(
     // cause, it should be reported with higher preference.
     let mut declared_symbols: BTreeMap<(SymbolScope, Ident), Vec<(SymbolKindEnum, Location)>> =
         BTreeMap::new();
-    for (scope, name, kind, loc) in eqlog.iter_defined_symbol() {
+    for (scope, name, kind, loc) in eqlog.iter_accessible_symbol() {
         let location = *locations.get(&loc).unwrap();
         declared_symbols
             .entry((scope, name))
@@ -412,7 +412,7 @@ pub fn iter_symbol_casing_errors<'a>(
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     eqlog
-        .iter_defined_symbol()
+        .iter_accessible_symbol()
         .filter_map(|(_scope, ident, kind, loc)| {
             let name: &str = identifiers.get(&ident).unwrap().as_str();
 
