@@ -926,6 +926,7 @@ type SymbolScope;
 
 pred symbol_scope_extension(smaller: SymbolScope, larger: SymbolScope);
 
+func module_symbol_scope(module: ModuleNode) -> SymbolScope;
 func decl_symbol_scope(node: DeclNode) -> SymbolScope;
 func decls_symbol_scope(nodes: DeclListNode) -> SymbolScope;
 func arg_symbol_scope(arg: ArgDeclNode) -> SymbolScope;
@@ -933,6 +934,11 @@ func args_symbol_scope(args: ArgDeclListNode) -> SymbolScope;
 func ctor_symbol_scope(ctor: CtorDeclNode) -> SymbolScope;
 func ctors_symbol_scope(ctor: CtorDeclListNode) -> SymbolScope;
 
+rule module_symbol_scope_rule {
+    if decls_module_node(module, decls);
+    if ss = decls_symbol_scope(decls);
+    then ss = module_symbol_scope(module);
+}
 rule decl_symbol_scope_total {
     if node: DeclNode;
     then decl_symbol_scope(node)!;

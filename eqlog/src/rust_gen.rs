@@ -172,7 +172,7 @@ fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io:
     "}
 }
 
-fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
+fn write_sort_fields(out: &mut impl fmt::Write, sort: &str) -> fmt::Result {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
         {sort_snake}_equalities: Unification<{sort}>,
@@ -2178,31 +2178,52 @@ fn write_define_fn(
     "}
 }
 
-fn write_theory_struct(
-    out: &mut impl Write,
-    name: &str,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    write!(out, "/// A model of the `{name}` theory.\n")?;
-    write!(out, "#[derive(Debug, Clone)]\n")?;
-    write!(out, "pub struct {} {{\n", name)?;
-    for (_scope, type_ident, _) in eqlog.iter_semantic_type() {
-        let type_name = identifiers.get(&type_ident).unwrap().as_str();
-        write_sort_fields(out, type_name)?;
-        write!(out, "\n")?;
-    }
+/// Displays a struct that holds data for all symbols defined in a [SymbolScope].
+fn display_symbol_scope_struct<'a>(
+    sym_scope: SymbolScope,
+    struct_name: &'a str,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            #[derive(Debug, Clone)]
+            pub struct {struct_name} {{
+        "}?;
 
-    for (relation, _) in iter_relation_arities(eqlog, identifiers) {
-        let relation_snake = relation.to_case(Snake);
-        let relation_camel = relation.to_case(UpperCamel);
-        write!(out, "  {relation_snake}: {relation_camel}Table,")?;
-    }
+        let type_kind = eqlog.type_symbol().unwrap();
+        let enum_kind = eqlog.enum_symbol().unwrap();
+        let pred_kind = eqlog.pred_symbol().unwrap();
+        let func_kind = eqlog.func_symbol().unwrap();
+        let ctor_kind = eqlog.ctor_symbol().unwrap();
 
-    write!(out, "empty_join_is_dirty: bool,\n")?;
-    write!(out, "}}\n")?;
-    write!(out, "type Model = {name};")?;
-    Ok(())
+        for (sym_scope0, name, sym_kind, _loc) in eqlog.iter_defined_symbol() {
+            if !eqlog.are_equal_symbol_scope(sym_scope0, sym_scope) {
+                continue;
+            }
+            if eqlog.are_equal_symbol_kind(sym_kind, type_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
+            {
+                let typ = eqlog.semantic_type(sym_scope, name);
+                let type_name = identifiers.get(&name).unwrap().as_str();
+                write_sort_fields(f, type_name)?;
+            } else if eqlog.are_equal_symbol_kind(sym_kind, pred_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, func_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind)
+            {
+                let relation_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                let relation_camel = relation_snake.to_case(UpperCamel);
+                writeln!(f, "{relation_snake}: {relation_camel}Table,")?;
+            }
+
+            let rel_snake = identifiers.get(&name).unwrap().as_str();
+        }
+
+        writeln!(f, "empty_join_is_dirty: bool,")?;
+        writeln!(f, "}}\n")?;
+
+        Ok(())
+    })
 }
 
 fn write_theory_impl(
@@ -2370,7 +2391,21 @@ pub fn write_module(
     write!(out, "\n")?;
 
     write_model_delta_struct(out, eqlog, identifiers)?;
-    write_theory_struct(out, name, eqlog, identifiers)?;
+    let module = eqlog
+        .iter_module_node()
+        .next()
+        .expect("There should be exactly one module node");
+    writeln!(
+        out,
+        "{}",
+        display_symbol_scope_struct(
+            eqlog.module_symbol_scope(module).unwrap(),
+            name,
+            eqlog,
+            identifiers
+        )
+    )?;
+    writeln!(out, "type Model = {};", name)?;
 
     write_model_delta_impl(out, eqlog, identifiers)?;
     write!(out, "\n")?;
