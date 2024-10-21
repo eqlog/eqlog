@@ -122,6 +122,8 @@ pred cons_decl_list_node(DeclListNode, head: DeclNode, tail: DeclListNode);
 type ModuleNode;
 pred decls_module_node(ModuleNode, DeclListNode);
 
+func module_name(module: ModuleNode) -> Ident;
+
 // ### Locations
 type Loc;
 
@@ -1015,6 +1017,21 @@ rule model_symbol_scope {
     if ambient_scope = decl_symbol_scope(decl);
     if member_scope = decls_symbol_scope(body);
     then symbol_scope_extension(ambient_scope, member_scope);
+}
+
+// This is the name of the Rust struct that holds the data for symbols defined in this scope.
+func symbol_scope_name(ss: SymbolScope) -> Ident;
+// - For modules, it's derived from the file name.
+rule module_symbol_scope_name {
+    if ss = module_symbol_scope(module);
+    if name = module_name(module);
+    then symbol_scope_name(ss) = name;
+}
+// - For model declarations, it's the model name
+rule model_symbol_scope_name {
+    if model_decl(_, name, body);
+    if ss = decls_symbol_scope(body);
+    then symbol_scope_name(ss) = name;
 }
 
 // The SymbolScope attached to a (variable) Scope.

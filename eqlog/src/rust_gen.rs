@@ -2364,7 +2364,6 @@ fn write_theory_display_impl(
 
 pub fn write_module(
     out: &mut impl Write,
-    name: &str,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
     rules: &[FlatRule],
@@ -2405,6 +2404,8 @@ pub fn write_module(
         .next()
         .expect("There should be exactly one module node");
     let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
+    let name: Ident = eqlog.symbol_scope_name(module_sym_scope).unwrap();
+    let name: &str = identifiers.get(&name).unwrap().as_str();
     writeln!(
         out,
         "{}",
