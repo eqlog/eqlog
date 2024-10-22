@@ -1511,47 +1511,41 @@ fn display_symbol_scope_delta_impl<'a>(
 }
 
 fn display_model_delta_new_fn<'a>(
-    _sym_scope: SymbolScope,
+    sym_scope: SymbolScope,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let new_tuples =
-            iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
-                let relation_snake = relation.to_case(Snake);
-                f(&format_args!("    new_{relation_snake}: Vec::new(),"))
-            });
-        let new_equalities = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-            let sort_snake = sort.to_case(Snake);
-            f(&format_args!(
-                "    new_{sort_snake}_equalities: Vec::new(),"
-            ))
-        });
-        let new_defines = eqlog
-            .iter_semantic_func()
-            .filter_map(|(_, ident, func)| {
-                if !eqlog.function_can_be_made_defined(func) {
-                    return None;
-                }
-
-                let func_name = identifiers.get(&ident).unwrap();
-                let func_snake = func_name.to_case(Snake);
-
-                Some(FmtFn(move |f: &mut Formatter| -> Result {
-                    writedoc! {f, "
-                        new_{func_snake}_def: Vec::new(),
-                    "}
-                }))
+        let new_equalities = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|(name, _typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                    write!(f, "new_{name_snake}_equalities: Vec::new(),")
+                })
             })
             .format("\n");
 
+        let new_tuples_and_defs = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|(name, rel)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                    writeln!(f, "new_{name_snake}: Vec::new(),")?;
+                    if let RelCase::FuncRel(func) = eqlog.rel_case(rel) {
+                        if eqlog.function_can_be_made_defined(func) {
+                            writeln!(f, "new_{name_snake}_def: Vec::new(),")?;
+                        }
+                    }
+                    Ok(())
+                })
+            })
+            .format("");
+
         writedoc! {f, "
             fn new() -> ModelDelta {{
-                ModelDelta{{
-            {new_tuples}
+            ModelDelta{{
+            {new_tuples_and_defs}
             {new_equalities}
-            {new_defines}
-                }}
+            }}
             }}
         "}
     })
