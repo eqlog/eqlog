@@ -11,10 +11,10 @@ readme.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eqlog-runtime = { version = "= 0.7.2" }
+eqlog-runtime = { version = "= 0.8" }
 
 [build-dependencies]
-eqlog = { version = "= 0.7.2", optional = true }
+eqlog = { version = "= 0.8", optional = true }
 
 [features]
 default = []
