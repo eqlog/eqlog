@@ -1495,6 +1495,8 @@ fn display_symbol_scope_delta_impl<'a>(
         #[allow(unused)]
         let apply_equalities_fn =
             display_model_delta_apply_equalities_fn(sym_scope, eqlog, identifiers);
+
+        let apply_tuples_fn = display_model_delta_apply_tuples_fn(sym_scope, eqlog, identifiers);
         writedoc! {f, "
             impl ModelDelta {{
             {new_fn}
@@ -1508,9 +1510,9 @@ fn display_symbol_scope_delta_impl<'a>(
             }}
 
             {apply_equalities_fn}
+            {apply_tuples_fn}
         "}?;
 
-        write_model_delta_apply_tuples_fn(f, eqlog, identifiers)?;
         write_model_delta_apply_def_fn(f, eqlog, identifiers)?;
 
         writedoc! {f, "
@@ -1589,32 +1591,38 @@ fn display_model_delta_apply_equalities_fn<'a>(
     })
 }
 
-fn write_model_delta_apply_tuples_fn(
-    out: &mut impl fmt::Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> fmt::Result {
-    let relations = iter_relation_arities(eqlog, identifiers)
-        .map(|(relation, arity)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let relation_snake = relation.to_case(Snake);
-                let relation_camel = relation.to_case(UpperCamel);
+fn display_model_delta_apply_tuples_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let relations = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|(name, rel)| {
+                let relation_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                let relation_camel = relation_snake.to_case(UpperCamel);
+
+                let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+
                 let args0 = (0..arity.len()).map(FlatVar).map(display_var).format(", ");
                 let args1 = args0.clone();
-                writedoc! {f, "
-                    for {relation_camel}({args0}) in self.new_{relation_snake}.drain(..) {{
-                        model.insert_{relation_snake}({args1});
-                    }}
-                "}
-            })
-        })
-        .format("\n");
 
-    writedoc! {out, "
-        fn apply_tuples(&mut self, model: &mut Model) {{
-            {relations}
-        }}
-    "}
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                        for {relation_camel}({args0}) in self.new_{relation_snake}.drain(..) {{
+                            model.insert_{relation_snake}({args1});
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            fn apply_tuples(&mut self, model: &mut Model) {{
+                {relations}
+            }}
+        "}
+    })
 }
 
 fn write_model_delta_apply_def_fn(
