@@ -1447,14 +1447,19 @@ fn write_canonicalize_fn(
 
 fn display_symbol_scope_delta_struct<'a>(
     sym_scope: SymbolScope,
-    struct_name: &'a str,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
             #[derive(Debug, Clone)]
-            struct {struct_name}Delta {{
+            struct {sym_scope_camel}Delta {{
         "}?;
 
         for (name, _typ) in iter_symbol_scope_types(sym_scope, eqlog) {
@@ -1489,6 +1494,13 @@ fn display_symbol_scope_delta_impl<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
+
     FmtFn(move |f: &mut Formatter| -> Result {
         let new_fn = display_model_delta_new_fn(sym_scope, eqlog, identifiers);
         // TODO: Why does this trigger the `unused` warning? It's used in the format string below.
@@ -1498,7 +1510,7 @@ fn display_symbol_scope_delta_impl<'a>(
         let apply_tuples_fn = display_model_delta_apply_tuples_fn(sym_scope, eqlog, identifiers);
         let apply_def_fn = display_model_delta_apply_def_fn(sym_scope, eqlog, identifiers);
         writedoc! {f, "
-            impl ModelDelta {{
+            impl {sym_scope_camel}Delta {{
             {new_fn}
 
             fn apply_surjective(&mut self, model: &mut Model) {{
@@ -1522,6 +1534,12 @@ fn display_model_delta_new_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let new_equalities = iter_symbol_scope_types(sym_scope, eqlog)
             .map(|(name, _typ)| {
@@ -1548,8 +1566,8 @@ fn display_model_delta_new_fn<'a>(
             .format("");
 
         writedoc! {f, "
-            fn new() -> ModelDelta {{
-            ModelDelta{{
+            fn new() -> {sym_scope_camel}Delta {{
+            {sym_scope_camel}Delta{{
             {new_tuples_and_defs}
             {new_equalities}
             }}
@@ -1930,6 +1948,7 @@ fn display_rule_func<'a>(
     rule_name: &'a str,
     flat_func: &'a FlatFunc,
     analysis: &'a FlatRuleAnalysis<'a>,
+    module: ModuleNode,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1949,10 +1968,18 @@ fn display_rule_func<'a>(
 
     let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
 
+    let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
+    let module_name = eqlog.symbol_scope_name(module_sym_scope).unwrap();
+    let module_camel = identifiers
+        .get(&module_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
+
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
             #[allow(unused_variables)]
-            fn {rule_name}_{func_name}(&self, delta: &mut ModelDelta, {var_args}) {{
+            fn {rule_name}_{func_name}(&self, delta: &mut {module_camel}Delta, {var_args}) {{
             for _ in [()] {{
             {stmts}
             }}
@@ -1964,6 +1991,7 @@ fn display_rule_func<'a>(
 fn display_rule_fns<'a>(
     rule: &'a FlatRule,
     analysis: &'a FlatRuleAnalysis<'a>,
+    module: ModuleNode,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -1971,7 +1999,16 @@ fn display_rule_fns<'a>(
         let funcs = rule
             .funcs
             .iter()
-            .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
+            .map(|func| {
+                display_rule_func(
+                    rule.name.as_str(),
+                    func,
+                    analysis,
+                    module,
+                    eqlog,
+                    identifiers,
+                )
+            })
             .format("\n");
         writeln!(f, "{}", funcs)?;
         Ok(())
@@ -2006,7 +2043,13 @@ fn write_drop_dirt_fn(
     "}
 }
 
-fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<()> {
+fn write_close_until_fn(
+    out: &mut impl Write,
+    module: ModuleNode,
+    rules: &[FlatRule],
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> io::Result<()> {
     let rules = rules
         .iter()
         .map(|rule| {
@@ -2017,6 +2060,14 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
         })
         .format("\n");
 
+    let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
+    let module_name = eqlog.symbol_scope_name(module_sym_scope).unwrap();
+    let module_camel = identifiers
+        .get(&module_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
+
     writedoc! {out, "
         /// Closes the model under all axioms until `condition` is satisfied.
         /// Depending on the axioms and `condition`, this may run indefinitely.
@@ -2025,7 +2076,7 @@ fn write_close_until_fn(out: &mut impl Write, rules: &[FlatRule]) -> io::Result<
         #[allow(dead_code)]
         pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
         {{
-            let mut delta = ModelDelta::new();
+            let mut delta = {module_camel}Delta::new();
 
             self.canonicalize();
             if condition(self) {{
@@ -2212,6 +2263,7 @@ fn write_theory_impl(
     name: &str,
     rules: &[FlatRule],
     analyses: &[FlatRuleAnalysis],
+    module: ModuleNode,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
@@ -2221,7 +2273,7 @@ fn write_theory_impl(
     write!(out, "\n")?;
 
     write_close_fn(out)?;
-    write_close_until_fn(out, rules)?;
+    write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
     for type_name in iter_types(eqlog, identifiers) {
         write_iter_sort_fn(out, type_name)?;
@@ -2284,7 +2336,7 @@ fn write_theory_impl(
         "There should be precisely one analysis for each rule"
     );
     for (rule, analysis) in rules.iter().zip(analyses) {
-        let rule_fn = display_rule_fns(rule, analysis, eqlog, identifiers);
+        let rule_fn = display_rule_fns(rule, analysis, module, eqlog, identifiers);
         writeln!(out, "{rule_fn}")?;
     }
 
@@ -2386,7 +2438,7 @@ pub fn write_module(
     writeln!(
         out,
         "{}",
-        display_symbol_scope_delta_struct(module_sym_scope, "Model", eqlog, identifiers)
+        display_symbol_scope_delta_struct(module_sym_scope, eqlog, identifiers)
     )?;
 
     writeln!(
@@ -2395,7 +2447,7 @@ pub fn write_module(
         display_symbol_scope_delta_impl(module_sym_scope, eqlog, identifiers)
     )?;
 
-    write_theory_impl(out, name, rules, analyses, eqlog, identifiers)?;
+    write_theory_impl(out, name, rules, analyses, module, eqlog, identifiers)?;
     write_theory_display_impl(out, name, eqlog, identifiers)?;
 
     Ok(())
