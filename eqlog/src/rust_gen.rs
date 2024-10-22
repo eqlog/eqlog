@@ -1457,45 +1457,23 @@ fn display_symbol_scope_delta_struct<'a>(
             struct {struct_name}Delta {{
         "}?;
 
-        let type_kind = eqlog.type_symbol().unwrap();
-        let enum_kind = eqlog.enum_symbol().unwrap();
-        let pred_kind = eqlog.pred_symbol().unwrap();
-        let func_kind = eqlog.func_symbol().unwrap();
-        let ctor_kind = eqlog.ctor_symbol().unwrap();
+        for (name, _typ) in iter_symbol_scope_types(sym_scope, eqlog) {
+            let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+            let name_camel = name_snake.to_case(UpperCamel);
+            writeln!(
+                f,
+                "new_{name_snake}_equalities: Vec<({name_camel}, {name_camel})>,"
+            )?;
+        }
 
-        for (sym_scope0, name, sym_kind, _loc) in eqlog.iter_defined_symbol() {
-            if !eqlog.are_equal_symbol_scope(sym_scope0, sym_scope) {
-                continue;
-            }
+        for (name, rel) in iter_symbol_scope_relations(sym_scope, eqlog) {
+            let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+            let name_camel = name_snake.to_case(UpperCamel);
+            writeln!(f, "new_{name_snake}: Vec<{name_camel}>,")?;
 
-            if eqlog.are_equal_symbol_kind(sym_kind, type_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
-            {
-                let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
-                let name_camel = name_snake.to_case(UpperCamel);
-                writeln!(
-                    f,
-                    "new_{name_snake}_equalities: Vec<({name_camel}, {name_camel})>,"
-                )?;
-                continue;
-            }
-
-            if !(eqlog.are_equal_symbol_kind(sym_kind, pred_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, func_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind))
-            {
-                continue;
-            }
-
-            let relation_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
-            let relation_camel = identifiers.get(&name).unwrap().as_str().to_case(UpperCamel);
-            writeln!(f, "new_{relation_snake}: Vec<{relation_camel}>,")?;
-            if eqlog.are_equal_symbol_kind(sym_kind, func_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind)
-            {
-                let func = eqlog.semantic_func(sym_scope, name).unwrap();
+            if let RelCase::FuncRel(func) = eqlog.rel_case(rel) {
                 if eqlog.function_can_be_made_defined(func) {
-                    writeln!(f, "new_{relation_snake}_def: Vec<{relation_camel}Args>,")?;
+                    writeln!(f, "new_{name_snake}_def: Vec<{name_camel}Args>,")?;
                 }
             }
         }

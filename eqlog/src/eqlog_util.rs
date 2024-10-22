@@ -478,3 +478,48 @@ pub fn iter_rule_morphisms<'a>(
         },
     )
 }
+
+pub fn iter_symbol_scope_types<'a>(
+    symbol_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = (Ident, Type)> {
+    let type_kind = eqlog.type_symbol().unwrap();
+    let enum_kind = eqlog.enum_symbol().unwrap();
+    eqlog
+        .iter_defined_symbol()
+        .filter_map(move |(sym_scope0, name, sym_kind, _loc)| {
+            (sym_scope0 == symbol_scope).then_some(())?;
+            (eqlog.are_equal_symbol_kind(sym_kind, type_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind))
+            .then_some(())?;
+            let typ = eqlog.semantic_type(symbol_scope, name).unwrap();
+            Some((name, typ))
+        })
+}
+
+pub fn iter_symbol_scope_relations<'a>(
+    symbol_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = (Ident, Rel)> {
+    let pred_kind = eqlog.pred_symbol().unwrap();
+    let func_kind = eqlog.func_symbol().unwrap();
+    let ctor_kind = eqlog.ctor_symbol().unwrap();
+    eqlog
+        .iter_defined_symbol()
+        .filter_map(move |(sym_scope0, name, sym_kind, _loc)| {
+            (sym_scope0 == symbol_scope).then_some(())?;
+            if eqlog.are_equal_symbol_kind(sym_kind, pred_kind) {
+                let pred = eqlog.semantic_pred(symbol_scope, name).unwrap();
+                return Some((name, eqlog.pred_rel(pred).unwrap()));
+            }
+
+            if eqlog.are_equal_symbol_kind(sym_kind, func_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind)
+            {
+                let func = eqlog.semantic_func(symbol_scope, name).unwrap();
+                return Some((name, eqlog.func_rel(func).unwrap()));
+            }
+
+            None
+        })
+}
