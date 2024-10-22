@@ -1513,11 +1513,11 @@ fn display_symbol_scope_delta_impl<'a>(
             impl {sym_scope_camel}Delta {{
             {new_fn}
 
-            fn apply_surjective(&mut self, model: &mut Model) {{
+            fn apply_surjective(&mut self, model: &mut {sym_scope_camel}) {{
                 self.apply_equalities(model);
                 self.apply_tuples(model);
             }}
-            fn apply_non_surjective(&mut self, model: &mut Model) {{
+            fn apply_non_surjective(&mut self, model: &mut {sym_scope_camel}) {{
                 self.apply_func_defs(model);
             }}
 
@@ -1581,6 +1581,12 @@ fn display_model_delta_apply_equalities_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let type_equalities = iter_symbol_scope_types(sym_scope, eqlog)
             .map(|(name, _typ)| {
@@ -1597,7 +1603,7 @@ fn display_model_delta_apply_equalities_fn<'a>(
 
         writedoc! {f, "
             #[allow(unused)]
-            fn apply_equalities(&mut self, model: &mut Model) {{
+            fn apply_equalities(&mut self, model: &mut {sym_scope_camel}) {{
             {type_equalities}
             }}
         "}
@@ -1609,6 +1615,12 @@ fn display_model_delta_apply_tuples_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let relations = iter_symbol_scope_relations(sym_scope, eqlog)
             .map(|(name, rel)| {
@@ -1632,7 +1644,7 @@ fn display_model_delta_apply_tuples_fn<'a>(
             .format("\n");
 
         writedoc! {f, "
-            fn apply_tuples(&mut self, model: &mut Model) {{
+            fn apply_tuples(&mut self, model: &mut {sym_scope_camel}) {{
                 {relations}
             }}
         "}
@@ -1644,6 +1656,12 @@ fn display_model_delta_apply_def_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let func_defs = iter_symbol_scope_relations(sym_scope, eqlog)
             .filter_map(|(name, rel)| {
@@ -1671,7 +1689,7 @@ fn display_model_delta_apply_def_fn<'a>(
 
         writedoc! {f, "
             #[allow(unused_variables)]
-            fn apply_func_defs(&mut self, model: &mut Model) {{
+            fn apply_func_defs(&mut self, model: &mut {sym_scope_camel}) {{
                 {func_defs}
             }}
         "}
@@ -2434,7 +2452,6 @@ pub fn write_module(
         "{}",
         display_symbol_scope_struct(module_sym_scope, eqlog, identifiers)
     )?;
-    writeln!(out, "type Model = {};", name)?;
     writeln!(
         out,
         "{}",
