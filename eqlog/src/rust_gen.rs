@@ -1491,15 +1491,25 @@ fn display_symbol_scope_delta_impl<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let new_fn = display_model_delta_new_fn(sym_scope, eqlog, identifiers);
+        // TODO: Why does this trigger the `unused` warning? It's used in the format string below.
+        #[allow(unused)]
+        let apply_equalities_fn =
+            display_model_delta_apply_equalities_fn(sym_scope, eqlog, identifiers);
         writedoc! {f, "
             impl ModelDelta {{
             {new_fn}
+
+            fn apply_surjective(&mut self, model: &mut Model) {{
+                self.apply_equalities(model);
+                self.apply_tuples(model);
+            }}
+            fn apply_non_surjective(&mut self, model: &mut Model) {{
+                self.apply_func_defs(model);
+            }}
+
+            {apply_equalities_fn}
         "}?;
 
-        write_model_delta_apply_surjective_fn(f)?;
-        write_model_delta_apply_non_surjective_fn(f)?;
-
-        write_model_delta_apply_equalities_fn(f, eqlog, identifiers)?;
         write_model_delta_apply_tuples_fn(f, eqlog, identifiers)?;
         write_model_delta_apply_def_fn(f, eqlog, identifiers)?;
 
@@ -1551,50 +1561,32 @@ fn display_model_delta_new_fn<'a>(
     })
 }
 
-fn write_model_delta_apply_surjective_fn(out: &mut impl fmt::Write) -> Result {
-    writedoc! {out, "
-        fn apply_surjective(&mut self, model: &mut Model) {{
-            self.apply_equalities(model);
-            self.apply_tuples(model);
-        }}
-    "}
-}
-
-fn write_model_delta_apply_non_surjective_fn(out: &mut impl fmt::Write) -> fmt::Result {
-    writedoc! {out, "
-        fn apply_non_surjective(&mut self, model: &mut Model) {{
-            self.apply_func_defs(model);
-        }}
-    "}
-}
-
-fn write_model_delta_apply_equalities_fn(
-    out: &mut impl fmt::Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> fmt::Result {
-    let type_equalities = eqlog
-        .iter_type()
-        .map(|typ| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let type_snake =
-                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
-
-                writedoc! {f, "
-                    for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
-                        model.equate_{type_snake}(lhs, rhs);
-                    }}
-                "}
+fn display_model_delta_apply_equalities_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let type_equalities = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|(name, _typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                    writedoc! {f, "
+                        for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
+                            model.equate_{type_snake}(lhs, rhs);
+                        }}
+                    "}
+                })
             })
-        })
-        .format("\n");
+            .format("\n");
 
-    writedoc! {out, "
-        #[allow(unused)]
-        fn apply_equalities(&mut self, model: &mut Model) {{
-        {type_equalities}
-        }}
-    "}
+        writedoc! {f, "
+            #[allow(unused)]
+            fn apply_equalities(&mut self, model: &mut Model) {{
+            {type_equalities}
+            }}
+        "}
+    })
 }
 
 fn write_model_delta_apply_tuples_fn(
