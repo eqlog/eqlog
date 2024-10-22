@@ -1495,8 +1495,8 @@ fn display_symbol_scope_delta_impl<'a>(
         #[allow(unused)]
         let apply_equalities_fn =
             display_model_delta_apply_equalities_fn(sym_scope, eqlog, identifiers);
-
         let apply_tuples_fn = display_model_delta_apply_tuples_fn(sym_scope, eqlog, identifiers);
+        let apply_def_fn = display_model_delta_apply_def_fn(sym_scope, eqlog, identifiers);
         writedoc! {f, "
             impl ModelDelta {{
             {new_fn}
@@ -1511,14 +1511,9 @@ fn display_symbol_scope_delta_impl<'a>(
 
             {apply_equalities_fn}
             {apply_tuples_fn}
-        "}?;
-
-        write_model_delta_apply_def_fn(f, eqlog, identifiers)?;
-
-        writedoc! {f, "
+            {apply_def_fn}
             }}
-        "}?;
-        Ok(())
+        "}
     })
 }
 
@@ -1612,7 +1607,8 @@ fn display_model_delta_apply_tuples_fn<'a>(
                         for {relation_camel}({args0}) in self.new_{relation_snake}.drain(..) {{
                             model.insert_{relation_snake}({args1});
                         }}
-                    "}
+                    "}?;
+                    Ok(())
                 })
             })
             .format("\n");
@@ -1625,46 +1621,43 @@ fn display_model_delta_apply_tuples_fn<'a>(
     })
 }
 
-fn write_model_delta_apply_def_fn(
-    out: &mut impl fmt::Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> fmt::Result {
-    let func_defs = eqlog
-        .iter_semantic_func()
-        // TODO: This won't work once we have more than one symbol scope, because then the same
-        // function appears in more than one symbol scope. This should result in us emitting things
-        // multiple times for the same function, which we don't want.
-        .filter_map(|(_symbol_scope, ident, func)| {
-            if !eqlog.function_can_be_made_defined(func) {
-                return None;
-            }
+fn display_model_delta_apply_def_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let func_defs = iter_symbol_scope_relations(sym_scope, eqlog)
+            .filter_map(|(name, rel)| {
+                let func = match eqlog.rel_case(rel) {
+                    RelCase::FuncRel(func) => func,
+                    _ => return None,
+                };
+                (eqlog.function_can_be_made_defined(func)).then_some((name, func))?;
+                let func_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                let func_camel = func_snake.to_case(UpperCamel);
 
-            let func_name = identifiers.get(&ident).unwrap();
-            let func_snake = func_name.to_case(Snake);
-            let func_camel = func_name.to_case(UpperCamel);
+                let domain = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
+                let args0 = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
+                let args1 = args0.clone();
 
-            let domain = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
-            let args0 = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
-            let args1 = args0.clone();
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                            for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
+                                model.define_{func_snake}({args1});
+                            }}
+                        "}
+                }))
+            })
+            .format("\n");
 
-            Some(FmtFn(move |f: &mut Formatter| -> Result {
-                writedoc! {f, "
-                        for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
-                            model.define_{func_snake}({args1});
-                        }}
-                    "}
-            }))
-        })
-        .format("\n");
-
-    // allow(unused_variables) is there for theories without functions.
-    writedoc! {out, "
-        #[allow(unused_variables)]
-        fn apply_func_defs(&mut self, model: &mut Model) {{
-            {func_defs}
-        }}
-    "}
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn apply_func_defs(&mut self, model: &mut Model) {{
+                {func_defs}
+            }}
+        "}
+    })
 }
 
 fn display_var(var: FlatVar) -> impl Display {
