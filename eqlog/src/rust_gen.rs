@@ -2199,7 +2199,6 @@ fn display_symbol_scope_struct<'a>(
             if eqlog.are_equal_symbol_kind(sym_kind, type_kind)
                 || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
             {
-                let typ = eqlog.semantic_type(sym_scope, name);
                 let type_name = identifiers.get(&name).unwrap().as_str();
                 write_sort_fields(f, type_name)?;
             } else if eqlog.are_equal_symbol_kind(sym_kind, pred_kind)
@@ -2210,8 +2209,6 @@ fn display_symbol_scope_struct<'a>(
                 let relation_camel = relation_snake.to_case(UpperCamel);
                 writeln!(f, "{relation_snake}: {relation_camel}Table,")?;
             }
-
-            let rel_snake = identifiers.get(&name).unwrap().as_str();
         }
 
         writeln!(f, "empty_join_is_dirty: bool,")?;

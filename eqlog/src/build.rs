@@ -171,7 +171,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     }
 
     let source_without_comments = whipe_comments(&source);
-    let (mut eqlog, identifiers, locations, module) = parse(module_name, &source_without_comments)
+    let (mut eqlog, identifiers, locations, _module) = parse(module_name, &source_without_comments)
         .map_err(|error| CompileErrorWithContext {
             error,
             // TODO: Get rid of this copy; necessary because of the usage to create a
