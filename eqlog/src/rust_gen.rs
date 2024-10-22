@@ -2440,6 +2440,24 @@ pub fn write_module(
 
     write!(out, "\n")?;
 
+    for sym_scope in eqlog.iter_symbol_scope() {
+        writeln!(
+            out,
+            "{}",
+            display_symbol_scope_struct(sym_scope, eqlog, identifiers)
+        )?;
+        writeln!(
+            out,
+            "{}",
+            display_symbol_scope_delta_struct(sym_scope, eqlog, identifiers)
+        )?;
+        writeln!(
+            out,
+            "{}",
+            display_symbol_scope_delta_impl(sym_scope, eqlog, identifiers)
+        )?;
+    }
+
     let module = eqlog
         .iter_module_node()
         .next()
@@ -2447,22 +2465,6 @@ pub fn write_module(
     let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
     let name: Ident = eqlog.symbol_scope_name(module_sym_scope).unwrap();
     let name: &str = identifiers.get(&name).unwrap().as_str();
-    writeln!(
-        out,
-        "{}",
-        display_symbol_scope_struct(module_sym_scope, eqlog, identifiers)
-    )?;
-    writeln!(
-        out,
-        "{}",
-        display_symbol_scope_delta_struct(module_sym_scope, eqlog, identifiers)
-    )?;
-
-    writeln!(
-        out,
-        "{}",
-        display_symbol_scope_delta_impl(module_sym_scope, eqlog, identifiers)
-    )?;
 
     write_theory_impl(out, name, rules, analyses, module, eqlog, identifiers)?;
     write_theory_display_impl(out, name, eqlog, identifiers)?;
