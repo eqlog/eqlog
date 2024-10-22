@@ -1485,16 +1485,16 @@ fn display_symbol_scope_delta_struct<'a>(
 }
 
 fn display_symbol_scope_delta_impl<'a>(
-    _sym_scope: SymbolScope,
+    sym_scope: SymbolScope,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
+        let new_fn = display_model_delta_new_fn(sym_scope, eqlog, identifiers);
         writedoc! {f, "
             impl ModelDelta {{
+            {new_fn}
         "}?;
-
-        write_model_delta_new_fn(f, eqlog, identifiers)?;
 
         write_model_delta_apply_surjective_fn(f)?;
         write_model_delta_apply_non_surjective_fn(f)?;
@@ -1510,49 +1510,51 @@ fn display_symbol_scope_delta_impl<'a>(
     })
 }
 
-fn write_model_delta_new_fn(
-    out: &mut impl fmt::Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> fmt::Result {
-    let new_tuples =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!("    new_{relation_snake}: Vec::new(),"))
+fn display_model_delta_new_fn<'a>(
+    _sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let new_tuples =
+            iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
+                let relation_snake = relation.to_case(Snake);
+                f(&format_args!("    new_{relation_snake}: Vec::new(),"))
+            });
+        let new_equalities = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
+            let sort_snake = sort.to_case(Snake);
+            f(&format_args!(
+                "    new_{sort_snake}_equalities: Vec::new(),"
+            ))
         });
-    let new_equalities = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!(
-            "    new_{sort_snake}_equalities: Vec::new(),"
-        ))
-    });
-    let new_defines = eqlog
-        .iter_semantic_func()
-        .filter_map(|(_, ident, func)| {
-            if !eqlog.function_can_be_made_defined(func) {
-                return None;
-            }
+        let new_defines = eqlog
+            .iter_semantic_func()
+            .filter_map(|(_, ident, func)| {
+                if !eqlog.function_can_be_made_defined(func) {
+                    return None;
+                }
 
-            let func_name = identifiers.get(&ident).unwrap();
-            let func_snake = func_name.to_case(Snake);
+                let func_name = identifiers.get(&ident).unwrap();
+                let func_snake = func_name.to_case(Snake);
 
-            Some(FmtFn(move |f: &mut Formatter| -> Result {
-                writedoc! {f, "
-                    new_{func_snake}_def: Vec::new(),
-                "}
-            }))
-        })
-        .format("\n");
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                        new_{func_snake}_def: Vec::new(),
+                    "}
+                }))
+            })
+            .format("\n");
 
-    writedoc! {out, "
-        fn new() -> ModelDelta {{
-            ModelDelta{{
-        {new_tuples}
-        {new_equalities}
-        {new_defines}
+        writedoc! {f, "
+            fn new() -> ModelDelta {{
+                ModelDelta{{
+            {new_tuples}
+            {new_equalities}
+            {new_defines}
+                }}
             }}
-        }}
-    "}
+        "}
+    })
 }
 
 fn write_model_delta_apply_surjective_fn(out: &mut impl fmt::Write) -> Result {
