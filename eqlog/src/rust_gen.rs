@@ -1484,35 +1484,37 @@ fn display_symbol_scope_delta_struct<'a>(
     })
 }
 
-fn write_model_delta_impl(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    writedoc! {out, "
-        impl ModelDelta {{
-    "}?;
+fn display_symbol_scope_delta_impl<'a>(
+    _sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            impl ModelDelta {{
+        "}?;
 
-    write_model_delta_new_fn(out, eqlog, identifiers)?;
+        write_model_delta_new_fn(f, eqlog, identifiers)?;
 
-    write_model_delta_apply_surjective_fn(out)?;
-    write_model_delta_apply_non_surjective_fn(out)?;
+        write_model_delta_apply_surjective_fn(f)?;
+        write_model_delta_apply_non_surjective_fn(f)?;
 
-    write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
-    write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
-    write_model_delta_apply_def_fn(out, eqlog, identifiers)?;
+        write_model_delta_apply_equalities_fn(f, eqlog, identifiers)?;
+        write_model_delta_apply_tuples_fn(f, eqlog, identifiers)?;
+        write_model_delta_apply_def_fn(f, eqlog, identifiers)?;
 
-    writedoc! {out, "
-        }}
-    "}?;
-    Ok(())
+        writedoc! {f, "
+            }}
+        "}?;
+        Ok(())
+    })
 }
 
 fn write_model_delta_new_fn(
-    out: &mut impl Write,
+    out: &mut impl fmt::Write,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+) -> fmt::Result {
     let new_tuples =
         iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
             let relation_snake = relation.to_case(Snake);
@@ -1553,7 +1555,7 @@ fn write_model_delta_new_fn(
     "}
 }
 
-fn write_model_delta_apply_surjective_fn(out: &mut impl Write) -> io::Result<()> {
+fn write_model_delta_apply_surjective_fn(out: &mut impl fmt::Write) -> Result {
     writedoc! {out, "
         fn apply_surjective(&mut self, model: &mut Model) {{
             self.apply_equalities(model);
@@ -1562,7 +1564,7 @@ fn write_model_delta_apply_surjective_fn(out: &mut impl Write) -> io::Result<()>
     "}
 }
 
-fn write_model_delta_apply_non_surjective_fn(out: &mut impl Write) -> io::Result<()> {
+fn write_model_delta_apply_non_surjective_fn(out: &mut impl fmt::Write) -> fmt::Result {
     writedoc! {out, "
         fn apply_non_surjective(&mut self, model: &mut Model) {{
             self.apply_func_defs(model);
@@ -1571,10 +1573,10 @@ fn write_model_delta_apply_non_surjective_fn(out: &mut impl Write) -> io::Result
 }
 
 fn write_model_delta_apply_equalities_fn(
-    out: &mut impl Write,
+    out: &mut impl fmt::Write,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+) -> fmt::Result {
     let type_equalities = eqlog
         .iter_type()
         .map(|typ| {
@@ -1600,10 +1602,10 @@ fn write_model_delta_apply_equalities_fn(
 }
 
 fn write_model_delta_apply_tuples_fn(
-    out: &mut impl Write,
+    out: &mut impl fmt::Write,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+) -> fmt::Result {
     let relations = iter_relation_arities(eqlog, identifiers)
         .map(|(relation, arity)| {
             FmtFn(move |f: &mut Formatter| -> Result {
@@ -1628,10 +1630,10 @@ fn write_model_delta_apply_tuples_fn(
 }
 
 fn write_model_delta_apply_def_fn(
-    out: &mut impl Write,
+    out: &mut impl fmt::Write,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+) -> fmt::Result {
     let func_defs = eqlog
         .iter_semantic_func()
         // TODO: This won't work once we have more than one symbol scope, because then the same
@@ -2401,8 +2403,11 @@ pub fn write_module(
         display_symbol_scope_delta_struct(module_sym_scope, "Model", eqlog, identifiers)
     )?;
 
-    write_model_delta_impl(out, eqlog, identifiers)?;
-    write!(out, "\n")?;
+    writeln!(
+        out,
+        "{}",
+        display_symbol_scope_delta_impl(module_sym_scope, eqlog, identifiers)
+    )?;
 
     write_theory_impl(out, name, rules, analyses, eqlog, identifiers)?;
     write_theory_display_impl(out, name, eqlog, identifiers)?;
