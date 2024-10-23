@@ -2154,10 +2154,17 @@ fn display_symbol_scope_impl<'a>(
                 display_type_symbol_scope_fns(name, typ, sym_scope, eqlog, identifiers)
             })
             .format("\n");
+        let rel_fns = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|(name, rel)| {
+                display_relation_symbol_scope_fns(name, rel, sym_scope, eqlog, identifiers)
+            })
+            .format("\n");
 
         writedoc! {f, "
             impl {sym_scope_camel} {{
                 {type_fns}
+
+                {rel_fns}
             }}
         "}
     })
@@ -2255,6 +2262,16 @@ fn display_type_symbol_scope_fns<'a>(
 
         Ok(())
     })
+}
+
+fn display_relation_symbol_scope_fns<'a>(
+    name: Ident,
+    rel: Rel,
+    _sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result { Ok(()) })
 }
 
 fn write_theory_impl(
