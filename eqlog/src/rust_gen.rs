@@ -2276,6 +2276,25 @@ fn display_symbol_scope_struct<'a>(
     })
 }
 
+fn display_symbol_scope_impl<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            impl {sym_scope_camel} {{
+            }}
+        "}
+    })
+}
+
 fn write_theory_impl(
     out: &mut impl Write,
     name: &str,
@@ -2445,6 +2464,11 @@ pub fn write_module(
             out,
             "{}",
             display_symbol_scope_struct(sym_scope, eqlog, identifiers)
+        )?;
+        writeln!(
+            out,
+            "{}",
+            display_symbol_scope_impl(sym_scope, eqlog, identifiers)
         )?;
         writeln!(
             out,
