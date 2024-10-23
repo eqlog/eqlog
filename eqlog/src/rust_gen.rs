@@ -1151,63 +1151,42 @@ fn display_new_enum_element<'a>(
 }
 
 fn display_enum_cases_fn<'a>(
-    enum_decl: EnumDeclNode,
+    enum_type: Type,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let enum_ident = eqlog
-            .iter_enum_decl()
-            .find_map(|(enum_decl0, enum_ident, _)| {
-                if enum_decl0 == enum_decl {
-                    Some(enum_ident)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        let enum_name = identifiers.get(&enum_ident).unwrap();
-        let enum_name_camel = enum_name.to_case(UpperCamel);
-        let enum_name_camel = enum_name_camel.as_str();
-        let enum_name_snake = enum_name.to_case(Snake);
+        let enum_name = eqlog.type_name(enum_type).unwrap();
+        let enum_camel = identifiers.get(&enum_name).unwrap().to_case(UpperCamel);
+        let enum_snake = enum_camel.to_case(Snake);
 
-        let ctors = eqlog.iter_ctor_enum().filter_map(|(ctor, enum_decl0)| {
-            if eqlog.are_equal_enum_decl_node(enum_decl0, enum_decl) {
-                Some(ctor)
-            } else {
-                None
-            }
-        });
+        // Make enum_camel and enum_snake accessible in the filter_map closure below.
+        let enum_camel = enum_camel.as_str();
+        let enum_snake = enum_snake.as_str();
 
-        let ctor_value_iters = ctors
-            .map(|ctor| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let ss = eqlog.ctor_symbol_scope(ctor).unwrap();
-                    let ctor_ident = eqlog
-                        .iter_ctor_decl()
-                        .find_map(|(ctor0, ident, _)| {
-                            if eqlog.are_equal_ctor_decl_node(ctor, ctor0) {
-                                Some(ident)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap();
-                    let ctor_name = identifiers.get(&ctor_ident).unwrap();
-                    let ctor_name_snake = ctor_name.to_case(Snake);
-                    let ctor_name_camel = ctor_name.to_case(UpperCamel);
+        let ctor_value_iters = eqlog
+            .iter_ctor_decl()
+            .filter_map(|(ctor, ctor_ident, _)| {
+                let ctor_sym_scope = eqlog.ctor_symbol_scope(ctor).unwrap();
+                let ctor_func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
+                let codomain = eqlog.codomain(ctor_func).unwrap();
+                (eqlog.are_equal_type(enum_type, codomain).then_some(()))?;
 
-                    let ctor_func: Func = eqlog.semantic_func(ss, ctor_ident).unwrap();
-                    let arg_num = type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog).len();
+                let ctor_name = identifiers.get(&ctor_ident).unwrap();
+                let ctor_name_snake = ctor_name.to_case(Snake);
+                let ctor_name_camel = ctor_name.to_case(UpperCamel);
 
-                    let ctor_arg_vars = (0..arg_num).map(FlatVar);
-                    let result_var = FlatVar(arg_num);
-                    let tuple_vars = ctor_arg_vars.clone().chain(once(result_var));
+                let arg_num = type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog).len();
 
-                    let ctor_arg_vars = ctor_arg_vars.map(display_var).format(", ");
-                    let result_var = display_var(result_var);
-                    let tuple_vars = tuple_vars.map(display_var).format(", ");
+                let ctor_arg_vars = (0..arg_num).map(FlatVar);
+                let result_var = FlatVar(arg_num);
+                let tuple_vars = ctor_arg_vars.clone().chain(once(result_var));
 
+                let ctor_arg_vars = ctor_arg_vars.map(display_var).format(", ");
+                let result_var = display_var(result_var);
+                let tuple_vars = tuple_vars.map(display_var).format(", ");
+
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
                     // TODO: We probably want to use an index insted of a linear search here.
                     // However, this function is not needed during the close method, so those
                     // indices should only exist when the host program uses this function, probably
@@ -1215,13 +1194,13 @@ fn display_enum_cases_fn<'a>(
                     writedoc! {f, "
                         .chain(self.iter_{ctor_name_snake}().filter_map(move |({tuple_vars})| {{
                             if el == {result_var} {{
-                                Some({enum_name_camel}Case::{ctor_name_camel}({ctor_arg_vars}))
+                                Some({enum_camel}Case::{ctor_name_camel}({ctor_arg_vars}))
                             }} else {{
                                 None
                             }}
                         }}))
                     "}
-                })
+                }))
             })
             .format("\n");
 
@@ -1229,18 +1208,18 @@ fn display_enum_cases_fn<'a>(
         // iter_{ctor_name_snake} function yields elements instead of tuples, but the argument to
         // the closure we pass to filter_map above still has parens around the single variable.
         writedoc! {f, "
-            /// Returns an iterator over ways to destructure an [{enum_name_camel}] element.
+            /// Returns an iterator over ways to destructure an [{enum_camel}] element.
             #[allow(dead_code)]
-            pub fn {enum_name_snake}_cases<'a>(&'a self, el: {enum_name_camel}) -> impl 'a + Iterator<Item = {enum_name_camel}Case> {{
-            let el = self.{enum_name_snake}_equalities.root_const(el);
+            pub fn {enum_snake}_cases<'a>(&'a self, el: {enum_camel}) -> impl 'a + Iterator<Item = {enum_camel}Case> {{
+            let el = self.{enum_snake}_equalities.root_const(el);
             #[allow(unused_parens)]
             [].into_iter(){ctor_value_iters}
             }}
 
-            /// Returns the first way to destructure an [{enum_name_camel}] element.
+            /// Returns the first way to destructure an [{enum_camel}] element.
             #[allow(dead_code)]
-            pub fn {enum_name_snake}_case(&self, el: {enum_name_camel}) -> {enum_name_camel}Case {{
-                self.{enum_name_snake}_cases(el).next().unwrap()
+            pub fn {enum_snake}_case(&self, el: {enum_camel}) -> {enum_camel}Case {{
+                self.{enum_snake}_cases(el).next().unwrap()
             }}
         "}
     })
@@ -2302,7 +2281,12 @@ fn display_type_symbol_scope_fns<'a>(
             "}?;
         }
         if eqlog.is_enum_type(typ) {
-            writeln!(f, "{}", display_new_enum_element(typ, eqlog, identifiers))?;
+            let new_element_fn = display_new_enum_element(typ, eqlog, identifiers);
+            let cases_fn = display_enum_cases_fn(typ, eqlog, identifiers);
+            writedoc! {f, "
+                {new_element_fn}
+                {cases_fn}
+            "}?;
         }
 
         Ok(())
@@ -2339,14 +2323,6 @@ fn write_theory_impl(
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    for (enum_decl, _, _) in eqlog.iter_enum_decl() {
-        write!(
-            out,
-            "{}",
-            display_enum_cases_fn(enum_decl, eqlog, identifiers)
-        )?;
-    }
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
         write_pub_function_eval_fn(out, func_name, &arity)?;
