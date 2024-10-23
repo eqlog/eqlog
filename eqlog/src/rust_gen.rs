@@ -1069,73 +1069,51 @@ fn write_pub_insert_relation(
 }
 
 fn display_new_enum_element<'a>(
-    enum_decl: EnumDeclNode,
+    enum_name: Ident,
+    enum_type: Type,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let enum_ident = eqlog
-            .iter_enum_decl()
-            .find_map(|(enum_decl0, enum_ident, _)| {
-                if enum_decl0 == enum_decl {
-                    Some(enum_ident)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-        let enum_name = identifiers.get(&enum_ident).unwrap();
-        let enum_name_camel = enum_name.to_case(UpperCamel);
-        let enum_name_camel = enum_name_camel.as_str();
-        let enum_name_snake = enum_name.to_case(Snake);
+        let enum_camel = identifiers.get(&enum_name).unwrap().to_case(UpperCamel);
+        let enum_snake = enum_camel.to_case(Snake);
 
-        let ctors = eqlog.iter_ctor_enum().filter_map(|(ctor, enum_decl0)| {
-            if eqlog.are_equal_enum_decl_node(enum_decl0, enum_decl) {
-                Some(ctor)
-            } else {
-                None
-            }
-        });
+        // Make enum_camel and enum_snake accessible in the filter_map closure below.
+        let enum_camel = enum_camel.as_str();
+        let enum_snake = enum_snake.as_str();
 
-        let match_branches = ctors
-            .map(|ctor| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let ss: SymbolScope = eqlog.ctor_symbol_scope(ctor).unwrap();
-                    let ctor_ident = eqlog
-                        .iter_ctor_decl()
-                        .find_map(|(ctor0, ident, _)| {
-                            if eqlog.are_equal_ctor_decl_node(ctor, ctor0) {
-                                Some(ident)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap();
-                    let ctor_name = identifiers.get(&ctor_ident).unwrap();
-                    let ctor_name_snake = ctor_name.to_case(Snake);
-                    let ctor_name_camel = ctor_name.to_case(UpperCamel);
+        let match_branches = eqlog
+            .iter_ctor_decl()
+            .filter_map(|(ctor, ctor_name, _)| {
+                let ctor_sym_scope = eqlog.ctor_symbol_scope(ctor).unwrap();
+                let ctor_func = eqlog.semantic_func(ctor_sym_scope, ctor_name).unwrap();
+                let codomain = eqlog.codomain(ctor_func).unwrap();
+                (eqlog.are_equal_type(enum_type, codomain).then_some(()))?;
 
-                    let ctor_func: Func = eqlog.semantic_func(ss, ctor_ident).unwrap();
-                    let ctor_arg_types: Vec<Type> =
-                        type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog);
-                    let ctor_vars = (0..ctor_arg_types.len())
-                        .map(|i| display_var(FlatVar(i)))
-                        .format(", ");
-                    let func_vars = ctor_vars.clone();
+                let ctor_snake = identifiers.get(&ctor_name).unwrap().to_case(Snake);
+                let ctor_camel = ctor_snake.to_case(UpperCamel);
 
+                let ctor_arg_types: Vec<Type> =
+                    type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog);
+                let ctor_vars = (0..ctor_arg_types.len())
+                    .map(|i| display_var(FlatVar(i)))
+                    .format(", ");
+                let func_vars = ctor_vars.clone();
+
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
                     writedoc! {f, "
-                        {enum_name_camel}Case::{ctor_name_camel}({ctor_vars}) => {{
-                            self.define_{ctor_name_snake}({func_vars})
+                        {enum_camel}Case::{ctor_camel}({ctor_vars}) => {{
+                            self.define_{ctor_snake}({func_vars})
                         }}
                     "}
-                })
+                }))
             })
             .format("");
 
         writedoc! {f, "
-            /// Adjoins a new element of type [{enum_name_camel}].
+            /// Adjoins a new element of type [{enum_camel}].
             #[allow(dead_code)]
-            pub fn new_{enum_name_snake}(&mut self, value: {enum_name_camel}Case) -> {enum_name_camel} {{
+            pub fn new_{enum_snake}(&mut self, value: {enum_camel}Case) -> {enum_camel} {{
                 match value {{
                     {match_branches}
                 }}
@@ -2267,6 +2245,13 @@ fn display_type_symbol_scope_fns<'a>(
                 }}
             "}?;
         }
+        if eqlog.is_enum_type(typ) {
+            writeln!(
+                f,
+                "{}",
+                display_new_enum_element(name, typ, eqlog, identifiers)
+            )?;
+        }
 
         Ok(())
     })
@@ -2290,11 +2275,6 @@ fn write_theory_impl(
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
     for (enum_decl, _, _) in eqlog.iter_enum_decl() {
-        write!(
-            out,
-            "{}",
-            display_new_enum_element(enum_decl, eqlog, identifiers)
-        )?;
         write!(
             out,
             "{}",
