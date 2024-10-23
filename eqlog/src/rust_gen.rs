@@ -1068,49 +1068,6 @@ fn write_pub_insert_relation(
     "}
 }
 
-fn write_new_element_internal(
-    out: &mut impl Write,
-    typ: Type,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
-    let type_snake = type_camel.to_case(Snake);
-    writedoc! {out, "
-        /// Adjoins a new element of type [{type_camel}].
-        #[allow(dead_code)]
-        fn new_{type_snake}_internal(&mut self) -> {type_camel} {{
-            let old_len = self.{type_snake}_equalities.len();
-            self.{type_snake}_equalities.increase_size_to(old_len + 1);
-            let el = {type_camel}::from(u32::try_from(old_len).unwrap());
-
-            self.{type_snake}_new.insert(el);
-
-            assert!(self.{type_snake}_weights.len() == old_len);
-            self.{type_snake}_weights.push(0);
-
-            el
-        }}
-    "}
-}
-
-fn write_new_element(
-    out: &mut impl Write,
-    typ: Type,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
-    let type_snake = type_camel.to_case(Snake);
-    writedoc! {out, "
-        /// Adjoins a new element of type [{type_camel}].
-        #[allow(dead_code)]
-        pub fn new_{type_snake}(&mut self) -> {type_camel} {{
-            self.new_{type_snake}_internal()
-        }}
-    "}
-}
-
 fn display_new_enum_element<'a>(
     enum_decl: EnumDeclNode,
     eqlog: &'a Eqlog,
@@ -2266,9 +2223,9 @@ fn display_symbol_scope_impl<'a>(
 
 fn display_type_symbol_scope_fns<'a>(
     name: Ident,
-    _typ: Type,
+    typ: Type,
     _sym_scope: SymbolScope,
-    _eqlog: &'a Eqlog,
+    eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     let type_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
@@ -2297,7 +2254,32 @@ fn display_type_symbol_scope_fns<'a>(
             pub fn are_equal_{type_snake}(&self, lhs: {type_camel}, rhs: {type_camel}) -> bool {{
                 self.root_{type_snake}(lhs) == self.root_{type_snake}(rhs)
             }}
-        "}
+
+            #[allow(dead_code)]
+            fn new_{type_snake}_internal(&mut self) -> {type_camel} {{
+                let old_len = self.{type_snake}_equalities.len();
+                self.{type_snake}_equalities.increase_size_to(old_len + 1);
+                let el = {type_camel}::from(u32::try_from(old_len).unwrap());
+
+                self.{type_snake}_new.insert(el);
+
+                assert!(self.{type_snake}_weights.len() == old_len);
+                self.{type_snake}_weights.push(0);
+
+                el
+            }}
+        "}?;
+        if eqlog.is_normal_type(typ) {
+            writedoc! {f, "
+                /// Adjoins a new element of type [{type_camel}].
+                #[allow(dead_code)]
+                pub fn new_{type_snake}(&mut self) -> {type_camel} {{
+                    self.new_{type_snake}_internal()
+                }}
+            "}?;
+        }
+
+        Ok(())
     })
 }
 
@@ -2319,12 +2301,7 @@ fn write_theory_impl(
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
     for typ in eqlog.iter_type() {
-        write_new_element_internal(out, typ, eqlog, identifiers)?;
         write_equate_elements(out, typ, eqlog, identifiers)?;
-    }
-
-    for typ in eqlog.iter_type().filter(|typ| eqlog.is_normal_type(*typ)) {
-        write_new_element(out, typ, eqlog, identifiers)?;
     }
 
     for (enum_decl, _, _) in eqlog.iter_enum_decl() {
