@@ -568,6 +568,12 @@ rule semantic_decl_enum {
     then is_enum_type(typ);
 }
 
+func type_name(Type) -> Ident;
+rule type_name_semantic_type {
+    if semantic_type(_, name) = ty;
+    then type_name(ty) = name;
+}
+
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
 rule semantic_arg_types_nil {
     if nil_arg_decl_list_node(n);
@@ -637,6 +643,16 @@ rule semantic_decl_ctor {
 enum Rel {
     PredRel(Pred),
     FuncRel(Func)
+}
+
+func rel_name(Rel) -> Ident;
+rule semantic_func_name {
+    if r = FuncRel(semantic_func(_, name));
+    then rel_name(r) = name;
+}
+rule semantic_pred_name {
+    if r = PredRel(semantic_pred(_, name));
+    then rel_name(r) = name;
 }
 
 rule rel_constructors_pred_total {
