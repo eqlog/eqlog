@@ -873,48 +873,72 @@ fn write_pub_predicate_holds_fn(
     "}
 }
 
-fn write_pub_function_eval_fn(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
-    let dom = &arity[..(arity.len() - 1)];
-    let cod_index = dom.len();
-    let cod = arity[cod_index];
+fn display_pub_function_eval_fn<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let dom = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
+        let cod = eqlog.codomain(func).unwrap();
+        let cod_camel = identifiers
+            .get(&eqlog.type_name(cod).unwrap())
+            .unwrap()
+            .to_case(UpperCamel);
+        let cod_index = dom.len();
 
-    let rel_fn_args = dom
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
+        let rel = eqlog.func_rel(func).unwrap();
+        let relation_name = identifiers.get(&eqlog.rel_name(rel).unwrap()).unwrap();
+        let relation_snake = relation_name.to_case(Snake);
 
-    let canonicalize = dom
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("\n", |(i, s), f| {
-            let sort_snake = s.to_case(Snake);
-            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
-        });
+        let func_args = dom
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ)| {
+                FmtFn(move |f: &mut Formatter| {
+                    let type_camel = identifiers
+                        .get(&eqlog.type_name(typ).unwrap())
+                        .unwrap()
+                        .to_case(UpperCamel);
+                    write!(f, ", mut arg{i}: {type_camel}")
+                })
+            })
+            .format("");
 
-    let query = QuerySpec {
-        projections: (0..dom.len()).collect(),
-        diagonals: BTreeSet::new(),
-        age: QueryAge::All,
-    };
-    let iter = IterName(relation, &query);
-    let args0 = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-    let args1 = args0.clone();
+        let canonicalize = dom
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, t)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_snake = identifiers
+                        .get(&eqlog.type_name(t).unwrap())
+                        .unwrap()
+                        .to_case(Snake);
+                    write!(f, "arg{i} = self.root_{type_snake}(arg{i});")
+                })
+            })
+            .format("\n");
 
-    writedoc! {out, "
-        /// Evaluates `{relation}({args0})`.
-        #[allow(dead_code)]
-        pub fn {relation_snake}(&self{rel_fn_args}) -> Option<{cod}> {{
-            {canonicalize}
-            self.{iter}({args1}).next().map(|t| t.{cod_index})
-        }}
-    "}
+        let query = QuerySpec {
+            projections: (0..dom.len()).collect(),
+            diagonals: BTreeSet::new(),
+            age: QueryAge::All,
+        };
+        let iter = IterName(relation_name, &query);
+        let args0 = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        let args1 = args0.clone();
+
+        writedoc! {f, "
+            /// Evaluates `{relation_name}({args0})`.
+            #[allow(dead_code)]
+            pub fn {relation_snake}(&self{func_args}) -> Option<{cod_camel}> {{
+                {canonicalize}
+                self.{iter}({args1}).next().map(|t| t.{cod_index})
+            }}
+        "}
+    })
 }
 
 fn display_pub_iter_fn<'a>(
@@ -2203,7 +2227,7 @@ fn display_symbol_scope_impl<'a>(
             .map(|typ| display_type_symbol_scope_fns(typ, sym_scope, eqlog, identifiers))
             .format("\n");
         let rel_fns = iter_symbol_scope_relations(sym_scope, eqlog)
-            .map(|rel| display_relation_symbol_scope_fns(rel, sym_scope, eqlog, identifiers))
+            .map(|rel| display_relation_symbol_scope_fns(rel, eqlog, identifiers))
             .format("\n");
 
         writedoc! {f, "
@@ -2316,7 +2340,6 @@ fn display_type_symbol_scope_fns<'a>(
 
 fn display_relation_symbol_scope_fns<'a>(
     rel: Rel,
-    _sym_scope: SymbolScope,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -2326,7 +2349,18 @@ fn display_relation_symbol_scope_fns<'a>(
         writedoc! {f, "
             {pub_iter_fn}
             {pub_insert_fn}
-        "}
+        "}?;
+        match eqlog.rel_case(rel) {
+            RelCase::PredRel(_pred) => {}
+            RelCase::FuncRel(func) => {
+                let pub_eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
+                writedoc! {f, "
+                    {pub_eval_fn}
+                "}?;
+            }
+        }
+
+        Ok(())
     })
 }
 
@@ -2346,11 +2380,6 @@ fn write_theory_impl(
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
-        write_pub_function_eval_fn(out, func_name, &arity)?;
-        write!(out, "\n")?;
-    }
 
     for func in eqlog.iter_func() {
         if eqlog.function_can_be_made_defined(func) {
