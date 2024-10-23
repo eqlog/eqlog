@@ -1240,42 +1240,6 @@ fn display_enum_cases_fn<'a>(
     })
 }
 
-fn write_equate_elements(
-    out: &mut impl Write,
-    typ: Type,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
-    let type_snake = type_camel.to_case(Snake);
-    writedoc! {out, "
-        /// Enforces the equality `lhs = rhs`.
-        #[allow(dead_code)]
-        pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
-            lhs = self.{type_snake}_equalities.root(lhs);
-            rhs = self.{type_snake}_equalities.root(rhs);
-            if lhs == rhs {{
-                return;
-            }}
-
-            let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
-            let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
-            let (root, child) =
-                if lhs_weight >= rhs_weight {{
-                    (lhs, rhs)
-                }} else {{
-                    (rhs, lhs)
-                }};
-
-            self.{type_snake}_equalities.union_roots_into(child, root);
-            
-            self.{type_snake}_old.remove(&child);
-            self.{type_snake}_new.remove(&child);
-            self.{type_snake}_uprooted.push(child);
-        }}
-    "}
-}
-
 fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
     let rel_snake = rel.to_case(Snake);
     let rel_camel = rel.to_case(UpperCamel);
@@ -2255,6 +2219,31 @@ fn display_type_symbol_scope_fns<'a>(
                 self.root_{type_snake}(lhs) == self.root_{type_snake}(rhs)
             }}
 
+            /// Enforces the equality `lhs = rhs`.
+            #[allow(dead_code)]
+            pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
+                lhs = self.{type_snake}_equalities.root(lhs);
+                rhs = self.{type_snake}_equalities.root(rhs);
+                if lhs == rhs {{
+                    return;
+                }}
+
+                let lhs_weight = self.{type_snake}_weights[lhs.0 as usize];
+                let rhs_weight = self.{type_snake}_weights[rhs.0 as usize];
+                let (root, child) =
+                    if lhs_weight >= rhs_weight {{
+                        (lhs, rhs)
+                    }} else {{
+                        (rhs, lhs)
+                    }};
+
+                self.{type_snake}_equalities.union_roots_into(child, root);
+                
+                self.{type_snake}_old.remove(&child);
+                self.{type_snake}_new.remove(&child);
+                self.{type_snake}_uprooted.push(child);
+            }}
+
             #[allow(dead_code)]
             fn new_{type_snake}_internal(&mut self) -> {type_camel} {{
                 let old_len = self.{type_snake}_equalities.len();
@@ -2299,10 +2288,6 @@ fn write_theory_impl(
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    for typ in eqlog.iter_type() {
-        write_equate_elements(out, typ, eqlog, identifiers)?;
-    }
 
     for (enum_decl, _, _) in eqlog.iter_enum_decl() {
         write!(
