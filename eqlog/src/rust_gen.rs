@@ -839,38 +839,58 @@ impl<'a> Display for IterName<'a> {
     }
 }
 
-fn write_pub_predicate_holds_fn(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
-    let rel_fn_args = arity
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
+fn display_pub_predicate_holds_fn<'a>(
+    pred: Pred,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let rel = eqlog.pred_rel(pred).unwrap();
+        let relation = identifiers.get(&eqlog.rel_name(rel).unwrap()).unwrap();
+        let relation_snake = relation.to_case(Snake);
 
-    let canonicalize = arity
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("\n", |(i, s), f| {
-            let sort_snake = s.to_case(Snake);
-            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
-        });
+        let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        let rel_fn_args = arity
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let arg = format!("arg{}", i);
+                    let typ_camel =
+                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
+                    write!(f, ", mut {arg}: {typ_camel}")
+                })
+            })
+            .format("");
 
-    let rel_args0 = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-    let rel_args1 = rel_args0.clone();
-    let relation_camel = relation.to_case(UpperCamel);
-    writedoc! {out, "
-        /// Returns `true` if `{relation}({rel_args0})` holds.
-        #[allow(dead_code)]
-        pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
-            {canonicalize}
-            self.{relation_snake}.contains({relation_camel}({rel_args1}))
-        }}
-    "}
+        let canonicalize = arity
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let arg = format!("arg{}", i);
+                    let typ_snake =
+                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    writeln!(f, "{arg} = self.root_{typ_snake}({arg});")
+                })
+            })
+            .format("");
+
+        let rel_args0 = (0..arity.len()).map(|i| format!("arg{}", i)).format(", ");
+        let rel_args1 = rel_args0.clone();
+        let relation_camel = relation.to_case(UpperCamel);
+
+        writedoc! {f, "
+            /// Returns `true` if `{relation}({rel_args0})` holds.
+            #[allow(dead_code)]
+            pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
+                {canonicalize}
+                self.{relation_snake}.contains({relation_camel}({rel_args1}))
+            }}
+        "}
+    })
 }
 
 fn display_pub_function_eval_fn<'a>(
@@ -2352,7 +2372,13 @@ fn display_relation_symbol_scope_fns<'a>(
             {pub_insert_fn}
         "}?;
         match eqlog.rel_case(rel) {
-            RelCase::PredRel(_pred) => {}
+            RelCase::PredRel(pred) => {
+                writeln!(
+                    f,
+                    "{}",
+                    display_pub_predicate_holds_fn(pred, eqlog, identifiers)
+                )?;
+            }
             RelCase::FuncRel(func) => {
                 writeln!(
                     f,
@@ -2385,11 +2411,6 @@ fn write_theory_impl(
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
-        write_pub_predicate_holds_fn(out, pred, &arity)?;
-        write!(out, "\n")?;
-    }
 
     write_canonicalize_fn(out, eqlog, identifiers)?;
     write_is_dirty_fn(out, eqlog, identifiers)?;
