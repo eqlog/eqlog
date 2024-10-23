@@ -1319,17 +1319,6 @@ fn write_equate_elements(
     "}
 }
 
-fn write_are_equal_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
-        #[allow(dead_code)]
-        pub fn are_equal_{sort_snake}(&self, lhs: {sort}, rhs: {sort}) -> bool {{
-            self.root_{sort_snake}(lhs) == self.root_{sort_snake}(rhs)
-        }}
-    "}
-}
-
 fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
     let rel_snake = rel.to_case(Snake);
     let rel_camel = rel.to_case(UpperCamel);
@@ -2302,6 +2291,12 @@ fn display_type_symbol_scope_fns<'a>(
                     self.{type_snake}_equalities.root_const(el)
                 }}
             }}
+
+            /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
+            #[allow(dead_code)]
+            pub fn are_equal_{type_snake}(&self, lhs: {type_camel}, rhs: {type_camel}) -> bool {{
+                self.root_{type_snake}(lhs) == self.root_{type_snake}(rhs)
+            }}
         "}
     })
 }
@@ -2322,11 +2317,6 @@ fn write_theory_impl(
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    for type_name in iter_types(eqlog, identifiers) {
-        write_are_equal_fn(out, type_name)?;
-        write!(out, "\n")?;
-    }
 
     for typ in eqlog.iter_type() {
         write_new_element_internal(out, typ, eqlog, identifiers)?;
