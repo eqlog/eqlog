@@ -482,7 +482,7 @@ pub fn iter_rule_morphisms<'a>(
 pub fn iter_symbol_scope_types<'a>(
     symbol_scope: SymbolScope,
     eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = (Ident, Type)> {
+) -> impl 'a + Iterator<Item = Type> {
     let type_kind = eqlog.type_symbol().unwrap();
     let enum_kind = eqlog.enum_symbol().unwrap();
     eqlog
@@ -492,8 +492,7 @@ pub fn iter_symbol_scope_types<'a>(
             (eqlog.are_equal_symbol_kind(sym_kind, type_kind)
                 || eqlog.are_equal_symbol_kind(sym_kind, enum_kind))
             .then_some(())?;
-            let typ = eqlog.semantic_type(symbol_scope, name).unwrap();
-            Some((name, typ))
+            Some(eqlog.semantic_type(symbol_scope, name).unwrap())
         })
 }
 

@@ -1097,12 +1097,12 @@ fn write_pub_insert_relation(
 }
 
 fn display_new_enum_element<'a>(
-    enum_name: Ident,
     enum_type: Type,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f: &mut Formatter| -> Result {
+        let enum_name = eqlog.type_name(enum_type).unwrap();
         let enum_camel = identifiers.get(&enum_name).unwrap().to_case(UpperCamel);
         let enum_snake = enum_camel.to_case(Snake);
 
@@ -1351,8 +1351,12 @@ fn display_symbol_scope_delta_struct<'a>(
             struct {sym_scope_camel}Delta {{
         "}?;
 
-        for (name, _typ) in iter_symbol_scope_types(sym_scope, eqlog) {
-            let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+        for typ in iter_symbol_scope_types(sym_scope, eqlog) {
+            let name_snake = identifiers
+                .get(&eqlog.type_name(typ).unwrap())
+                .unwrap()
+                .as_str()
+                .to_case(Snake);
             let name_camel = name_snake.to_case(UpperCamel);
             writeln!(
                 f,
@@ -1431,9 +1435,10 @@ fn display_model_delta_new_fn<'a>(
         .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let new_equalities = iter_symbol_scope_types(sym_scope, eqlog)
-            .map(|(name, _typ)| {
+            .map(|typ| {
+                let type_name = eqlog.type_name(typ).unwrap();
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                    let name_snake = identifiers.get(&type_name).unwrap().as_str().to_case(Snake);
                     write!(f, "new_{name_snake}_equalities: Vec::new(),")
                 })
             })
@@ -1478,9 +1483,10 @@ fn display_model_delta_apply_equalities_fn<'a>(
         .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let type_equalities = iter_symbol_scope_types(sym_scope, eqlog)
-            .map(|(name, _typ)| {
+            .map(|typ| {
+                let type_name = eqlog.type_name(typ).unwrap();
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                    let type_snake = identifiers.get(&type_name).unwrap().as_str().to_case(Snake);
                     writedoc! {f, "
                         for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
                             model.equate_{type_snake}(lhs, rhs);
@@ -2178,9 +2184,7 @@ fn display_symbol_scope_impl<'a>(
         .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let type_fns = iter_symbol_scope_types(sym_scope, eqlog)
-            .map(|(name, typ)| {
-                display_type_symbol_scope_fns(name, typ, sym_scope, eqlog, identifiers)
-            })
+            .map(|typ| display_type_symbol_scope_fns(typ, sym_scope, eqlog, identifiers))
             .format("\n");
         let rel_fns = iter_symbol_scope_relations(sym_scope, eqlog)
             .map(|(_, rel)| display_relation_symbol_scope_fns(rel, sym_scope, eqlog, identifiers))
@@ -2197,13 +2201,16 @@ fn display_symbol_scope_impl<'a>(
 }
 
 fn display_type_symbol_scope_fns<'a>(
-    name: Ident,
     typ: Type,
     _sym_scope: SymbolScope,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let type_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+    let type_snake = identifiers
+        .get(&eqlog.type_name(typ).unwrap())
+        .unwrap()
+        .as_str()
+        .to_case(Snake);
     let type_camel = type_snake.to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
@@ -2279,11 +2286,7 @@ fn display_type_symbol_scope_fns<'a>(
             "}?;
         }
         if eqlog.is_enum_type(typ) {
-            writeln!(
-                f,
-                "{}",
-                display_new_enum_element(name, typ, eqlog, identifiers)
-            )?;
+            writeln!(f, "{}", display_new_enum_element(typ, eqlog, identifiers))?;
         }
 
         Ok(())
