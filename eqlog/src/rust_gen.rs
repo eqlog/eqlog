@@ -1345,18 +1345,6 @@ fn write_are_equal_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        /// Returns and iterator over elements of sort `{sort}`.
-        /// The iterator yields canonical representatives only.
-        #[allow(dead_code)]
-        pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
-            self.{sort_snake}_new.iter().chain(self.{sort_snake}_old.iter()).copied()
-        }}
-    "}
-}
-
 fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
     let rel_snake = rel.to_case(Snake);
     let rel_camel = rel.to_case(UpperCamel);
@@ -2288,8 +2276,36 @@ fn display_symbol_scope_impl<'a>(
         .as_str()
         .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
+        let type_fns = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|(name, typ)| {
+                display_type_symbol_scope_fns(name, typ, sym_scope, eqlog, identifiers)
+            })
+            .format("\n");
+
         writedoc! {f, "
             impl {sym_scope_camel} {{
+                {type_fns}
+            }}
+        "}
+    })
+}
+
+fn display_type_symbol_scope_fns<'a>(
+    name: Ident,
+    _typ: Type,
+    _sym_scope: SymbolScope,
+    _eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let type_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+    let type_camel = type_snake.to_case(UpperCamel);
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            /// Returns an iterator over elements of type `{type_camel}`.
+            /// The iterator yields canonical representatives only.
+            #[allow(dead_code)]
+            pub fn iter_{type_snake}(&self) -> impl '_ + Iterator<Item={type_camel}> {{
+                self.{type_snake}_new.iter().chain(self.{type_snake}_old.iter()).copied()
             }}
         "}
     })
@@ -2313,7 +2329,6 @@ fn write_theory_impl(
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
     for type_name in iter_types(eqlog, identifiers) {
-        write_iter_sort_fn(out, type_name)?;
         write_root_fn(out, type_name)?;
         write_are_equal_fn(out, type_name)?;
         write!(out, "\n")?;
