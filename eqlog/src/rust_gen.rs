@@ -1364,8 +1364,12 @@ fn display_symbol_scope_delta_struct<'a>(
             )?;
         }
 
-        for (name, rel) in iter_symbol_scope_relations(sym_scope, eqlog) {
-            let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+        for rel in iter_symbol_scope_relations(sym_scope, eqlog) {
+            let name_snake = identifiers
+                .get(&eqlog.rel_name(rel).unwrap())
+                .unwrap()
+                .as_str()
+                .to_case(Snake);
             let name_camel = name_snake.to_case(UpperCamel);
             writeln!(f, "new_{name_snake}: Vec<{name_camel}>,")?;
 
@@ -1445,9 +1449,13 @@ fn display_model_delta_new_fn<'a>(
             .format("\n");
 
         let new_tuples_and_defs = iter_symbol_scope_relations(sym_scope, eqlog)
-            .map(|(name, rel)| {
+            .map(|rel| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let name_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                    let name_snake = identifiers
+                        .get(&eqlog.rel_name(rel).unwrap())
+                        .unwrap()
+                        .as_str()
+                        .to_case(Snake);
                     writeln!(f, "new_{name_snake}: Vec::new(),")?;
                     if let RelCase::FuncRel(func) = eqlog.rel_case(rel) {
                         if eqlog.function_can_be_made_defined(func) {
@@ -1518,8 +1526,12 @@ fn display_model_delta_apply_tuples_fn<'a>(
         .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let relations = iter_symbol_scope_relations(sym_scope, eqlog)
-            .map(|(name, rel)| {
-                let relation_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+            .map(|rel| {
+                let relation_snake = identifiers
+                    .get(&eqlog.rel_name(rel).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
                 let relation_camel = relation_snake.to_case(UpperCamel);
 
                 let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
@@ -1559,13 +1571,17 @@ fn display_model_delta_apply_def_fn<'a>(
         .to_case(UpperCamel);
     FmtFn(move |f: &mut Formatter| -> Result {
         let func_defs = iter_symbol_scope_relations(sym_scope, eqlog)
-            .filter_map(|(name, rel)| {
+            .filter_map(|rel| {
                 let func = match eqlog.rel_case(rel) {
                     RelCase::FuncRel(func) => func,
                     _ => return None,
                 };
-                (eqlog.function_can_be_made_defined(func)).then_some((name, func))?;
-                let func_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
+                eqlog.function_can_be_made_defined(func).then_some(())?;
+                let func_snake = identifiers
+                    .get(&eqlog.rel_name(rel).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
                 let func_camel = func_snake.to_case(UpperCamel);
 
                 let domain = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
@@ -2187,7 +2203,7 @@ fn display_symbol_scope_impl<'a>(
             .map(|typ| display_type_symbol_scope_fns(typ, sym_scope, eqlog, identifiers))
             .format("\n");
         let rel_fns = iter_symbol_scope_relations(sym_scope, eqlog)
-            .map(|(_, rel)| display_relation_symbol_scope_fns(rel, sym_scope, eqlog, identifiers))
+            .map(|rel| display_relation_symbol_scope_fns(rel, sym_scope, eqlog, identifiers))
             .format("\n");
 
         writedoc! {f, "
