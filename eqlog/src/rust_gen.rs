@@ -1319,21 +1319,6 @@ fn write_equate_elements(
     "}
 }
 
-fn write_root_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        /// Returns the canonical representative of the equivalence class of `el`.
-        #[allow(dead_code)]
-        pub fn root_{sort_snake}(&self, el: {sort}) -> {sort} {{
-            if el.0 as usize >= self.{sort_snake}_equalities.len() {{
-                el
-            }} else {{
-                self.{sort_snake}_equalities.root_const(el)
-            }}
-        }}
-    "}
-}
-
 fn write_are_equal_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     let sort_snake = sort.to_case(Snake);
     writedoc! {out, "
@@ -2307,6 +2292,16 @@ fn display_type_symbol_scope_fns<'a>(
             pub fn iter_{type_snake}(&self) -> impl '_ + Iterator<Item={type_camel}> {{
                 self.{type_snake}_new.iter().chain(self.{type_snake}_old.iter()).copied()
             }}
+
+            /// Returns the canonical representative of the equivalence class of `el`.
+            #[allow(dead_code)]
+            pub fn root_{type_snake}(&self, el: {type_camel}) -> {type_camel} {{
+                if el.0 as usize >= self.{type_snake}_equalities.len() {{
+                    el
+                }} else {{
+                    self.{type_snake}_equalities.root_const(el)
+                }}
+            }}
         "}
     })
 }
@@ -2329,7 +2324,6 @@ fn write_theory_impl(
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
     for type_name in iter_types(eqlog, identifiers) {
-        write_root_fn(out, type_name)?;
         write_are_equal_fn(out, type_name)?;
         write!(out, "\n")?;
     }
