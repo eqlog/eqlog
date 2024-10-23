@@ -1009,91 +1009,112 @@ fn display_pub_iter_fn<'a>(
     })
 }
 
-fn write_pub_insert_relation(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-    is_function: bool,
-) -> io::Result<()> {
-    let rel_snake = relation.to_case(Snake);
-    let rel_camel = relation.to_case(UpperCamel);
+fn display_pub_insert_relation<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let rel_name = identifiers.get(&eqlog.rel_name(rel).unwrap()).unwrap();
+        let rel_snake = rel_name.to_case(Snake);
+        let rel_camel = rel_name.to_case(UpperCamel);
 
-    let rel_args: Vec<FlatVar> = (0..arity.len()).map(FlatVar).collect();
+        // Turn variables into refs to that we can use them from the closures passed to e.g. `map`.
+        let rel_name = rel_name.as_str();
+        let rel_snake = rel_snake.as_str();
+        let rel_camel = rel_camel.as_str();
 
-    let rel_fn_args = rel_args
-        .iter()
-        .copied()
-        .zip(arity)
-        .map(|(arg, typ)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let arg = display_var(arg);
-                let type_camel = typ.to_case(UpperCamel);
-                write!(f, "mut {arg}: {type_camel}")
-            })
-        })
-        .format(", ");
+        let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        let rel_args: Vec<FlatVar> = (0..arity.len()).map(FlatVar).collect();
 
-    let canonicalize = rel_args
-        .iter()
-        .copied()
-        .zip(arity)
-        .map(|(arg, typ)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let arg = display_var(arg);
-                let type_snake = typ.to_case(Snake);
-                write!(f, "{arg} = self.{type_snake}_equalities.root({arg});")
-            })
-        })
-        .format("\n");
-
-    let update_weights = rel_args
-        .iter()
-        .copied()
-        .zip(arity)
-        .enumerate()
-        .map(|(i, (arg, typ))| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let arg = display_var(arg);
-                let type_snake = typ.to_case(Snake);
-                let rel_camel = relation.to_case(UpperCamel);
-                writedoc! {f, "
-                    let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
-                    *weight{i} = weight{i}.saturating_add({rel_camel}Table::WEIGHT);
-                "}
-            })
-        })
-        .format("\n");
-
-    let docstring = if is_function {
-        let dom_len = arity.len() - 1;
-        let func_args = rel_args[..dom_len]
+        let rel_fn_args = rel_args
             .iter()
             .copied()
-            .map(display_var)
+            .zip(arity.iter().copied())
+            .map(|(arg, typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let arg = display_var(arg);
+                    let type_camel = identifiers
+                        .get(&eqlog.type_name(typ).unwrap())
+                        .unwrap()
+                        .to_case(UpperCamel);
+                    write!(f, "mut {arg}: {type_camel}")
+                })
+            })
             .format(", ");
-        let result = display_var(*rel_args.last().expect("func can't have empty arity"));
-        formatdoc! {"
-            /// Makes the equation `{rel_snake}({func_args}) = {result}` hold.
-        "}
-    } else {
+
+        let canonicalize = rel_args
+            .iter()
+            .copied()
+            .zip(arity.iter().copied())
+            .map(|(arg, typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let arg = display_var(arg);
+                    let type_snake = identifiers
+                        .get(&eqlog.type_name(typ).unwrap())
+                        .unwrap()
+                        .to_case(Snake);
+                    write!(f, "{arg} = self.{type_snake}_equalities.root({arg});")
+                })
+            })
+            .format("\n");
+
+        let update_weights = rel_args
+            .iter()
+            .copied()
+            .zip(arity.iter().copied())
+            .enumerate()
+            .map(|(i, (arg, typ))| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let arg = display_var(arg);
+                    let type_snake = identifiers
+                        .get(&eqlog.type_name(typ).unwrap())
+                        .unwrap()
+                        .to_case(Snake);
+                    writedoc! {f, "
+                        let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
+                        *weight{i} = weight{i}.saturating_add({rel_camel}Table::WEIGHT);
+                    "}
+                })
+            })
+            .format("\n");
+
+        let is_function = match eqlog.rel_case(rel) {
+            RelCase::PredRel(_) => false,
+            RelCase::FuncRel(_) => true,
+        };
+
+        let docstring = if is_function {
+            let dom_len = arity.len() - 1;
+            let func_args = rel_args[..dom_len]
+                .iter()
+                .copied()
+                .map(display_var)
+                .format(", ");
+            let result = display_var(*rel_args.last().expect("func can't have empty arity"));
+            formatdoc! {"
+                /// Makes the equation `{rel_name}({func_args}) = {result}` hold.
+            "}
+        } else {
+            let rel_args = rel_args.iter().copied().map(display_var).format(", ");
+            formatdoc! {"
+                /// Makes `{rel_name}({rel_args})` hold.
+            "}
+        };
+
         let rel_args = rel_args.iter().copied().map(display_var).format(", ");
-        formatdoc! {"
-            /// Makes `{rel_snake}({rel_args})` hold.
-        "}
-    };
 
-    let rel_args = rel_args.iter().copied().map(display_var).format(", ");
-
-    writedoc! {out, "
-        {docstring}
-        #[allow(dead_code)]
-        pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
-            {canonicalize}
-            if self.{rel_snake}.insert({rel_camel}({rel_args})) {{
-                {update_weights}
+        writedoc! {f, "
+            {docstring}
+            #[allow(dead_code)]
+            pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
+                {canonicalize}
+                if self.{rel_snake}.insert({rel_camel}({rel_args})) {{
+                    {update_weights}
+                }}
             }}
-        }}
-    "}
+        "}
+    })
 }
 
 fn display_new_enum_element<'a>(
@@ -2299,10 +2320,12 @@ fn display_relation_symbol_scope_fns<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let pub_iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
     FmtFn(move |f: &mut Formatter| -> Result {
+        let pub_iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
+        let pub_insert_fn = display_pub_insert_relation(rel, eqlog, identifiers);
         writedoc! {f, "
             {pub_iter_fn}
+            {pub_insert_fn}
         "}
     })
 }
@@ -2326,7 +2349,6 @@ fn write_theory_impl(
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
         write_pub_function_eval_fn(out, func_name, &arity)?;
-        write_pub_insert_relation(out, func_name, &arity, true)?;
         write!(out, "\n")?;
     }
 
@@ -2338,7 +2360,6 @@ fn write_theory_impl(
 
     for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
         write_pub_predicate_holds_fn(out, pred, &arity)?;
-        write_pub_insert_relation(out, &pred, &arity, false)?;
         write!(out, "\n")?;
     }
 
