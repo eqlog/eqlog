@@ -917,68 +917,96 @@ fn write_pub_function_eval_fn(
     "}
 }
 
-fn write_pub_iter_fn(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-    is_function: bool,
-) -> io::Result<()> {
-    let rel_snake = relation.to_case(Snake);
-    let rel_type = if arity.len() == 1 {
-        arity.first().unwrap().to_string()
-    } else {
-        let args = arity
-            .iter()
-            .copied()
-            .format_with(", ", |s, f| f(&format_args!("{}", s)));
-        format!("({args})")
-    };
+fn display_pub_iter_fn<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let relation_name = identifiers.get(&eqlog.rel_name(rel).unwrap()).unwrap();
+    let relation_snake = relation_name.to_case(Snake);
 
-    let tuple_unpack = match arity.len() {
-        0 => "|_| ()".to_string(),
-        1 => "|t| t.0".to_string(),
-        n => {
-            let args = (0..n).format_with(", ", |i, f| f(&format_args!("t.{i}")));
-            format!("|t| ({args})")
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+        if arity.is_empty() {
+            return Ok(());
         }
-    };
 
-    let docstring = match (is_function, arity.len()) {
-        (false, 0) => todo!("Shouldn't generate an iter_...() function for truth values."),
-        (false, 1) => {
-            formatdoc! {"
-                /// Returns an iterator over elements satisfying the `{relation}` predicate.
-            "}
-        }
-        (false, n) => {
-            debug_assert!(n > 0);
-            formatdoc! {"
-                /// Returns an iterator over tuples of elements satisfying the `{relation}` predicate.
-            "}
-        }
-        (true, 0) => panic!("Functions cannot have empty arity"),
-        (true, 1) => {
-            formatdoc! {"
-                /// Returns an iterator over `{relation}` constants.
-                /// The iterator may yield more than one element if the model is not closed.
-            "}
-        }
-        (true, n) => {
-            debug_assert!(n > 1);
-            formatdoc! {"
-                /// Returns an iterator over tuples in the graph of the `{relation}` function.
-                /// The relation yielded by the iterator need not be functional if the model is not closed.
-            "}
-        }
-    };
+        let iter_item_type = match arity.as_slice() {
+            [t] => {
+                let type_name = eqlog.type_name(*t).unwrap();
+                let type_camel = identifiers.get(&type_name).unwrap().to_case(UpperCamel);
+                format!("{type_camel}")
+            }
+            ts => {
+                let args = ts
+                    .iter()
+                    .copied()
+                    .map(|t| {
+                        let type_name = eqlog.type_name(t).unwrap();
+                        let type_camel = identifiers.get(&type_name).unwrap().to_case(UpperCamel);
+                        type_camel
+                    })
+                    .format_with(", ", |s, f| f(&format_args!("{}", s)));
+                format!("({args})")
+            }
+        };
 
-    writedoc! {out, "
-        {docstring}
-        #[allow(dead_code)]
-        pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={rel_type}> {{
-            self.{rel_snake}.iter_all().map({tuple_unpack})
-        }}
-    "}
+        let tuple_unpack = match arity.len() {
+            0 => "|_| ()".to_string(),
+            1 => "|t| t.0".to_string(),
+            n => {
+                let args = (0..n).format_with(", ", |i, f| f(&format_args!("t.{i}")));
+                format!("|t| ({args})")
+            }
+        };
+
+        let is_function = match eqlog.rel_case(rel) {
+            RelCase::PredRel(_) => false,
+            RelCase::FuncRel(_) => true,
+        };
+
+        let docstring = match (is_function, arity.len()) {
+            (false, 0) => {
+                formatdoc! {"
+                    /// Returns an iterator that yields () if the `{relation_name}` predicate holds.
+                "}
+            }
+
+            (false, 1) => {
+                formatdoc! {"
+                    /// Returns an iterator over elements satisfying the `{relation_name}` predicate.
+                "}
+            }
+            (false, n) => {
+                debug_assert!(n > 0);
+                formatdoc! {"
+                    /// Returns an iterator over tuples of elements satisfying the `{relation_name}` predicate.
+                "}
+            }
+            (true, 0) => panic!("Functions cannot have empty arity"),
+            (true, 1) => {
+                formatdoc! {"
+                    /// Returns an iterator that yields the `{relation_name}` constant.
+                    /// The iterator may yield more than one element if the model is not closed.
+                "}
+            }
+            (true, n) => {
+                debug_assert!(n > 1);
+                formatdoc! {"
+                    /// Returns an iterator over tuples in the graph of the `{relation_name}` function.
+                    /// The relation yielded by the iterator need not be functional if the model is not closed.
+                "}
+            }
+        };
+
+        writedoc! {f, "
+            {docstring}
+            #[allow(dead_code)]
+            pub fn iter_{relation_snake}(&self) -> impl '_ + Iterator<Item={iter_item_type}> {{
+                self.{relation_snake}.iter_all().map({tuple_unpack})
+            }}
+        "}
+    })
 }
 
 fn write_pub_insert_relation(
@@ -2155,9 +2183,7 @@ fn display_symbol_scope_impl<'a>(
             })
             .format("\n");
         let rel_fns = iter_symbol_scope_relations(sym_scope, eqlog)
-            .map(|(name, rel)| {
-                display_relation_symbol_scope_fns(name, rel, sym_scope, eqlog, identifiers)
-            })
+            .map(|(_, rel)| display_relation_symbol_scope_fns(rel, sym_scope, eqlog, identifiers))
             .format("\n");
 
         writedoc! {f, "
@@ -2265,13 +2291,17 @@ fn display_type_symbol_scope_fns<'a>(
 }
 
 fn display_relation_symbol_scope_fns<'a>(
-    name: Ident,
     rel: Rel,
     _sym_scope: SymbolScope,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    FmtFn(move |f: &mut Formatter| -> Result { Ok(()) })
+    let pub_iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
+    FmtFn(move |f: &mut Formatter| -> Result {
+        writedoc! {f, "
+            {pub_iter_fn}
+        "}
+    })
 }
 
 fn write_theory_impl(
@@ -2301,7 +2331,6 @@ fn write_theory_impl(
 
     for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
         write_pub_function_eval_fn(out, func_name, &arity)?;
-        write_pub_iter_fn(out, func_name, &arity, true)?;
         write_pub_insert_relation(out, func_name, &arity, true)?;
         write!(out, "\n")?;
     }
@@ -2314,9 +2343,6 @@ fn write_theory_impl(
 
     for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
         write_pub_predicate_holds_fn(out, pred, &arity)?;
-        if arity.len() > 0 {
-            write_pub_iter_fn(out, pred, &arity, false)?;
-        }
         write_pub_insert_relation(out, &pred, &arity, false)?;
         write!(out, "\n")?;
     }
