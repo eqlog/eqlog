@@ -2103,62 +2103,63 @@ fn write_new_fn(
     Ok(())
 }
 
-fn write_define_fn(
-    out: &mut impl Write,
+fn display_define_fn<'a>(
     func: Func,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let func_snake = display_func_snake(func, eqlog, identifiers);
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let func_snake = display_func_snake(func, eqlog, identifiers);
 
-    let domain = type_list_vec(eqlog.domain(func).expect("should be total"), eqlog);
-    let codomain = eqlog.codomain(func).expect("should be total");
+        let domain = type_list_vec(eqlog.domain(func).expect("should be total"), eqlog);
+        let codomain = eqlog.codomain(func).expect("should be total");
 
-    let codomain_camel =
-        format!("{}", display_type(codomain, eqlog, identifiers)).to_case(UpperCamel);
-    let codomain_snake = codomain_camel.to_case(Snake);
+        let codomain_camel =
+            format!("{}", display_type(codomain, eqlog, identifiers)).to_case(UpperCamel);
+        let codomain_snake = codomain_camel.to_case(Snake);
 
-    let func_arg_vars: Vec<FlatVar> = (0..domain.len()).map(FlatVar).collect();
-    let result_var = FlatVar(domain.len());
+        let func_arg_vars: Vec<FlatVar> = (0..domain.len()).map(FlatVar).collect();
+        let result_var = FlatVar(domain.len());
 
-    let fn_args = func_arg_vars
-        .iter()
-        .copied()
-        .zip(domain.iter().copied())
-        .map(|(var, var_typ)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let type_camel =
-                    format!("{}", display_type(var_typ, eqlog, identifiers)).to_case(UpperCamel);
-                let var = display_var(var);
-                write!(f, "{var}: {type_camel}")
+        let fn_args = func_arg_vars
+            .iter()
+            .copied()
+            .zip(domain.iter().copied())
+            .map(|(var, var_typ)| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_camel = format!("{}", display_type(var_typ, eqlog, identifiers))
+                        .to_case(UpperCamel);
+                    let var = display_var(var);
+                    write!(f, "{var}: {type_camel}")
+                })
             })
-        })
-        .format(", ");
+            .format(", ");
 
-    let args0 = func_arg_vars.iter().copied().map(display_var).format(", ");
-    let args1 = args0.clone();
-    let rel_args = func_arg_vars
-        .iter()
-        .copied()
-        .chain(once(result_var))
-        .map(display_var)
-        .format(", ");
-    let result_var = display_var(result_var);
+        let args0 = func_arg_vars.iter().copied().map(display_var).format(", ");
+        let args1 = args0.clone();
+        let rel_args = func_arg_vars
+            .iter()
+            .copied()
+            .chain(once(result_var))
+            .map(display_var)
+            .format(", ");
+        let result_var = display_var(result_var);
 
-    writedoc! {out, "
-        /// Enforces that `{func_snake}({args0})` is defined, adjoining a new element if necessary.
-        #[allow(dead_code)]
-        pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
-            match self.{func_snake}({args1}) {{
-                Some(result) => result,
-                None => {{
-                    let {result_var} = self.new_{codomain_snake}_internal();
-                    self.insert_{func_snake}({rel_args});
-                    {result_var}
+        writedoc! {f, "
+            /// Enforces that `{func_snake}({args0})` is defined, adjoining a new element if necessary.
+            #[allow(dead_code)]
+            pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
+                match self.{func_snake}({args1}) {{
+                    Some(result) => result,
+                    None => {{
+                        let {result_var} = self.new_{codomain_snake}_internal();
+                        self.insert_{func_snake}({rel_args});
+                        {result_var}
+                    }}
                 }}
             }}
-        }}
-    "}
+        "}
+    })
 }
 
 /// Displays a struct that holds data for all symbols defined in a [SymbolScope].
@@ -2353,10 +2354,14 @@ fn display_relation_symbol_scope_fns<'a>(
         match eqlog.rel_case(rel) {
             RelCase::PredRel(_pred) => {}
             RelCase::FuncRel(func) => {
-                let pub_eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
-                writedoc! {f, "
-                    {pub_eval_fn}
-                "}?;
+                writeln!(
+                    f,
+                    "{}",
+                    display_pub_function_eval_fn(func, eqlog, identifiers)
+                )?;
+                if eqlog.function_can_be_made_defined(func) {
+                    writeln!(f, "{}", display_define_fn(func, eqlog, identifiers))?;
+                }
             }
         }
 
@@ -2380,12 +2385,6 @@ fn write_theory_impl(
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    for func in eqlog.iter_func() {
-        if eqlog.function_can_be_made_defined(func) {
-            write_define_fn(out, func, eqlog, identifiers)?;
-        }
-    }
 
     for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
         write_pub_predicate_holds_fn(out, pred, &arity)?;
