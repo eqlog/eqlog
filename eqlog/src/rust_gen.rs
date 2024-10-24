@@ -40,10 +40,10 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
         #[allow(unused)]
         use std::collections::{{BTreeSet, BTreeMap}};
+        #[allow(unused)]
         use std::fmt;
         #[allow(unused)]
         use eqlog_runtime::Unification;
-        use eqlog_runtime::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
         use std::ops::Bound;
     "}
 }
@@ -152,7 +152,7 @@ fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -
         .copied()
         .format_with(", ", |sort, f| f(&format_args!("pub {sort}")));
     writedoc! {out, "
-        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
         struct {relation_camel}({args});
     "}
 }
@@ -167,7 +167,7 @@ fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io:
     // the moment, those are non-constructor functions valued in an enum type.
     writedoc! {out, "
         #[allow(unused)]
-        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
         struct {func_camel}Args({args});
     "}
 }
@@ -2502,49 +2502,8 @@ fn write_theory_impl(
         writeln!(out, "{rule_fn}")?;
     }
 
-    write_drop_dirt_fn(out, eqlog, identifiers)?;
-
     write!(out, "}}\n")?;
     Ok(())
-}
-
-fn write_theory_display_impl(
-    out: &mut impl Write,
-    name: &str,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let els = iter_types(eqlog, identifiers).format_with("", |sort, f| {
-        let sort_camel = &sort;
-        let sort_snake = sort.to_case(Snake);
-        let modify_table = formatdoc! {"
-            with(Header(\"{sort_camel}\"))
-            .with(Modify::new(Segment::all())
-            .with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-        "};
-        f(&format_args!(
-            "self.{sort_snake}_equalities.class_table().{modify_table}.fmt(f)?;"
-        ))
-    });
-    let rels = iter_relation_arities(eqlog, identifiers).format_with("", |(rel, _), f| {
-        let rel_snake = rel.to_case(Snake);
-        f(&format_args!("self.{rel_snake}.fmt(f)?;"))
-    });
-
-    writedoc! {out, "
-        impl fmt::Display for {name} {{
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
-                {els}
-                {rels}
-                Ok(())
-            }}
-        }}
-    "}
 }
 
 pub fn write_module(
@@ -2575,7 +2534,6 @@ pub fn write_module(
         let indices: BTreeSet<&IndexSpec> = index_selection.values().flatten().collect();
         write_table_struct(out, rel, &arity, &indices)?;
         write_table_impl(out, rel, &arity, &indices, &index_selection)?;
-        write_table_display_impl(out, rel)?;
     }
     for (func, arity) in iter_func_arities(eqlog, identifiers) {
         let dom = &arity[0..arity.len() - 1];
@@ -2608,7 +2566,6 @@ pub fn write_module(
     let name: &str = identifiers.get(&name).unwrap().as_str();
 
     write_theory_impl(out, name, rules, analyses, module, eqlog, identifiers)?;
-    write_theory_display_impl(out, name, eqlog, identifiers)?;
 
     Ok(())
 }
