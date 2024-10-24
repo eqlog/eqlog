@@ -1345,37 +1345,50 @@ fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) 
     Ok(())
 }
 
-fn write_canonicalize_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let rel_blocks = iter_relation_arities(eqlog, identifiers)
-        .map(|(rel, arity)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                write_canonicalize_rel_block(f, rel, arity.as_slice())
+fn display_canonicalize_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let rel_blocks = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|rel| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let arity: Vec<String> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
+                        .into_iter()
+                        .map(|typ| {
+                            let type_name = identifiers
+                                .get(&eqlog.type_name(typ).unwrap())
+                                .unwrap()
+                                .as_str();
+                            type_name.to_case(UpperCamel)
+                        })
+                        .collect();
+                    let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
+                    let relation = format!("{}", display_rel(rel, eqlog, identifiers));
+                    write_canonicalize_rel_block(f, relation.as_str(), arity.as_slice())
+                })
             })
-        })
-        .format("\n");
+            .format("\n");
 
-    let clear_uprooted_vecs = eqlog
-        .iter_type()
-        .map(|typ| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let type_snake =
-                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
-                write!(f, "self.{type_snake}_uprooted.clear();")
+        let clear_uprooted_vecs = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|typ| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_snake =
+                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    write!(f, "self.{type_snake}_uprooted.clear();")
+                })
             })
-        })
-        .format("\n");
+            .format("\n");
 
-    writedoc! {out, "
-        fn canonicalize(&mut self) {{
-            {rel_blocks}
+        writedoc! {f, "
+            fn canonicalize(&mut self) {{
+                {rel_blocks}
 
-            {clear_uprooted_vecs}
-        }}
-    "}
+                {clear_uprooted_vecs}
+            }}
+        "}
+    })
 }
 
 fn display_symbol_scope_delta_struct<'a>(
@@ -2287,10 +2300,12 @@ fn display_symbol_scope_impl<'a>(
             .format("\n");
 
         let new_fn = display_symbol_scope_new_fn(sym_scope, eqlog, identifiers);
+        let canonicalize_fn = display_canonicalize_fn(sym_scope, eqlog, identifiers);
 
         writedoc! {f, "
             impl {sym_scope_camel} {{
                 {new_fn}
+                {canonicalize_fn}
                 {type_fns}
                 {rel_fns}
             }}
@@ -2446,7 +2461,7 @@ fn write_theory_impl(
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
-    write_canonicalize_fn(out, eqlog, identifiers)?;
+    //write_canonicalize_fn(out, eqlog, identifiers)?;
     write_is_dirty_fn(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
