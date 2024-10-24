@@ -766,52 +766,58 @@ fn write_table_impl(
     "}
 }
 
-fn write_table_display_impl(out: &mut impl Write, relation: &str) -> io::Result<()> {
-    let relation_camel = relation.to_case(UpperCamel);
-    writedoc! {out, "
-        impl fmt::Display for {relation_camel}Table {{
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
-                Table::new(self.iter_all())
-                    .with(Extract::segment(1.., ..))
-                    .with(Header(\"{relation}\"))
-                    .with(Modify::new(Segment::all()).with(Alignment::center()))
-                    .with(
-                        Style::modern()
-                            .top_intersection('─')
-                            .header_intersection('┬')
-                    )
-                    .fmt(f)
+fn display_is_dirty_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let rels_dirty = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|rel| {
+                let relation_snake = identifiers
+                    .get(&eqlog.rel_name(rel).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(f, " || self.{relation_snake}.is_dirty()")
+                })
+            })
+            .format("");
+
+        let sorts_dirty = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|typ| {
+                let sort_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(f, " || !self.{sort_snake}_new.is_empty()")
+                })
+            })
+            .format("");
+
+        let uprooted_dirty = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|typ| {
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(f, " || !self.{type_snake}_uprooted.is_empty()")
+                })
+            })
+            .format("");
+
+        writedoc! {f, "
+            #[allow(dead_code)]
+            pub fn is_dirty(&self) -> bool {{
+                self.empty_join_is_dirty {rels_dirty} {sorts_dirty} {uprooted_dirty}
             }}
-        }}
-    "}
-}
-
-fn write_is_dirty_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let rels_dirty =
-        iter_relation_arities(eqlog, identifiers).format_with("", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!(" || self.{relation_snake}.is_dirty()"))
-        });
-
-    let sorts_dirty = iter_types(eqlog, identifiers).format_with("", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!(" || !self.{sort_snake}_new.is_empty()"))
-    });
-
-    let uprooted_dirty = iter_types(eqlog, identifiers).format_with("", |typ, f| {
-        let type_snake = typ.to_case(Snake);
-        f(&format_args!(" || !self.{type_snake}_uprooted.is_empty()"))
-    });
-
-    writedoc! {out, "
-        fn is_dirty(&self) -> bool {{
-            self.empty_join_is_dirty {rels_dirty} {sorts_dirty} {uprooted_dirty}
-        }}
-    "}
+        "}
+    })
 }
 
 struct IterName<'a>(&'a str, &'a QuerySpec);
@@ -2001,34 +2007,6 @@ fn display_rule_fns<'a>(
     })
 }
 
-fn write_drop_dirt_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!("self.{relation_snake}.drop_dirt();"))
-        });
-    let sorts = iter_types(eqlog, identifiers).format_with("\n", |sort, f| {
-        let sort_snake = sort.to_case(Snake);
-        f(&format_args!(
-            "self.{sort_snake}_old.append(&mut self.{sort_snake}_new);"
-        ))
-    });
-
-    writedoc! {out, "
-        fn drop_dirt(&mut self) {{
-            self.empty_join_is_dirty = false;
-
-        {relations}
-
-        {sorts}
-        }}
-    "}
-}
-
 fn write_close_until_fn(
     out: &mut impl Write,
     module: ModuleNode,
@@ -2095,6 +2073,53 @@ fn write_close_until_fn(
             false
         }}
     "}
+}
+
+fn display_drop_dirt_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let relations = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|rel| {
+                let relation_snake = identifiers
+                    .get(&eqlog.rel_name(rel).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(f, "self.{relation_snake}.drop_dirt();")
+                })
+            })
+            .format("\n");
+
+        let sorts = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|typ| {
+                let sort_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(
+                        f,
+                        "self.{sort_snake}_old.append(&mut self.{sort_snake}_new);"
+                    )
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            fn drop_dirt(&mut self) {{
+                self.empty_join_is_dirty = false;
+
+                {relations}
+
+                {sorts}
+            }}
+        "}
+    })
 }
 
 fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
@@ -2301,11 +2326,15 @@ fn display_symbol_scope_impl<'a>(
 
         let new_fn = display_symbol_scope_new_fn(sym_scope, eqlog, identifiers);
         let canonicalize_fn = display_canonicalize_fn(sym_scope, eqlog, identifiers);
+        let drop_dirt_fn = display_drop_dirt_fn(sym_scope, eqlog, identifiers);
+        let is_dirty_fn = display_is_dirty_fn(sym_scope, eqlog, identifiers);
 
         writedoc! {f, "
             impl {sym_scope_camel} {{
                 {new_fn}
                 {canonicalize_fn}
+                {is_dirty_fn}
+                {drop_dirt_fn}
                 {type_fns}
                 {rel_fns}
             }}
@@ -2461,8 +2490,6 @@ fn write_theory_impl(
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
 
-    //write_canonicalize_fn(out, eqlog, identifiers)?;
-    write_is_dirty_fn(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
     assert_eq!(
