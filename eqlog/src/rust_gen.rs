@@ -2095,32 +2095,67 @@ fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
     "}
 }
 
-fn write_new_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    write!(out, "/// Creates an empty model.\n")?;
-    write!(out, "#[allow(dead_code)]\n")?;
-    write!(out, "pub fn new() -> Self {{\n")?;
-    write!(out, "Self {{\n")?;
-    for sort in iter_types(eqlog, identifiers) {
-        let sort_snake = sort.to_case(Snake);
-        write!(out, "{sort_snake}_equalities: Unification::new(),\n")?;
-        write!(out, "{sort_snake}_weights: Vec::new(),\n")?;
-        write!(out, "{sort_snake}_new: BTreeSet::new(),\n")?;
-        write!(out, "{sort_snake}_old: BTreeSet::new(),\n")?;
-        write!(out, "{sort_snake}_uprooted: Vec::new(),\n")?;
-    }
-    for (relation, _) in iter_relation_arities(eqlog, identifiers) {
-        let relation_snake = relation.to_case(Snake);
-        let relation_camel = relation.to_case(UpperCamel);
-        write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
-    }
-    write!(out, "empty_join_is_dirty: true,\n")?;
-    write!(out, "}}\n")?;
-    write!(out, "}}\n")?;
-    Ok(())
+fn display_symbol_scope_new_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_camel = identifiers
+        .get(&sym_scope_name)
+        .unwrap()
+        .as_str()
+        .to_case(UpperCamel);
+
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let is_module_sym_scope = eqlog.iter_module_node().any(|module| {
+            eqlog.are_equal_symbol_scope(eqlog.module_symbol_scope(module).unwrap(), sym_scope)
+        });
+
+        let visibility = if is_module_sym_scope { "pub " } else { "" };
+
+        writedoc! {f, "
+            /// Creates an empty {sym_scope_camel} model.
+            #[allow(dead_code)]
+            {visibility}fn new() -> Self {{
+                Self {{
+        "}?;
+
+        for typ in iter_symbol_scope_types(sym_scope, eqlog) {
+            let type_snake = identifiers
+                .get(&eqlog.type_name(typ).unwrap())
+                .unwrap()
+                .as_str()
+                .to_case(Snake);
+            writedoc! {f, "
+                {type_snake}_equalities: Unification::new(),
+                {type_snake}_weights: Vec::new(),
+                {type_snake}_new: BTreeSet::new(),
+                {type_snake}_old: BTreeSet::new(),
+                {type_snake}_uprooted: Vec::new(),
+            "}?;
+        }
+
+        for rel in iter_symbol_scope_relations(sym_scope, eqlog) {
+            let relation_snake = identifiers
+                .get(&eqlog.rel_name(rel).unwrap())
+                .unwrap()
+                .as_str()
+                .to_case(Snake);
+            let relation_camel = relation_snake.to_case(UpperCamel);
+            writedoc! {f, "
+                {relation_snake}: {relation_camel}Table::new(),
+            "}?;
+        }
+
+        writedoc! {f, "
+                    empty_join_is_dirty: true,
+                }}
+            }}
+        "}?;
+
+        Ok(())
+    })
 }
 
 fn display_define_fn<'a>(
@@ -2251,10 +2286,12 @@ fn display_symbol_scope_impl<'a>(
             .map(|rel| display_relation_symbol_scope_fns(rel, eqlog, identifiers))
             .format("\n");
 
+        let new_fn = display_symbol_scope_new_fn(sym_scope, eqlog, identifiers);
+
         writedoc! {f, "
             impl {sym_scope_camel} {{
+                {new_fn}
                 {type_fns}
-
                 {rel_fns}
             }}
         "}
@@ -2405,9 +2442,6 @@ fn write_theory_impl(
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
     write!(out, "impl {} {{\n", name)?;
-
-    write_new_fn(out, eqlog, identifiers)?;
-    write!(out, "\n")?;
 
     write_close_fn(out)?;
     write_close_until_fn(out, module, rules, eqlog, identifiers)?;
