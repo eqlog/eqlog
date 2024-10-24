@@ -2509,26 +2509,18 @@ pub fn write_module(
     write!(out, "\n")?;
 
     for sym_scope in eqlog.iter_symbol_scope() {
-        writeln!(
-            out,
-            "{}",
-            display_symbol_scope_struct(sym_scope, eqlog, identifiers)
-        )?;
-        writeln!(
-            out,
-            "{}",
-            display_symbol_scope_impl(sym_scope, eqlog, identifiers)
-        )?;
-        writeln!(
-            out,
-            "{}",
-            display_symbol_scope_delta_struct(sym_scope, eqlog, identifiers)
-        )?;
-        writeln!(
-            out,
-            "{}",
-            display_symbol_scope_delta_impl(sym_scope, eqlog, identifiers)
-        )?;
+        let model_struct = display_symbol_scope_struct(sym_scope, eqlog, identifiers);
+        let model_impl = display_symbol_scope_impl(sym_scope, eqlog, identifiers);
+
+        let delta_struct = display_symbol_scope_delta_struct(sym_scope, eqlog, identifiers);
+        let delta_impl = display_symbol_scope_delta_impl(sym_scope, eqlog, identifiers);
+        writedoc! {out, "
+            {model_struct}
+            {model_impl}
+
+            {delta_struct}
+            {delta_impl}
+        "}?;
     }
 
     let module = eqlog
