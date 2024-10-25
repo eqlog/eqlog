@@ -1457,6 +1457,15 @@ fn display_symbol_scope_delta_struct<'a>(
                 f,
                 "new_{name_snake}_equalities: Vec<({name_camel}, {name_camel})>,"
             )?;
+
+            if eqlog.is_model_type(typ) {
+                let member_sym_scope = eqlog.model_member_symbol_scope(typ).unwrap();
+                let delta_name =
+                    display_symbol_scope_delta_name(member_sym_scope, eqlog, identifiers);
+                writedoc! {f, "
+                    {name_snake}_deltas: BTreeMap<{name_camel}, {delta_name}>,
+                "}?;
+            }
         }
 
         for rel in iter_symbol_scope_relations(sym_scope, eqlog) {
@@ -1528,7 +1537,14 @@ fn display_model_delta_new_fn<'a>(
                 let type_name = eqlog.type_name(typ).unwrap();
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let name_snake = identifiers.get(&type_name).unwrap().as_str().to_case(Snake);
-                    write!(f, "new_{name_snake}_equalities: Vec::new(),")
+                    write!(f, "new_{name_snake}_equalities: Vec::new(),")?;
+
+                    if eqlog.is_model_type(typ) {
+                        writedoc! {f, "
+                            {name_snake}_deltas: BTreeMap::new(),
+                        "}?;
+                    }
+                    Ok(())
                 })
             })
             .format("\n");
