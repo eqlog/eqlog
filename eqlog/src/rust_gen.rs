@@ -2140,7 +2140,9 @@ fn display_symbol_scope_new_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+    let sym_scope_name = identifiers
+        .get(&eqlog.symbol_scope_name(sym_scope).unwrap())
+        .unwrap();
 
     FmtFn(move |f: &mut Formatter| -> Result {
         let is_module_sym_scope = eqlog.iter_module_node().any(|module| {
@@ -2169,6 +2171,12 @@ fn display_symbol_scope_new_fn<'a>(
                 {type_snake}_old: BTreeSet::new(),
                 {type_snake}_uprooted: Vec::new(),
             "}?;
+
+            if eqlog.is_model_type(typ) {
+                writedoc! {f, "
+                    {type_snake}_models: BTreeMap::new(),
+                "}?;
+            }
         }
 
         for rel in iter_symbol_scope_relations(sym_scope, eqlog) {
@@ -2275,7 +2283,18 @@ fn display_symbol_scope_struct<'a>(
                         {type_snake}_new: BTreeSet<{type_name}>,
                         {type_snake}_weights: Vec<usize>,
                         {type_snake}_uprooted: Vec<{type_name}>,
-                    "}
+                    "}?;
+
+                    if eqlog.is_model_type(typ) {
+                        let member_sym_scope = eqlog.model_member_symbol_scope(typ).unwrap();
+                        let model_sym_scope_name =
+                            display_symbol_scope_name(member_sym_scope, eqlog, identifiers);
+                        writedoc! {f, "
+                            {type_snake}_models: BTreeMap<{type_name}, {model_sym_scope_name}>,
+                        "}?;
+                    }
+
+                    Ok(())
                 })
             })
             .format("");

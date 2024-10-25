@@ -1037,12 +1037,16 @@ rule ctors_symbol_scope_cons {
     then ctors_symbol_scope(tail) = ss;
 }
 
-rule model_symbol_scope {
+func model_member_symbol_scope(Type) -> SymbolScope;
+
+rule model_symbol_scope_law {
     if decl_node_model(decl, model_node);
-    if model_decl(model_node, _, body);
+    if model_decl(model_node, model_name, body);
     if ambient_scope = decl_symbol_scope(decl);
     if member_scope = decls_symbol_scope(body);
     then symbol_scope_extension(ambient_scope, member_scope);
+    if typ = semantic_type(ambient_scope, model_name);
+    then model_member_symbol_scope(typ) = member_scope;
 }
 
 // This is the name of the Rust struct that holds the data for symbols defined in this scope.
