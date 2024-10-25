@@ -220,17 +220,6 @@ fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io:
     "}
 }
 
-fn write_sort_fields(out: &mut impl fmt::Write, sort: &str) -> fmt::Result {
-    let sort_snake = sort.to_case(Snake);
-    writedoc! {out, "
-        {sort_snake}_equalities: Unification<{sort}>,
-        {sort_snake}_old: BTreeSet<{sort}>,
-        {sort_snake}_new: BTreeSet<{sort}>,
-        {sort_snake}_weights: Vec<usize>,
-        {sort_snake}_uprooted: Vec<{sort}>,
-    "}
-}
-
 struct OrderName<'a>(&'a [usize]);
 impl<'a> Display for OrderName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -2271,44 +2260,48 @@ fn display_symbol_scope_struct<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let model_name = display_symbol_scope_name(sym_scope, eqlog, identifiers);
+
+        let type_fields = iter_symbol_scope_types(sym_scope, eqlog)
+            .map(|typ| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_snake = identifiers
+                        .get(&eqlog.type_name(typ).unwrap())
+                        .unwrap()
+                        .to_case(Snake);
+                    let type_name = display_type(typ, eqlog, identifiers);
+                    writedoc! {f, "
+                        {type_snake}_equalities: Unification<{type_name}>,
+                        {type_snake}_old: BTreeSet<{type_name}>,
+                        {type_snake}_new: BTreeSet<{type_name}>,
+                        {type_snake}_weights: Vec<usize>,
+                        {type_snake}_uprooted: Vec<{type_name}>,
+                    "}
+                })
+            })
+            .format("");
+
+        let relation_fields = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|rel| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let relation_snake = identifiers
+                        .get(&eqlog.rel_name(rel).unwrap())
+                        .unwrap()
+                        .to_case(Snake);
+                    let relation_camel = relation_snake.to_case(UpperCamel);
+                    writedoc! {f, "
+                        {relation_snake}: {relation_camel}Table,
+                    "}
+                })
+            })
+            .format("");
+
         writedoc! {f, "
             #[derive(Debug, Clone)]
             pub struct {model_name} {{
-        "}?;
-
-        let type_kind = eqlog.type_symbol().unwrap();
-        let enum_kind = eqlog.enum_symbol().unwrap();
-        let pred_kind = eqlog.pred_symbol().unwrap();
-        let func_kind = eqlog.func_symbol().unwrap();
-        let ctor_kind = eqlog.ctor_symbol().unwrap();
-        let model_kind = eqlog.model_symbol().unwrap();
-
-        // TODO: We should probably refactor this loop using iter_symbol_scope_types and
-        // iter_symbol_scope_relations.
-        for (sym_scope0, name, sym_kind, _loc) in eqlog.iter_defined_symbol() {
-            if !eqlog.are_equal_symbol_scope(sym_scope0, sym_scope) {
-                continue;
-            }
-            if eqlog.are_equal_symbol_kind(sym_kind, type_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, model_kind)
-            {
-                let type_name = identifiers.get(&name).unwrap().as_str();
-                write_sort_fields(f, type_name)?;
-            } else if eqlog.are_equal_symbol_kind(sym_kind, pred_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, func_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, ctor_kind)
-            {
-                let relation_snake = identifiers.get(&name).unwrap().as_str().to_case(Snake);
-                let relation_camel = relation_snake.to_case(UpperCamel);
-                writeln!(f, "{relation_snake}: {relation_camel}Table,")?;
-            }
-        }
-
-        writeln!(f, "empty_join_is_dirty: bool,")?;
-        writeln!(f, "}}\n")?;
-
-        Ok(())
+            {relation_fields}
+            {type_fields}
+            empty_join_is_dirty: bool,
+        }}"}
     })
 }
 
