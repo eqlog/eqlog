@@ -535,6 +535,7 @@ type Type;
 
 pred is_normal_type(ty: Type);
 pred is_enum_type(ty: Type);
+pred is_model_type(ty: Type);
 
 enum TypeList {
     NilTypeList(),
@@ -566,6 +567,13 @@ rule semantic_decl_enum {
     if ss = decl_symbol_scope(decl);
     then typ := semantic_type(ss, ident)!;
     then is_enum_type(typ);
+}
+rule semantic_decl_model {
+    if decl_node_model(decl, model_node);
+    if model_decl(model_node, ident, _);
+    if ss = decl_symbol_scope(decl);
+    then typ := semantic_type(ss, ident)!;
+    then is_model_type(typ);
 }
 
 func type_name(Type) -> Ident;
@@ -930,6 +938,7 @@ func func_symbol() -> SymbolKind;
 func rule_symbol() -> SymbolKind;
 func enum_symbol() -> SymbolKind;
 func ctor_symbol() -> SymbolKind;
+func model_symbol() -> SymbolKind;
 rule {
     then type_symbol()!;
     then pred_symbol()!;
@@ -937,6 +946,7 @@ rule {
     then rule_symbol()!;
     then enum_symbol()!;
     then ctor_symbol()!;
+    then model_symbol()!;
 }
 
 // A SymbolScope represents a set of defined symbols (types, functions, preds, ... but not variables).
@@ -1116,6 +1126,14 @@ rule enum_decl_defines_symbol {
     if ss = decl_symbol_scope(decl);
     if kind = enum_symbol();
     if loc = enum_decl_node_loc(enum_decl);
+    then defined_symbol(ss, name, kind, loc);
+}
+rule model_decl_defines_symbol {
+    if decl_node_model(decl, model_decl);
+    if model_decl(model_decl, name, _);
+    if ss = decl_symbol_scope(decl);
+    if kind = model_symbol();
+    if loc = model_decl_node_loc(model_decl);
     then defined_symbol(ss, name, kind, loc);
 }
 rule pred_decl_defines_symbol {

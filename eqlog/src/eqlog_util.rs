@@ -179,6 +179,9 @@ pub fn symbol_kind(kind: SymbolKind, eqlog: &Eqlog) -> SymbolKindEnum {
     if eqlog.are_equal_symbol_kind(kind, eqlog.ctor_symbol().unwrap()) {
         return SymbolKindEnum::Ctor;
     }
+    if eqlog.are_equal_symbol_kind(kind, eqlog.model_symbol().unwrap()) {
+        return SymbolKindEnum::Model;
+    }
 
     panic!("Invalid symbol kind")
 }
@@ -476,12 +479,14 @@ pub fn iter_symbol_scope_types<'a>(
 ) -> impl 'a + Iterator<Item = Type> {
     let type_kind = eqlog.type_symbol().unwrap();
     let enum_kind = eqlog.enum_symbol().unwrap();
+    let model_kind = eqlog.model_symbol().unwrap();
     eqlog
         .iter_defined_symbol()
         .filter_map(move |(sym_scope0, name, sym_kind, _loc)| {
             (sym_scope0 == symbol_scope).then_some(())?;
             (eqlog.are_equal_symbol_kind(sym_kind, type_kind)
-                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind))
+                || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, model_kind))
             .then_some(())?;
             Some(eqlog.semantic_type(symbol_scope, name).unwrap())
         })

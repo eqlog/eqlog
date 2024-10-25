@@ -420,7 +420,10 @@ pub fn iter_symbol_casing_errors<'a>(
 
             let symbol_kind = symbol_kind(kind, eqlog);
             match symbol_kind {
-                SymbolKindEnum::Type | SymbolKindEnum::Enum | SymbolKindEnum::Ctor => {
+                SymbolKindEnum::Model
+                | SymbolKindEnum::Type
+                | SymbolKindEnum::Enum
+                | SymbolKindEnum::Ctor => {
                     if name != name.to_case(Case::UpperCamel) {
                         return Some(CompileError::SymbolNotCamelCase {
                             name: name.to_string(),

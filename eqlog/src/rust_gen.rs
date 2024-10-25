@@ -2281,13 +2281,17 @@ fn display_symbol_scope_struct<'a>(
         let pred_kind = eqlog.pred_symbol().unwrap();
         let func_kind = eqlog.func_symbol().unwrap();
         let ctor_kind = eqlog.ctor_symbol().unwrap();
+        let model_kind = eqlog.model_symbol().unwrap();
 
+        // TODO: We should probably refactor this loop using iter_symbol_scope_types and
+        // iter_symbol_scope_relations.
         for (sym_scope0, name, sym_kind, _loc) in eqlog.iter_defined_symbol() {
             if !eqlog.are_equal_symbol_scope(sym_scope0, sym_scope) {
                 continue;
             }
             if eqlog.are_equal_symbol_kind(sym_kind, type_kind)
                 || eqlog.are_equal_symbol_kind(sym_kind, enum_kind)
+                || eqlog.are_equal_symbol_kind(sym_kind, model_kind)
             {
                 let type_name = identifiers.get(&name).unwrap().as_str();
                 write_sort_fields(f, type_name)?;

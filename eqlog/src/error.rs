@@ -14,6 +14,7 @@ pub enum SymbolKindEnum {
     Rule,
     Enum,
     Ctor,
+    Model,
 }
 
 impl Display for SymbolKindEnum {
@@ -26,6 +27,7 @@ impl Display for SymbolKindEnum {
             Rule => "rule",
             Enum => "enum",
             Ctor => "constructor",
+            Model => "model",
         })
     }
 }
