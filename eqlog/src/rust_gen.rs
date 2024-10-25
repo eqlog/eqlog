@@ -84,26 +84,38 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
     "}
 }
 
-// #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-// pub struct SortName(pub u32);
-fn write_sort_struct(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    writedoc! {out, "
-        #[allow(dead_code)]
-        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-        pub struct {sort}(pub u32);
-    "}
+fn display_type_struct<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let type_name = display_type(typ, eqlog, identifiers);
+        writedoc! {f, "
+            #[allow(dead_code)]
+            #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+            pub struct {type_name}(pub u32);
+        "}
+    })
 }
 
-fn write_sort_impl(out: &mut impl Write, sort: &str) -> io::Result<()> {
-    writedoc! {out, "
-        impl Into<u32> for {sort} {{ fn into(self) -> u32 {{ self.0 }} }}
-        impl From<u32> for {sort} {{ fn from(x: u32) -> Self {{ {sort}(x) }} }}
-        impl fmt::Display for {sort} {{
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
-                write!(f, \"{{:?}}\", self)
+fn display_type_impl<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let type_name = display_type(typ, eqlog, identifiers);
+        writedoc! {f, "
+            impl Into<u32> for {type_name} {{ fn into(self) -> u32 {{ self.0 }} }}
+            impl From<u32> for {type_name} {{ fn from(x: u32) -> Self {{ {type_name}(x) }} }}
+            impl fmt::Display for {type_name} {{
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
+                    write!(f, \"{{:?}}\", self)
+                }}
             }}
-        }}
-    "}
+        "}
+    })
 }
 
 fn display_ctor<'a>(
@@ -2503,10 +2515,13 @@ pub fn write_module(
     write_imports(out)?;
     write!(out, "\n")?;
 
-    for (_scope, ident, _) in eqlog.iter_semantic_type() {
-        let name = identifiers.get(&ident).unwrap().as_str();
-        write_sort_struct(out, name)?;
-        write_sort_impl(out, name)?;
+    for typ in eqlog.iter_type() {
+        let type_struct = display_type_struct(typ, eqlog, identifiers);
+        let type_impl = display_type_impl(typ, eqlog, identifiers);
+        writedoc! {out, "
+            {type_struct}
+            {type_impl}
+        "}?;
     }
     write!(out, "\n")?;
 
