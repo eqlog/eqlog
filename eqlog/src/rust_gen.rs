@@ -848,10 +848,29 @@ fn display_is_dirty_fn<'a>(
             })
             .format("");
 
+        let nested_models_dirty = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter_map(|typ| {
+                (eqlog.is_model_type(typ)).then_some(())?;
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    write!(
+                        f,
+                        " || !self.{type_snake}_models.values().any(|model| model.is_dirty())"
+                    )
+                }))
+            })
+            .format("");
+
         writedoc! {f, "
-            #[allow(dead_code)]
             pub fn is_dirty(&self) -> bool {{
-                self.empty_join_is_dirty {rels_dirty} {sorts_dirty} {uprooted_dirty}
+                self.empty_join_is_dirty
+                    {rels_dirty}
+                    {sorts_dirty}
+                    {uprooted_dirty}{nested_models_dirty}
             }}
         "}
     })
