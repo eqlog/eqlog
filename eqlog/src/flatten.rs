@@ -43,12 +43,21 @@ fn assign_el_vars(
     el_terms
 }
 
-fn make_var_type_map(el_vars: &BTreeMap<El, FlatVar>, eqlog: &Eqlog) -> BTreeMap<FlatVar, Type> {
+fn make_var_type_map(
+    el_vars: &BTreeMap<El, FlatVar>,
+    eqlog: &Eqlog,
+) -> BTreeMap<FlatVar, FlatType> {
     el_vars
         .iter()
         .map(|(el, var)| {
-            let typ = el_type(*el, eqlog).unwrap();
-            (*var, typ)
+            let local_type = el_type(*el, eqlog).unwrap();
+            (
+                *var,
+                FlatType {
+                    local_type,
+                    model: None,
+                },
+            )
         })
         .collect()
 }

@@ -116,12 +116,27 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
         args: Vec::new(),
         body: stmts,
     };
+    let result_type = FlatType {
+        local_type: codomain,
+        model: model_var,
+    };
     let var_types: BTreeMap<FlatVar, FlatType> = func_args
         .iter()
         .copied()
-        .zip(domain.into_iter().map(|ty| FlatType { local_type: ty, model: None }))
-        .chain([(result0, FlatType {local_type: codomain, model: None}), (result1, FlatType {local_type: codomain, model: None})])
-        .chain(model_var.map(|var| (var, FlatType { local_type: ancestor_tys[0], model: None })))
+        .zip(domain.into_iter().map(|ty| FlatType {
+            local_type: ty,
+            model: None,
+        }))
+        .chain([(result0, result_type), (result1, result_type)])
+        .chain(model_var.map(|var| {
+            (
+                var,
+                FlatType {
+                    local_type: ancestor_tys[0],
+                    model: None,
+                },
+            )
+        }))
         .collect();
     let name = format!("implicit_functionality_{}", func.0);
 

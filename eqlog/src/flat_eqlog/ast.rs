@@ -7,8 +7,8 @@ pub struct FlatVar(pub usize);
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatType {
-    local_type: Type,
-    model: Option<FlatVar>,
+    pub local_type: Type,
+    pub model: Option<FlatVar>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
