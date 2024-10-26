@@ -1,4 +1,3 @@
-use crate::eqlog_util::*;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
