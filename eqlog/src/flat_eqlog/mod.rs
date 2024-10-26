@@ -59,14 +59,6 @@ fn ancestor_model_types(func: Func, eqlog: &Eqlog) -> Vec<Type> {
 }
 
 pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
-    // TODO: Remove this, this looks like a debug print statement.
-    if let None = eqlog.domain(func) {
-        let semantic_arg_types: Vec<_> = eqlog.iter_semantic_arg_types().collect();
-        indoc::printdoc! {"
-            semantic_arg_types = {semantic_arg_types:?}
-        "}
-    }
-
     let ancestor_tys = ancestor_model_types(func, eqlog);
     if ancestor_tys.len() > 1 {
         todo!("Nested model types are not supported yet");
