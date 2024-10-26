@@ -6,6 +6,12 @@ use eqlog_eqlog::*;
 pub struct FlatVar(pub usize);
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatType {
+    local_type: Type,
+    model: Option<FlatVar>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatFuncName(pub usize);
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -187,5 +193,5 @@ impl FlatStmt {
 pub struct FlatRule {
     pub name: String,
     pub funcs: Vec<FlatFunc>,
-    pub var_types: BTreeMap<FlatVar, Type>,
+    pub var_types: BTreeMap<FlatVar, FlatType>,
 }

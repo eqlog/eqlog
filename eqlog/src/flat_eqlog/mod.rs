@@ -116,12 +116,12 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
         args: Vec::new(),
         body: stmts,
     };
-    let var_types: BTreeMap<FlatVar, Type> = func_args
+    let var_types: BTreeMap<FlatVar, FlatType> = func_args
         .iter()
         .copied()
-        .zip(domain)
-        .chain([(result0, codomain), (result1, codomain)])
-        .chain(model_var.map(|var| (var, ancestor_tys[0])))
+        .zip(domain.into_iter().map(|ty| FlatType { local_type: ty, model: None }))
+        .chain([(result0, FlatType {local_type: codomain, model: None}), (result1, FlatType {local_type: codomain, model: None})])
+        .chain(model_var.map(|var| (var, FlatType { local_type: ancestor_tys[0], model: None })))
         .collect();
     let name = format!("implicit_functionality_{}", func.0);
 
@@ -139,7 +139,7 @@ pub struct FlatRuleAnalysis<'a> {
     ///
     /// This is currently just a reference to the corresponding field in [FlatRule], but perhaps
     /// this field should live here instead.
-    pub var_types: &'a BTreeMap<FlatVar, Type>,
+    pub var_types: &'a BTreeMap<FlatVar, FlatType>,
     /// A map that assigns to each suffix of consecutive statements in a rule the set of variables
     /// that are already bound before those statements.
     // TODO: Why isn't this ever used?
