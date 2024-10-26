@@ -1591,7 +1591,7 @@ fn write_model_delta_apply_equalities_fn(
                     format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
                 writedoc! {f, "
-                    for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
+                    for (lhs, rhs) in self.new_{type_snake}_equalities.drain(..) {{
                         model.equate_{type_snake}(lhs, rhs);
                     }}
                 "}
