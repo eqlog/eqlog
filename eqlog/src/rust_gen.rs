@@ -1424,11 +1424,28 @@ fn display_canonicalize_fn<'a>(
             })
             .format("\n");
 
+        let nested_model_canonicalize = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter_map(|typ| {
+                eqlog.is_model_type(typ).then_some(())?;
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_snake =
+                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    writedoc! {f, "
+                        for model in self.{type_snake}_models.values_mut() {{
+                            model.canonicalize();
+                        }}
+                    "}
+                }))
+            })
+            .format("\n");
+
         writedoc! {f, "
             fn canonicalize(&mut self) {{
                 {rel_blocks}
 
                 {clear_uprooted_vecs}
+
+                {nested_model_canonicalize}
             }}
         "}
     })
