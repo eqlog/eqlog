@@ -1618,7 +1618,7 @@ fn display_model_delta_apply_equalities_fn<'a>(
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let type_snake = identifiers.get(&type_name).unwrap().as_str().to_case(Snake);
                     writedoc! {f, "
-                        for (lhs, rhs) in self.new_{type_snake}_equalities.iter().copied() {{
+                        for (lhs, rhs) in self.new_{type_snake}_equalities.drain(..) {{
                             model.equate_{type_snake}(lhs, rhs);
                         }}
                     "}
