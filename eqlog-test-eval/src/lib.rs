@@ -21,6 +21,7 @@ eqlog_mod!(matches);
 eqlog_mod!(matches_rel);
 eqlog_mod!(triple_join);
 eqlog_mod!(int);
+eqlog_mod!(empty);
 
 mod category_mod;
 #[cfg(test)]

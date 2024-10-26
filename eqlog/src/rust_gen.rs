@@ -1628,7 +1628,9 @@ fn write_model_delta_apply_tuples_fn(
         })
         .format("\n");
 
+    // allow(unused_variables) is there for theories without relations.
     writedoc! {out, "
+        #[allow(unused_variables)]
         fn apply_tuples(&mut self, model: &mut Model) {{
             {relations}
         }}
