@@ -2274,13 +2274,20 @@ fn display_drop_dirt_fn<'a>(
                     .as_str()
                     .to_case(Snake);
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    write!(
-                        f,
-                        "self.{sort_snake}_old.append(&mut self.{sort_snake}_new);"
-                    )
+                    writedoc! { f, "
+                        self.{sort_snake}_old.append(&mut self.{sort_snake}_new);
+                    "}?;
+                    if eqlog.is_model_type(typ) {
+                        writedoc! { f, "
+                            for model in self.{sort_snake}_models.values_mut() {{
+                                model.drop_dirt();
+                            }}
+                        "}?;
+                    }
+                    Ok(())
                 })
             })
-            .format("\n");
+            .format("");
 
         writedoc! {f, "
             fn drop_dirt(&mut self) {{
