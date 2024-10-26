@@ -1506,21 +1506,30 @@ fn display_symbol_scope_delta_impl<'a>(
             display_model_delta_apply_equalities_fn(sym_scope, eqlog, identifiers);
         let apply_tuples_fn = display_model_delta_apply_tuples_fn(sym_scope, eqlog, identifiers);
         let apply_def_fn = display_model_delta_apply_def_fn(sym_scope, eqlog, identifiers);
+        let apply_nested_surjective_fn =
+            display_model_delta_apply_nested_surjective_fn(sym_scope, eqlog, identifiers);
+        let apply_nested_non_surjective_fn =
+            display_model_delta_apply_nested_non_surjective_fn(sym_scope, eqlog, identifiers);
         writedoc! {f, "
             impl {delta_name} {{
             {new_fn}
 
             fn apply_surjective(&mut self, model: &mut {model_name}) {{
+                self.apply_nested_surjective(model);
                 self.apply_equalities(model);
                 self.apply_tuples(model);
             }}
             fn apply_non_surjective(&mut self, model: &mut {model_name}) {{
+                self.apply_nested_non_surjective(model);
                 self.apply_func_defs(model);
             }}
 
             {apply_equalities_fn}
             {apply_tuples_fn}
             {apply_def_fn}
+
+            {apply_nested_surjective_fn}
+            {apply_nested_non_surjective_fn}
             }}
         "}
     })
@@ -1688,6 +1697,76 @@ fn display_model_delta_apply_def_fn<'a>(
             #[allow(unused_variables)]
             fn apply_func_defs(&mut self, model: &mut {model_name}) {{
                 {func_defs}
+            }}
+        "}
+    })
+}
+
+fn display_model_delta_apply_nested_surjective_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let model_name = display_symbol_scope_name(sym_scope, eqlog, identifiers);
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let nested_apply_loops = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter_map(|typ| {
+                (eqlog.is_model_type(typ)).then_some(())?;
+
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .to_case(Snake);
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                        for (el, nested_delta) in self.{type_snake}_deltas.iter_mut() {{
+                        let nested_model = model.{type_snake}_models.get_mut(el).unwrap();
+                        nested_delta.apply_surjective(nested_model);
+                        }}
+                    "}
+                }))
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn apply_nested_surjective(&mut self, model: &mut {model_name}) {{
+            {nested_apply_loops}
+            }}
+        "}
+    })
+}
+
+fn display_model_delta_apply_nested_non_surjective_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let model_name = display_symbol_scope_name(sym_scope, eqlog, identifiers);
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let nested_apply_loops = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter_map(|typ| {
+                (eqlog.is_model_type(typ)).then_some(())?;
+
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .to_case(Snake);
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                        for (el, nested_delta) in self.{type_snake}_deltas.iter_mut() {{
+                        let nested_model = model.{type_snake}_models.get_mut(el).unwrap();
+                        nested_delta.apply_non_surjective(nested_model);
+                        }}
+                    "}
+                }))
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn apply_nested_non_surjective(&mut self, model: &mut {model_name}) {{
+            {nested_apply_loops}
             }}
         "}
     })
