@@ -80,6 +80,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         use std::fmt;
         #[allow(unused)]
         use eqlog_runtime::Unification;
+        #[allow(unused)]
         use std::ops::Bound;
     "}
 }
