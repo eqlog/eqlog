@@ -24,6 +24,7 @@ pub enum QueryAge {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtRelation {
     pub rel: Rel,
+    pub model: Option<FlatVar>,
     pub args: Vec<FlatVar>,
     pub age: QueryAge,
 }
@@ -95,10 +96,11 @@ impl FlatIfStmtRelation {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
         let FlatIfStmtRelation {
             rel: _,
+            model,
             args,
             age: _,
         } = self;
-        args.iter().copied()
+        model.into_iter().copied().chain(args.iter().copied())
     }
 }
 

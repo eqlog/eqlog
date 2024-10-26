@@ -1738,7 +1738,12 @@ fn display_if_stmt_header<'a>(
                 "}?;
             }
             FlatIfStmt::Relation(rel_stmt) => {
-                let FlatIfStmtRelation { rel, args, age } = rel_stmt;
+                let FlatIfStmtRelation {
+                    rel,
+                    args,
+                    age,
+                    model,
+                } = rel_stmt;
                 let RelationInfo {
                     diagonals,
                     in_projections,
@@ -1765,7 +1770,15 @@ fn display_if_stmt_header<'a>(
                     }
                     write!(f, ", ")?;
                 }
-                write!(f, ") in self.")?;
+                match *model {
+                    None => {
+                        write!(f, ") in self.")?;
+                    }
+                    Some(model) => {
+                        let model_var = display_var(model);
+                        write!(f, ") in {model_var}_model.")?;
+                    }
+                }
                 let iter_name = IterName(relation.as_str(), &query_spec);
                 write!(f, "{iter_name}")?;
                 write!(f, "(")?;
@@ -1773,34 +1786,62 @@ fn display_if_stmt_header<'a>(
                     write!(f, "tm{}, ", tm.0)?;
                 }
                 write!(f, ") {{\n")?;
+                for tm in out_projections.values().copied() {
+                    let typ = *analysis.var_types.get(&tm).unwrap();
+                    if eqlog.is_model_type(typ) {
+                        let var = display_var(tm);
+                        let type_name = identifiers.get(&eqlog.type_name(typ).unwrap()).unwrap();
+                        let type_snake = type_name.to_case(Snake);
+                        let type_delta = display_symbol_scope_delta_name(
+                            eqlog.model_member_symbol_scope(typ).unwrap(),
+                            eqlog,
+                            identifiers,
+                        );
+                        writedoc! {f, "
+                            {var}_model = self.{type_snake}_models.get(&{var}).unwrap();
+                            {var}_delta = self.{type_snake}_deltas.entry({var}).or_insert_with(|| {type_delta}::new());
+                        "}?;
+                    }
+                }
             }
             FlatIfStmt::Type(type_stmt) => {
                 let FlatIfStmtType { var, age } = type_stmt;
-                let typ = format!(
-                    "{}",
-                    display_type(*analysis.var_types.get(var).unwrap(), eqlog, identifiers)
-                );
-                let typ_snake = typ.to_case(Snake);
+                let typ = *analysis.var_types.get(var).unwrap();
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .to_case(Snake);
                 let var = display_var(*var);
                 match age {
                     QueryAge::New => {
                         writedoc! {f, "
                             #[allow(unused_variables)]
-                            for {var} in self.{typ_snake}_new.iter().copied() {{
+                            for {var} in self.{type_snake}_new.iter().copied() {{
                         "}?;
                     }
                     QueryAge::Old => {
                         writedoc! {f, "
                             #[allow(unused_variables)]
-                            for {var} in self.{typ_snake}_old.iter().copied() {{
+                            for {var} in self.{type_snake}_old.iter().copied() {{
                         "}?;
                     }
                     QueryAge::All => {
                         writedoc! {f, "
                             #[allow(unused_variables)]
-                            for {var} in self.{typ_snake}_old.iter().chain(self.{typ_snake}_new.iter()).copied() {{
+                            for {var} in self.{type_snake}_old.iter().chain(self.{type_snake}_new.iter()).copied() {{
                         "}?;
                     }
+                }
+                if eqlog.is_model_type(typ) {
+                    let type_delta = display_symbol_scope_delta_name(
+                        eqlog.model_member_symbol_scope(typ).unwrap(),
+                        eqlog,
+                        identifiers,
+                    );
+                    writedoc! {f, "
+                        let {var}_model = self.{type_snake}_models.get(&{var}).unwrap();
+                        {var}_delta = delta.{type_snake}_deltas.entry({var}).or_insert_with(|| {type_delta}::new());
+                    "}?;
                 }
             }
         };

@@ -189,13 +189,10 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     })?;
     assert!(!eqlog.absurd());
 
-    let mut flat_rules: Vec<FlatRule> =
-        iter_symbol_scope_relations(eqlog.module_symbol_scope(module).unwrap(), &eqlog)
-            .filter_map(|rel| match eqlog.rel_case(rel) {
-                RelCase::FuncRel(func) => Some(functionality_v2(func, &eqlog)),
-                RelCase::PredRel(_) => None,
-            })
-            .collect();
+    let mut flat_rules: Vec<FlatRule> = eqlog
+        .iter_func()
+        .map(|func| functionality_v2(func, &eqlog))
+        .collect();
     let functionality_rule_num = flat_rules.len();
     flat_rules.extend(eqlog.iter_rule_decl_node().map(|rule| {
         let mut flat_rule = flatten(rule, &eqlog, &identifiers);

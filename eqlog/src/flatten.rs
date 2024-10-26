@@ -95,6 +95,7 @@ fn flatten_if_arbitrary(
                 .collect();
             let age = QueryAge::All;
             stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                model: None,
                 rel,
                 args,
                 age,
@@ -171,6 +172,7 @@ fn flatten_if_fresh(
                 Ordering::Greater => QueryAge::Old,
             };
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                model: None,
                 rel,
                 args,
                 age,
@@ -199,6 +201,7 @@ fn flatten_if_fresh(
         {
             let age = QueryAge::Old;
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+                model: None,
                 rel,
                 args,
                 age,

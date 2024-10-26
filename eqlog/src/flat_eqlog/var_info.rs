@@ -113,6 +113,7 @@ pub fn relation_info_rec<'a>(
                 FlatIfStmt::Relation(rel_if_stmt) => {
                     let fixed_vars = fixed_vars.get(&ByAddress(tail)).unwrap();
                     let FlatIfStmtRelation {
+                        model: _,
                         rel: _,
                         args,
                         age: _,
