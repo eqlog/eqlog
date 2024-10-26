@@ -1687,6 +1687,7 @@ fn display_model_delta_apply_tuples_fn<'a>(
             .format("\n");
 
         writedoc! {f, "
+            #[allow(unused_variables)]
             fn apply_tuples(&mut self, model: &mut {model_name}) {{
                 {relations}
             }}
