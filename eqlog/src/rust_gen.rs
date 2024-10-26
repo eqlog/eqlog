@@ -44,6 +44,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         #[allow(unused)]
         use eqlog_runtime::Unification;
         use eqlog_runtime::tabled::{{Tabled, Table, Header, Modify, Alignment, Style, object::Segment, Extract}};
+        #[allow(unused)]
         use std::ops::Bound;
     "}
 }
