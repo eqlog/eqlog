@@ -750,25 +750,64 @@ rule var_structure {
     then el_structure(el) = structure;
 }
 
+// ### Symbol access/instantiation
+
+enum ElementType {
+    AmbientType(Type),
+    InstantiatedType(El, Type)
+}
+
+rule ambient_type_total {
+    if ty: Type;
+    then AmbientType(ty)!;
+}
+
+enum ElementTypeList {
+    NilElementTypeList(),
+    ConsElementTypeList(head: ElementType, tail: ElementTypeList),
+    SnocElementTypeList(init: ElementTypeList, last: ElementType)
+}
+
+func ambient_el_type_list(TypeList) -> ElementTypeList;
+rule ambient_el_type_list_nil {
+    if tys = NilTypeList();
+    then el_tys := NilElementTypeList()!;
+    then ambient_el_type_list(tys) = el_tys;
+}
+rule ambient_el_type_list_cons {
+    if tys = ConsTypeList(head_type, tail_types);
+    if tail_el_types = ambient_el_type_list(tail_types);
+    if head_el_type = AmbientType(head_type);
+    then el_tys := ConsElementTypeList(head_el_type, tail_el_types)!;
+    then ambient_el_type_list(tys) = el_tys;
+}
+rule ambient_el_type_list_snoc {
+    if tys = SnocTypeList(init_types, last_type);
+    if init_el_types = ambient_el_type_list(init_types);
+    if last_el_type = AmbientType(last_type);
+    then el_tys := SnocElementTypeList(init_el_types, last_el_type)!;
+    then ambient_el_type_list(tys) = el_tys;
+}
+
 // ### The types of elements
-pred el_type(El, Type);
-pred el_types(ElList, TypeList);
+pred el_type(El, ElementType);
+pred el_types(ElList, ElementTypeList);
 
 rule nil_el_types {
     if els = NilElList(_);
-    then NilTypeList()!;
-    then el_types(els, NilTypeList());
+    then tys := NilElementTypeList()!;
+    then el_types(els, tys);
 }
 rule cons_el_types {
     if els = ConsElList(head, tail);
     if el_type(head, head_type);
     if el_types(tail, tail_types);
-    then ConsTypeList(head_type, tail_types)!;
-    then el_types(els, ConsTypeList(head_type, tail_types));
+    then tys := ConsElementTypeList(head_type, tail_types)!;
+    then el_types(els, tys);
 }
 rule cons_el_types_reverse {
     if els = ConsElList(head, tail);
-    if el_types(els, ConsTypeList(head_type, tail_types));
+    if el_types(els, ConsElementTypeList(head_type, tail_types));
     then el_type(head, head_type);
     then el_types(tail, tail_types);
 }
@@ -777,20 +816,20 @@ rule snoc_el_types {
     if els = SnocElList(init, last);
     if el_types(init, init_types);
     if el_type(last, last_type);
-    then SnocTypeList(init_types, last_type)!;
-    then el_types(els, SnocTypeList(init_types, last_type));
+    then tys := SnocElementTypeList(init_types, last_type)!;
+    then el_types(els, tys);
 }
 rule snoc_el_types_reverse {
     if els = SnocElList(init, last);
-    if el_types(els, SnocTypeList(init_types, last_type));
+    if el_types(els, SnocElementTypeList(init_types, last_type));
     then el_types(init, init_types);
     then el_type(last, last_type);
 }
 
 rule rel_app_types {
     if rel_app(rel, els);
-    if arity(rel) = ar;
-    then el_types(els, ar);
+    if ambient_el_type_list(arity(rel)) = tys;
+    then el_types(els, tys);
 }
 
 // This is only used from Rust. If it's removed we need to
@@ -1725,7 +1764,7 @@ rule pred_if_atom_semantics {
 rule var_if_atom_semantics {
     if var_if_atom_node(atom, var_term, type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if typ = semantic_type(ss, type_name);
+    if typ = AmbientType(semantic_type(ss, type_name));
     if var_el = semantic_el(var_term, _);
     then el_type(var_el, typ);
 }
@@ -1827,7 +1866,7 @@ rule defined_then_should_be_given_by_ctor {
     if defined_then_atom_node(atom, _, tm);
     if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
     if el = semantic_el(tm, _);
-    if el_type(el, semantic_type(ss, ty_name));
+    if el_type(el, AmbientType(semantic_type(ss, ty_name)));
     if enum_decl(enum_decl_node, ty_name, _);
     then should_be_obtained_by_ctor(tm, enum_decl_node);
 }
@@ -1973,7 +2012,7 @@ rule match_term_type_if_cases_determine_enum {
     if enum_decl_node = cases_determined_enum(cases);
     if ss = scope_symbols(entry_scope(rule_descendant_term(match_term)));
     if enum_decl(enum_decl_node, ident, _);
-    if enum_type = semantic_type(ss, ident);
+    if enum_type = AmbientType(semantic_type(ss, ident));
     if match_el = semantic_el(match_term, _);
     then el_type(match_el, enum_type);
 }
@@ -1983,7 +2022,7 @@ rule match_term_type_if_cases_determine_enum {
 pred match_stmt_should_contain_ctor(StmtNode, CtorDeclNode);
 rule match_stmt_should_contain_ctor_defined {
     if match_stmt_node(stmt, match_term, _);
-    if el_type(semantic_el(match_term, _), enum_type);
+    if el_type(semantic_el(match_term, _), AmbientType(enum_type));
     if ss = scope_symbols(entry_scope(rule_descendant_term(match_term)));
     if semantic_type(ss, enum_ident) = enum_type;
     if enum_decl(enum_decl_node, enum_ident, _);

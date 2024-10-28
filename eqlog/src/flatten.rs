@@ -50,14 +50,16 @@ fn make_var_type_map(
     el_vars
         .iter()
         .map(|(el, var)| {
-            let local_type = el_type(*el, eqlog).unwrap();
-            (
-                *var,
-                FlatType {
-                    local_type,
-                    model: None,
-                },
-            )
+            let el_type = el_type(*el, eqlog).unwrap();
+            let local_type = match eqlog.element_type_case(el_type) {
+                ElementTypeCase::AmbientType(ty) => ty,
+                ElementTypeCase::InstantiatedType(_, _) => todo!("instantiated types"),
+            };
+            let flat_type = FlatType {
+                local_type,
+                model: None,
+            };
+            (*var, flat_type)
         })
         .collect()
 }

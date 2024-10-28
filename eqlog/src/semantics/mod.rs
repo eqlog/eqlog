@@ -199,7 +199,7 @@ pub fn iter_conflicting_type_errors<'a>(
     eqlog: &'a Eqlog,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    let mut el_type: BTreeMap<El, Type> = BTreeMap::new();
+    let mut el_type: BTreeMap<El, ElementType> = BTreeMap::new();
     eqlog
         .iter_el_type()
         .filter_map(move |(el, ty)| match el_type.entry(el) {
@@ -208,7 +208,7 @@ pub fn iter_conflicting_type_errors<'a>(
                 None
             }
             btree_map::Entry::Occupied(occupied) => {
-                if eqlog.are_equal_type(*occupied.get(), ty) {
+                if eqlog.are_equal_element_type(*occupied.get(), ty) {
                     None
                 } else {
                     Some(el)
