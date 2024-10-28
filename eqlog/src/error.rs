@@ -1,34 +1,21 @@
 use crate::grammar_util::*;
 use crate::source_display::*;
+use eqlog_eqlog::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum SymbolKindEnum {
-    Type,
-    Pred,
-    Func,
-    Rule,
-    Enum,
-    Ctor,
-    Model,
-}
-
-impl Display for SymbolKindEnum {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use SymbolKindEnum::*;
-        f.write_str(match self {
-            Type => "type",
-            Pred => "predicate",
-            Func => "function",
-            Rule => "rule",
-            Enum => "enum",
-            Ctor => "constructor",
-            Model => "model",
-        })
+fn display_symbol_kind(symbol_kind: SymbolKindCase) -> &'static str {
+    match symbol_kind {
+        SymbolKindCase::TypeSymbol() => "type",
+        SymbolKindCase::PredSymbol() => "predicate",
+        SymbolKindCase::FuncSymbol() => "function",
+        SymbolKindCase::RuleSymbol() => "rule",
+        SymbolKindCase::EnumSymbol() => "enum",
+        SymbolKindCase::CtorSymbol() => "constructor",
+        SymbolKindCase::ModelSymbol() => "model",
     }
 }
 
@@ -51,12 +38,12 @@ pub enum CompileError {
     SymbolNotCamelCase {
         name: String,
         location: Location,
-        symbol_kind: SymbolKindEnum,
+        symbol_kind: SymbolKindCase,
     },
     SymbolNotSnakeCase {
         name: String,
         location: Location,
-        symbol_kind: SymbolKindEnum,
+        symbol_kind: SymbolKindCase,
     },
     VariableNotSnakeCase {
         name: String,
@@ -82,8 +69,8 @@ pub enum CompileError {
     },
     BadSymbolKind {
         name: String,
-        expected: SymbolKindEnum,
-        found: SymbolKindEnum,
+        expected: SymbolKindCase,
+        found: SymbolKindCase,
         used_at: Location,
         declared_at: Location,
     },
@@ -326,6 +313,7 @@ impl Display for CompileErrorWithContext {
                 location,
                 symbol_kind,
             } => {
+                let symbol_kind = display_symbol_kind(*symbol_kind);
                 write!(f, "{symbol_kind} \"{name}\" is not UpperCamelCase\n")?;
                 write_loc(f, *location)?;
             }
@@ -334,6 +322,7 @@ impl Display for CompileErrorWithContext {
                 location,
                 symbol_kind,
             } => {
+                let symbol_kind = display_symbol_kind(*symbol_kind);
                 write!(f, "{symbol_kind} \"{name}\" is not lower_snake_case\n")?;
                 write_loc(f, *location)?;
             }
@@ -378,6 +367,8 @@ impl Display for CompileErrorWithContext {
                 used_at,
                 declared_at,
             } => {
+                let expected = display_symbol_kind(*expected);
+                let found = display_symbol_kind(*found);
                 write!(f, "expected {expected}, found {found} \"{name}\"\n")?;
                 write_loc(f, *used_at)?;
                 write!(f, "\"{name}\" declared as {found} here:\n")?;

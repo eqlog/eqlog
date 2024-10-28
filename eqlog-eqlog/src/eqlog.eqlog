@@ -931,22 +931,23 @@ rule rel_tuple_in_img_law {
 // This is for facilitating checks for duplicated symbols, wrong symbol types,
 // and wrong argument numbers.
 
-type SymbolKind;
-func type_symbol() -> SymbolKind;
-func pred_symbol() -> SymbolKind;
-func func_symbol() -> SymbolKind;
-func rule_symbol() -> SymbolKind;
-func enum_symbol() -> SymbolKind;
-func ctor_symbol() -> SymbolKind;
-func model_symbol() -> SymbolKind;
+enum SymbolKind {
+    TypeSymbol(),
+    PredSymbol(),
+    FuncSymbol(),
+    RuleSymbol(),
+    EnumSymbol(),
+    CtorSymbol(),
+    ModelSymbol()
+}
 rule {
-    then type_symbol()!;
-    then pred_symbol()!;
-    then func_symbol()!;
-    then rule_symbol()!;
-    then enum_symbol()!;
-    then ctor_symbol()!;
-    then model_symbol()!;
+    then TypeSymbol()!;
+    then PredSymbol()!;
+    then FuncSymbol()!;
+    then RuleSymbol()!;
+    then EnumSymbol()!;
+    then CtorSymbol()!;
+    then ModelSymbol()!;
 }
 
 // A SymbolScope represents a set of defined symbols (types, functions, preds, ... but not variables).
@@ -1124,7 +1125,7 @@ rule type_decl_defines_symbol {
     if decl_node_type(decl, type_decl);
     if type_decl(type_decl, name);
     if ss = decl_symbol_scope(decl);
-    if kind = type_symbol();
+    if kind = TypeSymbol();
     if loc = type_decl_node_loc(type_decl);
     then defined_symbol(ss, name, kind, loc);
 }
@@ -1132,7 +1133,7 @@ rule enum_decl_defines_symbol {
     if decl_node_enum(decl, enum_decl);
     if enum_decl(enum_decl, name, _);
     if ss = decl_symbol_scope(decl);
-    if kind = enum_symbol();
+    if kind = EnumSymbol();
     if loc = enum_decl_node_loc(enum_decl);
     then defined_symbol(ss, name, kind, loc);
 }
@@ -1140,7 +1141,7 @@ rule model_decl_defines_symbol {
     if decl_node_model(decl, model_decl);
     if model_decl(model_decl, name, _);
     if ss = decl_symbol_scope(decl);
-    if kind = model_symbol();
+    if kind = ModelSymbol();
     if loc = model_decl_node_loc(model_decl);
     then defined_symbol(ss, name, kind, loc);
 }
@@ -1148,7 +1149,7 @@ rule pred_decl_defines_symbol {
     if decl_node_pred(decl, pred_decl);
     if pred_decl(pred_decl, name, _);
     if ss = decl_symbol_scope(decl);
-    if kind = pred_symbol();
+    if kind = PredSymbol();
     if loc = pred_decl_node_loc(pred_decl);
     then defined_symbol(ss, name, kind, loc);
 }
@@ -1156,14 +1157,14 @@ rule func_decl_defines_symbol {
     if decl_node_func(decl, func_decl);
     if func_decl(func_decl, name, _, _);
     if ss = decl_symbol_scope(decl);
-    if kind = func_symbol();
+    if kind = FuncSymbol();
     if loc = func_decl_node_loc(func_decl);
     then defined_symbol(ss, name, kind, loc);
 }
 rule ctor_decl_defines_symbol {
     if ctor_decl(ctor, name, _);
     if ss = ctor_symbol_scope(ctor);
-    if kind  = ctor_symbol();
+    if kind  = CtorSymbol();
     if loc = ctor_decl_node_loc(ctor);
     then defined_symbol(ss, name, kind, loc);
 }
@@ -1172,7 +1173,7 @@ rule rule_decl_defines_symbol {
     if rule_decl(rul, _);
     if ss = decl_symbol_scope(decl);
     if name = rule_name(rul);
-    if kind = rule_symbol();
+    if kind = RuleSymbol();
     if loc = rule_decl_node_loc(rul);
     then defined_symbol(ss, name, kind, loc);
 }
@@ -1187,8 +1188,8 @@ pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, sco
 rule arg_decl_should_be_type {
     if arg_decl_node_type(arg_decl, name);
     if ss = arg_symbol_scope(arg_decl);
-    if type_kind = type_symbol();
-    if enum_kind = enum_symbol();
+    if type_kind = TypeSymbol();
+    if enum_kind = EnumSymbol();
     if loc = arg_decl_node_loc(arg_decl);
     then should_be_symbol_2(name, type_kind, enum_kind, ss, loc);
 }
@@ -1196,38 +1197,38 @@ rule result_should_be_type {
     if decl_node_func(decl, func_decl);
     if func_decl(func_decl, _, _, result_type);
     if scope = decl_symbol_scope(decl);
-    if type_kind = type_symbol();
-    if enum_kind = enum_symbol();
+    if type_kind = TypeSymbol();
+    if enum_kind = EnumSymbol();
     if loc = func_decl_node_loc(func_decl);
     then should_be_symbol_2(result_type, type_kind, enum_kind, scope, loc);
 }
 rule var_atom_should_be_type {
     if var_if_atom_node(atom, _, name);
     if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if type_kind = type_symbol();
-    if enum_kind = enum_symbol();
+    if type_kind = TypeSymbol();
+    if enum_kind = EnumSymbol();
     if loc = if_atom_node_loc(atom);
     then should_be_symbol_2(name, type_kind, enum_kind, scope, loc);
 }
 rule pred_if_atom_should_be_pred {
     if pred_if_atom_node(atom, pred_name, _);
     if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if kind = pred_symbol();
+    if kind = PredSymbol();
     if loc = if_atom_node_loc(atom);
     then should_be_symbol(pred_name, kind, scope, loc);
 }
 rule pred_then_atom_should_be_pred {
     if pred_then_atom_node(atom, pred_name, _);
     if scope = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
-    if kind = pred_symbol();
+    if kind = PredSymbol();
     if loc = then_atom_node_loc(atom);
     then should_be_symbol(pred_name, kind, scope, loc);
 }
 rule app_atom_should_be_func {
     if app_term_node(term, name, _);
     if scope = scope_symbols(entry_scope(rule_descendant_term(term)));
-    if func_kind = func_symbol();
-    if ctor_kind = ctor_symbol();
+    if func_kind = FuncSymbol();
+    if ctor_kind = CtorSymbol();
     if loc = term_node_loc(term);
     then should_be_symbol_2(name, func_kind, ctor_kind, scope, loc);
 }
@@ -1887,7 +1888,7 @@ rule case_pattern_app_should_be_constructor {
     if scope = scope_symbols(entry_scope(rule_descendant_match_case(match_node)));
     if app_term_node(pattern, func_name, _);
     if pattern_loc = term_node_loc(pattern);
-    if ctor_sym = ctor_symbol();
+    if ctor_sym = CtorSymbol();
     then should_be_symbol(func_name, ctor_sym, scope, pattern_loc);
 }
 rule match_case_pattern_ctor_defined {

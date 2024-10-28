@@ -296,14 +296,14 @@ pub fn iter_symbol_lookup_errors<'a>(
     // In case of multiple declared of a symbol, symbol lookup should go through if at least on
     // declaration is of the right kind. Since the SymbolDeclaredTwice error is probably the root
     // cause, it should be reported with higher preference.
-    let mut declared_symbols: BTreeMap<(SymbolScope, Ident), Vec<(SymbolKindEnum, Location)>> =
+    let mut declared_symbols: BTreeMap<(SymbolScope, Ident), Vec<(SymbolKind, Location)>> =
         BTreeMap::new();
     for (scope, name, kind, loc) in eqlog.iter_accessible_symbol() {
         let location = *locations.get(&loc).unwrap();
         declared_symbols
             .entry((scope, name))
             .or_insert(Vec::new())
-            .push((symbol_kind(kind, eqlog), location));
+            .push((kind, location));
     }
     for decls in declared_symbols.values_mut() {
         decls.sort_by_key(|(_, location)| location.1);
@@ -311,24 +311,17 @@ pub fn iter_symbol_lookup_errors<'a>(
 
     eqlog
         .iter_should_be_symbol()
-        .map(|(ident, kind, scope, loc)| (ident, vec![symbol_kind(kind, eqlog)], scope, loc))
+        .map(|(ident, kind, scope, loc)| (ident, vec![kind], scope, loc))
         .chain(
             eqlog
                 .iter_should_be_symbol_2()
-                .map(|(ident, kind1, kind2, scope, loc)| {
-                    (
-                        ident,
-                        vec![symbol_kind(kind1, eqlog), symbol_kind(kind2, eqlog)],
-                        scope,
-                        loc,
-                    )
-                }),
+                .map(|(ident, kind1, kind2, scope, loc)| (ident, vec![kind1, kind2], scope, loc)),
         )
         .filter_map(move |(ident, expected_kinds, scope, loc)| {
             let name: &str = identifiers.get(&ident).unwrap().as_str();
             let location = *locations.get(&loc).unwrap();
 
-            let decls: &[(SymbolKindEnum, Location)] = match declared_symbols.get(&(scope, ident)) {
+            let decls: &[(SymbolKind, Location)] = match declared_symbols.get(&(scope, ident)) {
                 None => {
                     return Some(CompileError::UndeclaredSymbol {
                         name: name.to_string(),
@@ -352,8 +345,8 @@ pub fn iter_symbol_lookup_errors<'a>(
                     let (decl_kind, decl_location) = decls[0];
                     Some(CompileError::BadSymbolKind {
                         name: name.to_string(),
-                        expected: primary_expected_kind,
-                        found: decl_kind,
+                        expected: eqlog.symbol_kind_case(primary_expected_kind),
+                        found: eqlog.symbol_kind_case(decl_kind),
                         used_at: location,
                         declared_at: decl_location,
                     })
@@ -418,12 +411,12 @@ pub fn iter_symbol_casing_errors<'a>(
 
             let location = *locations.get(&loc).unwrap();
 
-            let symbol_kind = symbol_kind(kind, eqlog);
+            let symbol_kind = eqlog.symbol_kind_case(kind);
             match symbol_kind {
-                SymbolKindEnum::Model
-                | SymbolKindEnum::Type
-                | SymbolKindEnum::Enum
-                | SymbolKindEnum::Ctor => {
+                SymbolKindCase::ModelSymbol()
+                | SymbolKindCase::TypeSymbol()
+                | SymbolKindCase::EnumSymbol()
+                | SymbolKindCase::CtorSymbol() => {
                     if name != name.to_case(Case::UpperCamel) {
                         return Some(CompileError::SymbolNotCamelCase {
                             name: name.to_string(),
@@ -432,7 +425,9 @@ pub fn iter_symbol_casing_errors<'a>(
                         });
                     }
                 }
-                SymbolKindEnum::Pred | SymbolKindEnum::Func | SymbolKindEnum::Rule => {
+                SymbolKindCase::PredSymbol()
+                | SymbolKindCase::FuncSymbol()
+                | SymbolKindCase::RuleSymbol() => {
                     if name != name.to_case(Case::Snake) {
                         return Some(CompileError::SymbolNotSnakeCase {
                             name: name.to_string(),

@@ -1,4 +1,4 @@
-// src-digest: 50D66BF66A3961E0B8EF7B895AF3E009BFC79E61513D3E83708A0C960E3D14EF
+// src-digest: A813B081EADDC915C75EB725D0D31B28AA285758F273712E4FDA14FC14AA9AD0
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -441,6 +441,19 @@ pub enum ElListCase {
 NilElList(Structure),
 ConsElList(El, ElList),
 SnocElList(ElList, El),
+
+}
+
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum SymbolKindCase {
+TypeSymbol(),
+PredSymbol(),
+FuncSymbol(),
+RuleSymbol(),
+EnumSymbol(),
+CtorSymbol(),
+ModelSymbol(),
 
 }
 
@@ -1037,6 +1050,17 @@ fn permute_inverse_0_1(t: (u32, u32, )) -> ArgDeclNodeType {
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = ArgDeclNodeType> {
 
 self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = ArgDeclNodeType> {
+
+self.index_old_0_1
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, ))
@@ -39811,7 +39835,7 @@ impl fmt::Display for TypeSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("type_symbol"))
+            .with(Header("TypeSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -39970,7 +39994,7 @@ impl fmt::Display for PredSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("pred_symbol"))
+            .with(Header("PredSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -40129,7 +40153,7 @@ impl fmt::Display for FuncSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("func_symbol"))
+            .with(Header("FuncSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -40288,7 +40312,7 @@ impl fmt::Display for RuleSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("rule_symbol"))
+            .with(Header("RuleSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -40447,7 +40471,7 @@ impl fmt::Display for EnumSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("enum_symbol"))
+            .with(Header("EnumSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -40606,7 +40630,7 @@ impl fmt::Display for CtorSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("ctor_symbol"))
+            .with(Header("CtorSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -40765,7 +40789,7 @@ impl fmt::Display for ModelSymbolTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("model_symbol"))
+            .with(Header("ModelSymbol"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -47553,10 +47577,6 @@ for (lhs, rhs) in self.new_morphism_equalities.iter().copied() {
     model.equate_morphism(lhs, rhs);
 }
 
-for (lhs, rhs) in self.new_symbol_kind_equalities.iter().copied() {
-    model.equate_symbol_kind(lhs, rhs);
-}
-
 for (lhs, rhs) in self.new_symbol_scope_equalities.iter().copied() {
     model.equate_symbol_scope(lhs, rhs);
 }
@@ -47575,6 +47595,10 @@ for (lhs, rhs) in self.new_rel_equalities.iter().copied() {
 
 for (lhs, rhs) in self.new_el_list_equalities.iter().copied() {
     model.equate_el_list(lhs, rhs);
+}
+
+for (lhs, rhs) in self.new_symbol_kind_equalities.iter().copied() {
+    model.equate_symbol_kind(lhs, rhs);
 }
 
 }
@@ -51593,44 +51617,6 @@ pub fn equate_morphism(&mut self, mut lhs: Morphism, mut rhs: Morphism) {
     self.morphism_new.remove(&child);
     self.morphism_uprooted.push(child);
 }
-/// Adjoins a new element of type [SymbolKind].
-#[allow(dead_code)]
-fn new_symbol_kind_internal(&mut self) -> SymbolKind {
-    let old_len = self.symbol_kind_equalities.len();
-    self.symbol_kind_equalities.increase_size_to(old_len + 1);
-    let el = SymbolKind::from(u32::try_from(old_len).unwrap());
-
-    self.symbol_kind_new.insert(el);
-
-    assert!(self.symbol_kind_weights.len() == old_len);
-    self.symbol_kind_weights.push(0);
-
-    el
-}
-/// Enforces the equality `lhs = rhs`.
-#[allow(dead_code)]
-pub fn equate_symbol_kind(&mut self, mut lhs: SymbolKind, mut rhs: SymbolKind) {
-    lhs = self.symbol_kind_equalities.root(lhs);
-    rhs = self.symbol_kind_equalities.root(rhs);
-    if lhs == rhs {
-        return;
-    }
-
-    let lhs_weight = self.symbol_kind_weights[lhs.0 as usize];
-    let rhs_weight = self.symbol_kind_weights[rhs.0 as usize];
-    let (root, child) =
-        if lhs_weight >= rhs_weight {
-            (lhs, rhs)
-        } else {
-            (rhs, lhs)
-        };
-
-    self.symbol_kind_equalities.union_roots_into(child, root);
-    
-    self.symbol_kind_old.remove(&child);
-    self.symbol_kind_new.remove(&child);
-    self.symbol_kind_uprooted.push(child);
-}
 /// Adjoins a new element of type [SymbolScope].
 #[allow(dead_code)]
 fn new_symbol_scope_internal(&mut self) -> SymbolScope {
@@ -51821,6 +51807,44 @@ pub fn equate_el_list(&mut self, mut lhs: ElList, mut rhs: ElList) {
     self.el_list_new.remove(&child);
     self.el_list_uprooted.push(child);
 }
+/// Adjoins a new element of type [SymbolKind].
+#[allow(dead_code)]
+fn new_symbol_kind_internal(&mut self) -> SymbolKind {
+    let old_len = self.symbol_kind_equalities.len();
+    self.symbol_kind_equalities.increase_size_to(old_len + 1);
+    let el = SymbolKind::from(u32::try_from(old_len).unwrap());
+
+    self.symbol_kind_new.insert(el);
+
+    assert!(self.symbol_kind_weights.len() == old_len);
+    self.symbol_kind_weights.push(0);
+
+    el
+}
+/// Enforces the equality `lhs = rhs`.
+#[allow(dead_code)]
+pub fn equate_symbol_kind(&mut self, mut lhs: SymbolKind, mut rhs: SymbolKind) {
+    lhs = self.symbol_kind_equalities.root(lhs);
+    rhs = self.symbol_kind_equalities.root(rhs);
+    if lhs == rhs {
+        return;
+    }
+
+    let lhs_weight = self.symbol_kind_weights[lhs.0 as usize];
+    let rhs_weight = self.symbol_kind_weights[rhs.0 as usize];
+    let (root, child) =
+        if lhs_weight >= rhs_weight {
+            (lhs, rhs)
+        } else {
+            (rhs, lhs)
+        };
+
+    self.symbol_kind_equalities.union_roots_into(child, root);
+    
+    self.symbol_kind_old.remove(&child);
+    self.symbol_kind_new.remove(&child);
+    self.symbol_kind_uprooted.push(child);
+}
 /// Adjoins a new element of type [Ident].
 #[allow(dead_code)]
 pub fn new_ident(&mut self) -> Ident {
@@ -51996,11 +52020,6 @@ pub fn new_el_name(&mut self) -> ElName {
 pub fn new_morphism(&mut self) -> Morphism {
     self.new_morphism_internal()
 }
-/// Adjoins a new element of type [SymbolKind].
-#[allow(dead_code)]
-pub fn new_symbol_kind(&mut self) -> SymbolKind {
-    self.new_symbol_kind_internal()
-}
 /// Adjoins a new element of type [SymbolScope].
 #[allow(dead_code)]
 pub fn new_symbol_scope(&mut self) -> SymbolScope {
@@ -52155,6 +52174,102 @@ let el = self.el_list_equalities.root_const(el);
 #[allow(dead_code)]
 pub fn el_list_case(&self, el: ElList) -> ElListCase {
     self.el_list_cases(el).next().unwrap()
+}
+/// Adjoins a new element of type [SymbolKind].
+#[allow(dead_code)]
+pub fn new_symbol_kind(&mut self, value: SymbolKindCase) -> SymbolKind {
+    match value {
+        SymbolKindCase::TypeSymbol() => {
+    self.define_type_symbol()
+}
+SymbolKindCase::PredSymbol() => {
+    self.define_pred_symbol()
+}
+SymbolKindCase::FuncSymbol() => {
+    self.define_func_symbol()
+}
+SymbolKindCase::RuleSymbol() => {
+    self.define_rule_symbol()
+}
+SymbolKindCase::EnumSymbol() => {
+    self.define_enum_symbol()
+}
+SymbolKindCase::CtorSymbol() => {
+    self.define_ctor_symbol()
+}
+SymbolKindCase::ModelSymbol() => {
+    self.define_model_symbol()
+}
+
+    }
+}
+/// Returns an iterator over ways to destructure an [SymbolKind] element.
+#[allow(dead_code)]
+pub fn symbol_kind_cases<'a>(&'a self, el: SymbolKind) -> impl 'a + Iterator<Item = SymbolKindCase> {
+let el = self.symbol_kind_equalities.root_const(el);
+#[allow(unused_parens)]
+[].into_iter().chain(self.iter_type_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::TypeSymbol())
+    } else {
+        None
+    }
+}))
+
+.chain(self.iter_pred_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::PredSymbol())
+    } else {
+        None
+    }
+}))
+
+.chain(self.iter_func_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::FuncSymbol())
+    } else {
+        None
+    }
+}))
+
+.chain(self.iter_rule_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::RuleSymbol())
+    } else {
+        None
+    }
+}))
+
+.chain(self.iter_enum_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::EnumSymbol())
+    } else {
+        None
+    }
+}))
+
+.chain(self.iter_ctor_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::CtorSymbol())
+    } else {
+        None
+    }
+}))
+
+.chain(self.iter_model_symbol().filter_map(move |(tm0)| {
+    if el == tm0 {
+        Some(SymbolKindCase::ModelSymbol())
+    } else {
+        None
+    }
+}))
+
+}
+
+/// Returns the first way to destructure an [SymbolKind] element.
+#[allow(dead_code)]
+pub fn symbol_kind_case(&self, el: SymbolKind) -> SymbolKindCase {
+    self.symbol_kind_cases(el).next().unwrap()
 }
 /// Evaluates `real_virt_ident(arg0)`.
 #[allow(dead_code)]
@@ -54353,13 +54468,13 @@ let weight2 = &mut self.el_list_weights[tm2.0 as usize];
     }
 }
 
-/// Evaluates `type_symbol()`.
+/// Evaluates `TypeSymbol()`.
 #[allow(dead_code)]
 pub fn type_symbol(&self) -> Option<SymbolKind> {
     
     self.type_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `type_symbol` constants.
+/// Returns an iterator over `TypeSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -54378,13 +54493,13 @@ pub fn insert_type_symbol(&mut self, mut tm0: SymbolKind) {
     }
 }
 
-/// Evaluates `pred_symbol()`.
+/// Evaluates `PredSymbol()`.
 #[allow(dead_code)]
 pub fn pred_symbol(&self) -> Option<SymbolKind> {
     
     self.pred_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `pred_symbol` constants.
+/// Returns an iterator over `PredSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -54403,13 +54518,13 @@ pub fn insert_pred_symbol(&mut self, mut tm0: SymbolKind) {
     }
 }
 
-/// Evaluates `func_symbol()`.
+/// Evaluates `FuncSymbol()`.
 #[allow(dead_code)]
 pub fn func_symbol(&self) -> Option<SymbolKind> {
     
     self.func_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `func_symbol` constants.
+/// Returns an iterator over `FuncSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -54428,13 +54543,13 @@ pub fn insert_func_symbol(&mut self, mut tm0: SymbolKind) {
     }
 }
 
-/// Evaluates `rule_symbol()`.
+/// Evaluates `RuleSymbol()`.
 #[allow(dead_code)]
 pub fn rule_symbol(&self) -> Option<SymbolKind> {
     
     self.rule_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `rule_symbol` constants.
+/// Returns an iterator over `RuleSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -54453,13 +54568,13 @@ pub fn insert_rule_symbol(&mut self, mut tm0: SymbolKind) {
     }
 }
 
-/// Evaluates `enum_symbol()`.
+/// Evaluates `EnumSymbol()`.
 #[allow(dead_code)]
 pub fn enum_symbol(&self) -> Option<SymbolKind> {
     
     self.enum_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `enum_symbol` constants.
+/// Returns an iterator over `EnumSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -54478,13 +54593,13 @@ pub fn insert_enum_symbol(&mut self, mut tm0: SymbolKind) {
     }
 }
 
-/// Evaluates `ctor_symbol()`.
+/// Evaluates `CtorSymbol()`.
 #[allow(dead_code)]
 pub fn ctor_symbol(&self) -> Option<SymbolKind> {
     
     self.ctor_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `ctor_symbol` constants.
+/// Returns an iterator over `CtorSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -54503,13 +54618,13 @@ pub fn insert_ctor_symbol(&mut self, mut tm0: SymbolKind) {
     }
 }
 
-/// Evaluates `model_symbol()`.
+/// Evaluates `ModelSymbol()`.
 #[allow(dead_code)]
 pub fn model_symbol(&self) -> Option<SymbolKind> {
     
     self.model_symbol.iter_all().next().map(|t| t.0)
 }
-/// Returns an iterator over `model_symbol` constants.
+/// Returns an iterator over `ModelSymbol` constants.
 /// The iterator may yield more than one element if the model is not closed.
 
 #[allow(dead_code)]
@@ -55922,90 +56037,6 @@ pub fn define_map_el(&mut self, tm0: Morphism, tm1: El) -> El {
         }
     }
 }
-/// Enforces that `type_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_type_symbol(&mut self, ) -> SymbolKind {
-    match self.type_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_type_symbol(tm0);
-            tm0
-        }
-    }
-}
-/// Enforces that `pred_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_pred_symbol(&mut self, ) -> SymbolKind {
-    match self.pred_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_pred_symbol(tm0);
-            tm0
-        }
-    }
-}
-/// Enforces that `func_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_func_symbol(&mut self, ) -> SymbolKind {
-    match self.func_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_func_symbol(tm0);
-            tm0
-        }
-    }
-}
-/// Enforces that `rule_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_rule_symbol(&mut self, ) -> SymbolKind {
-    match self.rule_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_rule_symbol(tm0);
-            tm0
-        }
-    }
-}
-/// Enforces that `enum_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_enum_symbol(&mut self, ) -> SymbolKind {
-    match self.enum_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_enum_symbol(tm0);
-            tm0
-        }
-    }
-}
-/// Enforces that `ctor_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_ctor_symbol(&mut self, ) -> SymbolKind {
-    match self.ctor_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_ctor_symbol(tm0);
-            tm0
-        }
-    }
-}
-/// Enforces that `model_symbol()` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_model_symbol(&mut self, ) -> SymbolKind {
-    match self.model_symbol() {
-        Some(result) => result,
-        None => {
-            let tm0 = self.new_symbol_kind_internal();
-            self.insert_model_symbol(tm0);
-            tm0
-        }
-    }
-}
 /// Enforces that `module_symbol_scope(tm0)` is defined, adjoining a new element if necessary.
 #[allow(dead_code)]
 pub fn define_module_symbol_scope(&mut self, tm0: ModuleNode) -> SymbolScope {
@@ -56399,6 +56430,90 @@ pub fn define_snoc_el_list(&mut self, tm0: ElList, tm1: El) -> ElList {
             let tm2 = self.new_el_list_internal();
             self.insert_snoc_el_list(tm0, tm1, tm2);
             tm2
+        }
+    }
+}
+/// Enforces that `type_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_type_symbol(&mut self, ) -> SymbolKind {
+    match self.type_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_type_symbol(tm0);
+            tm0
+        }
+    }
+}
+/// Enforces that `pred_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_pred_symbol(&mut self, ) -> SymbolKind {
+    match self.pred_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_pred_symbol(tm0);
+            tm0
+        }
+    }
+}
+/// Enforces that `func_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_func_symbol(&mut self, ) -> SymbolKind {
+    match self.func_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_func_symbol(tm0);
+            tm0
+        }
+    }
+}
+/// Enforces that `rule_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_rule_symbol(&mut self, ) -> SymbolKind {
+    match self.rule_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_rule_symbol(tm0);
+            tm0
+        }
+    }
+}
+/// Enforces that `enum_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_enum_symbol(&mut self, ) -> SymbolKind {
+    match self.enum_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_enum_symbol(tm0);
+            tm0
+        }
+    }
+}
+/// Enforces that `ctor_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_ctor_symbol(&mut self, ) -> SymbolKind {
+    match self.ctor_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_ctor_symbol(tm0);
+            tm0
+        }
+    }
+}
+/// Enforces that `model_symbol()` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_model_symbol(&mut self, ) -> SymbolKind {
+    match self.model_symbol() {
+        Some(result) => result,
+        None => {
+            let tm0 = self.new_symbol_kind_internal();
+            self.insert_model_symbol(tm0);
+            tm0
         }
     }
 }
@@ -68986,12 +69101,12 @@ self.structure_uprooted.clear();
 self.el_uprooted.clear();
 self.el_name_uprooted.clear();
 self.morphism_uprooted.clear();
-self.symbol_kind_uprooted.clear();
 self.symbol_scope_uprooted.clear();
 self.nat_uprooted.clear();
 self.type_list_uprooted.clear();
 self.rel_uprooted.clear();
 self.el_list_uprooted.clear();
+self.symbol_kind_uprooted.clear();
 }
 fn is_dirty(&self) -> bool {
     self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.type_name.is_dirty() || self.semantic_arg_types.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_pred.is_dirty() || self.pred_arity.is_dirty() || self.semantic_func.is_dirty() || self.domain.is_dirty() || self.codomain.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.func_rel.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.type_symbol.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.model_symbol.is_dirty() || self.module_symbol_scope.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_model.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_el.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.pred_new.is_empty() || !self.func_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
@@ -70324,153 +70439,6 @@ delta.new_el_list_equalities.push((tm2, tm3));
 fn implicit_functionality_63_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for TypeSymbol(tm0, ) in self.type_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for TypeSymbol(tm1, ) in self.type_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_64_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for PredSymbol(tm0, ) in self.pred_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for PredSymbol(tm1, ) in self.pred_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_65_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for FuncSymbol(tm0, ) in self.func_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for FuncSymbol(tm1, ) in self.func_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_66_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleSymbol(tm0, ) in self.rule_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for RuleSymbol(tm1, ) in self.rule_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_67_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for EnumSymbol(tm0, ) in self.enum_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for EnumSymbol(tm1, ) in self.enum_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_68_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for CtorSymbol(tm0, ) in self.ctor_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for CtorSymbol(tm1, ) in self.ctor_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_69_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for ModelSymbol(tm0, ) in self.model_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for ModelSymbol(tm1, ) in self.model_symbol.iter_all() {
-
-delta.new_symbol_kind_equalities.push((tm0, tm1));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_70_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
 for ModuleSymbolScope(tm0, tm1, ) in self.module_symbol_scope.iter_new() {
 
 #[allow(unused_variables)]
@@ -70489,7 +70457,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_71_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_64_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclSymbolScope(tm0, tm1, ) in self.decl_symbol_scope.iter_new() {
@@ -70510,7 +70478,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_72_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_65_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclsSymbolScope(tm0, tm1, ) in self.decls_symbol_scope.iter_new() {
@@ -70531,7 +70499,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_73_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_66_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ArgSymbolScope(tm0, tm1, ) in self.arg_symbol_scope.iter_new() {
@@ -70552,7 +70520,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_74_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_67_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ArgsSymbolScope(tm0, tm1, ) in self.args_symbol_scope.iter_new() {
@@ -70573,7 +70541,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_75_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_68_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbolScope(tm0, tm1, ) in self.ctor_symbol_scope.iter_new() {
@@ -70594,7 +70562,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_76_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_69_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorsSymbolScope(tm0, tm1, ) in self.ctors_symbol_scope.iter_new() {
@@ -70615,7 +70583,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_77_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_70_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelMemberSymbolScope(tm0, tm1, ) in self.model_member_symbol_scope.iter_new() {
@@ -70636,7 +70604,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_78_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_71_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeModel(tm0, tm1, ) in self.symbol_scope_model.iter_new() {
@@ -70657,7 +70625,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_79_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_72_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeName(tm0, tm1, ) in self.symbol_scope_name.iter_new() {
@@ -70678,7 +70646,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_80_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_73_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ScopeSymbols(tm0, tm1, ) in self.scope_symbols.iter_new() {
@@ -70699,7 +70667,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_81_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_74_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Zero(tm0, ) in self.zero.iter_new() {
@@ -70720,7 +70688,7 @@ delta.new_nat_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_82_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_75_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Succ(tm0, tm1, ) in self.succ.iter_new() {
@@ -70741,7 +70709,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_83_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_76_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeListLen(tm0, tm1, ) in self.type_list_len.iter_new() {
@@ -70762,7 +70730,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_84_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_77_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TermListLen(tm0, tm1, ) in self.term_list_len.iter_new() {
@@ -70783,7 +70751,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_85_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_78_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for BeforeRuleStructure(tm0, tm1, ) in self.before_rule_structure.iter_new() {
@@ -70804,7 +70772,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_86_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_79_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for IfAtomMorphism(tm0, tm1, tm2, ) in self.if_atom_morphism.iter_new() {
@@ -70825,7 +70793,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_87_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_80_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ThenAtomMorphism(tm0, tm1, tm2, ) in self.then_atom_morphism.iter_new() {
@@ -70846,7 +70814,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_88_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_81_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for BranchStmtMorphism(tm0, tm1, tm2, ) in self.branch_stmt_morphism.iter_new() {
@@ -70867,7 +70835,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_89_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_82_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MatchStmtMorphism(tm0, tm1, tm2, ) in self.match_stmt_morphism.iter_new() {
@@ -70888,7 +70856,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_90_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_83_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticName(tm0, tm1, tm2, ) in self.semantic_name.iter_new() {
@@ -70909,7 +70877,7 @@ delta.new_el_name_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_91_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_84_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticEl(tm0, tm1, tm2, ) in self.semantic_el.iter_new() {
@@ -70930,7 +70898,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_92_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_85_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticEls(tm0, tm1, tm2, ) in self.semantic_els.iter_new() {
@@ -70951,7 +70919,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_93_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_86_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for WildcardName(tm0, tm1, ) in self.wildcard_name.iter_new() {
@@ -70972,7 +70940,7 @@ delta.new_el_name_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_94_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_87_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MatchCasePatternCtor(tm0, tm1, ) in self.match_case_pattern_ctor.iter_new() {
@@ -70993,7 +70961,7 @@ delta.new_ctor_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_95_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_88_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CasesDeterminedEnum(tm0, tm1, ) in self.cases_determined_enum.iter_new() {
@@ -71014,7 +70982,7 @@ delta.new_enum_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_96_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_89_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilTypeList(tm0, ) in self.nil_type_list.iter_new() {
@@ -71035,7 +71003,7 @@ delta.new_type_list_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_97_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_90_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsTypeList(tm0, tm1, tm2, ) in self.cons_type_list.iter_new() {
@@ -71056,7 +71024,7 @@ delta.new_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_98_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_91_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocTypeList(tm0, tm1, tm2, ) in self.snoc_type_list.iter_new() {
@@ -71077,7 +71045,7 @@ delta.new_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_99_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_92_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredRel(tm0, tm1, ) in self.pred_rel.iter_new() {
@@ -71098,7 +71066,7 @@ delta.new_rel_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_100_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_93_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncRel(tm0, tm1, ) in self.func_rel.iter_new() {
@@ -71119,7 +71087,7 @@ delta.new_rel_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_101_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_94_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilElList(tm0, tm1, ) in self.nil_el_list.iter_new() {
@@ -71140,7 +71108,7 @@ delta.new_el_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_102_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_95_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsElList(tm0, tm1, tm2, ) in self.cons_el_list.iter_new() {
@@ -71161,7 +71129,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_103_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_96_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocElList(tm0, tm1, tm2, ) in self.snoc_el_list.iter_new() {
@@ -71170,6 +71138,153 @@ for SnocElList(tm0, tm1, tm2, ) in self.snoc_el_list.iter_new() {
 for SnocElList(_, _, tm3, ) in self.snoc_el_list.iter_all_0_1(tm0, tm1, ) {
 
 delta.new_el_list_equalities.push((tm2, tm3));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_97_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeSymbol(tm0, ) in self.type_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for TypeSymbol(tm1, ) in self.type_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_98_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredSymbol(tm0, ) in self.pred_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for PredSymbol(tm1, ) in self.pred_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_99_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for FuncSymbol(tm0, ) in self.func_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for FuncSymbol(tm1, ) in self.func_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_100_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleSymbol(tm0, ) in self.rule_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for RuleSymbol(tm1, ) in self.rule_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_101_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for EnumSymbol(tm0, ) in self.enum_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for EnumSymbol(tm1, ) in self.enum_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_102_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for CtorSymbol(tm0, ) in self.ctor_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for CtorSymbol(tm1, ) in self.ctor_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_103_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ModelSymbol(tm0, ) in self.model_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for ModelSymbol(tm1, ) in self.model_symbol.iter_all() {
+
+delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 
@@ -88125,10 +88240,10 @@ for _ in [()] {
 for CtorDeclNodeLoc(tm0, tm5, ) in self.ctor_decl_node_loc.iter_new() {
 
 #[allow(unused_variables)]
-for CtorSymbolScope(_, tm3, ) in self.ctor_symbol_scope.iter_old_0(tm0, ) {
+for CtorSymbol(tm4, ) in self.ctor_symbol.iter_old() {
 
 #[allow(unused_variables)]
-for CtorSymbol(tm4, ) in self.ctor_symbol.iter_old() {
+for CtorSymbolScope(_, tm3, ) in self.ctor_symbol_scope.iter_old_0(tm0, ) {
 
 #[allow(unused_variables)]
 for CtorDecl(_, tm1, tm2, ) in self.ctor_decl.iter_old_0(tm0, ) {
@@ -88440,10 +88555,10 @@ for RuleDecl(_, tm2, ) in self.rule_decl.iter_old_0(tm1, ) {
 for DeclNodeRule(tm0, _, ) in self.decl_node_rule.iter_old_1(tm1, ) {
 
 #[allow(unused_variables)]
-for DeclSymbolScope(_, tm3, ) in self.decl_symbol_scope.iter_old_0(tm0, ) {
+for RuleName(_, tm4, ) in self.rule_name.iter_old_0(tm1, ) {
 
 #[allow(unused_variables)]
-for RuleName(_, tm4, ) in self.rule_name.iter_old_0(tm1, ) {
+for DeclSymbolScope(_, tm3, ) in self.decl_symbol_scope.iter_old_0(tm0, ) {
 
 self.rule_decl_defines_symbol_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
@@ -88639,10 +88754,10 @@ for EnumSymbol(tm4, ) in self.enum_symbol.iter_new() {
 for TypeSymbol(tm3, ) in self.type_symbol.iter_old() {
 
 #[allow(unused_variables)]
-for ArgSymbolScope(tm0, tm2, ) in self.arg_symbol_scope.iter_old() {
+for ArgDeclNodeType(tm0, tm1, ) in self.arg_decl_node_type.iter_old() {
 
 #[allow(unused_variables)]
-for ArgDeclNodeType(_, tm1, ) in self.arg_decl_node_type.iter_old_0(tm0, ) {
+for ArgSymbolScope(_, tm2, ) in self.arg_symbol_scope.iter_old_0(tm0, ) {
 
 self.arg_decl_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4);
 
@@ -88688,16 +88803,16 @@ for _ in [()] {
 for ArgDeclNodeLoc(tm0, tm5, ) in self.arg_decl_node_loc.iter_new() {
 
 #[allow(unused_variables)]
-for ArgSymbolScope(_, tm2, ) in self.arg_symbol_scope.iter_old_0(tm0, ) {
+for EnumSymbol(tm4, ) in self.enum_symbol.iter_old() {
 
 #[allow(unused_variables)]
 for ArgDeclNodeType(_, tm1, ) in self.arg_decl_node_type.iter_old_0(tm0, ) {
 
 #[allow(unused_variables)]
-for TypeSymbol(tm3, ) in self.type_symbol.iter_old() {
+for ArgSymbolScope(_, tm2, ) in self.arg_symbol_scope.iter_old_0(tm0, ) {
 
 #[allow(unused_variables)]
-for EnumSymbol(tm4, ) in self.enum_symbol.iter_old() {
+for TypeSymbol(tm3, ) in self.type_symbol.iter_old() {
 
 self.arg_decl_should_be_type_15(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
