@@ -59,6 +59,10 @@ type TermListNode;
 pred nil_term_list_node(nil: TermListNode);
 pred cons_term_list_node(node: TermListNode, head: TermNode, tail: TermListNode);
 
+type TypeExprNode;
+pred ambient_type_expr(node: TypeExprNode, ty_ident: Ident);
+pred member_type_expr(node: TypeExprNode, tm: TermNode, ty_ident: Ident);
+
 type OptTermNode;
 pred none_term_node(OptTermNode);
 pred some_term_node(OptTermNode, value: TermNode);
@@ -78,7 +82,7 @@ type IfAtomNode;
 pred equal_if_atom_node(IfAtomNode, lhs: TermNode, rhs: TermNode);
 pred defined_if_atom_node(IfAtomNode, term: TermNode);
 pred pred_if_atom_node(IfAtomNode, predicate: Ident, args: TermListNode);
-pred var_if_atom_node(IfAtomNode, var: TermNode, typ: Ident);
+pred var_if_atom_node(IfAtomNode, var: TermNode, type_expr: TypeExprNode);
 
 type ThenAtomNode;
 pred equal_then_atom_node(ThenAtomNode, lhs: TermNode, rhs: TermNode);
@@ -1242,7 +1246,9 @@ rule result_should_be_type {
     then should_be_symbol_2(result_type, type_kind, enum_kind, scope, loc);
 }
 rule var_atom_should_be_type {
-    if var_if_atom_node(atom, _, name);
+    if var_if_atom_node(atom, _, type_expr);
+    // TODO: We should also handle member type exprs.
+    if ambient_type_expr(type_expr, name);
     if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if type_kind = TypeSymbol();
     if enum_kind = EnumSymbol();
@@ -1762,7 +1768,9 @@ rule pred_if_atom_semantics {
     then rel_app(rel, arg_els);
 }
 rule var_if_atom_semantics {
-    if var_if_atom_node(atom, var_term, type_name);
+    if var_if_atom_node(atom, var_term, type_expr);
+    // TODO: We should also handle member type exprs here.
+    if ambient_type_expr(type_expr, type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if typ = AmbientType(semantic_type(ss, type_name));
     if var_el = semantic_el(var_term, _);

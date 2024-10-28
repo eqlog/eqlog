@@ -79,6 +79,19 @@ Term: TermNode = {
     <application: ApplicationTerm> => application,
 }
 
+TypeExpr: TypeExprNode = {
+    <l: @L> <ty_ident: Id> <r: @R> => {
+        let node = eqlog.new_type_expr_node();
+        eqlog.insert_ambient_type_expr(node, ty_ident);
+        node
+    },
+    <l: @L> <tm: Term> "." <ty_ident: Id> <r: @R> => {
+        let node = eqlog.new_type_expr_node();
+        eqlog.insert_member_type_expr(node, tm, ty_ident);
+        node
+    },
+}
+
 ArgList: TermListNode = {
     <l: @L> "(" <args: Intersperse<Term, ",">> ")" <r: @R> => {
         let tms = term_list_node(args.as_slice(), eqlog);
@@ -116,7 +129,7 @@ IfAtom: IfAtomNode = {
 
         atom
     },
-    <l: @L> <term: Term> ":" <typ: Id> <r: @R> => {
+    <l: @L> <term: Term> ":" <typ: TypeExpr> <r: @R> => {
         let atom = eqlog.new_if_atom_node();
         eqlog.insert_var_if_atom_node(atom, term, typ);
 
