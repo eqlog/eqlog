@@ -71,6 +71,10 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
         stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType {
             var: FlatVar(0),
             age: QueryAge::All,
+            var_type: FlatType {
+                model: None,
+                local_type: ancestor_tys[0],
+            },
         })));
     }
 

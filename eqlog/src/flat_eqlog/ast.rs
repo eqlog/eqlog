@@ -39,6 +39,7 @@ pub struct FlatIfStmtRelation {
 pub struct FlatIfStmtType {
     pub var: FlatVar,
     pub age: QueryAge,
+    pub var_type: FlatType,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -112,8 +113,12 @@ impl FlatIfStmtRelation {
 
 impl FlatIfStmtType {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
-        let FlatIfStmtType { var, age: _ } = self;
-        once(*var)
+        let FlatIfStmtType {
+            var,
+            age: _,
+            var_type,
+        } = self;
+        once(*var).chain(var_type.model.into_iter())
     }
 }
 

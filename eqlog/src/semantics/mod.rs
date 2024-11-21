@@ -317,6 +317,13 @@ pub fn iter_symbol_lookup_errors<'a>(
                 .iter_should_be_symbol_2()
                 .map(|(ident, kind1, kind2, scope, loc)| (ident, vec![kind1, kind2], scope, loc)),
         )
+        .chain(
+            eqlog
+                .iter_should_be_symbol_3()
+                .map(|(ident, kind1, kind2, kind3, scope, loc)| {
+                    (ident, vec![kind1, kind2, kind3], scope, loc)
+                }),
+        )
         .filter_map(move |(ident, expected_kinds, scope, loc)| {
             let name: &str = identifiers.get(&ident).unwrap().as_str();
             let location = *locations.get(&loc).unwrap();

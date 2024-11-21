@@ -1907,58 +1907,75 @@ fn display_if_stmt_header<'a>(
                     write!(f, "tm{}, ", tm.0)?;
                 }
                 write!(f, ") {{\n")?;
-                for tm in out_projections.values().copied() {
-                    let FlatType {
-                        local_type: typ,
-                        model: _,
-                    } = *analysis.var_types.get(&tm).unwrap();
-                    if eqlog.is_model_type(typ) {
-                        let var = display_var(tm);
-                        let type_name = identifiers.get(&eqlog.type_name(typ).unwrap()).unwrap();
-                        let type_snake = type_name.to_case(Snake);
-                        let type_delta = display_symbol_scope_delta_name(
-                            eqlog.model_member_symbol_scope(typ).unwrap(),
-                            eqlog,
-                            identifiers,
-                        );
-                        writedoc! {f, "
-                            let {var}_model = self.{type_snake}_models.get(&{var}).unwrap();
-                            let {var}_delta = self.{type_snake}_deltas.entry({var}).or_insert_with(|| {type_delta}::new());
-                        "}?;
-                    }
-                }
+                //for tm in out_projections.values().copied() {
+                //    let FlatType {
+                //        local_type: typ,
+                //        model: _,
+                //    } = *analysis.var_types.get(&tm).unwrap();
+                //    if eqlog.is_model_type(typ) {
+                //        let var = display_var(tm);
+                //        let type_name = identifiers.get(&eqlog.type_name(typ).unwrap()).unwrap();
+                //        let type_snake = type_name.to_case(Snake);
+                //        let type_delta = display_symbol_scope_delta_name(
+                //            eqlog.model_member_symbol_scope(typ).unwrap(),
+                //            eqlog,
+                //            identifiers,
+                //        );
+                //        writedoc! {f, "
+                //            let {var}_model = self.{type_snake}_models.get(&{var}).unwrap();
+                //            let {var}_delta = self.{type_snake}_deltas.entry({var}).or_insert_with(|| {type_delta}::new());
+                //        "}?;
+                //    }
+                //}
             }
             FlatIfStmt::Type(type_stmt) => {
-                let FlatIfStmtType { var, age } = type_stmt;
+                let FlatIfStmtType { var, age, var_type } = type_stmt;
                 let FlatType {
                     local_type: typ,
                     model,
-                } = *analysis.var_types.get(var).unwrap();
-                if model.is_some() {
-                    todo!("model member type in type if stmt")
-                }
+                } = *var_type;
                 let type_snake = identifiers
                     .get(&eqlog.type_name(typ).unwrap())
                     .unwrap()
                     .to_case(Snake);
+                let access_expr = FmtFn(|f: &mut Formatter| {
+                    match model {
+                        Some(model) => {
+                            let FlatType {
+                                local_type: model_type,
+                                model: _,
+                            } = *analysis.var_types.get(&model).unwrap();
+                            let model_type_snake = identifiers
+                                .get(&eqlog.type_name(model_type).unwrap())
+                                .unwrap()
+                                .to_case(Snake);
+                            let model = display_var(model);
+                            write!(f, "self.{model_type_snake}_models.get(&{model}).unwrap()")?;
+                        }
+                        None => {
+                            write!(f, "self")?;
+                        }
+                    }
+                    Ok(())
+                });
                 let var = display_var(*var);
                 match age {
                     QueryAge::New => {
                         writedoc! {f, "
                             #[allow(unused_variables)]
-                            for {var} in self.{type_snake}_new.iter().copied() {{
+                            for {var} in {access_expr}.{type_snake}_new.iter().copied() {{
                         "}?;
                     }
                     QueryAge::Old => {
                         writedoc! {f, "
                             #[allow(unused_variables)]
-                            for {var} in self.{type_snake}_old.iter().copied() {{
+                            for {var} in {access_expr}.{type_snake}_old.iter().copied() {{
                         "}?;
                     }
                     QueryAge::All => {
                         writedoc! {f, "
                             #[allow(unused_variables)]
-                            for {var} in self.{type_snake}_old.iter().chain(self.{type_snake}_new.iter()).copied() {{
+                            for {var} in {access_expr}.{type_snake}_old.iter().chain({access_expr}.{type_snake}_new.iter()).copied() {{
                         "}?;
                     }
                 }
@@ -1991,29 +2008,42 @@ fn display_surj_then<'a>(
             FlatSurjThenStmt::Equal(eq_stmt) => {
                 let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
-                let FlatType {
-                    local_type: typ,
-                    model,
-                } = *analysis.var_types.get(lhs).unwrap();
+                let FlatType { local_type, model } = *analysis.var_types.get(lhs).unwrap();
+                let local_type_snake = display_type(local_type, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+
                 let delta = FmtFn(move |f: &mut Formatter| -> Result {
                     match model {
                         None => {
                             write!(f, "delta")?;
                         }
                         Some(model) => {
+                            let FlatType {
+                                local_type: model_type,
+                                model: iterated_model,
+                            } = *analysis.var_types.get(&model).unwrap();
+                            if iterated_model.is_some() {
+                                todo!("Nested model types");
+                            }
+                            let model_type_snake = display_type(model_type, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
                             let model_var = display_var(model);
-                            write!(f, "{model_var}_delta")?;
+                            write!(
+                                f,
+                                "delta.{model_type_snake}_deltas.get_mut(&{model_var}).unwrap()"
+                            )?;
                         }
                     }
                     Ok(())
                 });
-                let typ_snake = format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
                 let lhs = display_var(*lhs);
                 let rhs = display_var(*rhs);
 
                 writedoc! {f, "
-                    {delta}.new_{typ_snake}_equalities.push(({lhs}, {rhs}));
+                    {delta}.new_{local_type_snake}_equalities.push(({lhs}, {rhs}));
                 "}?;
             }
             FlatSurjThenStmt::Relation(rel_stmt) => {
@@ -2163,11 +2193,8 @@ fn display_rule_func<'a>(
             let var_name = display_var(var);
             let FlatType {
                 local_type: typ,
-                model,
+                model: _,
             } = *analysis.var_types.get(&var).unwrap();
-            if model.is_some() {
-                todo!("model member type in rule func arg")
-            }
             let type_name = display_type(typ, eqlog, identifiers);
             FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: {type_name}") })
         })

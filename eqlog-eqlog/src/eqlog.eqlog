@@ -169,6 +169,7 @@ func rule_descendant_match_case_list(MatchCaseListNode) -> RuleDescendantNode;
 func rule_descendant_stmt(StmtNode) -> RuleDescendantNode;
 func rule_descendant_stmt_list(StmtListNode) -> RuleDescendantNode;
 func rule_descendant_stmt_block_list(StmtBlockListNode) -> RuleDescendantNode;
+func rule_descendant_type_expr(TypeExprNode) -> RuleDescendantNode;
 
 rule rule_descendant_rule_total {
     if rul: RuleDeclNode;
@@ -213,6 +214,10 @@ rule rule_descendant_stmt_list_total {
 rule rule_descendant_stmt_block_list_total {
     if blocks: StmtBlockListNode;
     then rule_descendant_stmt_block_list(blocks)!;
+}
+rule rule_descendant_type_expr_total {
+    if type_expr: TypeExprNode;
+    then rule_descendant_type_expr(type_expr)!;
 }
 
 /// ### Scopes
@@ -356,11 +361,22 @@ rule scopes_if_atom_pred {
     then scope_single_child(tms_descendant, atom_descendant);
 }
 rule scopes_if_atom_var {
-    if var_if_atom_node(atom, tm, _);
+    if var_if_atom_node(atom, tm, type_expr);
     if atom_descendant = rule_descendant_if_atom(atom);
     if tm_descendant = rule_descendant_term(tm);
+    if type_expr_descendant = rule_descendant_type_expr(type_expr);
 
-    then scope_single_child(tm_descendant, atom_descendant);
+    // We don't want the newly introduced (variable) term to be in scope for
+    // the type it's supposed to have. Otherwise we'd have things like
+    // ```
+    //   if x : x.member_type;
+    // ```
+    // which is nonsensical. So that's why we can't make the entry scope of
+    // type_expr node agree with the exit scope of the term, even though
+    // syntactically the variable preceeds the type expression. The other way
+    // round makes a bit more sense, but we could also think about just not
+    // enforcing a relation between the type expr node and the variable node.
+    then scope_extension_siblings(type_expr_descendant, tm_descendant, atom_descendant);
 }
 
 rule scopes_then_atom_equal {
@@ -418,6 +434,12 @@ rule scopes_term_var {
     if tm_exit = exit_scope(tm_descendant);
 
     then var_in_scope(virt_ident, tm_exit);
+}
+rule scopes_member_type_expr {
+    if member_type_expr(type_expr, tm, _);
+    if type_expr_descendant = rule_descendant_type_expr(type_expr);
+    if tm_descendant = rule_descendant_term(tm);
+    then scope_single_child(tm_descendant, type_expr_descendant);
 }
 
 // ### The enum constructor belong to
@@ -937,13 +959,42 @@ rule map_rel_app {
 
 // Morphisms preserve and reflect types.
 rule map_preserves_el_type {
-    if el_type(el, typ);
-    if mapped_el = map_el(_, el);
-    then el_type(mapped_el, typ);
+    if el_type(el, el_typ);
+    if mapped_el = map_el(morph, el);
+    match el_typ {
+        AmbientType(typ) => {
+            then el_type(mapped_el, AmbientType(typ));
+        }
+        InstantiatedType(model_el, local_typ) => {
+            if mapped_model_el = map_el(morph, model_el);
+            then mapped_el_typ := InstantiatedType(mapped_model_el, local_typ)!;
+            then el_type(mapped_el, mapped_el_typ);
+        }
+    }
 }
 rule map_reflects_el_type {
-    if el_type(map_el(_, el), typ);
-    then el_type(el, typ);
+    if el_type(map_el(_, el), mapped_el_typ);
+    match mapped_el_typ {
+        AmbientType(typ) => {
+            then el_type(el, AmbientType(typ));
+        }
+        InstantiatedType(_, _) => {
+            // Can we say something in this case? Note that if
+            //
+            // mapped_el_typ = InstantiatedType(mapped_model_el, local_type)
+            //
+            // and map_el(morph, model_el) = mapped_model_el, then we don't want to necessarily
+            // say that el_type(Instantiatedtype(model_el, local_type). Consider the case where we
+            // have two distinct model_el that satisfy map_el(morph, model_el) = mapped_model_el,
+            // i.e. the morphisms collapses the two elements into one.
+            //
+            // What we actually want to do here, probably, is to assert that an element
+            // preimage_model_el exists in the domain that maps to model_el such that el has type
+            // InstantiatedType(preimage_model_el, typ). This would be similar to Hindley-Milner,
+            // but I'm not sure the existing machinery can deal with elements that are introduced
+            // in this way.
+        }
+    }
 }
 
 // ### Kernel pairs of morphisms.
@@ -1097,6 +1148,15 @@ rule model_symbol_scope_law {
     then symbol_scope_model(member_scope) = typ;
 }
 
+
+// The symbol scope that can be accessd via an element of model type.
+func element_member_symbol_scope(el: El) -> SymbolScope;
+rule element_member_symbol_scope_laws {
+    if el_type(el, AmbientType(ty));
+    if sym_scope = model_member_symbol_scope(ty);
+    then element_member_symbol_scope(el) = sym_scope;
+}
+
 // This is the name of the Rust struct that holds the data for symbols defined in this scope.
 func symbol_scope_name(ss: SymbolScope) -> Ident;
 // - For modules, it's derived from the file name.
@@ -1227,14 +1287,17 @@ rule rule_decl_defines_symbol {
 pred should_be_symbol(name: Ident, kind: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
 // Two kinds of symbols are allowed, with `kind_1` being the typical one.
 pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
+// Three kinds of symbols are allowed, with `kind_1` being the typical one.
+pred should_be_symbol_3(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, kind_3: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
 
 rule arg_decl_should_be_type {
     if arg_decl_node_type(arg_decl, name);
     if ss = arg_symbol_scope(arg_decl);
     if type_kind = TypeSymbol();
     if enum_kind = EnumSymbol();
+    if model_kind = ModelSymbol();
     if loc = arg_decl_node_loc(arg_decl);
-    then should_be_symbol_2(name, type_kind, enum_kind, ss, loc);
+    then should_be_symbol_3(name, type_kind, enum_kind, model_kind, ss, loc);
 }
 rule result_should_be_type {
     if decl_node_func(decl, func_decl);
@@ -1242,8 +1305,9 @@ rule result_should_be_type {
     if scope = decl_symbol_scope(decl);
     if type_kind = TypeSymbol();
     if enum_kind = EnumSymbol();
+    if model_kind = EnumSymbol();
     if loc = func_decl_node_loc(func_decl);
-    then should_be_symbol_2(result_type, type_kind, enum_kind, scope, loc);
+    then should_be_symbol_3(result_type, type_kind, enum_kind, model_kind, scope, loc);
 }
 rule var_atom_should_be_type {
     if var_if_atom_node(atom, _, type_expr);
@@ -1252,8 +1316,9 @@ rule var_atom_should_be_type {
     if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if type_kind = TypeSymbol();
     if enum_kind = EnumSymbol();
+    if model_kind = ModelSymbol();
     if loc = if_atom_node_loc(atom);
-    then should_be_symbol_2(name, type_kind, enum_kind, scope, loc);
+    then should_be_symbol_3(name, type_kind, enum_kind, model_kind, scope, loc);
 }
 rule pred_if_atom_should_be_pred {
     if pred_if_atom_node(atom, pred_name, _);
@@ -1587,6 +1652,7 @@ pred then_atom_structure(ThenAtomNode, Structure);
 pred term_structure(TermNode, Structure);
 pred terms_structure(TermListNode, Structure);
 pred opt_term_structure(OptTermNode, Structure);
+pred type_expr_structure(TypeExprNode, Structure);
 
 rule stmt_structure_morphism {
     if stmt_morphism(stmt, morph);
@@ -1628,9 +1694,10 @@ rule pred_if_atom_structure {
     then terms_structure(arg_terms, structure);
 }
 rule var_if_atom_structure {
-    if var_if_atom_node(atom, var_term, _);
+    if var_if_atom_node(atom, var_term, type_expr);
     if if_atom_structure(atom, structure);
     then term_structure(var_term, structure);
+    then type_expr_structure(type_expr, structure);
 }
 
 // #### Propagate associated structures through then atoms.
@@ -1650,6 +1717,13 @@ rule pred_then_atom_structure {
     if pred_then_atom_node(atom, _, arg_terms);
     if then_atom_structure(atom, structure);
     then terms_structure(arg_terms, structure);
+}
+
+// ### Propagate associated structure through type exprs.
+rule member_type_expr_structure {
+    if member_type_expr(type_expr, model_tm, _);
+    if type_expr_structure(type_expr, strct);
+    then term_structure(model_tm, strct);
 }
 
 // #### Propagate associated structures through terms.
@@ -1767,14 +1841,48 @@ rule pred_if_atom_semantics {
     if arg_els = semantic_els(arg_terms, _);
     then rel_app(rel, arg_els);
 }
-rule var_if_atom_semantics {
+rule var_if_atom_semantics_ambient {
     if var_if_atom_node(atom, var_term, type_expr);
     // TODO: We should also handle member type exprs here.
     if ambient_type_expr(type_expr, type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if typ = AmbientType(semantic_type(ss, type_name));
+    if el_typ = AmbientType(semantic_type(ss, type_name));
     if var_el = semantic_el(var_term, _);
-    then el_type(var_el, typ);
+    then el_type(var_el, el_typ);
+}
+rule var_if_atom_semantics_member {
+    if var_if_atom_node(_, var_term, type_expr);
+    if member_type_expr(type_expr, model_term, type_name);
+
+    if var_el = semantic_el(var_term, strct);
+    if model_el = semantic_el(model_term, strct);
+
+    if member_ss = element_member_symbol_scope(model_el);
+    if member_type = semantic_type(member_ss, type_name);
+    then el_typ := InstantiatedType(model_el, member_type)!;
+    then el_type(var_el, el_typ);
+}
+
+rule var_if_atom_should_be_member_type {
+    //if var_if_atom_node(atom, var_term, type_expr);
+    if var_if_atom_node(atom, _, type_expr);
+    if member_type_expr(type_expr, model_term, type_name);
+    // TODO: Would be better to use the location of the type expression, or even just type_name.
+    // Those locations aren't saved at the moment though.
+    if loc = if_atom_node_loc(atom);
+
+    //if var_el = semantic_el(var_term, strct);
+    if model_el = semantic_el(model_term, _);
+
+    if member_scope = element_member_symbol_scope(model_el);
+    if type_symbol = TypeSymbol();
+    if model_symbol = ModelSymbol();
+    if enum_symbol = EnumSymbol();
+
+    then should_be_symbol_3(type_name, type_symbol, model_symbol, enum_symbol, member_scope, loc);
+    //if member_type = semantic_type(member_scope, type_name);
+    //then el_typ := InstantiatedType(model_el, member_type)!;
+    //then el_type(var_el, el_typ);
 }
 
 // #### Semantics of then atoms

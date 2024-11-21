@@ -3,3 +3,20 @@ model Pointed {
 
     func pt() -> P;
 }
+
+rule pointed_reflexivity {
+    if ptd: Pointed;
+    if x: ptd.P;
+    then x = x;
+}
+
+pred is_terminal_pointed(ptd: Pointed);
+rule pointed_collapse_convoluted {
+    if ptd_0: Pointed;
+    if ptd_1: Pointed;
+    if x: ptd_0.P;
+    if y: ptd_0.P;
+    if is_terminal_pointed(ptd_0);
+    if ptd_0 = ptd_1;
+    then x = y;
+}
