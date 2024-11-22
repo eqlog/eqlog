@@ -100,6 +100,68 @@ fn display_type_struct<'a>(
     })
 }
 
+fn display_type_var_struct_and_impl<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let type_name = display_type(typ, eqlog, identifiers);
+        let member_scope = eqlog.model_member_symbol_scope(typ);
+        let lifetime_param = if member_scope.is_some() { "<'a>" } else { "" };
+        writedoc! {f, "
+            #[allow(dead_code)]
+            #[derive(Copy, Clone)]
+            pub struct {type_name}Var{lifetime_param} {{
+            var: {type_name},
+        "}?;
+
+        let member_scope = eqlog.model_member_symbol_scope(typ);
+        if let Some(member_scope) = member_scope {
+            let model_struct_name = display_symbol_scope_name(member_scope, eqlog, identifiers);
+            writedoc! {f, "
+                model: Option<&'a {model_struct_name}>,
+            "}?;
+        }
+
+        writedoc! {f, "
+            }}
+        "}?;
+
+        writedoc! {f, "
+            #[allow(dead_code)]
+            impl{lifetime_param} {type_name}Var{lifetime_param} {{
+            fn new(var: {type_name}) -> Self {{
+            Self {{
+            var,
+        "}?;
+        if let Some(_) = member_scope {
+            writedoc! {f, "
+                model: None,
+            "}?;
+        }
+        writedoc! {f, "
+            }}
+            }}
+        "}?;
+
+        if let Some(member_scope) = member_scope {
+            let model_struct_name = display_symbol_scope_name(member_scope, eqlog, identifiers);
+            writedoc! {f, "
+                fn get_model(&mut self, models: &'a BTreeMap<{type_name}, {model_struct_name}>) -> &'a {model_struct_name} {{
+                self.model.get_or_insert_with(|| models.get(&self.var).unwrap())
+                }}
+            "}?;
+        }
+
+        writedoc! {f, "
+            }}
+        "}?;
+
+        Ok(())
+    })
+}
+
 fn display_type_impl<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
@@ -2776,9 +2838,11 @@ pub fn write_module(
     for typ in eqlog.iter_type() {
         let type_struct = display_type_struct(typ, eqlog, identifiers);
         let type_impl = display_type_impl(typ, eqlog, identifiers);
+        let type_var_struct_and_impl = display_type_var_struct_and_impl(typ, eqlog, identifiers);
         writedoc! {out, "
             {type_struct}
             {type_impl}
+            {type_var_struct_and_impl}
         "}?;
     }
     write!(out, "\n")?;
