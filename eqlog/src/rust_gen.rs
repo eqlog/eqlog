@@ -100,11 +100,22 @@ fn display_type_struct<'a>(
     })
 }
 
+fn display_var_type<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let type_ident = eqlog.type_name(typ).unwrap();
+    let type_name_camel = identifiers.get(&type_ident).unwrap().to_case(UpperCamel);
+    FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{type_name_camel}Var") })
+}
+
 fn display_type_var_struct_and_impl<'a>(
     typ: Type,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    let var_type = display_var_type(typ, eqlog, identifiers);
     FmtFn(move |f: &mut Formatter| -> Result {
         let type_name = display_type(typ, eqlog, identifiers);
         let member_scope = eqlog.model_member_symbol_scope(typ);
@@ -112,7 +123,7 @@ fn display_type_var_struct_and_impl<'a>(
         writedoc! {f, "
             #[allow(dead_code)]
             #[derive(Copy, Clone)]
-            pub struct {type_name}Var{lifetime_param} {{
+            pub struct {var_type}{lifetime_param} {{
             var: {type_name},
         "}?;
 
@@ -130,7 +141,7 @@ fn display_type_var_struct_and_impl<'a>(
 
         writedoc! {f, "
             #[allow(dead_code)]
-            impl{lifetime_param} {type_name}Var{lifetime_param} {{
+            impl{lifetime_param} {var_type}{lifetime_param} {{
             fn new(var: {type_name}) -> Self {{
             Self {{
             var,
@@ -1969,26 +1980,18 @@ fn display_if_stmt_header<'a>(
                     write!(f, "tm{}, ", tm.0)?;
                 }
                 write!(f, ") {{\n")?;
-                //for tm in out_projections.values().copied() {
-                //    let FlatType {
-                //        local_type: typ,
-                //        model: _,
-                //    } = *analysis.var_types.get(&tm).unwrap();
-                //    if eqlog.is_model_type(typ) {
-                //        let var = display_var(tm);
-                //        let type_name = identifiers.get(&eqlog.type_name(typ).unwrap()).unwrap();
-                //        let type_snake = type_name.to_case(Snake);
-                //        let type_delta = display_symbol_scope_delta_name(
-                //            eqlog.model_member_symbol_scope(typ).unwrap(),
-                //            eqlog,
-                //            identifiers,
-                //        );
-                //        writedoc! {f, "
-                //            let {var}_model = self.{type_snake}_models.get(&{var}).unwrap();
-                //            let {var}_delta = self.{type_snake}_deltas.entry({var}).or_insert_with(|| {type_delta}::new());
-                //        "}?;
-                //    }
-                //}
+                for tm in out_projections.values().copied() {
+                    let var = display_var(tm);
+                    let FlatType {
+                        local_type: typ,
+                        model: _,
+                    } = *analysis.var_types.get(&tm).unwrap();
+                    let var_type = display_var_type(typ, eqlog, identifiers);
+                    writedoc! {f, "
+                        let {var} = {var_type}::new({var});
+                        let {var} = {var}.var;
+                    "}?;
+                }
             }
             FlatIfStmt::Type(type_stmt) => {
                 let FlatIfStmtType { var, age, var_type } = type_stmt;
