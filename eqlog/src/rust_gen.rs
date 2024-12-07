@@ -118,13 +118,12 @@ fn display_type_var_struct_and_impl<'a>(
     let var_type = display_var_type(typ, eqlog, identifiers);
     FmtFn(move |f: &mut Formatter| -> Result {
         let type_name = display_type(typ, eqlog, identifiers);
-        let member_scope = eqlog.model_member_symbol_scope(typ);
-        let lifetime_param = if member_scope.is_some() { "<'a>" } else { "" };
         writedoc! {f, "
             #[allow(dead_code)]
             #[derive(Copy, Clone)]
-            pub struct {var_type}{lifetime_param} {{
+            pub struct {var_type}<'a> {{
             var: {type_name},
+            phantom: std::marker::PhantomData<&'a ()>,
         "}?;
 
         let member_scope = eqlog.model_member_symbol_scope(typ);
@@ -141,10 +140,11 @@ fn display_type_var_struct_and_impl<'a>(
 
         writedoc! {f, "
             #[allow(dead_code)]
-            impl{lifetime_param} {var_type}{lifetime_param} {{
+            impl<'a> {var_type}<'a> {{
             fn new(var: {type_name}) -> Self {{
             Self {{
             var,
+            phantom: std::marker::PhantomData,
         "}?;
         if let Some(_) = member_scope {
             writedoc! {f, "
@@ -1928,7 +1928,7 @@ fn display_if_stmt_header<'a>(
                 let rhs = display_var(*rhs);
 
                 writedoc! {f, "
-                    if self.are_equal_{type_snake}({lhs}, {rhs}) {{
+                    if self.are_equal_{type_snake}({lhs}.var, {rhs}.var) {{
                 "}?;
             }
             FlatIfStmt::Relation(rel_stmt) => {
@@ -1970,14 +1970,22 @@ fn display_if_stmt_header<'a>(
                     }
                     Some(model) => {
                         let model_var = display_var(model);
-                        write!(f, ") in {model_var}_model.")?;
+                        let model_type = analysis.var_types.get(&model).unwrap();
+                        let model_type_snake =
+                            display_type(model_type.local_type, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
+                        write!(
+                            f,
+                            ") in {model_var}.get_model(&self.{model_type_snake}_models)."
+                        )?;
                     }
                 }
                 let iter_name = IterName(relation.as_str(), &query_spec);
                 write!(f, "{iter_name}")?;
                 write!(f, "(")?;
                 for tm in in_projections.values().copied() {
-                    write!(f, "tm{}, ", tm.0)?;
+                    write!(f, "tm{}.var, ", tm.0)?;
                 }
                 write!(f, ") {{\n")?;
                 for tm in out_projections.values().copied() {
@@ -1988,8 +1996,8 @@ fn display_if_stmt_header<'a>(
                     } = *analysis.var_types.get(&tm).unwrap();
                     let var_type = display_var_type(typ, eqlog, identifiers);
                     writedoc! {f, "
-                        let {var} = {var_type}::new({var});
-                        let {var} = {var}.var;
+                        #[allow(unused_mut)]
+                        let mut {var} = {var_type}::new({var});
                     "}?;
                 }
             }
@@ -2014,8 +2022,8 @@ fn display_if_stmt_header<'a>(
                                 .get(&eqlog.type_name(model_type).unwrap())
                                 .unwrap()
                                 .to_case(Snake);
-                            let model = display_var(model);
-                            write!(f, "self.{model_type_snake}_models.get(&{model}).unwrap()")?;
+                            let model_var = display_var(model);
+                            write!(f, "{model_var}.get_model(&self.{model_type_snake}_models)")?;
                         }
                         None => {
                             write!(f, "self")?;
@@ -2044,17 +2052,11 @@ fn display_if_stmt_header<'a>(
                         "}?;
                     }
                 }
-                if eqlog.is_model_type(typ) {
-                    let type_delta = display_symbol_scope_delta_name(
-                        eqlog.model_member_symbol_scope(typ).unwrap(),
-                        eqlog,
-                        identifiers,
-                    );
-                    writedoc! {f, "
-                        let {var}_model = self.{type_snake}_models.get(&{var}).unwrap();
-                        let {var}_delta = delta.{type_snake}_deltas.entry({var}).or_insert_with(|| {type_delta}::new());
-                    "}?;
-                }
+                let var_type = display_var_type(typ, eqlog, identifiers);
+                writedoc! {f, "
+                    #[allow(unused_mut)]
+                    let mut {var} = {var_type}::new({var});
+                "}?;
             }
         };
 
@@ -2097,7 +2099,7 @@ fn display_surj_then<'a>(
                             let model_var = display_var(model);
                             write!(
                                 f,
-                                "delta.{model_type_snake}_deltas.get_mut(&{model_var}).unwrap()"
+                                "delta.{model_type_snake}_deltas.get_mut(&{model_var}.var).unwrap()"
                             )?;
                         }
                     }
@@ -2108,7 +2110,7 @@ fn display_surj_then<'a>(
                 let rhs = display_var(*rhs);
 
                 writedoc! {f, "
-                    {delta}.new_{local_type_snake}_equalities.push(({lhs}, {rhs}));
+                    {delta}.new_{local_type_snake}_equalities.push(({lhs}.var, {rhs}.var));
                 "}?;
             }
             FlatSurjThenStmt::Relation(rel_stmt) => {
@@ -2120,13 +2122,14 @@ fn display_surj_then<'a>(
                 let args0 = args
                     .iter()
                     .copied()
-                    .map(|arg| display_var(arg))
+                    .map(|arg| {
+                        FmtFn(move |f: &mut Formatter| -> Result {
+                            let var = display_var(arg);
+                            write!(f, "{var}.var")
+                        })
+                    })
                     .format(", ");
-                let args1 = args
-                    .iter()
-                    .copied()
-                    .map(|arg| display_var(arg))
-                    .format(", ");
+                let args1 = args0.clone();
                 let query_spec = QuerySpec {
                     projections: (0..args.len()).collect(),
                     diagonals: BTreeSet::new(),
@@ -2165,15 +2168,25 @@ fn display_non_surj_then<'a>(
         let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
         let iter_name = IterName(relation_camel.as_str(), &eval_func_spec);
 
-        let in_args0 = func_args.iter().copied().map(display_var).format(", ");
-        let in_args1 = func_args.iter().copied().map(display_var).format(", ");
+        let in_args0 = func_args
+            .iter()
+            .copied()
+            .map(|var| {
+                let var = display_var(var);
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var}.var") })
+            })
+            .format(", ");
+        let in_args1 = in_args0.clone();
 
         let out_arg_wildcards = repeat("_, ").take(func_args.len()).format("");
         let result = display_var(*result);
 
+        let result_var_type = display_var_type(eqlog.codomain(*func).unwrap(), eqlog, identifiers);
+
         writedoc! {f, "
-            let {result} = match self.{iter_name}({in_args0}).next() {{
-                Some({relation_camel}({out_arg_wildcards} res)) => res,
+            #[allow(unused_mut)]
+            let mut {result} = match self.{iter_name}({in_args0}).next() {{
+                Some({relation_camel}({out_arg_wildcards} res)) => {result_var_type}::new(res),
                 None => {{ 
                     delta.new_{relation_snake}_def.push({relation_camel}Args({in_args1}));
                     break;
@@ -2260,8 +2273,10 @@ fn display_rule_func<'a>(
                 local_type: typ,
                 model: _,
             } = *analysis.var_types.get(&var).unwrap();
-            let type_name = display_type(typ, eqlog, identifiers);
-            FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: {type_name}") })
+            let var_type = display_var_type(typ, eqlog, identifiers);
+            FmtFn(move |f: &mut Formatter| -> Result {
+                write!(f, "mut {var_name}: {var_type}<'a>")
+            })
         })
         .format(", ");
 
@@ -2272,8 +2287,8 @@ fn display_rule_func<'a>(
 
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
-            #[allow(unused_variables)]
-            fn {rule_name}_{func_name}(&self, delta: &mut {delta_name}, {var_args}) {{
+            #[allow(unused_variables, unused_mut)]
+            fn {rule_name}_{func_name}<'a>(&'a self, delta: &mut {delta_name}, {var_args}) {{
             for _ in [()] {{
             {stmts}
             }}
