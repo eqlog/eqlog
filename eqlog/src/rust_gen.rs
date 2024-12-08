@@ -933,7 +933,7 @@ fn display_is_dirty_fn<'a>(
                 Some(FmtFn(move |f: &mut Formatter| -> Result {
                     write!(
                         f,
-                        " || !self.{type_snake}_models.values().any(|model| model.is_dirty())"
+                        " || self.{type_snake}_models.values().any(|model| model.is_dirty())"
                     )
                 }))
             })
@@ -944,7 +944,8 @@ fn display_is_dirty_fn<'a>(
                 self.empty_join_is_dirty
                     {rels_dirty}
                     {sorts_dirty}
-                    {uprooted_dirty}{nested_models_dirty}
+                    {uprooted_dirty}
+                    {nested_models_dirty}
             }}
         "}
     })
