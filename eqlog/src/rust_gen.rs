@@ -1298,6 +1298,29 @@ fn display_pub_insert_relation<'a>(
     })
 }
 
+fn display_new_model_element<'a>(
+    model_type: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let type_name = eqlog.type_name(model_type).unwrap();
+        let type_camel = identifiers.get(&type_name).unwrap().to_case(UpperCamel);
+        let type_snake = type_camel.to_case(Snake);
+
+        writedoc! {f, "
+            /// Adjoins a new element of type [{type_camel}].
+            #[allow(dead_code)]
+            pub fn new_{type_snake}(&mut self) -> {type_camel} {{
+                let el = self.new_{type_snake}_internal();
+                let model = self.{type_snake}_models.insert(el, {type_camel}Model::new());
+                el
+            }}
+        "}?;
+        Ok(())
+    })
+}
+
 fn display_new_enum_element<'a>(
     enum_type: Type,
     eqlog: &'a Eqlog,
@@ -2763,14 +2786,24 @@ fn display_type_symbol_scope_fns<'a>(
                     self.new_{type_snake}_internal()
                 }}
             "}?;
-        }
-        if eqlog.is_enum_type(typ) {
+        } else if eqlog.is_enum_type(typ) {
             let new_element_fn = display_new_enum_element(typ, eqlog, identifiers);
             let cases_fn = display_enum_cases_fn(typ, eqlog, identifiers);
             writedoc! {f, "
                 {new_element_fn}
                 {cases_fn}
             "}?;
+        } else if eqlog.is_model_type(typ) {
+            let new_fn = display_new_model_element(typ, eqlog, identifiers);
+            writedoc!(
+                f,
+                "
+                {new_fn}"
+            )?;
+        } else {
+            // TODO: Introduce an Eqlog enum, e.g. "TypeKind" so that we can replace this if/else
+            // with an exhaustive match.
+            panic!("Unexpected type");
         }
 
         Ok(())

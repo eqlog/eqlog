@@ -1,7 +1,5 @@
 model Pointed {
     type P;
-
-    func pt() -> P;
 }
 
 rule pointed_reflexivity {
