@@ -55,3 +55,46 @@ fn merge_empty_models() {
         ptd1_model as *const PointedModel
     );
 }
+
+#[test]
+fn merge_non_empty_models() {
+    let mut model = IndexedPointed::new();
+
+    let ptd0 = model.new_pointed();
+    let ptd1 = model.new_pointed();
+
+    assert!(!model.are_equal_pointed(ptd0, ptd1));
+
+    let ptd0_model = model.get_pointed_model_mut(ptd0);
+    ptd0_model.new_p();
+    let ptd1_model = model.get_pointed_model_mut(ptd1);
+    ptd1_model.new_p();
+
+    model.equate_pointed(ptd0, ptd1);
+
+    model.close();
+    assert!(model.are_equal_pointed(ptd0, ptd1));
+    assert_eq!(model.get_pointed_model(ptd0).iter_p().count(), 2);
+}
+
+#[test]
+fn merge_non_empty_models_terminal() {
+    let mut model = IndexedPointed::new();
+
+    let ptd0 = model.new_pointed();
+    model.insert_is_terminal_pointed(ptd0);
+    let ptd1 = model.new_pointed();
+
+    assert!(!model.are_equal_pointed(ptd0, ptd1));
+
+    let ptd0_model = model.get_pointed_model_mut(ptd0);
+    ptd0_model.new_p();
+    let ptd1_model = model.get_pointed_model_mut(ptd1);
+    ptd1_model.new_p();
+
+    model.equate_pointed(ptd0, ptd1);
+
+    model.close();
+    assert!(model.are_equal_pointed(ptd0, ptd1));
+    assert_eq!(model.get_pointed_model(ptd0).iter_p().count(), 1);
+}
