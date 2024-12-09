@@ -1313,8 +1313,35 @@ fn display_new_model_element<'a>(
             #[allow(dead_code)]
             pub fn new_{type_snake}(&mut self) -> {type_camel} {{
                 let el = self.new_{type_snake}_internal();
-                let model = self.{type_snake}_models.insert(el, {type_camel}Model::new());
+                self.{type_snake}_models.insert(el, {type_camel}Model::new());
                 el
+            }}
+        "}?;
+        Ok(())
+    })
+}
+
+fn display_get_model_fns<'a>(
+    model_type: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let type_name = eqlog.type_name(model_type).unwrap();
+        let type_camel = identifiers.get(&type_name).unwrap().to_case(UpperCamel);
+        let type_snake = type_camel.to_case(Snake);
+
+        writedoc! {f, "
+            #[allow(dead_code)]
+            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> &{type_camel}Model {{
+                let el = self.root_{type_snake}(el);
+                self.{type_snake}_models.get(&el).unwrap()
+            }}
+
+            #[allow(dead_code)]
+            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> &mut {type_camel}Model {{
+                let el = self.root_{type_snake}(el);
+                self.{type_snake}_models.get_mut(&el).unwrap()
             }}
         "}?;
         Ok(())
@@ -2120,11 +2147,14 @@ fn display_surj_then<'a>(
                             let model_type_snake = display_type(model_type, eqlog, identifiers)
                                 .to_string()
                                 .to_case(Snake);
+                            let model_type_camel = model_type_snake.to_case(UpperCamel);
                             let model_var = display_var(model);
-                            write!(
-                                f,
-                                "delta.{model_type_snake}_deltas.get_mut(&{model_var}.var).unwrap()"
-                            )?;
+                            writedoc! {f,
+                                "delta
+                                .{model_type_snake}_deltas
+                                .entry({model_var}.var)
+                                .or_insert_with(|| {model_type_camel}ModelDelta::new())
+                            "}?;
                         }
                     }
                     Ok(())
@@ -2134,7 +2164,9 @@ fn display_surj_then<'a>(
                 let rhs = display_var(*rhs);
 
                 writedoc! {f, "
-                    {delta}.new_{local_type_snake}_equalities.push(({lhs}.var, {rhs}.var));
+                    {delta}
+                    .new_{local_type_snake}_equalities
+                    .push(({lhs}.var, {rhs}.var));
                 "}?;
             }
             FlatSurjThenStmt::Relation(rel_stmt) => {
@@ -2795,11 +2827,11 @@ fn display_type_symbol_scope_fns<'a>(
             "}?;
         } else if eqlog.is_model_type(typ) {
             let new_fn = display_new_model_element(typ, eqlog, identifiers);
-            writedoc!(
-                f,
-                "
-                {new_fn}"
-            )?;
+            let get_model_fns = display_get_model_fns(typ, eqlog, identifiers);
+            writedoc! { f, "
+                {new_fn}
+                {get_model_fns}
+            "}?;
         } else {
             // TODO: Introduce an Eqlog enum, e.g. "TypeKind" so that we can replace this if/else
             // with an exhaustive match.
