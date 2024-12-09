@@ -951,6 +951,97 @@ fn display_is_dirty_fn<'a>(
     })
 }
 
+fn display_merge_fn<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let el_maps = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter_map(|typ| {
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                let type_camel = type_snake.to_case(UpperCamel);
+                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                    // el_map is unused for types that don't occur in relations.
+                    // TODO: We don't need to build this map for those types.
+                    writedoc! {f, "
+                        #[allow(unused)]
+                        let {type_snake}_el_map: BTreeMap<{type_camel}, {type_camel}> =
+                        other
+                        .iter_{type_snake}()
+                        .map(|other_el| {{
+                        let self_el = self.new_{type_snake}_internal();
+                        (other_el, self_el)
+                        }})
+                        .collect();
+                    "}
+                }))
+            })
+            .format("\n");
+
+        let rel_copy = iter_symbol_scope_relations(sym_scope, eqlog)
+            .map(|rel| {
+                let rel_snake = identifiers
+                    .get(&eqlog.rel_name(rel).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+                let insert_args = FmtFn(move |f| match arity.len() {
+                    0 => {
+                        write!(f, "")
+                    }
+                    1 => {
+                        let arg_type_snake = display_type(arity[0], eqlog, identifiers)
+                            .to_string()
+                            .to_case(Snake);
+                        write!(f, "*{arg_type_snake}_el_map.get(&t).unwrap()")
+                    }
+                    _ => {
+                        let args = arity
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .map(|(i, arg_type)| {
+                                FmtFn(move |f| {
+                                    let arg_type_snake = display_type(arg_type, eqlog, identifiers)
+                                        .to_string()
+                                        .to_case(Snake);
+                                    write!(f, "*{arg_type_snake}_el_map.get(&t.{i}).unwrap()")
+                                })
+                            })
+                            .format(", ");
+                        write!(f, "{args}")
+                    }
+                });
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    // The variable `t` is unused if arity.len() == 0.
+                    writedoc! {f, "
+                        #[allow(unused)]
+                        for t in other.iter_{rel_snake}() {{
+                        self.insert_{rel_snake}({insert_args});
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            pub fn merge(&mut self, other: Self) {{
+            self.empty_join_is_dirty |= other.empty_join_is_dirty;
+
+            {el_maps}
+
+            {rel_copy}
+            }}
+        "}
+    })
+}
+
 struct IterName<'a>(&'a str, &'a QuerySpec);
 
 impl<'a> Display for IterName<'a> {
@@ -1108,9 +1199,6 @@ fn display_pub_iter_fn<'a>(
 
     FmtFn(move |f: &mut Formatter| -> Result {
         let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
-        if arity.is_empty() {
-            return Ok(());
-        }
 
         let iter_item_type = match arity.as_slice() {
             [t] => {
@@ -2720,6 +2808,7 @@ fn display_symbol_scope_impl<'a>(
         let canonicalize_fn = display_canonicalize_fn(sym_scope, eqlog, identifiers);
         let drop_dirt_fn = display_drop_dirt_fn(sym_scope, eqlog, identifiers);
         let is_dirty_fn = display_is_dirty_fn(sym_scope, eqlog, identifiers);
+        let merge_fn = display_merge_fn(sym_scope, eqlog, identifiers);
 
         writedoc! {f, "
             impl {model_name} {{
@@ -2729,6 +2818,7 @@ fn display_symbol_scope_impl<'a>(
                 {drop_dirt_fn}
                 {type_fns}
                 {rel_fns}
+                {merge_fn}
             }}
         "}
     })
