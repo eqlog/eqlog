@@ -31,3 +31,27 @@ fn single_terminal_pointed() {
     let ptd_model = model.get_pointed_model(ptd);
     assert!(ptd_model.are_equal_p(a, b));
 }
+
+#[test]
+fn merge_empty_models() {
+    let mut model = IndexedPointed::new();
+
+    let ptd0 = model.new_pointed();
+    let ptd1 = model.new_pointed();
+
+    assert!(!model.are_equal_pointed(ptd0, ptd1));
+    model.equate_pointed(ptd0, ptd1);
+
+    // Check that getting models still works (i.e. doesn't panic) after equating but before
+    // closing/canonicalizing.
+    let _: &PointedModel = model.get_pointed_model(ptd0);
+    let _: &PointedModel = model.get_pointed_model(ptd1);
+
+    model.close();
+    let ptd0_model = model.get_pointed_model(ptd0);
+    let ptd1_model = model.get_pointed_model(ptd1);
+    assert_eq!(
+        ptd0_model as *const PointedModel,
+        ptd1_model as *const PointedModel
+    );
+}
