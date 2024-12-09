@@ -990,48 +990,49 @@ fn display_merge_fn<'a>(
                     .unwrap()
                     .as_str()
                     .to_case(Snake);
+                let rel_camel = rel_snake.to_case(UpperCamel);
                 let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
-                let insert_args = FmtFn(move |f| match arity.len() {
-                    0 => {
-                        write!(f, "")
-                    }
-                    1 => {
-                        let arg_type_snake = display_type(arity[0], eqlog, identifiers)
-                            .to_string()
-                            .to_case(Snake);
-                        write!(f, "*{arg_type_snake}_el_map.get(&t).unwrap()")
-                    }
-                    _ => {
-                        let args = arity
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .map(|(i, arg_type)| {
-                                FmtFn(move |f| {
-                                    let arg_type_snake = display_type(arg_type, eqlog, identifiers)
-                                        .to_string()
-                                        .to_case(Snake);
-                                    write!(f, "*{arg_type_snake}_el_map.get(&t.{i}).unwrap()")
-                                })
-                            })
-                            .format(", ");
-                        write!(f, "{args}")
-                    }
-                });
+                let arity_len = arity.len();
+
+                let apply_map_el = arity
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, arg_type)| {
+                        FmtFn(move |f| {
+                            let arg_type_snake = display_type(arg_type, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
+                            writedoc! {f, "
+                                    let t{i} =
+                                    *{arg_type_snake}_el_map.get(
+                                    &other.{arg_type_snake}_equalities.root(t{i})
+                                    ).unwrap();
+                                "}
+                        })
+                    })
+                    .format("");
+
+                let args0 = (0..arity_len)
+                    .map(|i| FmtFn(move |f| write!(f, "t{i}")))
+                    .format(", ");
+                let args1 = args0.clone();
+
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    // The variable `t` is unused if arity.len() == 0.
                     writedoc! {f, "
-                        #[allow(unused)]
-                        for t in other.iter_{rel_snake}() {{
-                        self.insert_{rel_snake}({insert_args});
+                        for {rel_camel}({args0}) in other.{rel_snake}.iter_all() {{
+                        {apply_map_el}
+                        self.insert_{rel_snake}({args1});
                         }}
                     "}
                 })
             })
             .format("\n");
 
+        // The `mut` declaration for `other` is unused in case all of the {apply_map_el} blocks are
+        // empty, i.e. if the symbol scope contains at most nullary predicates and no functions.
         writedoc! {f, "
-            pub fn merge(&mut self, other: Self) {{
+            #[allow(unused_mut)]
+            pub fn merge(&mut self, mut other: Self) {{
             self.empty_join_is_dirty |= other.empty_join_is_dirty;
 
             {el_maps}
@@ -1646,6 +1647,26 @@ fn display_canonicalize_fn<'a>(
             })
             .format("\n");
 
+        let merge_models = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter(|typ| eqlog.is_model_type(*typ))
+            .map(|typ| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    writedoc! {f, "
+                    for child in self.{type_snake}_uprooted.iter().copied() {{
+                        let root = self.{type_snake}_equalities.root(child);
+
+                        let child_model = self.{type_snake}_models.remove(&child).unwrap();
+                        let root_model = self.{type_snake}_models.get_mut(&root).unwrap();
+                        root_model.merge(child_model);
+                    }}
+                "}
+                })
+            })
+            .format("\n");
+
         let clear_uprooted_vecs = iter_symbol_scope_types(sym_scope, eqlog)
             .map(|typ| {
                 FmtFn(move |f: &mut Formatter| -> Result {
@@ -1674,6 +1695,8 @@ fn display_canonicalize_fn<'a>(
         writedoc! {f, "
             fn canonicalize(&mut self) {{
                 {rel_blocks}
+
+                {merge_models}
 
                 {clear_uprooted_vecs}
 
