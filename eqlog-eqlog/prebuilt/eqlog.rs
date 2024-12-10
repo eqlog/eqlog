@@ -1,4 +1,4 @@
-// src-digest: 5618FDA8E9C18B31036F98C051662882F57C066E5A5D41CF516C37B38DDCE84C
+// src-digest: 2AA72B7C4156BA28C657E8D90F013142DE99DD54C778B89D951B0A48D1C53C5B
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -34521,14 +34521,14 @@ fn new() -> Self {
 }
 #[allow(dead_code)]
 fn insert(&mut self, t: SemanticType) -> bool {
-if self.index_old_2_0_1.contains(&Self::permute_2_0_1(t)) {
+if self.index_old_0_1_2.contains(&Self::permute_0_1_2(t)) {
 return false;
 }
-if !self.index_new_2_0_1.insert(Self::permute_2_0_1(t)) {
+if !self.index_new_0_1_2.insert(Self::permute_0_1_2(t)) {
 return false;
 }
 
-self.index_new_0_1_2.insert(Self::permute_0_1_2(t));
+self.index_new_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_symbol_scope.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -34551,27 +34551,27 @@ true
 }
 #[allow(dead_code)]
 fn contains(&self, t: SemanticType) -> bool {
-    self.index_new_2_0_1.contains(&Self::permute_2_0_1(t))
- || self.index_old_2_0_1.contains(&Self::permute_2_0_1(t))
+    self.index_new_0_1_2.contains(&Self::permute_0_1_2(t))
+ || self.index_old_0_1_2.contains(&Self::permute_0_1_2(t))
 
 }
 fn drop_dirt(&mut self) {
 self.index_old_0_1_2.extend(
-    self.index_new_2_0_1
+    self.index_new_0_1_2
     .iter().copied()
-    .map(|t| Self::permute_0_1_2(Self::permute_inverse_2_0_1(t)))
+    .map(|t| Self::permute_0_1_2(Self::permute_inverse_0_1_2(t)))
 );
 
 self.index_old_1_2_0.extend(
-    self.index_new_2_0_1
+    self.index_new_0_1_2
     .iter().copied()
-    .map(|t| Self::permute_1_2_0(Self::permute_inverse_2_0_1(t)))
+    .map(|t| Self::permute_1_2_0(Self::permute_inverse_0_1_2(t)))
 );
 
 self.index_old_2_0_1.extend(
-    self.index_new_2_0_1
+    self.index_new_0_1_2
     .iter().copied()
-    .map(|t| Self::permute_2_0_1(Self::permute_inverse_2_0_1(t)))
+    .map(|t| Self::permute_2_0_1(Self::permute_inverse_0_1_2(t)))
 );
 
 self.index_new_0_1_2.clear();
@@ -34580,7 +34580,7 @@ self.index_new_2_0_1.clear();
 
 }
 fn is_dirty(&self) -> bool {
-    !self.index_new_2_0_1.is_empty()
+    !self.index_new_0_1_2.is_empty()
 }
 #[allow(unused)]
 fn permute_0_1_2(t: SemanticType) -> (u32, u32, u32, ) {
@@ -34609,31 +34609,49 @@ fn permute_inverse_2_0_1(t: (u32, u32, u32, )) -> SemanticType {
 #[allow(dead_code)]
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = SemanticType> {
 
-self.index_new_2_0_1
+self.index_new_0_1_2
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
+    .map(Self::permute_inverse_0_1_2)
 }
 #[allow(dead_code)]
 fn iter_all(&self, ) -> impl '_ + Iterator<Item = SemanticType> {
 
-self.index_new_2_0_1
+self.index_new_0_1_2
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_2_0_1
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: SymbolScope) -> impl '_ + Iterator<Item = SemanticType> {
+    let arg0 = arg0.0;
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
 fn iter_old_0_1(&self, arg0: SymbolScope, arg1: Ident) -> impl '_ + Iterator<Item = SemanticType> {
@@ -34671,20 +34689,20 @@ fn iter_all_0_1_2(&self, arg0: SymbolScope, arg1: Ident, arg2: Type) -> impl '_ 
     let arg0 = arg0.0;
     let arg1 = arg1.0;
     let arg2 = arg2.0;
-self.index_new_2_0_1
+self.index_new_0_1_2
     .range((
-        Bound::Included(&(arg2, arg0, arg1,  )),
-        Bound::Included(&(arg2, arg0, arg1,  ))
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_2_0_1
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
     .range((
-        Bound::Included(&(arg2, arg0, arg1,  )),
-        Bound::Included(&(arg2, arg0, arg1,  ))
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
+    .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
 fn iter_old_0_2(&self, arg0: SymbolScope, arg2: Type) -> impl '_ + Iterator<Item = SemanticType> {
@@ -34768,12 +34786,12 @@ fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<SemanticType> {
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_new_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
-        } else if self.index_old_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_old_0_1_2.remove(&Self::permute_0_1_2(t));
-self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -34792,12 +34810,12 @@ fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<SemanticTy
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_new_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
-        } else if self.index_old_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_old_0_1_2.remove(&Self::permute_0_1_2(t));
-self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -34816,12 +34834,12 @@ fn drain_with_element_type(&mut self, tm: Type) -> Vec<SemanticType> {
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_new_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
-        } else if self.index_old_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_old_0_1_2.remove(&Self::permute_0_1_2(t));
-self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -36388,14 +36406,14 @@ fn new() -> Self {
 }
 #[allow(dead_code)]
 fn insert(&mut self, t: SemanticFunc) -> bool {
-if self.index_old_2_0_1.contains(&Self::permute_2_0_1(t)) {
+if self.index_old_0_1_2.contains(&Self::permute_0_1_2(t)) {
 return false;
 }
-if !self.index_new_2_0_1.insert(Self::permute_2_0_1(t)) {
+if !self.index_new_0_1_2.insert(Self::permute_0_1_2(t)) {
 return false;
 }
 
-self.index_new_0_1_2.insert(Self::permute_0_1_2(t));
+self.index_new_2_0_1.insert(Self::permute_2_0_1(t));
 
             match self.element_index_symbol_scope.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
@@ -36418,27 +36436,27 @@ true
 }
 #[allow(dead_code)]
 fn contains(&self, t: SemanticFunc) -> bool {
-    self.index_new_2_0_1.contains(&Self::permute_2_0_1(t))
- || self.index_old_2_0_1.contains(&Self::permute_2_0_1(t))
+    self.index_new_0_1_2.contains(&Self::permute_0_1_2(t))
+ || self.index_old_0_1_2.contains(&Self::permute_0_1_2(t))
 
 }
 fn drop_dirt(&mut self) {
 self.index_old_0_1_2.extend(
-    self.index_new_2_0_1
+    self.index_new_0_1_2
     .iter().copied()
-    .map(|t| Self::permute_0_1_2(Self::permute_inverse_2_0_1(t)))
+    .map(|t| Self::permute_0_1_2(Self::permute_inverse_0_1_2(t)))
 );
 
 self.index_old_1_2_0.extend(
-    self.index_new_2_0_1
+    self.index_new_0_1_2
     .iter().copied()
-    .map(|t| Self::permute_1_2_0(Self::permute_inverse_2_0_1(t)))
+    .map(|t| Self::permute_1_2_0(Self::permute_inverse_0_1_2(t)))
 );
 
 self.index_old_2_0_1.extend(
-    self.index_new_2_0_1
+    self.index_new_0_1_2
     .iter().copied()
-    .map(|t| Self::permute_2_0_1(Self::permute_inverse_2_0_1(t)))
+    .map(|t| Self::permute_2_0_1(Self::permute_inverse_0_1_2(t)))
 );
 
 self.index_new_0_1_2.clear();
@@ -36447,7 +36465,7 @@ self.index_new_2_0_1.clear();
 
 }
 fn is_dirty(&self) -> bool {
-    !self.index_new_2_0_1.is_empty()
+    !self.index_new_0_1_2.is_empty()
 }
 #[allow(unused)]
 fn permute_0_1_2(t: SemanticFunc) -> (u32, u32, u32, ) {
@@ -36476,31 +36494,49 @@ fn permute_inverse_2_0_1(t: (u32, u32, u32, )) -> SemanticFunc {
 #[allow(dead_code)]
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = SemanticFunc> {
 
-self.index_new_2_0_1
+self.index_new_0_1_2
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
+    .map(Self::permute_inverse_0_1_2)
 }
 #[allow(dead_code)]
 fn iter_all(&self, ) -> impl '_ + Iterator<Item = SemanticFunc> {
 
-self.index_new_2_0_1
+self.index_new_0_1_2
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_2_0_1
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: SymbolScope) -> impl '_ + Iterator<Item = SemanticFunc> {
+    let arg0 = arg0.0;
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
 fn iter_old_0_1(&self, arg0: SymbolScope, arg1: Ident) -> impl '_ + Iterator<Item = SemanticFunc> {
@@ -36538,20 +36574,20 @@ fn iter_all_0_1_2(&self, arg0: SymbolScope, arg1: Ident, arg2: Func) -> impl '_ 
     let arg0 = arg0.0;
     let arg1 = arg1.0;
     let arg2 = arg2.0;
-self.index_new_2_0_1
+self.index_new_0_1_2
     .range((
-        Bound::Included(&(arg2, arg0, arg1,  )),
-        Bound::Included(&(arg2, arg0, arg1,  ))
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_2_0_1
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
     .range((
-        Bound::Included(&(arg2, arg0, arg1,  )),
-        Bound::Included(&(arg2, arg0, arg1,  ))
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
     ))
     .copied()
-    .map(Self::permute_inverse_2_0_1)
+    .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
 fn iter_all_0_2(&self, arg0: SymbolScope, arg2: Func) -> impl '_ + Iterator<Item = SemanticFunc> {
@@ -36612,12 +36648,12 @@ fn drain_with_element_func(&mut self, tm: Func) -> Vec<SemanticFunc> {
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_new_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
-        } else if self.index_old_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_old_0_1_2.remove(&Self::permute_0_1_2(t));
-self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -36636,12 +36672,12 @@ fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<SemanticFunc> {
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_new_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
-        } else if self.index_old_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_old_0_1_2.remove(&Self::permute_0_1_2(t));
-self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -36660,12 +36696,12 @@ fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<SemanticFu
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_new_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
-        } else if self.index_old_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_old_0_1_2.remove(&Self::permute_0_1_2(t));
-self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
+self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -52697,7 +52733,6 @@ self.semantic_decl_model_0(&mut delta);
 self.type_name_semantic_type_0(&mut delta);
 self.semantic_arg_types_nil_0(&mut delta);
 self.semantic_arg_types_cons_0(&mut delta);
-self.semantic_pred_scope_extension_0(&mut delta);
 self.semantic_decl_pred_0(&mut delta);
 self.semantic_decl_func_0(&mut delta);
 self.semantic_decl_ctor_0(&mut delta);
@@ -52705,6 +52740,9 @@ self.semantic_func_name_0(&mut delta);
 self.semantic_pred_name_0(&mut delta);
 self.rel_constructors_pred_total_0(&mut delta);
 self.rel_constructors_func_total_0(&mut delta);
+self.semantic_pred_scope_extension_0(&mut delta);
+self.semantic_func_scope_extension_0(&mut delta);
+self.semantic_type_scope_extension_0(&mut delta);
 self.arity_laws_0(&mut delta);
 self.el_list_cons_injective_0(&mut delta);
 self.el_list_snoc_injective_0(&mut delta);
@@ -52740,7 +52778,7 @@ self.map_reflects_el_type_0(&mut delta);
 self.in_ker_rule_0(&mut delta);
 self.el_in_img_rule_0(&mut delta);
 self.rel_tuple_in_img_law_0(&mut delta);
-self.anonymous_rule_103_0(&mut delta);
+self.anonymous_rule_105_0(&mut delta);
 self.module_symbol_scope_rule_0(&mut delta);
 self.decl_symbol_scope_total_0(&mut delta);
 self.decls_symbol_scope_total_0(&mut delta);
@@ -84420,96 +84458,6 @@ delta.new_semantic_arg_types.push(SemanticArgTypes(tm0, tm7));
 
 
 #[allow(unused_variables)]
-fn semantic_pred_scope_extension_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-self.semantic_pred_scope_extension_1(delta, );
-self.semantic_pred_scope_extension_2(delta, );
-self.semantic_pred_scope_extension_5(delta, );
-
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn semantic_pred_scope_extension_1(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-
-}
-}
-
-#[allow(unused_variables)]
-fn semantic_pred_scope_extension_2(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for SymbolScopeExtension(tm0, tm1, ) in self.symbol_scope_extension.iter_new() {
-
-self.semantic_pred_scope_extension_3(delta, tm0, tm1);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn semantic_pred_scope_extension_3(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
-for _ in [()] {
-self.semantic_pred_scope_extension_4(delta, tm0, tm1);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn semantic_pred_scope_extension_4(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
-for _ in [()] {
-#[allow(unused_variables)]
-for SemanticPred(_, tm3, tm2, ) in self.semantic_pred.iter_all_0(tm0, ) {
-
-self.semantic_pred_scope_extension_6(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn semantic_pred_scope_extension_5(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for SemanticPred(tm0, tm3, tm2, ) in self.semantic_pred.iter_new() {
-
-#[allow(unused_variables)]
-for SymbolScopeExtension(_, tm1, ) in self.symbol_scope_extension.iter_old_0(tm0, ) {
-
-self.semantic_pred_scope_extension_6(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn semantic_pred_scope_extension_6(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope, tm2: Pred, tm3: Ident) {
-for _ in [()] {
-let exists_already = self.semantic_pred.iter_all_0_1_2(tm1, tm3, tm2).next().is_some();
-if !exists_already {
-delta.new_semantic_pred.push(SemanticPred(tm1, tm3, tm2));
-}
-
-
-
-}
-}
-
-
-#[allow(unused_variables)]
 fn semantic_decl_pred_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 self.semantic_decl_pred_1(delta, );
@@ -85776,6 +85724,276 @@ self.rel_constructors_func_total_6(delta, tm0, tm1);
 #[allow(unused_variables)]
 fn rel_constructors_func_total_6(&self, delta: &mut ModelDelta, tm0: Func, tm1: Rel) {
 for _ in [()] {
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.semantic_pred_scope_extension_1(delta, );
+self.semantic_pred_scope_extension_2(delta, );
+self.semantic_pred_scope_extension_5(delta, );
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SymbolScopeExtension(tm0, tm1, ) in self.symbol_scope_extension.iter_new() {
+
+self.semantic_pred_scope_extension_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_3(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
+for _ in [()] {
+self.semantic_pred_scope_extension_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_4(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(_, tm3, tm2, ) in self.semantic_pred.iter_all_0(tm0, ) {
+
+self.semantic_pred_scope_extension_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(tm0, tm3, tm2, ) in self.semantic_pred.iter_new() {
+
+#[allow(unused_variables)]
+for SymbolScopeExtension(_, tm1, ) in self.symbol_scope_extension.iter_old_0(tm0, ) {
+
+self.semantic_pred_scope_extension_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_pred_scope_extension_6(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope, tm2: Pred, tm3: Ident) {
+for _ in [()] {
+let exists_already = self.semantic_pred.iter_all_0_1_2(tm1, tm3, tm2).next().is_some();
+if !exists_already {
+delta.new_semantic_pred.push(SemanticPred(tm1, tm3, tm2));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.semantic_func_scope_extension_1(delta, );
+self.semantic_func_scope_extension_2(delta, );
+self.semantic_func_scope_extension_5(delta, );
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SymbolScopeExtension(tm0, tm1, ) in self.symbol_scope_extension.iter_new() {
+
+self.semantic_func_scope_extension_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_3(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
+for _ in [()] {
+self.semantic_func_scope_extension_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_4(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticFunc(_, tm3, tm2, ) in self.semantic_func.iter_all_0(tm0, ) {
+
+self.semantic_func_scope_extension_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticFunc(tm0, tm3, tm2, ) in self.semantic_func.iter_new() {
+
+#[allow(unused_variables)]
+for SymbolScopeExtension(_, tm1, ) in self.symbol_scope_extension.iter_old_0(tm0, ) {
+
+self.semantic_func_scope_extension_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_func_scope_extension_6(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope, tm2: Func, tm3: Ident) {
+for _ in [()] {
+let exists_already = self.semantic_func.iter_all_0_1_2(tm1, tm3, tm2).next().is_some();
+if !exists_already {
+delta.new_semantic_func.push(SemanticFunc(tm1, tm3, tm2));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.semantic_type_scope_extension_1(delta, );
+self.semantic_type_scope_extension_2(delta, );
+self.semantic_type_scope_extension_5(delta, );
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SymbolScopeExtension(tm0, tm1, ) in self.symbol_scope_extension.iter_new() {
+
+self.semantic_type_scope_extension_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_3(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
+for _ in [()] {
+self.semantic_type_scope_extension_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_4(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticType(_, tm3, tm2, ) in self.semantic_type.iter_all_0(tm0, ) {
+
+self.semantic_type_scope_extension_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticType(tm0, tm3, tm2, ) in self.semantic_type.iter_new() {
+
+#[allow(unused_variables)]
+for SymbolScopeExtension(_, tm1, ) in self.symbol_scope_extension.iter_old_0(tm0, ) {
+
+self.semantic_type_scope_extension_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn semantic_type_scope_extension_6(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: SymbolScope, tm2: Type, tm3: Ident) {
+for _ in [()] {
+let exists_already = self.semantic_type.iter_all_0_1_2(tm1, tm3, tm2).next().is_some();
+if !exists_already {
+delta.new_semantic_type.push(SemanticType(tm1, tm3, tm2));
+}
+
+
 
 }
 }
@@ -90543,16 +90761,16 @@ delta.new_rel_tuple_in_img.push(RelTupleInImg(tm3, tm0, tm2));
 
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_0(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.anonymous_rule_103_1(delta, );
-self.anonymous_rule_103_3(delta, );
-self.anonymous_rule_103_6(delta, );
-self.anonymous_rule_103_9(delta, );
-self.anonymous_rule_103_12(delta, );
-self.anonymous_rule_103_15(delta, );
-self.anonymous_rule_103_18(delta, );
-self.anonymous_rule_103_21(delta, );
+self.anonymous_rule_105_1(delta, );
+self.anonymous_rule_105_3(delta, );
+self.anonymous_rule_105_6(delta, );
+self.anonymous_rule_105_9(delta, );
+self.anonymous_rule_105_12(delta, );
+self.anonymous_rule_105_15(delta, );
+self.anonymous_rule_105_18(delta, );
+self.anonymous_rule_105_21(delta, );
 
 
 
@@ -90566,16 +90784,16 @@ self.anonymous_rule_103_21(delta, );
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_1(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.anonymous_rule_103_2(delta, );
+self.anonymous_rule_105_2(delta, );
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_2(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_2(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 let tm0 = match self.type_symbol.iter_all().next() {
     Some(TypeSymbol( res)) => res,
@@ -90585,7 +90803,7 @@ let tm0 = match self.type_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_4(delta, tm0);
+self.anonymous_rule_105_4(delta, tm0);
 
 
 
@@ -90593,12 +90811,12 @@ self.anonymous_rule_103_4(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_3(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_3(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_new() {
 
-self.anonymous_rule_103_4(delta, tm0);
+self.anonymous_rule_105_4(delta, tm0);
 
 
 }
@@ -90607,16 +90825,16 @@ self.anonymous_rule_103_4(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+fn anonymous_rule_105_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_103_5(delta, tm0);
+self.anonymous_rule_105_5(delta, tm0);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+fn anonymous_rule_105_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
 for _ in [()] {
 let tm1 = match self.pred_symbol.iter_all().next() {
     Some(PredSymbol( res)) => res,
@@ -90626,7 +90844,7 @@ let tm1 = match self.pred_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_7(delta, tm0, tm1);
+self.anonymous_rule_105_7(delta, tm0, tm1);
 
 
 
@@ -90634,7 +90852,7 @@ self.anonymous_rule_103_7(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_6(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_6(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredSymbol(tm1, ) in self.pred_symbol.iter_new() {
@@ -90642,7 +90860,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_new() {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 
-self.anonymous_rule_103_7(delta, tm0, tm1);
+self.anonymous_rule_105_7(delta, tm0, tm1);
 
 
 }
@@ -90653,16 +90871,16 @@ self.anonymous_rule_103_7(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+fn anonymous_rule_105_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_103_8(delta, tm0, tm1);
+self.anonymous_rule_105_8(delta, tm0, tm1);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+fn anonymous_rule_105_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
 for _ in [()] {
 let tm2 = match self.func_symbol.iter_all().next() {
     Some(FuncSymbol( res)) => res,
@@ -90672,7 +90890,7 @@ let tm2 = match self.func_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_10(delta, tm0, tm1, tm2);
+self.anonymous_rule_105_10(delta, tm0, tm1, tm2);
 
 
 
@@ -90680,7 +90898,7 @@ self.anonymous_rule_103_10(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_9(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_9(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncSymbol(tm2, ) in self.func_symbol.iter_new() {
@@ -90691,7 +90909,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 
-self.anonymous_rule_103_10(delta, tm0, tm1, tm2);
+self.anonymous_rule_105_10(delta, tm0, tm1, tm2);
 
 
 }
@@ -90704,16 +90922,16 @@ self.anonymous_rule_103_10(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_10(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
+fn anonymous_rule_105_10(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_103_11(delta, tm0, tm1, tm2);
+self.anonymous_rule_105_11(delta, tm0, tm1, tm2);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_11(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
+fn anonymous_rule_105_11(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
 for _ in [()] {
 let tm3 = match self.rule_symbol.iter_all().next() {
     Some(RuleSymbol( res)) => res,
@@ -90723,7 +90941,7 @@ let tm3 = match self.rule_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_13(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_105_13(delta, tm0, tm1, tm2, tm3);
 
 
 
@@ -90731,7 +90949,7 @@ self.anonymous_rule_103_13(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_12(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_12(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleSymbol(tm3, ) in self.rule_symbol.iter_new() {
@@ -90745,7 +90963,7 @@ for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 #[allow(unused_variables)]
 for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 
-self.anonymous_rule_103_13(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_105_13(delta, tm0, tm1, tm2, tm3);
 
 
 }
@@ -90760,16 +90978,16 @@ self.anonymous_rule_103_13(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_13(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
+fn anonymous_rule_105_13(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_103_14(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_105_14(delta, tm0, tm1, tm2, tm3);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_14(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
+fn anonymous_rule_105_14(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
 for _ in [()] {
 let tm4 = match self.enum_symbol.iter_all().next() {
     Some(EnumSymbol( res)) => res,
@@ -90779,7 +90997,7 @@ let tm4 = match self.enum_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_16(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_105_16(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 
@@ -90787,7 +91005,7 @@ self.anonymous_rule_103_16(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_15(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_15(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for EnumSymbol(tm4, ) in self.enum_symbol.iter_new() {
@@ -90804,7 +91022,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 #[allow(unused_variables)]
 for FuncSymbol(tm2, ) in self.func_symbol.iter_old() {
 
-self.anonymous_rule_103_16(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_105_16(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
@@ -90821,16 +91039,16 @@ self.anonymous_rule_103_16(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_16(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
+fn anonymous_rule_105_16(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_103_17(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_105_17(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_17(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
+fn anonymous_rule_105_17(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
 for _ in [()] {
 let tm5 = match self.ctor_symbol.iter_all().next() {
     Some(CtorSymbol( res)) => res,
@@ -90840,7 +91058,7 @@ let tm5 = match self.ctor_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_105_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 
@@ -90848,7 +91066,7 @@ self.anonymous_rule_103_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_18(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_18(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbol(tm5, ) in self.ctor_symbol.iter_new() {
@@ -90868,7 +91086,7 @@ for FuncSymbol(tm2, ) in self.func_symbol.iter_old() {
 #[allow(unused_variables)]
 for RuleSymbol(tm3, ) in self.rule_symbol.iter_old() {
 
-self.anonymous_rule_103_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_105_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 }
@@ -90887,16 +91105,16 @@ self.anonymous_rule_103_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_19(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
+fn anonymous_rule_105_19(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_103_20(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_105_20(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_20(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
+fn anonymous_rule_105_20(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
 for _ in [()] {
 let tm6 = match self.model_symbol.iter_all().next() {
     Some(ModelSymbol( res)) => res,
@@ -90906,7 +91124,7 @@ let tm6 = match self.model_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_103_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.anonymous_rule_105_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
 
 
@@ -90914,7 +91132,7 @@ self.anonymous_rule_103_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_21(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_105_21(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelSymbol(tm6, ) in self.model_symbol.iter_new() {
@@ -90937,7 +91155,7 @@ for RuleSymbol(tm3, ) in self.rule_symbol.iter_old() {
 #[allow(unused_variables)]
 for EnumSymbol(tm4, ) in self.enum_symbol.iter_old() {
 
-self.anonymous_rule_103_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.anonymous_rule_105_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
 
 }
@@ -90958,7 +91176,7 @@ self.anonymous_rule_103_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_103_22(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind, tm6: SymbolKind) {
+fn anonymous_rule_105_22(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind, tm6: SymbolKind) {
 for _ in [()] {
 
 }

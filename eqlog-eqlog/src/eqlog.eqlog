@@ -627,11 +627,6 @@ rule semantic_arg_types_cons {
 type Pred;
 func semantic_pred(scope: SymbolScope, Ident) -> Pred;
 func pred_arity(Pred) -> TypeList;
-rule semantic_pred_scope_extension {
-    if symbol_scope_extension(smaller, larger);
-    if predicate = semantic_pred(smaller, ident);
-    then semantic_pred(larger, ident) = predicate;
-}
 rule semantic_decl_pred {
     if decl_node_pred(decl, pred_decl);
     if pred_decl(pred_decl, name, arg_decls);
@@ -696,6 +691,22 @@ rule rel_constructors_pred_total {
 rule rel_constructors_func_total {
     if function: Func;
     then FuncRel(function)!;
+}
+
+rule semantic_pred_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if predicate = semantic_pred(smaller, ident);
+    then semantic_pred(larger, ident) = predicate;
+}
+rule semantic_func_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if function = semantic_func(smaller, ident);
+    then semantic_func(larger, ident) = function;
+}
+rule semantic_type_scope_extension {
+    if symbol_scope_extension(smaller, larger);
+    if typ = semantic_type(smaller, ident);
+    then semantic_type(larger, ident) = typ;
 }
 
 func arity(Rel) -> TypeList;
