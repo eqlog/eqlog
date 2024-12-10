@@ -98,3 +98,19 @@ fn merge_non_empty_models_terminal() {
     assert!(model.are_equal_pointed(ptd0, ptd1));
     assert_eq!(model.get_pointed_model(ptd0).iter_p().count(), 1);
 }
+
+#[test]
+fn merge_indexed_pointed_models() {
+    let mut model0 = IndexedPointed::new();
+    let ptd0 = model0.new_pointed();
+
+    let mut model1 = IndexedPointed::new();
+    let ptd1 = model1.new_pointed();
+
+    model0.merge(model1);
+    model0.close();
+    assert_eq!(model0.iter_pointed().count(), 2,);
+    for ptd in model0.iter_pointed() {
+        assert_eq!(model0.get_pointed_model(ptd).iter_p().count(), 0);
+    }
+}

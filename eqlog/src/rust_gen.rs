@@ -1028,6 +1028,28 @@ fn display_merge_fn<'a>(
             })
             .format("\n");
 
+        let model_copy = iter_symbol_scope_types(sym_scope, eqlog)
+            .filter(|typ| eqlog.is_model_type(*typ))
+            .map(|typ| {
+                let type_snake = identifiers
+                    .get(&eqlog.type_name(typ).unwrap())
+                    .unwrap()
+                    .as_str()
+                    .to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                        for (el, model) in other.{type_snake}_models.into_iter() {{
+                        let el =
+                        *{type_snake}_el_map.get(
+                        &other.{type_snake}_equalities.root(el)
+                        ).unwrap();
+                        self.{type_snake}_models.insert(el, model);
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
+
         // The `mut` declaration for `other` is unused in case all of the {apply_map_el} blocks are
         // empty, i.e. if the symbol scope contains at most nullary predicates and no functions.
         writedoc! {f, "
@@ -1038,6 +1060,8 @@ fn display_merge_fn<'a>(
             {el_maps}
 
             {rel_copy}
+
+            {model_copy}
             }}
         "}
     })
