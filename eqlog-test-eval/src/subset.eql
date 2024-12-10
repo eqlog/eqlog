@@ -1,0 +1,5 @@
+type Carrier;
+
+model Subset {
+    pred element(c: Carrier); 
+}
