@@ -957,15 +957,19 @@ fn display_merge_fn<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let el_maps = iter_symbol_scope_types(sym_scope, eqlog)
-            .filter_map(|typ| {
+        let sym_scope_types: BTreeSet<Type> = iter_symbol_scope_types(sym_scope, eqlog).collect();
+        let sym_scope_types = &sym_scope_types;
+        let el_maps = sym_scope_types
+            .iter()
+            .copied()
+            .map(|typ| {
                 let type_snake = identifiers
                     .get(&eqlog.type_name(typ).unwrap())
                     .unwrap()
                     .as_str()
                     .to_case(Snake);
                 let type_camel = type_snake.to_case(UpperCamel);
-                Some(FmtFn(move |f: &mut Formatter| -> Result {
+                FmtFn(move |f: &mut Formatter| -> Result {
                     // el_map is unused for types that don't occur in relations.
                     // TODO: We don't need to build this map for those types.
                     writedoc! {f, "
@@ -979,7 +983,7 @@ fn display_merge_fn<'a>(
                         }})
                         .collect();
                     "}
-                }))
+                })
             })
             .format("\n");
 
@@ -1002,12 +1006,18 @@ fn display_merge_fn<'a>(
                             let arg_type_snake = display_type(arg_type, eqlog, identifiers)
                                 .to_string()
                                 .to_case(Snake);
+
                             writedoc! {f, "
-                                    let t{i} =
-                                    *{arg_type_snake}_el_map.get(
-                                    &other.{arg_type_snake}_equalities.root(t{i})
-                                    ).unwrap();
-                                "}
+                                let t{i} = other.{arg_type_snake}_equalities.root(t{i});
+                            "}?;
+                            // We only need to apply the mapping if the type is a member type (as
+                            // opposed to an ambient type).
+                            if sym_scope_types.contains(&arg_type) {
+                                writedoc! {f, "
+                                    let t{i} = *{arg_type_snake}_el_map.get(&t{i}).unwrap();
+                                "}?;
+                            }
+                            Ok(())
                         })
                     })
                     .format("");
@@ -1590,22 +1600,63 @@ fn display_enum_cases_fn<'a>(
     })
 }
 
-fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
-    let rel_snake = rel.to_case(Snake);
-    let rel_camel = rel.to_case(UpperCamel);
+fn write_canonicalize_rel_block(
+    out: &mut Formatter,
+    // The symbol scope in which the relation is defined.
+    symbol_scope: SymbolScope,
+    rel: Rel,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> Result {
+    let rel_snake = display_rel(rel, eqlog, identifiers)
+        .to_string()
+        .to_case(Snake);
+    let rel_camel = rel_snake.to_case(UpperCamel);
     let rel_camel = rel_camel.as_str();
 
-    for typ in arity.iter().copied().collect::<BTreeSet<&str>>() {
-        let type_snake = typ.to_case(Snake);
+    let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
+
+    for typ in arity.iter().copied() {
+        let type_symbol_scope = eqlog
+            .type_definition_symbol_scope(typ)
+            .expect("Every type should have been defined somehwere");
+        let type_snake = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+
+        let type_symbol_scope_var = if eqlog.are_equal_symbol_scope(type_symbol_scope, symbol_scope)
+        {
+            "self".to_string()
+        } else {
+            display_symbol_scope_name(type_symbol_scope, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake)
+        };
 
         let canonicalize_ts = arity
             .iter()
             .copied()
             .enumerate()
-            .map(|(i, typ_i)| {
-                let typ_i_snake = typ_i.to_case(Snake);
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    write!(f, "t.{i} = self.root_{typ_i_snake}(t.{i});")
+            .map(|(i, type_i)| {
+                let type_i_snake = display_type(type_i, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                let type_i_symbol_scope = eqlog
+                    .type_definition_symbol_scope(type_i)
+                    .expect("Every type should have been defined somehwere");
+                let type_i_symbol_scope_var =
+                    if eqlog.are_equal_symbol_scope(type_i_symbol_scope, symbol_scope) {
+                        "self".to_string()
+                    } else {
+                        display_symbol_scope_name(type_i_symbol_scope, eqlog, identifiers)
+                            .to_string()
+                            .to_case(Snake)
+                    };
+                FmtFn(move |f| {
+                    write!(
+                        f,
+                        "t.{i} = {type_i_symbol_scope_var}.root_{type_i_snake}(t.{i});"
+                    )
                 })
             })
             .format("\n");
@@ -1615,22 +1666,27 @@ fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) 
                 .iter()
                 .copied()
                 .enumerate()
-                .map(move |(i, typ_i)| {
-                    FmtFn(move |f: &mut Formatter| -> Result {
-                        let typ_i_snake = typ_i.to_case(Snake);
-                        writedoc! {f, "
-                            let weight{i} = &mut self.{typ_i_snake}_weights[t.{i}.0 as usize];
-                            *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
-                        "}
-                    })
-                })
+                .map(move |(i, type_i)| FmtFn(move |f| {
+                    let type_i_snake = display_type(type_i, eqlog, identifiers).to_string().to_case(Snake);
+                    let type_i_symbol_scope = eqlog.type_definition_symbol_scope(type_i).expect("Every type should have been defined somehwere");
+                    let type_i_symbol_scope_var =
+                        if eqlog.are_equal_symbol_scope(type_i_symbol_scope, symbol_scope) {
+                            "self".to_string()
+                        } else {
+                            display_symbol_scope_name(type_i_symbol_scope, eqlog, identifiers).to_string().to_case(Snake)
+                        };
+                    writedoc! {f, "
+                        let weight{i} = &mut {type_i_symbol_scope_var}.{type_i_snake}_weights[t.{i}.0 as usize];
+                        *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
+                    "}
+                }))
                 .format("\n")
         };
         let reduce_weights = adjust_weights("sub");
         let increase_weights = adjust_weights("add");
 
         writedoc! {out, "
-            for el in self.{type_snake}_uprooted.iter().copied() {{
+            for el in {type_symbol_scope_var}.{type_snake}_uprooted.iter().copied() {{
                 let ts = self.{rel_snake}.drain_with_element_{type_snake}(el);
                 for mut t in ts {{
                     {reduce_weights}
@@ -1651,23 +1707,18 @@ fn display_canonicalize_fn<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
+        let ancestor_params = iter_symbol_scope_ancestors(sym_scope, eqlog)
+            .map(|ancestor| {
+                FmtFn(move |f| {
+                    let type_name = display_symbol_scope_name(ancestor, eqlog, identifiers);
+                    let var_name = type_name.to_string().to_case(Snake);
+                    write!(f, "{var_name}: &mut {type_name}")
+                })
+            })
+            .format(", ");
         let rel_blocks = iter_symbol_scope_relations(sym_scope, eqlog)
             .map(|rel| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let arity: Vec<String> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
-                        .into_iter()
-                        .map(|typ| {
-                            let type_name = identifiers
-                                .get(&eqlog.type_name(typ).unwrap())
-                                .unwrap()
-                                .as_str();
-                            type_name.to_case(UpperCamel)
-                        })
-                        .collect();
-                    let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
-                    let relation = format!("{}", display_rel(rel, eqlog, identifiers));
-                    write_canonicalize_rel_block(f, relation.as_str(), arity.as_slice())
-                })
+                FmtFn(move |f| write_canonicalize_rel_block(f, sym_scope, rel, eqlog, identifiers))
             })
             .format("\n");
 
@@ -1705,11 +1756,23 @@ fn display_canonicalize_fn<'a>(
             .filter_map(|typ| {
                 eqlog.is_model_type(typ).then_some(())?;
                 Some(FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake =
-                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    let sym_scope_params = iter_symbol_scope_ancestors(sym_scope, eqlog)
+                        .map(|ancestor| {
+                            FmtFn(move |f| {
+                                let type_name =
+                                    display_symbol_scope_name(ancestor, eqlog, identifiers);
+                                let var_name = type_name.to_string().to_case(Snake);
+                                write!(f, ", {var_name}")
+                            })
+                        })
+                        .format("");
+
                     writedoc! {f, "
                         for model in self.{type_snake}_models.values_mut() {{
-                            model.canonicalize();
+                            model.canonicalize(self {sym_scope_params});
                         }}
                     "}
                 }))
@@ -1717,7 +1780,7 @@ fn display_canonicalize_fn<'a>(
             .format("\n");
 
         writedoc! {f, "
-            fn canonicalize(&mut self) {{
+            fn canonicalize(&mut self, {ancestor_params}) {{
                 {rel_blocks}
 
                 {merge_models}

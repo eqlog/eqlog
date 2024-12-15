@@ -1059,6 +1059,11 @@ rule {
 type SymbolScope;
 
 pred symbol_scope_extension(smaller: SymbolScope, larger: SymbolScope);
+func symbol_scope_parent(larger: SymbolScope) -> SymbolScope;
+rule symbol_scope_extension_parent {
+    if symbol_scope_extension(base, ext);
+    then symbol_scope_parent(ext) = base;
+}
 
 func module_symbol_scope(module: ModuleNode) -> SymbolScope;
 func decl_symbol_scope(node: DeclNode) -> SymbolScope;
@@ -1219,6 +1224,7 @@ rule rule_symbol_scope {
 
 // A predicate tracking which symbols have are defined in a symbol scope.
 pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
+func type_definition_symbol_scope(typ: Type) -> SymbolScope;
 
 // A predicate tracking which symbols have are accessible in a symbols scope.
 // At the moment, symbols are accessible if they're declared in the same
@@ -1258,6 +1264,11 @@ rule model_decl_defines_symbol {
     if kind = ModelSymbol();
     if loc = model_decl_node_loc(model_decl);
     then defined_symbol(ss, name, kind, loc);
+}
+rule type_definition_symbol_scope_rule {
+    if ty = semantic_type(ss, ident);
+    if defined_symbol(ss, ident, _, _);
+    then type_definition_symbol_scope(ty) = ss;
 }
 rule pred_decl_defines_symbol {
     if decl_node_pred(decl, pred_decl);

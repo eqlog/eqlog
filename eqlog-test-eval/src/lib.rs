@@ -23,6 +23,7 @@ eqlog_mod!(triple_join);
 eqlog_mod!(int);
 eqlog_mod!(indexed_pointed);
 eqlog_mod!(empty);
+eqlog_mod!(subset);
 
 mod category_mod;
 #[cfg(test)]
@@ -60,5 +61,7 @@ mod poset_test;
 mod product_category_test;
 #[cfg(test)]
 mod semilattice_test;
+#[cfg(test)]
+mod subset_test;
 #[cfg(test)]
 mod trans_refl_test;

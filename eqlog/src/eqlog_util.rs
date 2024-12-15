@@ -491,3 +491,12 @@ pub fn iter_symbol_scope_relations<'a>(
             None
         })
 }
+
+pub fn iter_symbol_scope_ancestors<'a>(
+    symbol_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+) -> impl 'a + Iterator<Item = SymbolScope> {
+    successors(eqlog.symbol_scope_parent(symbol_scope), |&sym_scope| {
+        eqlog.symbol_scope_parent(sym_scope)
+    })
+}
