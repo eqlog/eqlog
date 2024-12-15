@@ -1770,10 +1770,16 @@ fn display_canonicalize_fn<'a>(
                         })
                         .format("");
 
+                    // TODO: We need to to the swapping here because we can't borrow self mutably.
+                    // It'd be better if we didn't have to pass through all of `self` but instead
+                    // only those parts that are needed.
                     writedoc! {f, "
-                        for model in self.{type_snake}_models.values_mut() {{
+                        let mut models_map = BTreeMap::new();
+                        std::mem::swap(&mut models_map, &mut self.{type_snake}_models);
+                        for model in models_map.values_mut() {{
                             model.canonicalize(self {sym_scope_params});
                         }}
+                        std::mem::swap(&mut models_map, &mut self.{type_snake}_models);
                     "}
                 }))
             })
@@ -2896,7 +2902,12 @@ fn display_symbol_scope_struct<'a>(
             {relation_fields}
             {type_fields}
             empty_join_is_dirty: bool,
-        }}"}
+            }}
+
+            pub struct {model_name}Ref<'a> {{
+                model: &'a {model_name},
+            }}
+        "}
     })
 }
 
