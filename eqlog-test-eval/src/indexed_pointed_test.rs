@@ -22,10 +22,11 @@ fn single_terminal_pointed() {
     let ptd = model.new_pointed();
     model.insert_is_subterminal_pointed(ptd);
 
-    let ptd_model = model.get_pointed_model_mut(ptd);
+    let mut ptd_model = model.get_pointed_model_mut(ptd);
     let a = ptd_model.new_p();
     let b = ptd_model.new_p();
     assert!(!ptd_model.are_equal_p(a, b));
+    drop(ptd_model);
     model.close();
 
     let ptd_model = model.get_pointed_model(ptd);
@@ -44,15 +45,15 @@ fn merge_empty_models() {
 
     // Check that getting models still works (i.e. doesn't panic) after equating but before
     // closing/canonicalizing.
-    let _: &PointedModel = model.get_pointed_model(ptd0);
-    let _: &PointedModel = model.get_pointed_model(ptd1);
+    let _ = model.get_pointed_model(ptd0);
+    let _ = model.get_pointed_model(ptd1);
 
     model.close();
     let ptd0_model = model.get_pointed_model(ptd0);
     let ptd1_model = model.get_pointed_model(ptd1);
     assert_eq!(
-        ptd0_model as *const PointedModel,
-        ptd1_model as *const PointedModel
+        &*ptd0_model as *const PointedModel,
+        &*ptd1_model as *const PointedModel
     );
 }
 
@@ -65,10 +66,12 @@ fn merge_non_empty_models() {
 
     assert!(!model.are_equal_pointed(ptd0, ptd1));
 
-    let ptd0_model = model.get_pointed_model_mut(ptd0);
+    let mut ptd0_model = model.get_pointed_model_mut(ptd0);
     ptd0_model.new_p();
-    let ptd1_model = model.get_pointed_model_mut(ptd1);
+    drop(ptd0_model);
+    let mut ptd1_model = model.get_pointed_model_mut(ptd1);
     ptd1_model.new_p();
+    drop(ptd1_model);
 
     model.equate_pointed(ptd0, ptd1);
 
@@ -87,10 +90,12 @@ fn merge_non_empty_models_terminal() {
 
     assert!(!model.are_equal_pointed(ptd0, ptd1));
 
-    let ptd0_model = model.get_pointed_model_mut(ptd0);
+    let mut ptd0_model = model.get_pointed_model_mut(ptd0);
     ptd0_model.new_p();
-    let ptd1_model = model.get_pointed_model_mut(ptd1);
+    drop(ptd0_model);
+    let mut ptd1_model = model.get_pointed_model_mut(ptd1);
     ptd1_model.new_p();
+    drop(ptd1_model);
 
     model.equate_pointed(ptd0, ptd1);
 
@@ -109,10 +114,12 @@ fn merge_non_empty_models_with_pt() {
 
     assert!(!model.are_equal_pointed(ptd0, ptd1));
 
-    let ptd0_model = model.get_pointed_model_mut(ptd0);
+    let mut ptd0_model = model.get_pointed_model_mut(ptd0);
     ptd0_model.define_pt();
-    let ptd1_model = model.get_pointed_model_mut(ptd1);
+    drop(ptd0_model);
+    let mut ptd1_model = model.get_pointed_model_mut(ptd1);
     ptd1_model.define_pt();
+    drop(ptd1_model);
 
     model.equate_pointed(ptd0, ptd1);
 

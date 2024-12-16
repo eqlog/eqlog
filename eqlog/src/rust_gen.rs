@@ -82,6 +82,8 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         use eqlog_runtime::Unification;
         #[allow(unused)]
         use std::ops::Bound;
+        #[allow(unused)]
+        use std::cell::RefCell;
     "}
 }
 
@@ -130,7 +132,7 @@ fn display_type_var_struct_and_impl<'a>(
         if let Some(member_scope) = member_scope {
             let model_struct_name = display_symbol_scope_name(member_scope, eqlog, identifiers);
             writedoc! {f, "
-                model: Option<&'a {model_struct_name}>,
+                model: Option<&'a RefCell<{model_struct_name}>>,
             "}?;
         }
 
@@ -159,8 +161,9 @@ fn display_type_var_struct_and_impl<'a>(
         if let Some(member_scope) = member_scope {
             let model_struct_name = display_symbol_scope_name(member_scope, eqlog, identifiers);
             writedoc! {f, "
-                fn get_model(&mut self, models: &'a BTreeMap<{type_name}, {model_struct_name}>) -> &'a {model_struct_name} {{
-                self.model.get_or_insert_with(|| models.get(&self.var).unwrap())
+                fn get_model(&mut self, models: &'a BTreeMap<{type_name}, RefCell<{model_struct_name}>>) -> std::cell::Ref<'a, {model_struct_name}> {{
+                let ref_cell = self.model.get_or_insert_with(|| models.get(&self.var).unwrap());
+                ref_cell.borrow()
                 }}
             "}?;
         }
@@ -933,7 +936,7 @@ fn display_is_dirty_fn<'a>(
                 Some(FmtFn(move |f: &mut Formatter| -> Result {
                     write!(
                         f,
-                        " || self.{type_snake}_models.values().any(|model| model.is_dirty())"
+                        " || self.{type_snake}_models.values().any(|model| model.borrow().is_dirty())"
                     )
                 }))
             })
@@ -1436,7 +1439,7 @@ fn display_new_model_element<'a>(
             #[allow(dead_code)]
             pub fn new_{type_snake}(&mut self) -> {type_camel} {{
                 let el = self.new_{type_snake}_internal();
-                self.{type_snake}_models.insert(el, {type_camel}Model::new());
+                self.{type_snake}_models.insert(el, RefCell::new({type_camel}Model::new()));
                 el
             }}
         "}?;
@@ -1456,15 +1459,15 @@ fn display_get_model_fns<'a>(
 
         writedoc! {f, "
             #[allow(dead_code)]
-            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> &{type_camel}Model {{
+            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> std::cell::Ref<{type_camel}Model> {{
                 let el = self.root_{type_snake}(el);
-                self.{type_snake}_models.get(&el).unwrap()
+                self.{type_snake}_models.get(&el).unwrap().borrow()
             }}
 
             #[allow(dead_code)]
-            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> &mut {type_camel}Model {{
+            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> std::cell::RefMut<{type_camel}Model> {{
                 let el = self.root_{type_snake}(el);
-                self.{type_snake}_models.get_mut(&el).unwrap()
+                self.{type_snake}_models.get_mut(&el).unwrap().borrow_mut()
             }}
         "}?;
         Ok(())
@@ -1733,8 +1736,8 @@ fn display_canonicalize_fn<'a>(
                     for child in self.{type_snake}_uprooted.iter().copied() {{
                         let root = self.{type_snake}_equalities.root(child);
 
-                        let child_model = self.{type_snake}_models.remove(&child).unwrap();
-                        let root_model = self.{type_snake}_models.get_mut(&root).unwrap();
+                        let child_model = self.{type_snake}_models.remove(&child).unwrap().into_inner();
+                        let root_model = self.{type_snake}_models.get_mut(&root).unwrap().get_mut();
                         root_model.merge(child_model);
                     }}
                 "}
@@ -1777,7 +1780,7 @@ fn display_canonicalize_fn<'a>(
                         let mut models_map = BTreeMap::new();
                         std::mem::swap(&mut models_map, &mut self.{type_snake}_models);
                         for model in models_map.values_mut() {{
-                            model.canonicalize(self {sym_scope_params});
+                            model.get_mut().canonicalize(self {sym_scope_params});
                         }}
                         std::mem::swap(&mut models_map, &mut self.{type_snake}_models);
                     "}
@@ -2086,7 +2089,7 @@ fn display_model_delta_apply_nested_surjective_fn<'a>(
                 Some(FmtFn(move |f: &mut Formatter| -> Result {
                     writedoc! {f, "
                         for (el, nested_delta) in self.{type_snake}_deltas.iter_mut() {{
-                        let nested_model = model.{type_snake}_models.get_mut(el).unwrap();
+                        let nested_model = model.{type_snake}_models.get_mut(el).unwrap().get_mut();
                         nested_delta.apply_surjective(nested_model);
                         }}
                     "}
@@ -2121,7 +2124,7 @@ fn display_model_delta_apply_nested_non_surjective_fn<'a>(
                 Some(FmtFn(move |f: &mut Formatter| -> Result {
                     writedoc! {f, "
                         for (el, nested_delta) in self.{type_snake}_deltas.iter_mut() {{
-                        let nested_model = model.{type_snake}_models.get_mut(el).unwrap();
+                        let nested_model = model.{type_snake}_models.get_mut(el).unwrap().get_mut();
                         nested_delta.apply_non_surjective(nested_model);
                         }}
                     "}
@@ -2685,7 +2688,7 @@ fn display_drop_dirt_fn<'a>(
                     if eqlog.is_model_type(typ) {
                         writedoc! { f, "
                             for model in self.{sort_snake}_models.values_mut() {{
-                                model.drop_dirt();
+                                model.get_mut().drop_dirt();
                             }}
                         "}?;
                     }
@@ -2872,7 +2875,7 @@ fn display_symbol_scope_struct<'a>(
                         let model_sym_scope_name =
                             display_symbol_scope_name(member_sym_scope, eqlog, identifiers);
                         writedoc! {f, "
-                            {type_snake}_models: BTreeMap<{type_name}, {model_sym_scope_name}>,
+                            {type_snake}_models: BTreeMap<{type_name}, RefCell<{model_sym_scope_name}>>,
                         "}?;
                     }
 
