@@ -83,7 +83,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         #[allow(unused)]
         use std::ops::Bound;
         #[allow(unused)]
-        use std::cell::RefCell;
+        use std::cell::{{RefCell, Ref, RefMut}};
     "}
 }
 
@@ -161,7 +161,7 @@ fn display_type_var_struct_and_impl<'a>(
         if let Some(member_scope) = member_scope {
             let model_struct_name = display_symbol_scope_name(member_scope, eqlog, identifiers);
             writedoc! {f, "
-                fn get_model(&mut self, models: &'a BTreeMap<{type_name}, RefCell<{model_struct_name}>>) -> std::cell::Ref<'a, {model_struct_name}> {{
+                fn get_model(&mut self, models: &'a BTreeMap<{type_name}, RefCell<{model_struct_name}>>) -> Ref<'a, {model_struct_name}> {{
                 let ref_cell = self.model.get_or_insert_with(|| models.get(&self.var).unwrap());
                 ref_cell.borrow()
                 }}
@@ -1459,13 +1459,13 @@ fn display_get_model_fns<'a>(
 
         writedoc! {f, "
             #[allow(dead_code)]
-            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> std::cell::Ref<{type_camel}Model> {{
+            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> Ref<{type_camel}Model> {{
                 let el = self.root_{type_snake}(el);
                 self.{type_snake}_models.get(&el).unwrap().borrow()
             }}
 
             #[allow(dead_code)]
-            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> std::cell::RefMut<{type_camel}Model> {{
+            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> RefMut<{type_camel}Model> {{
                 let el = self.root_{type_snake}(el);
                 self.{type_snake}_models.get_mut(&el).unwrap().borrow_mut()
             }}
@@ -1789,6 +1789,7 @@ fn display_canonicalize_fn<'a>(
             .format("\n");
 
         writedoc! {f, "
+            #[allow(unused_variables)]
             fn canonicalize(&mut self, {ancestor_params}) {{
                 {rel_blocks}
 
@@ -2906,9 +2907,49 @@ fn display_symbol_scope_struct<'a>(
             {type_fields}
             empty_join_is_dirty: bool,
             }}
+        "}
+    })
+}
 
-            pub struct {model_name}Ref<'a> {{
-                model: &'a {model_name},
+fn display_symbol_scope_ref_struct<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let sym_scope_camel = display_symbol_scope_name(sym_scope, eqlog, identifiers);
+        let fields = once(sym_scope)
+            .chain(iter_symbol_scope_ancestors(sym_scope, eqlog))
+            .map(|ancestor| {
+                let ancestor_camel = display_symbol_scope_name(ancestor, eqlog, identifiers)
+                    .to_string()
+                    .to_case(UpperCamel);
+                let ancestor_snake = ancestor_camel.to_case(Snake);
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    writedoc! {f, "
+                        {ancestor_snake}: Ref<'a, {ancestor_camel}>,
+                    "}
+                })
+            })
+            .format("\n");
+        writedoc! {f, "
+            #[allow(unused)]
+            pub struct {sym_scope_camel}Ref<'a> {{
+                {fields}
+            }}
+        "}
+    })
+}
+
+fn display_symbol_scope_ref_impl<'a>(
+    sym_scope: SymbolScope,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let sym_scope_camel = display_symbol_scope_name(sym_scope, eqlog, identifiers);
+        writedoc! {f, "
+            impl<'a> {sym_scope_camel}Ref<'a> {{
             }}
         "}
     })
@@ -3167,11 +3208,17 @@ pub fn write_module(
         let model_struct = display_symbol_scope_struct(sym_scope, eqlog, identifiers);
         let model_impl = display_symbol_scope_impl(sym_scope, eqlog, identifiers);
 
+        let model_ref_struct = display_symbol_scope_ref_struct(sym_scope, eqlog, identifiers);
+        let model_ref_impl = display_symbol_scope_ref_impl(sym_scope, eqlog, identifiers);
+
         let delta_struct = display_symbol_scope_delta_struct(sym_scope, eqlog, identifiers);
         let delta_impl = display_symbol_scope_delta_impl(sym_scope, eqlog, identifiers);
         writedoc! {out, "
             {model_struct}
             {model_impl}
+
+            {model_ref_struct}
+            {model_ref_impl}
 
             {delta_struct}
             {delta_impl}
