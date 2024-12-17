@@ -236,6 +236,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         )
     });
     write!(&mut result, "{module_display}")?;
+    fs::write(&out_file, &result)?;
 
     #[cfg(feature = "rustfmt")]
     match std::process::Command::new("rustfmt")
