@@ -35,14 +35,7 @@ fn display_symbol_scope_name<'a>(
             .unwrap()
             .as_str()
             .to_case(UpperCamel);
-        let is_top_level = eqlog.iter_module_node().any(|module| {
-            eqlog.are_equal_symbol_scope(eqlog.module_symbol_scope(module).unwrap(), sym_scope)
-        });
-        if is_top_level {
-            write!(f, "{sym_scope_camel}")?;
-        } else {
-            write!(f, "{sym_scope_camel}Model")?;
-        }
+        write!(f, "{sym_scope_camel}Model")?;
         Ok(())
     })
 }
@@ -2604,13 +2597,11 @@ fn write_close_until_fn(
         })
         .format("\n");
 
-    let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
-    let module_name = eqlog.symbol_scope_name(module_sym_scope).unwrap();
-    let module_camel = identifiers
-        .get(&module_name)
-        .unwrap()
-        .as_str()
-        .to_case(UpperCamel);
+    let module_sym_scope_delta = display_symbol_scope_delta_name(
+        eqlog.module_symbol_scope(module).unwrap(),
+        eqlog,
+        identifiers,
+    );
 
     writedoc! {out, "
         /// Closes the model under all axioms until `condition` is satisfied.
@@ -2620,7 +2611,7 @@ fn write_close_until_fn(
         #[allow(dead_code)]
         pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
         {{
-            let mut delta = {module_camel}Delta::new();
+            let mut delta = {module_sym_scope_delta}::new();
 
             self.canonicalize();
             if condition(self) {{
@@ -3131,6 +3122,20 @@ fn display_relation_symbol_scope_fns<'a>(
         Ok(())
     })
 }
+fn write_theory_struct(
+    out: &mut impl Write,
+    name: &str,
+    module: ModuleNode,
+    eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
+) -> Result {
+    let module_sym_scope = eqlog.module_symbol_scope(module).unwrap();
+    let model_name = display_symbol_scope_name(module_sym_scope, eqlog, identifiers);
+
+    writedoc! {out, "
+        pub type {name} = {model_name};
+    "}
+}
 
 fn write_theory_impl(
     out: &mut impl Write,
@@ -3234,6 +3239,7 @@ pub fn write_module(
     let name: Ident = eqlog.symbol_scope_name(module_sym_scope).unwrap();
     let name: &str = identifiers.get(&name).unwrap().as_str();
 
+    write_theory_struct(out, name, module, eqlog, identifiers)?;
     write_theory_impl(out, name, rules, analyses, module, eqlog, identifiers)?;
 
     Ok(())
