@@ -7,8 +7,7 @@ use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{self, Display, Formatter, Result};
-use std::io::{self, Write};
+use std::fmt::{self, Display, Formatter, Result, Write};
 use std::iter::once;
 use std::iter::repeat;
 
@@ -72,7 +71,7 @@ fn display_func_snake<'a>(
     format!("{}", identifiers.get(&ident).unwrap()).to_case(Snake)
 }
 
-fn write_imports(out: &mut impl Write) -> io::Result<()> {
+fn write_imports(out: &mut impl Write) -> Result {
     writedoc! { out, "
         #[allow(unused)]
         use std::collections::{{BTreeSet, BTreeMap}};
@@ -270,7 +269,7 @@ fn display_enum<'a>(
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
-fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
+fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> Result {
     let relation_camel = relation.to_case(UpperCamel);
     let args = arity
         .iter()
@@ -282,7 +281,7 @@ fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -
     "}
 }
 
-fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io::Result<()> {
+fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> Result {
     let func_camel = func.to_case(UpperCamel);
     let args = dom
         .iter()
@@ -338,7 +337,7 @@ fn write_table_struct(
     relation: &str,
     arity: &[&str],
     indices: &BTreeSet<&IndexSpec>,
-) -> io::Result<()> {
+) -> Result {
     let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
     let tuple_type = format!("({tuple_type_args})");
 
@@ -371,7 +370,7 @@ fn write_table_new_fn(
     out: &mut impl Write,
     arity: &[&str],
     indices: &BTreeSet<&IndexSpec>,
-) -> io::Result<()> {
+) -> Result {
     let index_inits = indices.iter().copied().format_with("\n", |index, f| {
         let index_name = IndexName(index);
         f(&format_args!(
@@ -401,7 +400,7 @@ fn write_table_permute_fn(
     relation: &str,
     arity: &[&str],
     order: &[usize],
-) -> io::Result<()> {
+) -> Result {
     let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
     let order_name = OrderName(order);
     let tuple_args = order
@@ -421,7 +420,7 @@ fn write_table_permute_inverse_fn(
     relation: &str,
     arity: &[&str],
     order: &[usize],
-) -> io::Result<()> {
+) -> Result {
     let tuple_type_args = (0..arity.len()).format_with("", |_, f| f(&format_args!("u32, ")));
     let order_name = OrderName(order);
     let rel_args = (0..order.len()).format_with(", ", |i, f| {
@@ -461,7 +460,7 @@ fn write_table_insert_fn(
     arity: &[&str],
     indices: &BTreeSet<&IndexSpec>,
     index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
-) -> io::Result<()> {
+) -> Result {
     let (master_new_index, master_old_index) =
         match index_selection.get(&QuerySpec::all()).unwrap().as_slice() {
             [a, b] => {
@@ -576,7 +575,7 @@ fn write_table_iter_fn(
     arity: &[&str],
     query: &QuerySpec,
     indices: &[IndexSpec],
-) -> io::Result<()> {
+) -> Result {
     // (arg3: Mor, arg5: Obj, ...)
     let fn_args = query.projections.iter().copied().format_with(", ", |i, f| {
         let sort = arity[i];
@@ -650,7 +649,7 @@ fn write_table_contains_fn(
     out: &mut impl Write,
     relation: &str,
     index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
-) -> io::Result<()> {
+) -> Result {
     let indices = index_selection.get(&QuerySpec::all()).unwrap();
     let relation_camel = relation.to_case(UpperCamel);
     let checks = indices
@@ -676,7 +675,7 @@ fn write_table_contains_fn(
 fn write_table_is_dirty_fn(
     out: &mut impl Write,
     index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
-) -> io::Result<()> {
+) -> Result {
     // A "new" query is always mapped to a single index at the moment.
     let master_index_new = from_singleton(
         index_selection
@@ -697,7 +696,7 @@ fn write_table_drop_dirt_fn(
     out: &mut impl Write,
     indices: &BTreeSet<&IndexSpec>,
     index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
-) -> io::Result<()> {
+) -> Result {
     let master_index_new = from_singleton(index_selection.get(&QuerySpec::all_dirty()).unwrap());
     let master_index_new_order = OrderName(&master_index_new.order);
     let master_index_new = IndexName(master_index_new);
@@ -748,7 +747,7 @@ fn write_table_drain_with_element(
     indices: &BTreeSet<&IndexSpec>,
     index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
     sort: &str,
-) -> io::Result<()> {
+) -> Result {
     let sort_snake = sort.to_case(Snake);
 
     let (master_new_index, master_old_index) =
@@ -834,7 +833,7 @@ fn write_table_weight(
     out: &mut impl Write,
     arity: &[&str],
     indices: &BTreeSet<&IndexSpec>,
-) -> io::Result<()> {
+) -> Result {
     let tuple_weight = arity.len();
     let el_lookup_weight = tuple_weight;
     let indices_weight = indices.len() * tuple_weight;
@@ -851,7 +850,7 @@ fn write_table_impl(
     arity: &[&str],
     indices: &BTreeSet<&IndexSpec>,
     index_selection: &BTreeMap<QuerySpec, Vec<IndexSpec>>,
-) -> io::Result<()> {
+) -> Result {
     let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
         impl {relation_camel}Table {{
@@ -2594,7 +2593,7 @@ fn write_close_until_fn(
     rules: &[FlatRule],
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+) -> Result {
     let rules = rules
         .iter()
         .map(|rule| {
@@ -2710,7 +2709,7 @@ fn display_drop_dirt_fn<'a>(
     })
 }
 
-fn write_close_fn(out: &mut impl Write) -> io::Result<()> {
+fn write_close_fn(out: &mut impl Write) -> Result {
     writedoc! {out, "
         /// Closes the model under all axioms.
         /// Depending on the axioms and the model, this may run indefinitely.
@@ -3141,7 +3140,7 @@ fn write_theory_impl(
     module: ModuleNode,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
+) -> Result {
     write!(out, "impl {} {{\n", name)?;
 
     write_close_fn(out)?;
@@ -3170,7 +3169,7 @@ pub fn write_module(
     rules: &[FlatRule],
     analyses: &[FlatRuleAnalysis],
     index_selection: &IndexSelection,
-) -> io::Result<()> {
+) -> Result {
     write_imports(out)?;
     write!(out, "\n")?;
 

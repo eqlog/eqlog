@@ -1,6 +1,7 @@
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
+use crate::fmt_util::FmtFn;
 use crate::grammar::*;
 use crate::grammar_util::*;
 use crate::rust_gen::*;
@@ -18,6 +19,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io;
+use std::io::Write as _;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -223,15 +225,17 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     let mut result: Vec<u8> = Vec::new();
     write_src_digest(&mut result, src_digest.as_slice())?;
 
-    write_module(
-        &mut result,
-        &eqlog,
-        &identifiers,
-        flat_rules.as_slice(),
-        flat_analyses.as_slice(),
-        &index_selection,
-    )?;
-    fs::write(&out_file, &result)?;
+    let module_display = FmtFn(|f| {
+        write_module(
+            f,
+            &eqlog,
+            &identifiers,
+            flat_rules.as_slice(),
+            flat_analyses.as_slice(),
+            &index_selection,
+        )
+    });
+    write!(&mut result, "{module_display}")?;
 
     #[cfg(feature = "rustfmt")]
     match std::process::Command::new("rustfmt")
