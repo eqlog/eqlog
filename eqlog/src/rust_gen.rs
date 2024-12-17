@@ -3141,25 +3141,27 @@ fn write_theory_impl(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> Result {
-    write!(out, "impl {} {{\n", name)?;
-
-    write_close_fn(out)?;
-    write_close_until_fn(out, module, rules, eqlog, identifiers)?;
-
-    write!(out, "\n")?;
+    let close_fn = FmtFn(move |f| write_close_fn(f));
+    let close_until_fn = FmtFn(move |f| write_close_until_fn(f, module, rules, eqlog, identifiers));
 
     assert_eq!(
         rules.len(),
         analyses.len(),
         "There should be precisely one analysis for each rule"
     );
-    for (rule, analysis) in rules.iter().zip(analyses) {
-        let rule_fn = display_rule_fns(rule, analysis, module, eqlog, identifiers);
-        writeln!(out, "{rule_fn}")?;
-    }
+    let rule_fns = rules
+        .iter()
+        .zip(analyses)
+        .map(|(rule, analysis)| display_rule_fns(rule, analysis, module, eqlog, identifiers))
+        .format("\n");
 
-    write!(out, "}}\n")?;
-    Ok(())
+    writedoc! {out, "
+        impl {name} {{
+            {close_fn}
+            {close_until_fn}
+            {rule_fns}
+        }}
+    "}
 }
 
 pub fn write_module(
