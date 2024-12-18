@@ -52,8 +52,8 @@ fn merge_empty_models() {
     let ptd0_model = model.get_pointed_model(ptd0);
     let ptd1_model = model.get_pointed_model(ptd1);
     assert_eq!(
-        &*ptd0_model as *const PointedModel,
-        &*ptd1_model as *const PointedModel
+        &*ptd0_model as *const PointedModelData,
+        &*ptd1_model as *const PointedModelData
     );
 }
 

@@ -35,7 +35,7 @@ fn display_symbol_scope_name<'a>(
             .unwrap()
             .as_str()
             .to_case(UpperCamel);
-        write!(f, "{sym_scope_camel}Model")?;
+        write!(f, "{sym_scope_camel}ModelData")?;
         Ok(())
     })
 }
@@ -46,8 +46,13 @@ fn display_symbol_scope_delta_name<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| {
-        let sym_scope_name = display_symbol_scope_name(sym_scope, eqlog, identifiers);
-        write!(f, "{sym_scope_name}Delta")?;
+        let sym_scope_name = eqlog.symbol_scope_name(sym_scope).unwrap();
+        let sym_scope_camel = identifiers
+            .get(&sym_scope_name)
+            .unwrap()
+            .as_str()
+            .to_case(UpperCamel);
+        write!(f, "{sym_scope_camel}ModelDelta")?;
         Ok(())
     })
 }
@@ -1422,6 +1427,8 @@ fn display_new_model_element<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f: &mut Formatter| -> Result {
+        let sym_scope = eqlog.model_member_symbol_scope(model_type).unwrap();
+        let sym_scope_name = display_symbol_scope_name(sym_scope, eqlog, identifiers);
         let type_name = eqlog.type_name(model_type).unwrap();
         let type_camel = identifiers.get(&type_name).unwrap().to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
@@ -1431,7 +1438,7 @@ fn display_new_model_element<'a>(
             #[allow(dead_code)]
             pub fn new_{type_snake}(&mut self) -> {type_camel} {{
                 let el = self.new_{type_snake}_internal();
-                self.{type_snake}_models.insert(el, RefCell::new({type_camel}Model::new()));
+                self.{type_snake}_models.insert(el, RefCell::new({sym_scope_name}::new()));
                 el
             }}
         "}?;
@@ -1445,19 +1452,21 @@ fn display_get_model_fns<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
+        let sym_scope = eqlog.model_member_symbol_scope(model_type).unwrap();
+        let sym_scope_name = display_symbol_scope_name(sym_scope, eqlog, identifiers);
         let type_name = eqlog.type_name(model_type).unwrap();
         let type_camel = identifiers.get(&type_name).unwrap().to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
         writedoc! {f, "
             #[allow(dead_code)]
-            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> Ref<{type_camel}Model> {{
+            pub fn get_{type_snake}_model(&self, el: {type_camel}) -> Ref<{sym_scope_name}> {{
                 let el = self.root_{type_snake}(el);
                 self.{type_snake}_models.get(&el).unwrap().borrow()
             }}
 
             #[allow(dead_code)]
-            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> RefMut<{type_camel}Model> {{
+            pub fn get_{type_snake}_model_mut(&mut self, el: {type_camel}) -> RefMut<{sym_scope_name}> {{
                 let el = self.root_{type_snake}(el);
                 self.{type_snake}_models.get_mut(&el).unwrap().borrow_mut()
             }}
@@ -2349,8 +2358,8 @@ fn display_surj_then<'a>(
                                 .to_case(Snake);
                             let model_type_camel = model_type_snake.to_case(UpperCamel);
                             let model_var = display_var(model);
-                            writedoc! {f,
-                                "delta
+                            writedoc! {f, "
+                                delta
                                 .{model_type_snake}_deltas
                                 .entry({model_var}.var)
                                 .or_insert_with(|| {model_type_camel}ModelDelta::new())
@@ -2916,16 +2925,14 @@ fn display_symbol_scope_ref_struct<'a>(
                     .to_case(UpperCamel);
                 let ancestor_snake = ancestor_camel.to_case(Snake);
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    writedoc! {f, "
-                        {ancestor_snake}: Ref<'a, {ancestor_camel}>,
-                    "}
+                    write!(f, "{ancestor_snake}: &'a RefCell<{ancestor_camel}>,")
                 })
             })
             .format("\n");
         writedoc! {f, "
             #[allow(unused)]
-            pub struct {sym_scope_camel}Ref<'a> {{
-                {fields}
+            pub struct {sym_scope_camel}RefMut<'a> {{
+            {fields}
             }}
         "}
     })
@@ -2939,7 +2946,7 @@ fn display_symbol_scope_ref_impl<'a>(
     FmtFn(move |f: &mut Formatter| -> Result {
         let sym_scope_camel = display_symbol_scope_name(sym_scope, eqlog, identifiers);
         writedoc! {f, "
-            impl<'a> {sym_scope_camel}Ref<'a> {{
+            impl<'a> {sym_scope_camel}RefMut<'a> {{
             }}
         "}
     })
