@@ -40,6 +40,7 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
         #[allow(unused)]
         use std::collections::{{BTreeSet, BTreeMap}};
+        #[allow(unused)]
         use std::fmt;
         #[allow(unused)]
         use eqlog_runtime::Unification;

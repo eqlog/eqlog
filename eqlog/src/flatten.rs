@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 
 fn assign_ambient_model_vars(
     ambient_sym_scope: SymbolScope,
+    available_vars: &mut impl Iterator<Item = FlatVar>,
     eqlog: &Eqlog,
 ) -> BTreeMap<SymbolScope, FlatVar> {
     iter_symbol_scope_ancestors(ambient_sym_scope, eqlog)
@@ -15,8 +16,7 @@ fn assign_ambient_model_vars(
             let _model_type = eqlog.symbol_scope_model(sym_scope)?;
             Some(sym_scope)
         })
-        .enumerate()
-        .map(|(i, sym_scope)| (sym_scope, FlatVar(i)))
+        .map(move |sym_scope| (sym_scope, available_vars.next().unwrap()))
         .collect()
 }
 
@@ -30,10 +30,10 @@ fn assign_ambient_model_vars(
 /// of the [FlatTerm]s assigned to a preimage of y.
 fn assign_el_vars(
     morphisms: impl IntoIterator<Item = Morphism>,
+    available_vars: &mut impl Iterator<Item = FlatVar>,
     eqlog: &Eqlog,
 ) -> BTreeMap<El, FlatVar> {
     let mut el_terms = BTreeMap::new();
-    let mut unused_flat_terms = (0..).into_iter().map(FlatVar);
 
     for transition in morphisms {
         for (m, preimage, image) in eqlog.iter_map_el() {
@@ -50,11 +50,25 @@ fn assign_el_vars(
         for el in iter_els(cod, eqlog) {
             el_terms
                 .entry(el)
-                .or_insert_with(|| unused_flat_terms.next().unwrap());
+                .or_insert_with(|| available_vars.next().unwrap());
         }
     }
 
     el_terms
+}
+
+fn assign_vars(
+    ambient_sym_scope: SymbolScope,
+    morphisms: impl IntoIterator<Item = Morphism>,
+    eqlog: &Eqlog,
+) -> (BTreeMap<SymbolScope, FlatVar>, BTreeMap<El, FlatVar>) {
+    let mut available_vars = (0..).into_iter().map(FlatVar);
+
+    let ambient_model_vars =
+        assign_ambient_model_vars(ambient_sym_scope, &mut available_vars, eqlog);
+    let el_vars = assign_el_vars(morphisms, &mut available_vars, eqlog);
+
+    (ambient_model_vars, el_vars)
 }
 
 fn make_var_type_map(
@@ -385,9 +399,12 @@ pub fn flatten(
         })
         .unwrap();
     let ambient_sym_scope = eqlog.decl_symbol_scope(rule_decl).unwrap();
-    let ambient_model_vars = assign_ambient_model_vars(ambient_sym_scope, eqlog);
 
-    let el_vars = assign_el_vars(iter_rule_morphisms(rule, eqlog).flatten(), eqlog);
+    let (ambient_model_vars, el_vars) = assign_vars(
+        ambient_sym_scope,
+        iter_rule_morphisms(rule, eqlog).flatten(),
+        eqlog,
+    );
 
     // The general strategy is as follows:
     // - The first flat function (with index 0) is the entry point for the flat rule. The body of
