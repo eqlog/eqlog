@@ -6,7 +6,6 @@ use super::slice_group_by::*;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 struct IfStmtGoodness {
-    model_vars_were_matched: bool,
     is_equal: bool,
     age: QueryAge,
     new_variables: usize,
@@ -15,7 +14,6 @@ struct IfStmtGoodness {
 impl Default for IfStmtGoodness {
     fn default() -> Self {
         IfStmtGoodness {
-            model_vars_were_matched: true,
             is_equal: false,
             age: QueryAge::All,
             new_variables: 0,
@@ -32,20 +30,13 @@ fn cmp_age_goodness(lhs: QueryAge, rhs: QueryAge) -> std::cmp::Ordering {
 impl Ord for IfStmtGoodness {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // True is better than false.
-        let model_vars_were_matched = self
-            .model_vars_were_matched
-            .cmp(&other.model_vars_were_matched);
-        // True is better than false.
         let is_equal = self.is_equal.cmp(&other.is_equal);
         // True is better than false.
-        let age = cmp_age_goodness(self.age, other.age);
+        let age_goodness = cmp_age_goodness(self.age, other.age);
         // Smaller is better than greater.
         let new_variables = self.new_variables.cmp(&other.new_variables).reverse();
 
-        model_vars_were_matched
-            .then(is_equal)
-            .then(age)
-            .then(new_variables)
+        is_equal.then(age_goodness).then(new_variables)
     }
 }
 
@@ -97,19 +88,6 @@ fn less_variables_is_better() {
 }
 
 fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
-    let model_vars_were_matched = match stmt {
-        FlatIfStmt::Equal(_) | FlatIfStmt::Relation(_) => true,
-        FlatIfStmt::Type(FlatIfStmtType {
-            var_type: FlatType {
-                local_type: _,
-                model,
-            },
-            ..
-        }) => match model {
-            Some(model_var) => fixed_vars.contains(model_var),
-            None => true,
-        },
-    };
     let is_equal = matches!(stmt, FlatIfStmt::Equal(_));
     let age = match stmt {
         FlatIfStmt::Equal(_) => QueryAge::All,
@@ -122,7 +100,6 @@ fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmt
         .filter(|var| !fixed_vars.contains(&var))
         .count();
     IfStmtGoodness {
-        model_vars_were_matched,
         is_equal,
         age,
         new_variables,

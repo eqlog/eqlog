@@ -1,7 +1,6 @@
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
-use crate::fmt_util::FmtFn;
 use crate::grammar::*;
 use crate::grammar_util::*;
 use crate::rust_gen::*;
@@ -19,7 +18,6 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::Write as _;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -43,7 +41,6 @@ fn whipe_comments(source: &str) -> String {
 }
 
 fn parse(
-    module_name: String,
     source: &str,
 ) -> Result<
     (
@@ -62,11 +59,6 @@ fn parse(
     let module = ModuleParser::new()
         .parse(&mut eqlog, &mut identifiers, &mut locations, source)
         .map_err(CompileError::from)?;
-
-    let module_name: Ident = *identifiers
-        .entry(module_name)
-        .or_insert_with(|| eqlog.new_ident());
-    eqlog.insert_module_name(module, module_name);
 
     let identifiers = identifiers.into_iter().map(|(s, i)| (i, s)).collect();
     let locations = locations
@@ -129,10 +121,10 @@ fn eqlog_files(root_path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-fn digest_source(module_name: &str, src: &str) -> Vec<u8> {
+fn digest_source(theory_name: &str, src: &str) -> Vec<u8> {
     Sha256::new()
         .chain_update(env!("EQLOG_SOURCE_DIGEST").as_bytes())
-        .chain_update(module_name.as_bytes())
+        .chain_update(theory_name.as_bytes())
         .chain_update(src.as_bytes())
         .finalize()
         .as_slice()
@@ -156,7 +148,7 @@ fn write_src_digest(out: &mut impl io::Write, digest: &[u8]) -> Result<(), Box<d
 }
 
 fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
-    let module_name = in_file
+    let theory_name = in_file
         .file_stem()
         .unwrap()
         .to_str()
@@ -164,7 +156,7 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .to_case(Case::UpperCamel);
     let source = fs::read_to_string(in_file)?;
 
-    let src_digest = digest_source(module_name.as_str(), source.as_str());
+    let src_digest = digest_source(theory_name.as_str(), source.as_str());
     let out_digest = read_out_digest(out_file);
 
     // TODO: Add a check to verify that the out file hasn't been corrupted?
@@ -173,8 +165,8 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     }
 
     let source_without_comments = whipe_comments(&source);
-    let (mut eqlog, identifiers, locations, _module) = parse(module_name, &source_without_comments)
-        .map_err(|error| CompileErrorWithContext {
+    let (mut eqlog, identifiers, locations, _module) =
+        parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
             error,
             // TODO: Get rid of this copy; necessary because of the usage to create a
             // CompileErrorWithContext below.
@@ -222,20 +214,25 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
         .collect();
     let index_selection = select_indices(&if_stmt_rel_infos, &eqlog, &identifiers);
 
+    let theory_name = in_file
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_case(Case::UpperCamel);
+
     let mut result: Vec<u8> = Vec::new();
     write_src_digest(&mut result, src_digest.as_slice())?;
 
-    let module_display = FmtFn(|f| {
-        write_module(
-            f,
-            &eqlog,
-            &identifiers,
-            flat_rules.as_slice(),
-            flat_analyses.as_slice(),
-            &index_selection,
-        )
-    });
-    write!(&mut result, "{module_display}")?;
+    write_module(
+        &mut result,
+        &theory_name,
+        &eqlog,
+        &identifiers,
+        flat_rules.as_slice(),
+        flat_analyses.as_slice(),
+        &index_selection,
+    )?;
     fs::write(&out_file, &result)?;
 
     #[cfg(feature = "rustfmt")]

@@ -6,12 +6,6 @@ use eqlog_eqlog::*;
 pub struct FlatVar(pub usize);
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct FlatType {
-    pub local_type: Type,
-    pub model: Option<FlatVar>,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatFuncName(pub usize);
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -30,7 +24,6 @@ pub enum QueryAge {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtRelation {
     pub rel: Rel,
-    pub model: Option<FlatVar>,
     pub args: Vec<FlatVar>,
     pub age: QueryAge,
 }
@@ -39,7 +32,6 @@ pub struct FlatIfStmtRelation {
 pub struct FlatIfStmtType {
     pub var: FlatVar,
     pub age: QueryAge,
-    pub var_type: FlatType,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -103,22 +95,17 @@ impl FlatIfStmtRelation {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
         let FlatIfStmtRelation {
             rel: _,
-            model,
             args,
             age: _,
         } = self;
-        model.into_iter().copied().chain(args.iter().copied())
+        args.iter().copied()
     }
 }
 
 impl FlatIfStmtType {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
-        let FlatIfStmtType {
-            var,
-            age: _,
-            var_type,
-        } = self;
-        once(*var).chain(var_type.model.into_iter())
+        let FlatIfStmtType { var, age: _ } = self;
+        once(*var)
     }
 }
 
@@ -198,5 +185,5 @@ impl FlatStmt {
 pub struct FlatRule {
     pub name: String,
     pub funcs: Vec<FlatFunc>,
-    pub var_types: BTreeMap<FlatVar, FlatType>,
+    pub var_types: BTreeMap<FlatVar, Type>,
 }
