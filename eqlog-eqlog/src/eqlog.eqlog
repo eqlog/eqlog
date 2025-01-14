@@ -671,7 +671,8 @@ rule semantic_decl_ctor {
 
 enum Rel {
     PredRel(Pred),
-    FuncRel(Func)
+    FuncRel(Func),
+    ModelParentRel(SymbolScope)
 }
 
 func rel_name(Rel) -> Ident;
@@ -722,6 +723,15 @@ rule arity_laws {
             if cod = codomain(function);
             then tys := SnocTypeList(dom, cod)!;
             then arity(rel) = tys;
+        }
+        ModelParentRel(child_scope) => {
+            if parent_scope = symbol_scope_parent(child_scope);
+            if child_model_type = symbol_scope_model(child_scope);
+            if parent_model_type = symbol_scope_model(parent_scope);
+            then nil := NilTypeList()!;
+            then parent_singleton := ConsTypeList(parent_model_type, nil)!;
+            then child_parent := ConsTypeList(child_model_type, parent_singleton)!;
+            then arity(rel) = child_parent;
         }
     }
 }
@@ -1063,6 +1073,13 @@ func symbol_scope_parent(larger: SymbolScope) -> SymbolScope;
 rule symbol_scope_extension_parent {
     if symbol_scope_extension(base, ext);
     then symbol_scope_parent(ext) = base;
+}
+
+rule model_parent_rel_law {
+    if parent_scope = symbol_scope_parent(child_scope);
+    if _ = symbol_scope_model(child_scope);
+    if _ = symbol_scope_model(parent_scope);
+    then ModelParentRel(child_scope)!;
 }
 
 func module_symbol_scope(module: ModuleNode) -> SymbolScope;
