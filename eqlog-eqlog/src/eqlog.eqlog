@@ -1242,6 +1242,7 @@ rule rule_symbol_scope {
 // A predicate tracking which symbols have are defined in a symbol scope.
 pred defined_symbol(scope: SymbolScope, Ident, SymbolKind, Loc);
 func type_definition_symbol_scope(typ: Type) -> SymbolScope;
+func rel_definition_symbol_scope(rel: Rel) -> SymbolScope;
 
 // A predicate tracking which symbols have are accessible in a symbols scope.
 // At the moment, symbols are accessible if they're declared in the same
@@ -1309,6 +1310,18 @@ rule ctor_decl_defines_symbol {
     if kind  = CtorSymbol();
     if loc = ctor_decl_node_loc(ctor);
     then defined_symbol(ss, name, kind, loc);
+}
+rule pred_definition_symbol_scope_rule {
+    if predicate = semantic_pred(ss, ident);
+    if defined_symbol(ss, ident, _, _);
+    if rel = PredRel(predicate);
+    then rel_definition_symbol_scope(rel) = ss;
+}
+rule func_definition_symbol_scope_rule {
+    if function = semantic_func(ss, ident);
+    if defined_symbol(ss, ident, _, _);
+    if rel = FuncRel(function);
+    then rel_definition_symbol_scope(rel) = ss;
 }
 rule rule_decl_defines_symbol {
     if decl_node_rule(decl, rul);
