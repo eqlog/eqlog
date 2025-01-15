@@ -92,8 +92,10 @@ fn display_ctor<'a>(
         let ss: SymbolScope = eqlog.ctor_symbol_scope(ctor).unwrap();
 
         let ctor_func = eqlog.semantic_func(ss, ctor_ident).unwrap();
-        let domain: Vec<Type> =
-            type_list_vec(eqlog.domain(ctor_func).expect("should be total"), eqlog);
+        let domain: Vec<Type> = type_list_vec(
+            eqlog.flat_domain(ctor_func).expect("should be total"),
+            eqlog,
+        );
 
         let domain = domain
             .into_iter()
@@ -146,31 +148,58 @@ fn display_enum<'a>(
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 // pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
-fn write_relation_struct(out: &mut impl Write, relation: &str, arity: &[&str]) -> io::Result<()> {
-    let relation_camel = relation.to_case(UpperCamel);
-    let args = arity
-        .iter()
-        .copied()
-        .format_with(", ", |sort, f| f(&format_args!("pub {sort}")));
-    writedoc! {out, "
-        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-        struct {relation_camel}({args});
-    "}
+fn display_relation_struct<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let args = flat_arity
+            .into_iter()
+            .map(|typ| display_type(typ, eqlog, identifiers))
+            .format(",");
+        writedoc! {f, "
+            #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+            struct {rel_camel}({args});
+        "}
+    })
 }
 
-fn write_func_args_struct(out: &mut impl Write, func: &str, dom: &[&str]) -> io::Result<()> {
-    let func_camel = func.to_case(UpperCamel);
-    let args = dom
-        .iter()
-        .copied()
-        .format_with(", ", |typ, f| f(&format_args!("pub {typ}")));
-    // The #[allow(unused)] is there for functions that cannot be made defined via the Rust API. At
-    // the moment, those are non-constructor functions valued in an enum type.
-    writedoc! {out, "
-        #[allow(unused)]
-        #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-        struct {func_camel}Args({args});
-    "}
+fn display_func_args_struct<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel = eqlog.func_rel(func).unwrap();
+        let func_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let args = dom
+            .iter()
+            .copied()
+            .map(|typ| {
+                FmtFn(move |f| {
+                    let type_camel = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(UpperCamel);
+                    write!(f, "pub {type_camel}")
+                })
+            })
+            .format(", ");
+        // The #[allow(unused)] is there for functions that cannot be made defined via the Rust API. At
+        // the moment, those are non-constructor functions valued in an enum type.
+        writedoc! {f, "
+            #[allow(unused)]
+            #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+            struct {func_camel}Args({args});
+        "}
+    })
 }
 
 fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
@@ -1161,7 +1190,7 @@ fn display_new_enum_element<'a>(
 
                     let ctor_func: Func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
                     let ctor_arg_types: Vec<Type> =
-                        type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog);
+                        type_list_vec(eqlog.flat_domain(ctor_func).unwrap(), eqlog);
                     let ctor_vars = (0..ctor_arg_types.len())
                         .map(|i| display_var(FlatVar(i)))
                         .format(", ");
@@ -1236,7 +1265,7 @@ fn display_enum_cases_fn<'a>(
                     let ctor_name_camel = ctor_name.to_case(UpperCamel);
 
                     let ctor_func: Func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
-                    let arg_num = type_list_vec(eqlog.domain(ctor_func).unwrap(), eqlog).len();
+                    let arg_num = type_list_vec(eqlog.flat_domain(ctor_func).unwrap(), eqlog).len();
 
                     let ctor_arg_vars = (0..arg_num).map(FlatVar);
                     let result_var = FlatVar(arg_num);
@@ -1358,92 +1387,105 @@ fn write_iter_sort_fn(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
-fn write_canonicalize_rel_block(out: &mut Formatter, rel: &str, arity: &[&str]) -> Result {
-    let rel_snake = rel.to_case(Snake);
-    let rel_camel = rel.to_case(UpperCamel);
-    let rel_camel = rel_camel.as_str();
+fn display_canonicalize_rel_block<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        let rel_camel = rel_camel.as_str();
 
-    for typ in arity.iter().copied().collect::<BTreeSet<&str>>() {
-        let type_snake = typ.to_case(Snake);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        for typ in arity.iter().copied() {
+            let type_snake = display_type(typ, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
 
-        let canonicalize_ts = arity
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, typ_i)| {
-                let typ_i_snake = typ_i.to_case(Snake);
+            let canonicalize_ts = arity
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(i, type_i)| {
+                    FmtFn(move |f| {
+                        let type_i_snake = display_type(type_i, eqlog, identifiers)
+                            .to_string()
+                            .to_case(Snake);
+                        write!(f, "t.{i} = self.root_{type_i_snake}(t.{i});")
+                    })
+                })
+                .format("\n");
+
+            let adjust_weights = |op: &'static str| {
+                arity
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .map(move |(i, type_i)| {
+                        FmtFn(move |f| {
+                            let type_i_snake = display_type(type_i, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
+                            writedoc! {f, "
+                            let weight{i} = &mut self.{type_i_snake}_weights[t.{i}.0 as usize];
+                            *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
+                        "}
+                        })
+                    })
+                    .format("\n")
+            };
+            let reduce_weights = adjust_weights("sub");
+            let increase_weights = adjust_weights("add");
+
+            writedoc! {f, "
+                for el in self.{type_snake}_uprooted.iter().copied() {{
+                    let ts = self.{rel_snake}.drain_with_element_{type_snake}(el);
+                    for mut t in ts {{
+                        {reduce_weights}
+                        {canonicalize_ts}
+                        if self.{rel_snake}.insert(t) {{
+                            {increase_weights}
+                        }}
+                    }}
+                }}
+            "}?;
+        }
+        Ok(())
+    })
+}
+
+fn display_canonicalize_fn<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_blocks = eqlog
+            .iter_rel()
+            .map(|rel| display_canonicalize_rel_block(rel, eqlog, identifiers))
+            .format("\n");
+
+        let clear_uprooted_vecs = eqlog
+            .iter_type()
+            .map(|typ| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    write!(f, "t.{i} = self.root_{typ_i_snake}(t.{i});")
+                    let type_snake =
+                        format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+                    write!(f, "self.{type_snake}_uprooted.clear();")
                 })
             })
             .format("\n");
 
-        let adjust_weights = |op: &'static str| {
-            arity
-                .iter()
-                .copied()
-                .enumerate()
-                .map(move |(i, typ_i)| {
-                    FmtFn(move |f: &mut Formatter| -> Result {
-                        let typ_i_snake = typ_i.to_case(Snake);
-                        writedoc! {f, "
-                            let weight{i} = &mut self.{typ_i_snake}_weights[t.{i}.0 as usize];
-                            *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
-                        "}
-                    })
-                })
-                .format("\n")
-        };
-        let reduce_weights = adjust_weights("sub");
-        let increase_weights = adjust_weights("add");
+        writedoc! {f, "
+            fn canonicalize(&mut self) {{
+                {rel_blocks}
 
-        writedoc! {out, "
-            for el in self.{type_snake}_uprooted.iter().copied() {{
-                let ts = self.{rel_snake}.drain_with_element_{type_snake}(el);
-                for mut t in ts {{
-                    {reduce_weights}
-                    {canonicalize_ts}
-                    if self.{rel_snake}.insert(t) {{
-                        {increase_weights}
-                    }}
-                }}
+                {clear_uprooted_vecs}
             }}
-        "}?;
-    }
-    Ok(())
-}
-
-fn write_canonicalize_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let rel_blocks = iter_relation_arities(eqlog, identifiers)
-        .map(|(rel, arity)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                write_canonicalize_rel_block(f, rel, arity.as_slice())
-            })
-        })
-        .format("\n");
-
-    let clear_uprooted_vecs = eqlog
-        .iter_type()
-        .map(|typ| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let type_snake =
-                    format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
-                write!(f, "self.{type_snake}_uprooted.clear();")
-            })
-        })
-        .format("\n");
-
-    writedoc! {out, "
-        fn canonicalize(&mut self) {{
-            {rel_blocks}
-
-            {clear_uprooted_vecs}
-        }}
-    "}
+        "}
+    })
 }
 
 fn write_model_delta_struct(
@@ -1521,7 +1563,8 @@ fn write_model_delta_impl(
     write_model_delta_apply_non_surjective_fn(out)?;
 
     write_model_delta_apply_equalities_fn(out, eqlog, identifiers)?;
-    write_model_delta_apply_tuples_fn(out, eqlog, identifiers)?;
+    let apply_tuples_fn = display_model_delta_apply_tuples_fn(eqlog, identifiers);
+    writeln!(out, "{}", apply_tuples_fn)?;
     write_model_delta_apply_def_fn(out, eqlog, identifiers)?;
 
     writedoc! {out, "
@@ -1633,34 +1676,42 @@ fn write_model_delta_apply_equalities_fn(
     "}
 }
 
-fn write_model_delta_apply_tuples_fn(
-    out: &mut impl Write,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let relations = iter_relation_arities(eqlog, identifiers)
-        .map(|(relation, arity)| {
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let relation_snake = relation.to_case(Snake);
-                let relation_camel = relation.to_case(UpperCamel);
-                let args0 = (0..arity.len()).map(FlatVar).map(display_var).format(", ");
-                let args1 = args0.clone();
-                writedoc! {f, "
-                    for {relation_camel}({args0}) in self.new_{relation_snake}.drain(..) {{
-                        model.insert_{relation_snake}({args1});
+fn display_model_delta_apply_tuples_fn<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let relations = eqlog
+            .iter_rel()
+            .map(|rel| {
+                FmtFn(move |f| {
+                    let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+                    let rel_snake = display_rel(rel, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    let rel_camel = rel_snake.to_case(UpperCamel);
+                    let args = (0..arity.len())
+                        .map(FlatVar)
+                        .map(display_var)
+                        .format(", ")
+                        .to_string();
+                    writedoc! {f, "
+                    for {rel_camel}({args}) in self.new_{rel_snake}.drain(..) {{
+                        model.insert_{rel_snake}({args});
                     }}
                 "}
+                })
             })
-        })
-        .format("\n");
+            .format("\n");
 
-    // allow(unused_variables) is there for theories without relations.
-    writedoc! {out, "
-        #[allow(unused_variables)]
-        fn apply_tuples(&mut self, model: &mut Model) {{
-            {relations}
-        }}
-    "}
+        // allow(unused_variables) is there for theories without relations.
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn apply_tuples(&mut self, model: &mut Model) {{
+                {relations}
+            }}
+        "}
+    })
 }
 
 fn write_model_delta_apply_def_fn(
@@ -1679,7 +1730,7 @@ fn write_model_delta_apply_def_fn(
             let func_snake = func_name.to_case(Snake);
             let func_camel = func_name.to_case(UpperCamel);
 
-            let domain = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
+            let domain = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
             let args0 = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
             let args1 = args0.clone();
 
@@ -1845,26 +1896,22 @@ fn display_surj_then<'a>(
                     format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(UpperCamel);
                 let relation_snake =
                     format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(Snake);
-                let args0 = args
-                    .iter()
-                    .copied()
-                    .map(|arg| display_var(arg))
-                    .format(", ");
-                let args1 = args
-                    .iter()
-                    .copied()
-                    .map(|arg| display_var(arg))
-                    .format(", ");
                 let query_spec = QuerySpec {
                     projections: (0..args.len()).collect(),
                     diagonals: BTreeSet::new(),
                     age: QueryAge::All,
                 };
+                let args = args
+                    .iter()
+                    .copied()
+                    .map(|arg| display_var(arg))
+                    .format(", ")
+                    .to_string();
                 let iter_name = IterName(relation_camel.as_str(), &query_spec);
                 writedoc! {f, "
-                    let exists_already = self.{iter_name}({args0}).next().is_some();
+                    let exists_already = self.{iter_name}({args}).next().is_some();
                     if !exists_already {{
-                    delta.new_{relation_snake}.push({relation_camel}({args1}));
+                    delta.new_{relation_snake}.push({relation_camel}({args}));
                     }}
                 "}?;
             }
@@ -2025,11 +2072,17 @@ fn write_drop_dirt_fn(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> io::Result<()> {
-    let relations =
-        iter_relation_arities(eqlog, identifiers).format_with("\n", |(relation, _), f| {
-            let relation_snake = relation.to_case(Snake);
-            f(&format_args!("self.{relation_snake}.drop_dirt();"))
-        });
+    let relations = eqlog
+        .iter_rel()
+        .map(|rel| {
+            FmtFn(move |f| {
+                let rel_snake = display_rel(rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                write!(f, "self.{rel_snake}.drop_dirt();")
+            })
+        })
+        .format("\n");
     let types = eqlog
         .iter_type()
         .map(|typ| {
@@ -2140,10 +2193,12 @@ fn write_new_fn(
         write!(out, "{type_snake}_old: BTreeSet::new(),\n")?;
         write!(out, "{type_snake}_uprooted: Vec::new(),\n")?;
     }
-    for (relation, _) in iter_relation_arities(eqlog, identifiers) {
-        let relation_snake = relation.to_case(Snake);
-        let relation_camel = relation.to_case(UpperCamel);
-        write!(out, "{relation_snake}: {relation_camel}Table::new(),")?;
+    for rel in eqlog.iter_rel() {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        write!(out, "{rel_snake}: {rel_camel}Table::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
     write!(out, "}}\n")?;
@@ -2159,7 +2214,7 @@ fn write_define_fn(
 ) -> io::Result<()> {
     let func_snake = display_func_snake(func, eqlog, identifiers);
 
-    let domain = type_list_vec(eqlog.domain(func).expect("should be total"), eqlog);
+    let domain = type_list_vec(eqlog.flat_domain(func).expect("should be total"), eqlog);
     let codomain = eqlog.codomain(func).expect("should be total");
 
     let codomain_camel =
@@ -2298,7 +2353,19 @@ fn write_theory_impl(
         }
     }
 
-    for (func_name, arity) in iter_func_arities(eqlog, identifiers) {
+    for func in eqlog.iter_func() {
+        let rel = eqlog.func_rel(func).unwrap();
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity: Vec<String> = arity
+            .into_iter()
+            .map(|typ| display_type(typ, eqlog, identifiers).to_string())
+            .collect();
+        let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
+
+        let func_name = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let func_name = func_name.as_str();
         write_pub_function_eval_fn(out, func_name, &arity)?;
         write_pub_iter_fn(out, func_name, &arity, true)?;
         write_pub_insert_relation(out, func_name, &arity, true)?;
@@ -2320,7 +2387,8 @@ fn write_theory_impl(
         write!(out, "\n")?;
     }
 
-    write_canonicalize_fn(out, eqlog, identifiers)?;
+    let canonicalize_fn = display_canonicalize_fn(eqlog, identifiers);
+    write!(out, "{canonicalize_fn}\n")?;
     write_is_dirty_fn(out, eqlog, identifiers)?;
     write!(out, "\n")?;
 
@@ -2365,16 +2433,32 @@ pub fn write_module(
         writeln!(out, "{}", display_enum(enum_decl, eqlog, identifiers))?;
     }
 
-    for (rel, arity) in iter_relation_arities(eqlog, identifiers) {
-        write_relation_struct(out, rel, &arity)?;
+    for rel in eqlog.iter_rel() {
+        let rel_struct = display_relation_struct(rel, eqlog, identifiers);
+        writedoc! {out, "
+            {rel_struct}
+        "}?;
+
+        let arity: Vec<String> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+            .into_iter()
+            .map(|typ| {
+                display_type(typ, eqlog, identifiers)
+                    .to_string()
+                    .to_case(UpperCamel)
+            })
+            .collect();
+        let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
+        let rel = display_rel(rel, eqlog, identifiers).to_string();
+        let rel = rel.as_str();
         let index_selection = index_selection.get(rel).unwrap();
         let indices: BTreeSet<&IndexSpec> = index_selection.values().flatten().collect();
         write_table_struct(out, rel, &arity, &indices)?;
         write_table_impl(out, rel, &arity, &indices, &index_selection)?;
     }
-    for (func, arity) in iter_func_arities(eqlog, identifiers) {
-        let dom = &arity[0..arity.len() - 1];
-        write_func_args_struct(out, func, dom)?;
+
+    for func in eqlog.iter_func() {
+        let func_args_struct = display_func_args_struct(func, eqlog, identifiers);
+        writeln!(out, "{func_args_struct}")?;
     }
 
     write!(out, "\n")?;

@@ -25,7 +25,12 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
             semantic_arg_types = {semantic_arg_types:?}
         "}
     }
-    let domain = type_list_vec(eqlog.domain(func).expect("domain should be total"), eqlog);
+    let domain = type_list_vec(
+        eqlog
+            .flat_domain(func)
+            .expect("flat domain should be total"),
+        eqlog,
+    );
     let codomain = eqlog.codomain(func).expect("codomain should be total");
 
     let rel = eqlog.func_rel(func).unwrap();

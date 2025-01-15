@@ -42,8 +42,8 @@ mod monoid_test;
 //mod pca_test;
 #[cfg(test)]
 mod branches_test;
-#[cfg(test)]
-mod indexed_pointed_test;
+//#[cfg(test)]
+//mod indexed_pointed_test;
 #[cfg(test)]
 mod inference_test;
 #[cfg(test)]

@@ -36,7 +36,7 @@ impl QuerySpec {
     /// The [QuerySpec] to query for one specific tuple in a relation.
     pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
         let arity_len =
-            type_list_vec(eqlog.arity(rel).expect("arity should be total"), eqlog).len();
+            type_list_vec(eqlog.flat_arity(rel).expect("arity should be total"), eqlog).len();
         QuerySpec {
             projections: (0..arity_len).collect(),
             diagonals: BTreeSet::new(),
@@ -45,7 +45,7 @@ impl QuerySpec {
     }
     /// The [QuerySpec] for evaluating a function.
     pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
-        let domain = eqlog.domain(func).expect("domain should be total");
+        let domain = eqlog.flat_domain(func).expect("domain should be total");
         let dom_len = type_list_vec(domain, eqlog).len();
         QuerySpec {
             projections: (0..dom_len).collect(),

@@ -112,6 +112,7 @@ fn iter_rel_app<'a>(
 /// The output statements assumes that data in the domain of the morphism has already been matched.
 fn flatten_if_arbitrary(
     morphism: Morphism,
+    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Vec<FlatStmt> {
@@ -128,18 +129,30 @@ fn flatten_if_arbitrary(
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
-        if !eqlog.rel_tuple_in_img(morphism, rel, els) {
-            let args: Vec<FlatVar> = el_list_vec(els, eqlog)
-                .into_iter()
-                .map(|el| *el_vars.get(&el).unwrap())
-                .collect();
-            let age = QueryAge::All;
-            stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
-                rel,
-                args,
-                age,
-            })));
+        let els_vec = el_list_vec(els, eqlog);
+        if eqlog.rel_tuple_in_img(morphism, rel, els) {
+            continue;
         }
+
+        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+
+        let mut args: Vec<FlatVar> = Vec::new();
+        if els_vec.len() != flat_arity.len() {
+            assert!(els_vec.len() + 1 == flat_arity.len());
+            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+            let ambient_model_var = ambient_model_vars
+                .get(&rel_def_sym_scope)
+                .expect("Rel is defined in ambient model, so it should have a model variable");
+            args.push(*ambient_model_var);
+        }
+        args.extend(els_vec.iter().copied().map(|el| *el_vars.get(&el).unwrap()));
+
+        let age = QueryAge::All;
+        stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
+            rel,
+            args,
+            age,
+        })));
     }
 
     for el in iter_els(cod, eqlog) {
@@ -160,6 +173,7 @@ fn flatten_if_arbitrary(
 /// so far.
 fn flatten_if_fresh(
     morphism: Morphism,
+    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Vec<Vec<FlatStmt>> {
@@ -172,10 +186,20 @@ fn flatten_if_fresh(
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
-        let args: Vec<FlatVar> = el_list_vec(els, eqlog)
-            .into_iter()
-            .map(|el| *el_vars.get(&el).unwrap())
-            .collect();
+        let els_vec = el_list_vec(els, eqlog);
+
+        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+
+        let mut args: Vec<FlatVar> = Vec::new();
+        if els_vec.len() != flat_arity.len() {
+            assert!(els_vec.len() + 1 == flat_arity.len());
+            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+            let ambient_model_var = ambient_model_vars
+                .get(&rel_def_sym_scope)
+                .expect("Rel is defined in ambient model, so it should have a model variable");
+            args.push(*ambient_model_var);
+        }
+        args.extend(els_vec.iter().copied().map(|el| *el_vars.get(&el).unwrap()));
 
         if eqlog.rel_tuple_in_img(morphism, rel, els) {
             arbitrary_rel_tuples.push((rel, args));
@@ -270,6 +294,7 @@ fn flatten_if_fresh(
 /// The provided `morphism` must be surjective.
 fn flatten_surj_then(
     morphism: Morphism,
+    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Vec<FlatStmt> {
@@ -289,15 +314,28 @@ fn flatten_surj_then(
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
-        if !eqlog.rel_tuple_in_img(morphism, rel, els) {
-            let args: Vec<FlatVar> = el_list_vec(els, eqlog)
-                .into_iter()
-                .map(|el| *el_vars.get(&el).unwrap())
-                .collect();
-            stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
-                FlatSurjThenStmtRelation { rel, args },
-            )));
+        let els_vec = el_list_vec(els, eqlog);
+        if eqlog.rel_tuple_in_img(morphism, rel, els) {
+            continue;
         }
+
+        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+
+        let mut args: Vec<FlatVar> = Vec::new();
+
+        if els_vec.len() != flat_arity.len() {
+            assert!(els_vec.len() + 1 == flat_arity.len());
+            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+            let ambient_model_var = ambient_model_vars
+                .get(&rel_def_sym_scope)
+                .expect("Rel is defined in ambient model, so it should have a model variable");
+            args.push(*ambient_model_var);
+        }
+
+        args.extend(els_vec.iter().copied().map(|el| *el_vars.get(&el).unwrap()));
+        stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
+            FlatSurjThenStmtRelation { rel, args },
+        )));
     }
 
     assert!(
@@ -455,7 +493,7 @@ pub fn flatten(
                 let old_if_func = FlatFunc {
                     name: FlatFuncName(funcs.len()),
                     args: old_if_func_args.clone(),
-                    body: flatten_if_arbitrary(morphism, &el_vars, eqlog),
+                    body: flatten_if_arbitrary(morphism, &ambient_model_vars, &el_vars, eqlog),
                 };
                 funcs.push(old_if_func);
                 funcs[matching_func_index].body.push(FlatStmt::Call {
@@ -473,7 +511,7 @@ pub fn flatten(
             // funcs[0].
             let before_fresh_if_func_len = funcs.len();
             funcs.extend(
-                flatten_if_fresh(morphism, &el_vars, eqlog)
+                flatten_if_fresh(morphism, &ambient_model_vars, &el_vars, eqlog)
                     .into_iter()
                     .zip(before_fresh_if_func_len..)
                     .map(|(body, func_index)| FlatFunc {
@@ -520,9 +558,12 @@ pub fn flatten(
             // to 1. introduce a flat eqlog statement that matches the empty join. Then we can
             // introduce a new function here that matches the empty join and only then executes the
             // flatten_surj_then statements. This function can then be called from function 0.
-            funcs[matching_func_index]
-                .body
-                .extend(flatten_surj_then(morphism, &el_vars, eqlog));
+            funcs[matching_func_index].body.extend(flatten_surj_then(
+                morphism,
+                &ambient_model_vars,
+                &el_vars,
+                eqlog,
+            ));
             matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else if eqlog.non_surj_then_morphism(morphism) {
             let dom_vars: Vec<FlatVar> = iter_els(eqlog.dom(morphism).unwrap(), eqlog)
@@ -569,7 +610,8 @@ pub fn flatten(
             // Create a function that matches the codomain of `morphism` with fresh data relative
             // to the domain. Since a non-surjective statement is given by at most one new tuple in
             // a relation, it should be possible to match it with fresh data in just one function.
-            let mut fresh_if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog).into_iter();
+            let mut fresh_if_blocks =
+                flatten_if_fresh(morphism, &ambient_model_vars, &el_vars, eqlog).into_iter();
             let fresh_if_block = fresh_if_blocks
                 .next()
                 .expect("There should be at least one block");

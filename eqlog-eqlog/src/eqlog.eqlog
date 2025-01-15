@@ -736,6 +736,41 @@ rule arity_laws {
     }
 }
 
+func flat_arity(Rel) -> TypeList;
+func flat_domain(Func) -> TypeList;
+
+rule model_parent_rel_flat_arity_law {
+    if rel = ModelParentRel(_);
+    if ar = arity(rel);
+    then flat_arity(rel) = ar;
+}
+rule top_level_flat_arity_law {
+    if ss = rel_definition_symbol_scope(rel);
+    if ss = module_symbol_scope(_);
+    if ar = arity(rel);
+    then flat_arity(rel) = ar;
+}
+rule top_level_flat_domain_law {
+    if ss = rel_definition_symbol_scope(FuncRel(function));
+    if ss = module_symbol_scope(_);
+    if d = domain(function);
+    then flat_domain(function) = d;
+}
+rule member_flat_arity_law {
+    if ss = rel_definition_symbol_scope(rel);
+    if model_ty = symbol_scope_model(ss);
+    if ar = arity(rel);
+    then cons_ar := ConsTypeList(model_ty, ar)!;
+    then flat_arity(rel) = cons_ar;
+}
+rule member_flat_domain_law {
+    if ss = rel_definition_symbol_scope(FuncRel(function));
+    if model_ty = symbol_scope_model(ss);
+    if d = domain(function);
+    then cons_d := ConsTypeList(model_ty, d)!;
+    then flat_domain(function) = cons_d;
+}
+
 // ## Structures
 
 type Structure;
