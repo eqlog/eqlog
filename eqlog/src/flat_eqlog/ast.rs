@@ -48,12 +48,6 @@ pub struct FlatSurjThenStmtRelation {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct FlatThenStmtType {
-    pub var: FlatVar,
-    pub typ: Type,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatSurjThenStmt {
     Equal(FlatStmtEqual),
     Relation(FlatSurjThenStmtRelation),
