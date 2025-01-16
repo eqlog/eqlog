@@ -608,6 +608,25 @@ rule type_name_semantic_type {
     then type_name(ty) = name;
 }
 
+func parent_model_func(nested_type: Type) -> Func;
+rule parent_model_func_defined_and_codomain {
+    if ss = type_definition_symbol_scope(typ);
+    if parent_type = symbol_scope_model(ss);
+    then parent_func := parent_model_func(typ)!;
+    then codomain(parent_func) = parent_type;
+}
+rule parent_model_func_def_scope {
+    if ss = type_definition_symbol_scope(typ);
+    if parent_func = parent_model_func(typ);
+    if rel = FuncRel(parent_func);
+    then rel_definition_symbol_scope(rel) = ss;
+}
+rule parent_model_func_domain {
+    if parent_func = parent_model_func(_);
+    then nil := NilTypeList()!;
+    then domain(parent_func) = nil;
+}
+
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
 rule semantic_arg_types_nil {
     if nil_arg_decl_list_node(n);
@@ -671,8 +690,7 @@ rule semantic_decl_ctor {
 
 enum Rel {
     PredRel(Pred),
-    FuncRel(Func),
-    ModelParentRel(SymbolScope)
+    FuncRel(Func)
 }
 
 func rel_name(Rel) -> Ident;
@@ -724,26 +742,12 @@ rule arity_laws {
             then tys := SnocTypeList(dom, cod)!;
             then arity(rel) = tys;
         }
-        ModelParentRel(child_scope) => {
-            if parent_scope = symbol_scope_parent(child_scope);
-            if child_model_type = symbol_scope_model(child_scope);
-            if parent_model_type = symbol_scope_model(parent_scope);
-            then nil := NilTypeList()!;
-            then parent_singleton := ConsTypeList(parent_model_type, nil)!;
-            then child_parent := ConsTypeList(child_model_type, parent_singleton)!;
-            then arity(rel) = child_parent;
-        }
     }
 }
 
 func flat_arity(Rel) -> TypeList;
 func flat_domain(Func) -> TypeList;
 
-rule model_parent_rel_flat_arity_law {
-    if rel = ModelParentRel(_);
-    if ar = arity(rel);
-    then flat_arity(rel) = ar;
-}
 rule top_level_flat_arity_law {
     if ss = rel_definition_symbol_scope(rel);
     if ss = module_symbol_scope(_);
@@ -1108,13 +1112,6 @@ func symbol_scope_parent(larger: SymbolScope) -> SymbolScope;
 rule symbol_scope_extension_parent {
     if symbol_scope_extension(base, ext);
     then symbol_scope_parent(ext) = base;
-}
-
-rule model_parent_rel_law {
-    if parent_scope = symbol_scope_parent(child_scope);
-    if _ = symbol_scope_model(child_scope);
-    if _ = symbol_scope_model(parent_scope);
-    then ModelParentRel(child_scope)!;
 }
 
 func module_symbol_scope(module: ModuleNode) -> SymbolScope;

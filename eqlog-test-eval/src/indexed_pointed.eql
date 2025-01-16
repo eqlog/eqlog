@@ -2,6 +2,9 @@ model Pointed {
     type P;
 
     func pt() -> P;
+
+    model Nested {
+    }
 }
 
 rule pointed_reflexivity {

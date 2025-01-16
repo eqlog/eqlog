@@ -134,12 +134,11 @@ pub fn select_indices<'a>(
 ) -> IndexSelection {
     // Every relation needs a QuerySpec for all tuples, and a QuerySpec for one specific tuple.
     // TODO: Can't we do without the QuerySpec for all dirty tuples though?
-    let mut query_specs: BTreeMap<String, BTreeSet<QuerySpec>> = eqlog
+    let mut query_specs: BTreeMap<Rel, BTreeSet<QuerySpec>> = eqlog
         .iter_rel()
         .map(|rel| {
             let min_spec_set =
                 btreeset! {QuerySpec::all(), QuerySpec::one(rel, eqlog), QuerySpec::all_dirty()};
-            let rel = format!("{}", display_rel(rel, eqlog, identifiers));
             (rel, min_spec_set)
         })
         .collect();
@@ -147,18 +146,14 @@ pub fn select_indices<'a>(
     // Every func needs in addition a QuerySpec for the arguments to the function to generate
     // the public eval function and for non surjective then statements.
     for func in eqlog.iter_func() {
-        let rel = format!(
-            "{}",
-            display_rel(eqlog.func_rel(func).unwrap(), eqlog, identifiers)
-        );
+        let rel = eqlog.func_rel(func).unwrap();
         let spec = QuerySpec::eval_func(func, eqlog);
-        query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
+        query_specs.get_mut(&rel).unwrap().insert(spec);
     }
 
     // Every relation if stmt needs a QuerySpec.
     for (if_stmt_rel, info) in if_stmt_rel_infos {
         let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
-        let rel = format!("{}", display_rel(*rel, eqlog, identifiers));
         let RelationInfo {
             diagonals,
             in_projections,
@@ -169,7 +164,7 @@ pub fn select_indices<'a>(
             projections: in_projections.keys().copied().collect(),
             age: *age,
         };
-        query_specs.get_mut(rel.as_str()).unwrap().insert(spec);
+        query_specs.get_mut(rel).unwrap().insert(spec);
     }
 
     query_specs
@@ -197,10 +192,8 @@ pub fn select_indices<'a>(
             let desugared_query_index_map: BTreeMap<QuerySpec, IndexSpec> = desugared_chains
                 .into_iter()
                 .flat_map(|queries| {
-                    let index = IndexSpec::from_query_spec_chain(
-                        get_arity(&rel, eqlog, identifiers).unwrap().len(),
-                        &queries,
-                    );
+                    let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+                    let index = IndexSpec::from_query_spec_chain(arity.len(), &queries);
                     queries.into_iter().zip(repeat(index))
                 })
                 .collect();
@@ -241,6 +234,7 @@ pub fn select_indices<'a>(
                 })
                 .collect();
 
+            let rel = display_rel(rel, eqlog, identifiers).to_string();
             (rel, query_index_map)
         })
         .collect()

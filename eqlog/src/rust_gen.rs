@@ -1602,20 +1602,16 @@ fn write_model_delta_new_fn(
         })
         .format("\n");
     let new_defines = eqlog
-        .iter_semantic_func()
-        .filter_map(|(_, ident, func)| {
-            if !eqlog.function_can_be_made_defined(func) {
-                return None;
-            }
-
-            let func_name = identifiers.get(&ident).unwrap();
-            let func_snake = func_name.to_case(Snake);
-
-            Some(FmtFn(move |f: &mut Formatter| -> Result {
-                writedoc! {f, "
-                    new_{func_snake}_def: Vec::new(),
-                "}
-            }))
+        .iter_func()
+        .filter(|&func| eqlog.function_can_be_made_defined(func))
+        .map(|func| {
+            FmtFn(move |f| {
+                let rel = eqlog.func_rel(func).unwrap();
+                let func_snake = display_rel(rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                write!(f, "new_{func_snake}_def: Vec::new(),")
+            })
         })
         .format("\n");
 
@@ -1759,18 +1755,6 @@ fn display_var(var: FlatVar) -> impl Display {
         write!(f, "tm{var}")?;
         Ok(())
     })
-}
-
-fn display_type<'a>(
-    typ: Type,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    let ident = eqlog
-        .iter_semantic_type()
-        .find_map(|(_sym_scope, ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
-        .expect("semantic_type should be surjective");
-    identifiers.get(&ident).unwrap().as_str()
 }
 
 fn display_if_stmt_header<'a>(

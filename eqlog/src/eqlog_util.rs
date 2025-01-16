@@ -1,8 +1,11 @@
+use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
-use std::iter::{once, successors};
+use std::iter::successors;
+
+use Case::Snake;
 
 pub fn iter_els<'a>(structure: Structure, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = El> {
     eqlog.iter_el_structure().filter_map(move |(el, strct)| {
@@ -208,50 +211,6 @@ pub fn iter_pred_arities<'a>(
     })
 }
 
-pub fn semantic_type_ident(ty: Type, eqlog: &Eqlog) -> Ident {
-    eqlog
-        .iter_semantic_type()
-        .find_map(|(_, ident, ty0)| eqlog.are_equal_type(ty0, ty).then_some(ident))
-        .unwrap()
-}
-
-pub fn iter_func_arities<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
-    eqlog.iter_semantic_func().map(|(_, ident, func)| {
-        let name = identifiers.get(&ident).unwrap().as_str();
-        let domain_tys: Vec<Type> = type_list_vec(eqlog.domain(func).unwrap(), eqlog);
-        let codomain: Type = eqlog.codomain(func).unwrap();
-
-        let arity: Vec<&str> = domain_tys
-            .into_iter()
-            .chain(once(codomain))
-            .map(|ty| {
-                let ident = semantic_type_ident(ty, eqlog);
-                identifiers.get(&ident).unwrap().as_str()
-            })
-            .collect();
-
-        (name, arity)
-    })
-}
-
-pub fn iter_relation_arities<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
-    iter_pred_arities(eqlog, identifiers).chain(iter_func_arities(eqlog, identifiers))
-}
-
-pub fn get_arity<'a>(
-    rel: &'a str,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> Option<Vec<&'a str>> {
-    iter_relation_arities(eqlog, identifiers).find_map(|(r, arity)| (r == rel).then_some(arity))
-}
-
 /// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element
 /// representing the natural number in the provided eqlog model.
 fn nats<'a>(eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Nat> {
@@ -321,11 +280,23 @@ fn assign_el_names(
     names
 }
 
+pub fn display_type<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let ident = eqlog
+        .iter_semantic_type()
+        .find_map(|(_sym_scope, ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
+        .expect("semantic_type should be surjective");
+    identifiers.get(&ident).unwrap().as_str()
+}
+
 pub fn display_rel<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
+) -> String {
     let pred = eqlog.iter_pred_rel().find_map(|(pred, rel0)| {
         if eqlog.are_equal_rel(rel0, rel) {
             Some(pred)
@@ -338,7 +309,7 @@ pub fn display_rel<'a>(
             .iter_semantic_pred()
             .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
             .expect("semantic_pred should be surjective");
-        return identifiers.get(&ident).unwrap().as_str();
+        return identifiers.get(&ident).unwrap().clone();
     }
 
     let func = eqlog.iter_func_rel().find_map(|(func, rel0)| {
@@ -348,12 +319,30 @@ pub fn display_rel<'a>(
             None
         }
     });
+
     if let Some(func) = func {
         let ident = eqlog
             .iter_semantic_func()
-            .find_map(|(_, ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident))
-            .expect("semantic_func should be surjective");
-        return identifiers.get(&ident).unwrap().as_str();
+            .find_map(|(_, ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident));
+        if let Some(ident) = ident {
+            return identifiers.get(&ident).unwrap().clone();
+        }
+
+        let model_type = eqlog
+            .iter_parent_model_func()
+            .find_map(|(model_type, func0)| {
+                if eqlog.are_equal_func(func, func0) {
+                    Some(model_type)
+                } else {
+                    None
+                }
+            });
+        if let Some(model_type) = model_type {
+            let type_name = display_type(model_type, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            return format!("{type_name}_parent");
+        }
     }
 
     panic!("Rel should be either pred or func")

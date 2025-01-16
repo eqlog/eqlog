@@ -1,0 +1,4 @@
+model Outer {
+    model Inner {
+    }
+}
