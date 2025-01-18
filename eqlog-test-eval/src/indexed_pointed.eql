@@ -3,11 +3,13 @@ model Pointed {
 
     func pt() -> P;
 
-    model Nested {
+    rule pointed_reflexivity_member {
+        if x: P;
+        then x = x;
     }
 }
 
-rule pointed_reflexivity {
+rule pointed_reflexivity_global {
     if ptd: Pointed;
     if x: ptd.P;
     then x = x;

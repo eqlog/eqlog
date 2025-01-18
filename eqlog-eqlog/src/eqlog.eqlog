@@ -1057,6 +1057,14 @@ rule map_reflects_el_type {
     }
 }
 
+// Mapping elements commutes with ambient model els.
+rule map_preserves_ambient_model_els {
+    if el = ambient_model_el(ss, _);
+    if mapped_el = map_el(morph, el);
+    if cod(morph) = cod_structure;
+    then mapped_el = ambient_model_el(ss, cod_structure);
+}
+
 // ### Kernel pairs of morphisms.
 
 pred in_ker(Morphism, El, El);
@@ -1112,6 +1120,16 @@ func symbol_scope_parent(larger: SymbolScope) -> SymbolScope;
 rule symbol_scope_extension_parent {
     if symbol_scope_extension(base, ext);
     then symbol_scope_parent(ext) = base;
+}
+pred symbol_scope_ancestor(ss: SymbolScope, ancestor: SymbolScope);
+rule symbol_scope_ancestor_reflexivity {
+    if ss: SymbolScope;
+    then symbol_scope_ancestor(ss, ss);
+}
+rule symbol_scope_ancestor_parent {
+    if symbol_scope_ancestor(ss, ancestor);
+    if parent = symbol_scope_parent(ancestor);
+    then symbol_scope_ancestor(ss, parent);
 }
 
 func module_symbol_scope(module: ModuleNode) -> SymbolScope;
@@ -1621,10 +1639,57 @@ rule before_rule_structure_total {
     if rn: RuleDeclNode;
     then before_rule_structure(rn)!;
 }
+
+func ambient_model_el_structure(RuleDeclNode) -> Structure;
+rule ambient_model_el_structure_module_scope {
+    if decl_node_rule(decl, rul);
+    if decl_symbol_scope(decl) = module_symbol_scope(_);
+    if before_rule_struct = before_rule_structure(rul);
+    then ambient_model_el_structure(rul) = before_rule_struct;
+}
+
+func ambient_model_el_morphism(RuleDeclNode) -> Morphism;
+rule ambient_model_el_structure_model_scope {
+    if decl_node_rule(decl, rul);
+    if ss = decl_symbol_scope(decl);
+    if ss = model_member_symbol_scope(_);
+    then ambient_model_el_morphism(rul)!;
+}
+
+rule ambient_model_el_morphism_signature {
+    if morph = ambient_model_el_morphism(rul);
+    if brs = before_rule_structure(rul);
+    then dom(morph) = brs;
+    then ams := ambient_model_el_structure(rul)!;
+    then cod(morph) = ams;
+}
+
+rule ambient_model_el_structure_els {
+    if ams = ambient_model_el_structure(rul);
+    if decl_node_rule(decl, rul);
+    if ss = decl_symbol_scope(decl);
+    if symbol_scope_ancestor(ss, ancestor_scope);
+    if _ = symbol_scope_model(ancestor_scope);
+    then ambient_model_el(ancestor_scope, ams)!;
+}
+rule ambient_model_el_parent_law {
+    if ams = ambient_model_el_structure(_);
+    if el = ambient_model_el(ss, ams);
+    if parent_el = ambient_model_el(symbol_scope_parent(ss), ams);
+
+    if el_typ = symbol_scope_model(ss);
+    if parent_func = parent_model_func(el_typ);
+    if parent_rel = FuncRel(parent_func);
+    then nil := NilElList(ams)!;
+    then parent_el_nil := ConsElList(parent_el, nil)!;
+    then el_parent_el_nil := ConsElList(el, parent_el_nil)!;
+    then rel_app(parent_rel, el_parent_el_nil);
+}
+
 rule before_first_rule_stmt {
     if rule_decl(rul, stmts);
     if cons_stmt_list_node(stmts, first, _);
-    if structure = before_rule_structure(rul);
+    if structure = ambient_model_el_structure(rul);
     then before_stmt_structure(first, structure);
 }
 
@@ -1689,6 +1754,10 @@ pred surj_then_morphism(Morphism);
 pred non_surj_then_morphism(Morphism);
 pred noop_morphism(Morphism);
 
+rule ambient_model_el_morphism_is_if {
+    if morph = ambient_model_el_morphism(_);
+    then if_morphism(morph);
+}
 rule if_stmt_morphism_is_if {
     if if_stmt_node(stmt, _);
     if stmt_morphism(stmt, morph);
@@ -1869,6 +1938,9 @@ rule semantic_els_cons {
     then semantic_els(terms, structure) = cons_els;
 }
 
+// #### Variables representing ambient models.
+func ambient_model_el(model_member_scope: SymbolScope, Structure) -> El;
+
 // #### The structures of semantic elements
 rule semantic_el_struct {
     if el = semantic_el(_, structure);
@@ -1877,6 +1949,19 @@ rule semantic_el_struct {
 rule semantic_els_struct {
     if els = semantic_els(_, structure);
     then els_structure(els) = structure;
+}
+
+rule ambient_model_el_struct {
+    if el = ambient_model_el(_, structure);
+    then el_structure(el) = structure;
+}
+
+// #### Types of ambient model els
+rule ambient_model_el_type {
+    if el = ambient_model_el(member_scope, _);
+    if model_type = symbol_scope_model(member_scope);
+    if model_el_type = AmbientType(model_type);
+    then el_type(el, model_el_type);
 }
 
 // #### Semantics of terms

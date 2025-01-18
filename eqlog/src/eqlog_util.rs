@@ -80,30 +80,6 @@ pub fn el_list_vec(mut els: ElList, eqlog: &Eqlog) -> Vec<El> {
     conss.into_iter().chain(snocs.into_iter().rev()).collect()
 }
 
-//pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
-//    let mut result = Vec::new();
-//    loop {
-//        let cons_entry = eqlog
-//            .iter_cons_type_list()
-//            .find(|(_, _, cons_types)| eqlog.are_equal_type_list(*cons_types, types));
-//        if let Some((head_type, tail_types, _)) = cons_entry {
-//            result.push(head_type);
-//            types = tail_types;
-//            continue;
-//        }
-//
-//        let nil = eqlog
-//            .nil_type_list()
-//            .expect("nil_type_list should be defined if there exists a type list");
-//        assert!(
-//            eqlog.are_equal_type_list(types, nil),
-//            "a type_list should be either nil or cons"
-//        );
-//        break;
-//    }
-//
-//    result
-//}
 pub fn type_list_vec(mut types: TypeList, eqlog: &Eqlog) -> Vec<Type> {
     let mut conss = Vec::new();
     let mut snocs = Vec::new();

@@ -1,4 +1,6 @@
 model Outer {
     model Inner {
+        rule asdf {
+        }
     }
 }
