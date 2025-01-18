@@ -608,6 +608,11 @@ rule type_name_semantic_type {
     then type_name(ty) = name;
 }
 
+func virtual_symbol_scope() -> SymbolScope;
+rule virtual_symbol_scope_total {
+    then virtual_symbol_scope()!;
+}
+
 func parent_model_func(nested_type: Type) -> Func;
 rule parent_model_func_defined_and_codomain {
     if ss = type_definition_symbol_scope(typ);
@@ -615,16 +620,20 @@ rule parent_model_func_defined_and_codomain {
     then parent_func := parent_model_func(typ)!;
     then codomain(parent_func) = parent_type;
 }
+
 rule parent_model_func_def_scope {
-    if ss = type_definition_symbol_scope(typ);
-    if parent_func = parent_model_func(typ);
+    if ss = virtual_symbol_scope();
+    if parent_func = parent_model_func(_);
     if rel = FuncRel(parent_func);
     then rel_definition_symbol_scope(rel) = ss;
 }
+
 rule parent_model_func_domain {
-    if parent_func = parent_model_func(_);
+    if parent_func = parent_model_func(typ);
     then nil := NilTypeList()!;
-    then domain(parent_func) = nil;
+    then typ_nil := ConsTypeList(typ, nil)!;
+    then domain(parent_func) = typ_nil;
+    then flat_domain(parent_func) = typ_nil;
 }
 
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
@@ -750,13 +759,21 @@ func flat_domain(Func) -> TypeList;
 
 rule top_level_flat_arity_law {
     if ss = rel_definition_symbol_scope(rel);
-    if ss = module_symbol_scope(_);
+    branch {
+        if ss = module_symbol_scope(_);
+    } along {
+        if ss = virtual_symbol_scope();
+    }
     if ar = arity(rel);
     then flat_arity(rel) = ar;
 }
 rule top_level_flat_domain_law {
     if ss = rel_definition_symbol_scope(FuncRel(function));
-    if ss = module_symbol_scope(_);
+    branch {
+        if ss = module_symbol_scope(_);
+    } along {
+        if ss = virtual_symbol_scope();
+    }
     if d = domain(function);
     then flat_domain(function) = d;
 }
