@@ -443,6 +443,7 @@ fn flatten_surj_then(
 /// pushout along making a function defined on a single argument tuple.
 fn flatten_non_surj_then(
     morphism: Morphism,
+    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Option<FlatNonSurjThenStmt> {
@@ -491,10 +492,19 @@ fn flatten_non_surj_then(
         "Arguments to obtain new element should be in image"
     );
 
-    let func_args = func_arg_els
+    let rel = eqlog.func_rel(func).unwrap();
+    let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+    let model_var = ambient_model_vars.get(&rel_def_sym_scope).copied();
+
+    let func_args: Vec<FlatVar> = model_var
         .into_iter()
-        .map(|el| *el_vars.get(&el).unwrap())
+        .chain(
+            func_arg_els
+                .into_iter()
+                .map(|el| *el_vars.get(&el).unwrap()),
+        )
         .collect();
+
     let result = *el_vars.get(&new_el).unwrap();
     Some(FlatNonSurjThenStmt {
         func,
@@ -661,13 +671,14 @@ pub fn flatten(
                 .map(|el| *el_vars.get(&el).unwrap())
                 .collect();
 
-            let non_surj_then_stmt = match flatten_non_surj_then(morphism, &el_vars, eqlog) {
-                Some(non_surj_then_stmt) => non_surj_then_stmt,
-                None => {
-                    // In this case, `morphism` is an isomorphism, so nothing needs to be done.
-                    continue;
-                }
-            };
+            let non_surj_then_stmt =
+                match flatten_non_surj_then(morphism, &ambient_model_vars, &el_vars, eqlog) {
+                    Some(non_surj_then_stmt) => non_surj_then_stmt,
+                    None => {
+                        // In this case, `morphism` is an isomorphism, so nothing needs to be done.
+                        continue;
+                    }
+                };
 
             // Create a function that, given a match of the domain of `morphism`, either
             //
