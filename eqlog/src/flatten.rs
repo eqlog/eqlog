@@ -155,12 +155,37 @@ fn flatten_if_arbitrary(
         })));
     }
 
-    for el in iter_els(cod, eqlog) {
-        if !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el) {
-            let var = *el_vars.get(&el).unwrap();
-            let age = QueryAge::All;
-            stmts.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
-        }
+    for el in iter_els(cod, eqlog)
+        .filter(move |&el| !eqlog.el_in_img(morphism, el) && !eqlog.constrained_el(el))
+    {
+        let var = *el_vars.get(&el).unwrap();
+        let age = QueryAge::All;
+        let el_typ = el_type(el, eqlog).unwrap();
+        let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
+            ElementTypeCase::AmbientType(typ) => {
+                let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
+                let var = ambient_model_vars.get(&typ_def_sym_scope).copied();
+                (var, typ)
+            }
+            ElementTypeCase::InstantiatedType(model_el, typ) => {
+                let var = Some(*el_vars.get(&model_el).unwrap());
+                (var, typ)
+            }
+        };
+        let if_stmt = match parent_var {
+            None => FlatIfStmt::Type(FlatIfStmtType { var, age }),
+            Some(parent_var) => {
+                let parent_rel = eqlog
+                    .func_rel(eqlog.parent_model_func(typ).unwrap())
+                    .unwrap();
+                FlatIfStmt::Relation(FlatIfStmtRelation {
+                    rel: parent_rel,
+                    args: vec![var, parent_var],
+                    age,
+                })
+            }
+        };
+        stmts.push(FlatStmt::If(if_stmt));
     }
 
     stmts
@@ -180,8 +205,8 @@ fn flatten_if_fresh(
     let mut fresh_rel_tuples: Vec<(Rel, Vec<FlatVar>)> = Vec::new();
     let mut arbitrary_rel_tuples: Vec<(Rel, Vec<FlatVar>)> = Vec::new();
 
-    let mut fresh_type_els: Vec<FlatVar> = Vec::new();
-    let mut arbitrary_type_els: Vec<FlatVar> = Vec::new();
+    let mut fresh_type_els: Vec<El> = Vec::new();
+    let mut arbitrary_type_els: Vec<El> = Vec::new();
 
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
@@ -210,11 +235,10 @@ fn flatten_if_fresh(
 
     for el in iter_els(cod, eqlog).filter(|el| !eqlog.constrained_el(*el)) {
         let in_img = eqlog.el_in_img(morphism, el);
-        let var = *el_vars.get(&el).unwrap();
         if in_img {
-            arbitrary_type_els.push(var);
+            arbitrary_type_els.push(el);
         } else {
-            fresh_type_els.push(var);
+            fresh_type_els.push(el);
         }
     }
 
@@ -234,6 +258,12 @@ fn flatten_if_fresh(
                 Ordering::Equal => QueryAge::New,
                 Ordering::Greater => QueryAge::Old,
             };
+            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+            let ambient_model_var = ambient_model_vars.get(&rel_def_sym_scope).copied();
+            let args = match ambient_model_var {
+                Some(ambient_model_var) => [ambient_model_var].into_iter().chain(args).collect(),
+                None => args,
+            };
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
@@ -241,13 +271,39 @@ fn flatten_if_fresh(
             })));
         }
 
-        for var in fresh_type_els
+        for el in fresh_type_els
             .iter()
             .chain(arbitrary_type_els.iter())
             .copied()
         {
             let age = QueryAge::All;
-            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
+            let var = *el_vars.get(&el).unwrap();
+            let el_typ = el_type(el, eqlog).unwrap();
+            let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
+                ElementTypeCase::AmbientType(typ) => {
+                    let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
+                    let var = ambient_model_vars.get(&typ_def_sym_scope).copied();
+                    (var, typ)
+                }
+                ElementTypeCase::InstantiatedType(model_el, typ) => {
+                    let var = Some(*el_vars.get(&model_el).unwrap());
+                    (var, typ)
+                }
+            };
+            let if_stmt = match parent_var {
+                None => FlatIfStmt::Type(FlatIfStmtType { var, age }),
+                Some(parent_var) => {
+                    let parent_rel = eqlog
+                        .func_rel(eqlog.parent_model_func(typ).unwrap())
+                        .unwrap();
+                    FlatIfStmt::Relation(FlatIfStmtRelation {
+                        rel: parent_rel,
+                        args: vec![var, parent_var],
+                        age,
+                    })
+                }
+            };
+            block.push(FlatStmt::If(if_stmt));
         }
 
         blocks.push(block);
@@ -261,6 +317,12 @@ fn flatten_if_fresh(
             .chain(arbitrary_rel_tuples.iter())
             .cloned()
         {
+            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+            let ambient_model_var = ambient_model_vars.get(&rel_def_sym_scope).copied();
+            let args = match ambient_model_var {
+                Some(ambient_model_var) => [ambient_model_var].into_iter().chain(args).collect(),
+                None => args,
+            };
             let age = QueryAge::Old;
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
@@ -269,7 +331,7 @@ fn flatten_if_fresh(
             })));
         }
 
-        for (i, var) in fresh_type_els
+        for (i, el) in fresh_type_els
             .iter()
             .chain(arbitrary_type_els.iter())
             .copied()
@@ -280,7 +342,33 @@ fn flatten_if_fresh(
                 Ordering::Equal => QueryAge::New,
                 Ordering::Greater => QueryAge::Old,
             };
-            block.push(FlatStmt::If(FlatIfStmt::Type(FlatIfStmtType { var, age })));
+            let var = *el_vars.get(&el).unwrap();
+            let el_typ = el_type(el, eqlog).unwrap();
+            let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
+                ElementTypeCase::AmbientType(typ) => {
+                    let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
+                    let var = ambient_model_vars.get(&typ_def_sym_scope).copied();
+                    (var, typ)
+                }
+                ElementTypeCase::InstantiatedType(model_el, typ) => {
+                    let var = Some(*el_vars.get(&model_el).unwrap());
+                    (var, typ)
+                }
+            };
+            let if_stmt = match parent_var {
+                None => FlatIfStmt::Type(FlatIfStmtType { var, age }),
+                Some(parent_var) => {
+                    let parent_rel = eqlog
+                        .func_rel(eqlog.parent_model_func(typ).unwrap())
+                        .unwrap();
+                    FlatIfStmt::Relation(FlatIfStmtRelation {
+                        rel: parent_rel,
+                        args: vec![var, parent_var],
+                        age,
+                    })
+                }
+            };
+            block.push(FlatStmt::If(if_stmt));
         }
 
         blocks.push(block);
