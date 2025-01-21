@@ -2093,6 +2093,16 @@ rule pred_then_atom_semantics {
     then rel_app(rel, arg_els);
 }
 
+// ### Implicit parent els in rel apps
+func rel_app_parent_model_el(rel: Rel, args: ElList) -> El;
+rule rel_app_parent_model_el_law {
+    if rel_app(rel, args);
+    if structure = els_structure(args);
+    if ss = rel_definition_symbol_scope(rel);
+    if el = ambient_model_el(ss, structure);
+    then rel_app_parent_model_el(rel, args) = el;
+}
+
 // ## Epic check
 
 // ### Terms that should need epic checking

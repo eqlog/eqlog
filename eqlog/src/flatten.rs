@@ -6,20 +6,6 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-fn assign_ambient_model_vars(
-    ambient_sym_scope: SymbolScope,
-    available_vars: &mut impl Iterator<Item = FlatVar>,
-    eqlog: &Eqlog,
-) -> BTreeMap<SymbolScope, FlatVar> {
-    iter_symbol_scope_ancestors(ambient_sym_scope, eqlog)
-        .filter_map(|sym_scope| {
-            let _model_type = eqlog.symbol_scope_model(sym_scope)?;
-            Some(sym_scope)
-        })
-        .map(move |sym_scope| (sym_scope, available_vars.next().unwrap()))
-        .collect()
-}
-
 /// Assign compatible [FlatTerm]s to the [El]s in the codomains of a list of morphisms.
 ///
 /// The function takes the list of morphisms as an iterator over [Morphism] elements. These
@@ -30,10 +16,10 @@ fn assign_ambient_model_vars(
 /// of the [FlatTerm]s assigned to a preimage of y.
 fn assign_el_vars(
     morphisms: impl IntoIterator<Item = Morphism>,
-    available_vars: &mut impl Iterator<Item = FlatVar>,
     eqlog: &Eqlog,
 ) -> BTreeMap<El, FlatVar> {
     let mut el_terms = BTreeMap::new();
+    let mut available_vars = (0..).map(FlatVar);
 
     for transition in morphisms {
         for (m, preimage, image) in eqlog.iter_map_el() {
@@ -57,39 +43,17 @@ fn assign_el_vars(
     el_terms
 }
 
-fn assign_vars(
-    ambient_sym_scope: SymbolScope,
-    morphisms: impl IntoIterator<Item = Morphism>,
-    eqlog: &Eqlog,
-) -> (BTreeMap<SymbolScope, FlatVar>, BTreeMap<El, FlatVar>) {
-    let mut available_vars = (0..).into_iter().map(FlatVar);
-
-    let ambient_model_vars =
-        assign_ambient_model_vars(ambient_sym_scope, &mut available_vars, eqlog);
-    let el_vars = assign_el_vars(morphisms, &mut available_vars, eqlog);
-
-    (ambient_model_vars, el_vars)
-}
-
-fn make_var_type_map(
-    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
-    el_vars: &BTreeMap<El, FlatVar>,
-    eqlog: &Eqlog,
-) -> BTreeMap<FlatVar, Type> {
-    ambient_model_vars
+fn make_var_type_map(el_vars: &BTreeMap<El, FlatVar>, eqlog: &Eqlog) -> BTreeMap<FlatVar, Type> {
+    el_vars
         .iter()
-        .map(|(sym_scope, var)| {
-            let model_type = eqlog.symbol_scope_model(*sym_scope).unwrap();
-            (*var, model_type)
-        })
-        .chain(el_vars.iter().map(|(el, var)| {
+        .map(|(el, var)| {
             let el_typ = el_type(*el, eqlog).unwrap();
             let typ = match eqlog.element_type_case(el_typ) {
                 ElementTypeCase::AmbientType(typ) => typ,
                 ElementTypeCase::InstantiatedType(_, typ) => typ,
             };
             (*var, typ)
-        }))
+        })
         .collect()
 }
 
@@ -112,7 +76,6 @@ fn iter_rel_app<'a>(
 /// The output statements assumes that data in the domain of the morphism has already been matched.
 fn flatten_if_arbitrary(
     morphism: Morphism,
-    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Vec<FlatStmt> {
@@ -129,23 +92,17 @@ fn flatten_if_arbitrary(
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
-        let els_vec = el_list_vec(els, eqlog);
         if eqlog.rel_tuple_in_img(morphism, rel, els) {
             continue;
         }
 
-        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-
-        let mut args: Vec<FlatVar> = Vec::new();
-        if els_vec.len() != flat_arity.len() {
-            assert!(els_vec.len() + 1 == flat_arity.len());
-            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
-            let ambient_model_var = ambient_model_vars
-                .get(&rel_def_sym_scope)
-                .expect("Rel is defined in ambient model, so it should have a model variable");
-            args.push(*ambient_model_var);
-        }
-        args.extend(els_vec.iter().copied().map(|el| *el_vars.get(&el).unwrap()));
+        let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, els);
+        let els_vec: Vec<El> = el_list_vec(els, eqlog);
+        let args: Vec<FlatVar> = model_el
+            .into_iter()
+            .chain(els_vec)
+            .map(|el| *el_vars.get(&el).unwrap())
+            .collect();
 
         let age = QueryAge::All;
         stmts.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
@@ -164,8 +121,11 @@ fn flatten_if_arbitrary(
         let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
             ElementTypeCase::AmbientType(typ) => {
                 let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-                let var = ambient_model_vars.get(&typ_def_sym_scope).copied();
-                (var, typ)
+                let el_struct = eqlog.el_structure(el).unwrap();
+                let model_var = eqlog
+                    .ambient_model_el(typ_def_sym_scope, el_struct)
+                    .map(|model_el| *el_vars.get(&model_el).unwrap());
+                (model_var, typ)
             }
             ElementTypeCase::InstantiatedType(model_el, typ) => {
                 let var = Some(*el_vars.get(&model_el).unwrap());
@@ -198,7 +158,6 @@ fn flatten_if_arbitrary(
 /// so far.
 fn flatten_if_fresh(
     morphism: Morphism,
-    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Vec<Vec<FlatStmt>> {
@@ -211,20 +170,13 @@ fn flatten_if_fresh(
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
-        let els_vec = el_list_vec(els, eqlog);
-
-        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-
-        let mut args: Vec<FlatVar> = Vec::new();
-        if els_vec.len() != flat_arity.len() {
-            assert!(els_vec.len() + 1 == flat_arity.len());
-            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
-            let ambient_model_var = ambient_model_vars
-                .get(&rel_def_sym_scope)
-                .expect("Rel is defined in ambient model, so it should have a model variable");
-            args.push(*ambient_model_var);
-        }
-        args.extend(els_vec.iter().copied().map(|el| *el_vars.get(&el).unwrap()));
+        let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, els);
+        let els_vec: Vec<El> = el_list_vec(els, eqlog);
+        let args: Vec<FlatVar> = model_el
+            .into_iter()
+            .chain(els_vec)
+            .map(|el| *el_vars.get(&el).unwrap())
+            .collect();
 
         if eqlog.rel_tuple_in_img(morphism, rel, els) {
             arbitrary_rel_tuples.push((rel, args));
@@ -258,12 +210,6 @@ fn flatten_if_fresh(
                 Ordering::Equal => QueryAge::New,
                 Ordering::Greater => QueryAge::Old,
             };
-            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
-            let ambient_model_var = ambient_model_vars.get(&rel_def_sym_scope).copied();
-            let args = match ambient_model_var {
-                Some(ambient_model_var) => [ambient_model_var].into_iter().chain(args).collect(),
-                None => args,
-            };
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
                 args,
@@ -282,8 +228,11 @@ fn flatten_if_fresh(
             let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
                 ElementTypeCase::AmbientType(typ) => {
                     let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-                    let var = ambient_model_vars.get(&typ_def_sym_scope).copied();
-                    (var, typ)
+                    let el_struct = eqlog.el_structure(el).unwrap();
+                    let model_var = eqlog
+                        .ambient_model_el(typ_def_sym_scope, el_struct)
+                        .map(|model_el| *el_vars.get(&model_el).unwrap());
+                    (model_var, typ)
                 }
                 ElementTypeCase::InstantiatedType(model_el, typ) => {
                     let var = Some(*el_vars.get(&model_el).unwrap());
@@ -317,12 +266,6 @@ fn flatten_if_fresh(
             .chain(arbitrary_rel_tuples.iter())
             .cloned()
         {
-            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
-            let ambient_model_var = ambient_model_vars.get(&rel_def_sym_scope).copied();
-            let args = match ambient_model_var {
-                Some(ambient_model_var) => [ambient_model_var].into_iter().chain(args).collect(),
-                None => args,
-            };
             let age = QueryAge::Old;
             block.push(FlatStmt::If(FlatIfStmt::Relation(FlatIfStmtRelation {
                 rel,
@@ -347,8 +290,11 @@ fn flatten_if_fresh(
             let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
                 ElementTypeCase::AmbientType(typ) => {
                     let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-                    let var = ambient_model_vars.get(&typ_def_sym_scope).copied();
-                    (var, typ)
+                    let el_struct = eqlog.el_structure(el).unwrap();
+                    let model_var = eqlog
+                        .ambient_model_el(typ_def_sym_scope, el_struct)
+                        .map(|model_el| *el_vars.get(&model_el).unwrap());
+                    (model_var, typ)
                 }
                 ElementTypeCase::InstantiatedType(model_el, typ) => {
                     let var = Some(*el_vars.get(&model_el).unwrap());
@@ -382,7 +328,6 @@ fn flatten_if_fresh(
 /// The provided `morphism` must be surjective.
 fn flatten_surj_then(
     morphism: Morphism,
-    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Vec<FlatStmt> {
@@ -402,25 +347,18 @@ fn flatten_surj_then(
     let cod = eqlog.cod(morphism).expect("cod should be total");
 
     for (rel, els) in iter_rel_app(cod, eqlog) {
-        let els_vec = el_list_vec(els, eqlog);
         if eqlog.rel_tuple_in_img(morphism, rel, els) {
             continue;
         }
 
-        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, els);
+        let els_vec: Vec<El> = el_list_vec(els, eqlog);
+        let args: Vec<FlatVar> = model_el
+            .into_iter()
+            .chain(els_vec)
+            .map(|el| *el_vars.get(&el).unwrap())
+            .collect();
 
-        let mut args: Vec<FlatVar> = Vec::new();
-
-        if els_vec.len() != flat_arity.len() {
-            assert!(els_vec.len() + 1 == flat_arity.len());
-            let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
-            let ambient_model_var = ambient_model_vars
-                .get(&rel_def_sym_scope)
-                .expect("Rel is defined in ambient model, so it should have a model variable");
-            args.push(*ambient_model_var);
-        }
-
-        args.extend(els_vec.iter().copied().map(|el| *el_vars.get(&el).unwrap()));
         stmts.push(FlatStmt::SurjThen(FlatSurjThenStmt::Relation(
             FlatSurjThenStmtRelation { rel, args },
         )));
@@ -443,7 +381,6 @@ fn flatten_surj_then(
 /// pushout along making a function defined on a single argument tuple.
 fn flatten_non_surj_then(
     morphism: Morphism,
-    ambient_model_vars: &BTreeMap<SymbolScope, FlatVar>,
     el_vars: &BTreeMap<El, FlatVar>,
     eqlog: &Eqlog,
 ) -> Option<FlatNonSurjThenStmt> {
@@ -478,14 +415,15 @@ fn flatten_non_surj_then(
         .iter_func_app()
         .find_map(|(func, args, result)| {
             if eqlog.are_equal_el(result, new_el) {
-                Some((func, el_list_vec(args, eqlog)))
+                Some((func, args))
             } else {
                 None
             }
         })
         .expect("new element should be the result of func_app");
+    let func_arg_els_vec = el_list_vec(func_arg_els, eqlog);
     assert!(
-        func_arg_els
+        func_arg_els_vec
             .iter()
             .copied()
             .all(|arg| img_els.contains(&arg)),
@@ -493,16 +431,12 @@ fn flatten_non_surj_then(
     );
 
     let rel = eqlog.func_rel(func).unwrap();
-    let rel_def_sym_scope = eqlog.rel_definition_symbol_scope(rel).unwrap();
-    let model_var = ambient_model_vars.get(&rel_def_sym_scope).copied();
+    let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, func_arg_els);
 
-    let func_args: Vec<FlatVar> = model_var
+    let func_args: Vec<FlatVar> = model_el
         .into_iter()
-        .chain(
-            func_arg_els
-                .into_iter()
-                .map(|el| *el_vars.get(&el).unwrap()),
-        )
+        .chain(func_arg_els_vec)
+        .map(|el| *el_vars.get(&el).unwrap())
         .collect();
 
     let result = *el_vars.get(&new_el).unwrap();
@@ -524,23 +458,7 @@ pub fn flatten(
         None => format!("anonymous_rule_{}", rule.0),
     };
 
-    let rule_decl = eqlog
-        .iter_decl_node_rule()
-        .find_map(|(decl, rule0)| {
-            if eqlog.are_equal_rule_decl_node(rule0, rule) {
-                Some(decl)
-            } else {
-                None
-            }
-        })
-        .unwrap();
-    let ambient_sym_scope = eqlog.decl_symbol_scope(rule_decl).unwrap();
-
-    let (ambient_model_vars, el_vars) = assign_vars(
-        ambient_sym_scope,
-        iter_rule_morphisms(rule, eqlog).flatten(),
-        eqlog,
-    );
+    let el_vars = assign_el_vars(iter_rule_morphisms(rule, eqlog).flatten(), eqlog);
 
     // The general strategy is as follows:
     // - The first flat function (with index 0) is the entry point for the flat rule. The body of
@@ -591,7 +509,7 @@ pub fn flatten(
                 let old_if_func = FlatFunc {
                     name: FlatFuncName(funcs.len()),
                     args: old_if_func_args.clone(),
-                    body: flatten_if_arbitrary(morphism, &ambient_model_vars, &el_vars, eqlog),
+                    body: flatten_if_arbitrary(morphism, &el_vars, eqlog),
                 };
                 funcs.push(old_if_func);
                 funcs[matching_func_index].body.push(FlatStmt::Call {
@@ -609,7 +527,7 @@ pub fn flatten(
             // funcs[0].
             let before_fresh_if_func_len = funcs.len();
             funcs.extend(
-                flatten_if_fresh(morphism, &ambient_model_vars, &el_vars, eqlog)
+                flatten_if_fresh(morphism, &el_vars, eqlog)
                     .into_iter()
                     .zip(before_fresh_if_func_len..)
                     .map(|(body, func_index)| FlatFunc {
@@ -656,12 +574,9 @@ pub fn flatten(
             // to 1. introduce a flat eqlog statement that matches the empty join. Then we can
             // introduce a new function here that matches the empty join and only then executes the
             // flatten_surj_then statements. This function can then be called from function 0.
-            funcs[matching_func_index].body.extend(flatten_surj_then(
-                morphism,
-                &ambient_model_vars,
-                &el_vars,
-                eqlog,
-            ));
+            funcs[matching_func_index]
+                .body
+                .extend(flatten_surj_then(morphism, &el_vars, eqlog));
             matching_func_indices.insert(eqlog.cod(morphism).unwrap(), matching_func_index);
         } else if eqlog.non_surj_then_morphism(morphism) {
             let dom_vars: Vec<FlatVar> = iter_els(eqlog.dom(morphism).unwrap(), eqlog)
@@ -671,14 +586,13 @@ pub fn flatten(
                 .map(|el| *el_vars.get(&el).unwrap())
                 .collect();
 
-            let non_surj_then_stmt =
-                match flatten_non_surj_then(morphism, &ambient_model_vars, &el_vars, eqlog) {
-                    Some(non_surj_then_stmt) => non_surj_then_stmt,
-                    None => {
-                        // In this case, `morphism` is an isomorphism, so nothing needs to be done.
-                        continue;
-                    }
-                };
+            let non_surj_then_stmt = match flatten_non_surj_then(morphism, &el_vars, eqlog) {
+                Some(non_surj_then_stmt) => non_surj_then_stmt,
+                None => {
+                    // In this case, `morphism` is an isomorphism, so nothing needs to be done.
+                    continue;
+                }
+            };
 
             // Create a function that, given a match of the domain of `morphism`, either
             //
@@ -709,8 +623,7 @@ pub fn flatten(
             // Create a function that matches the codomain of `morphism` with fresh data relative
             // to the domain. Since a non-surjective statement is given by at most one new tuple in
             // a relation, it should be possible to match it with fresh data in just one function.
-            let mut fresh_if_blocks =
-                flatten_if_fresh(morphism, &ambient_model_vars, &el_vars, eqlog).into_iter();
+            let mut fresh_if_blocks = flatten_if_fresh(morphism, &el_vars, eqlog).into_iter();
             let fresh_if_block = fresh_if_blocks
                 .next()
                 .expect("There should be at least one block");
@@ -757,7 +670,7 @@ pub fn flatten(
         }
     }
 
-    let var_types = make_var_type_map(&ambient_model_vars, &el_vars, eqlog);
+    let var_types = make_var_type_map(&el_vars, eqlog);
     FlatRule {
         name,
         funcs,

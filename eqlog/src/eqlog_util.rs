@@ -138,55 +138,6 @@ pub fn el_type(el: El, eqlog: &Eqlog) -> Option<ElementType> {
     })
 }
 
-pub fn arg_decl_types<'a>(
-    mut arg_decls: ArgDeclListNode,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> Vec<&'a str> {
-    let mut result = Vec::new();
-    loop {
-        if eqlog.nil_arg_decl_list_node(arg_decls) {
-            break;
-        }
-
-        let (head_arg_decl, tail_arg_decls) = eqlog
-            .iter_cons_arg_decl_list_node()
-            .find_map(|(args0, head, tail)| {
-                eqlog
-                    .are_equal_arg_decl_list_node(args0, arg_decls)
-                    .then_some((head, tail))
-            })
-            .expect("ArgDeclListNode should be either nil or cons");
-
-        let head_ident = eqlog
-            .iter_arg_decl_node_type()
-            .find_map(|(arg_decl, ident)| {
-                eqlog
-                    .are_equal_arg_decl_node(arg_decl, head_arg_decl)
-                    .then_some(ident)
-            })
-            .expect("ArgDeclNode should have a type");
-
-        let head_name = identifiers.get(&head_ident).unwrap().as_str();
-
-        result.push(head_name);
-        arg_decls = tail_arg_decls;
-    }
-
-    result
-}
-
-pub fn iter_pred_arities<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Iterator<Item = (&'a str, Vec<&'a str>)> {
-    eqlog.iter_pred_decl().map(|(_, ident, arg_decls)| {
-        let name = identifiers.get(&ident).unwrap().as_str();
-        let arity = arg_decl_types(arg_decls, eqlog, identifiers);
-        (name, arity)
-    })
-}
-
 /// An iterator yielding the natural numbers 0, 1, 2, ... for as long as there is an element
 /// representing the natural number in the provided eqlog model.
 fn nats<'a>(eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = Nat> {
@@ -409,13 +360,4 @@ pub fn iter_rule_morphisms<'a>(
             (!next_morphisms.is_empty()).then_some(next_morphisms)
         },
     )
-}
-
-pub fn iter_symbol_scope_ancestors<'a>(
-    symbol_scope: SymbolScope,
-    eqlog: &'a Eqlog,
-) -> impl 'a + Iterator<Item = SymbolScope> {
-    successors(eqlog.symbol_scope_parent(symbol_scope), |&sym_scope| {
-        eqlog.symbol_scope_parent(sym_scope)
-    })
 }

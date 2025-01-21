@@ -2362,7 +2362,19 @@ fn write_theory_impl(
         }
     }
 
-    for (pred, arity) in iter_pred_arities(eqlog, identifiers) {
+    for pred in eqlog.iter_pred() {
+        let rel = eqlog.pred_rel(pred).unwrap();
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity: Vec<String> = arity
+            .into_iter()
+            .map(|typ| display_type(typ, eqlog, identifiers).to_string())
+            .collect();
+        let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
+        let pred = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let pred = pred.as_str();
+
         write_pub_predicate_holds_fn(out, pred, &arity)?;
         if arity.len() > 0 {
             write_pub_iter_fn(out, pred, &arity, false)?;

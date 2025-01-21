@@ -154,6 +154,12 @@ pub fn select_indices<'a>(
     // Every relation if stmt needs a QuerySpec.
     for (if_stmt_rel, info) in if_stmt_rel_infos {
         let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
+        let rel_str = crate::eqlog_util::display_rel(*rel, eqlog, identifiers).to_string();
+        if rel_str == "is_subterminal" {
+            println!("{rel_str}");
+            println!("{if_stmt_rel:?}");
+            println!("{info:?}");
+        }
         let RelationInfo {
             diagonals,
             in_projections,

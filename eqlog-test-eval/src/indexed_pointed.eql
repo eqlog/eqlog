@@ -3,9 +3,18 @@ model Pointed {
 
     func pt() -> P;
 
+    pred is_subterminal();
+
     rule pointed_reflexivity_member {
         if x: P;
         then x = x;
+    }
+
+    rule is_subterminal_member_collapse {
+        if is_subterminal();
+        if x: P;
+        if y: P;
+        then x = y;
     }
 }
 
