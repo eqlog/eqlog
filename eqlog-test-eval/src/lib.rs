@@ -23,7 +23,7 @@ eqlog_mod!(triple_join);
 eqlog_mod!(int);
 eqlog_mod!(indexed_pointed);
 eqlog_mod!(empty);
-//eqlog_mod!(subset);
+eqlog_mod!(subset);
 eqlog_mod!(nested_model);
 
 mod category_mod;
