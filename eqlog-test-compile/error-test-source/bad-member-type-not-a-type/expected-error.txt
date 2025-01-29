@@ -1,0 +1,12 @@
+Error: expected type, found predicate "Foo"
+ --> error-test-source/bad-member-type-not-a-type/theory.eql:7
+  | 
+7 |     if y: x.Foo;
+  |        ^^^^^^^^ 
+  | 
+"Foo" declared as predicate here:
+ --> error-test-source/bad-member-type-not-a-type/theory.eql:2
+  | 
+2 |     pred Foo();
+  |     ^^^^^^^^^^^
+  | 

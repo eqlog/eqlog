@@ -1,0 +1,9 @@
+model M {
+    type Foo;
+}
+
+rule {
+    if x: M;
+    if y: x.Bar;
+    then y = y;
+}

@@ -1,0 +1,9 @@
+model M {
+    pred Foo();
+}
+
+rule {
+    if x: M;
+    if y: x.Foo;
+    then y = y;
+}

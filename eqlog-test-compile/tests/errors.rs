@@ -245,3 +245,13 @@ fn match_conflicting_enum() {
 fn match_not_exhaustive() {
     test_case(Path::new("match-not-exhaustive"));
 }
+
+#[test]
+fn bad_member_type_missing() {
+    test_case(Path::new("bad-member-type-missing"));
+}
+
+#[test]
+fn bad_member_type_not_a_type() {
+    test_case(Path::new("bad-member-type-not-a-type"));
+}

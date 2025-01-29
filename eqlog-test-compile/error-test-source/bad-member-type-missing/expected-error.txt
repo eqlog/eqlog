@@ -1,0 +1,6 @@
+Error: undeclared symbol "Bar"
+ --> error-test-source/bad-member-type-missing/theory.eql:7
+  | 
+7 |     if y: x.Bar;
+  |        ^^^^^^^^ 
+  | 
