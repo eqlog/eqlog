@@ -22,10 +22,8 @@ fn merge_non_empty_without_pt() {
     let pointed0 = model.new_pointed();
     let pointed1 = model.new_pointed();
 
-    let a = model.new_p();
-    let b = model.new_p();
-    model.insert_p_parent(a, pointed0);
-    model.insert_p_parent(b, pointed1);
+    model.new_p(pointed0);
+    model.new_p(pointed1);
 
     model.equate_pointed(pointed0, pointed1);
     model.close();
@@ -35,9 +33,6 @@ fn merge_non_empty_without_pt() {
 }
 
 #[test]
-// TODO: Fix p_parent().count() which is currently 0 but should be 2, and then activate this test
-// again.
-#[should_panic]
 fn merge_initial_models() {
     let mut model = IndexedPointed::new();
 

@@ -1098,47 +1098,103 @@ fn write_pub_insert_relation(
     "}
 }
 
-fn write_new_element_internal(
-    out: &mut impl Write,
+fn display_new_element_fn_internal<'a>(
     typ: Type,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
-    let type_snake = type_camel.to_case(Snake);
-    writedoc! {out, "
-        /// Adjoins a new element of type [{type_camel}].
-        #[allow(dead_code)]
-        fn new_{type_snake}_internal(&mut self) -> {type_camel} {{
-            let old_len = self.{type_snake}_equalities.len();
-            self.{type_snake}_equalities.increase_size_to(old_len + 1);
-            let el = {type_camel}::from(u32::try_from(old_len).unwrap());
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let type_camel = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let type_snake = type_camel.to_case(Snake);
+        let type_snake = type_snake.as_str();
 
-            self.{type_snake}_new.insert(el);
+        let parent_func = eqlog.parent_model_func(typ);
+        let parent_param = FmtFn(move |f| {
+            let parent_func = match parent_func {
+                Some(parent_func) => parent_func,
+                None => return Ok(()),
+            };
 
-            assert!(self.{type_snake}_weights.len() == old_len);
-            self.{type_snake}_weights.push(0);
+            let parent_type = eqlog.codomain(parent_func).unwrap();
+            write!(
+                f,
+                "parent: {}",
+                display_type(parent_type, eqlog, identifiers)
+            )
+        });
 
-            el
-        }}
-    "}
+        let insert_parent = FmtFn(move |f| {
+            if parent_func.is_none() {
+                return Ok(());
+            }
+
+            write!(f, "self.insert_{type_snake}_parent(el, parent);")
+        });
+
+        writedoc! {f, "
+            /// Adjoins a new element of type [{type_camel}].
+            #[allow(dead_code)]
+            fn new_{type_snake}_internal(&mut self, {parent_param}) -> {type_camel} {{
+                let old_len = self.{type_snake}_equalities.len();
+                self.{type_snake}_equalities.increase_size_to(old_len + 1);
+                let el = {type_camel}::from(u32::try_from(old_len).unwrap());
+
+                self.{type_snake}_new.insert(el);
+
+                assert!(self.{type_snake}_weights.len() == old_len);
+                self.{type_snake}_weights.push(0);
+                
+                {insert_parent}
+
+                el
+            }}
+        "}
+    })
 }
 
-fn write_new_element(
-    out: &mut impl Write,
+fn display_new_element_fn<'a>(
     typ: Type,
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> io::Result<()> {
-    let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
-    let type_snake = type_camel.to_case(Snake);
-    writedoc! {out, "
-        /// Adjoins a new element of type [{type_camel}].
-        #[allow(dead_code)]
-        pub fn new_{type_snake}(&mut self) -> {type_camel} {{
-            self.new_{type_snake}_internal()
-        }}
-    "}
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let type_camel = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let type_snake = type_camel.to_case(Snake);
+
+        let parent_func = eqlog.parent_model_func(typ);
+        let parent_param = FmtFn(move |f| {
+            let parent_func = match parent_func {
+                Some(parent_func) => parent_func,
+                None => return Ok(()),
+            };
+
+            let parent_type = eqlog.codomain(parent_func).unwrap();
+            write!(
+                f,
+                "parent: {}",
+                display_type(parent_type, eqlog, identifiers)
+            )
+        });
+
+        let parent_arg = FmtFn(move |f| {
+            if parent_func.is_none() {
+                return Ok(());
+            }
+            write!(f, "parent")
+        });
+
+        writedoc! {f, "
+            /// Adjoins a new element of type [{type_camel}].
+            #[allow(dead_code)]
+            pub fn new_{type_snake}(&mut self, {parent_param}) -> {type_camel} {{
+                self.new_{type_snake}_internal({parent_arg})
+            }}
+        "}
+    })
 }
 
 fn display_new_enum_element<'a>(
@@ -2222,8 +2278,12 @@ fn write_define_fn(
         })
         .format(", ");
 
-    let args0 = func_arg_vars.iter().copied().map(display_var).format(", ");
-    let args1 = args0.clone();
+    let args = func_arg_vars
+        .iter()
+        .copied()
+        .map(display_var)
+        .format(", ")
+        .to_string();
     let rel_args = func_arg_vars
         .iter()
         .copied()
@@ -2232,14 +2292,27 @@ fn write_define_fn(
         .format(", ");
     let result_var = display_var(result_var);
 
+    let codomain_parent_func = eqlog.parent_model_func(codomain);
+    let parent_arg = FmtFn(move |f| {
+        if codomain_parent_func.is_none() {
+            return Ok(());
+        }
+
+        let parent_var = display_var(FlatVar(0));
+        write!(f, "{parent_var}")
+    });
+
     writedoc! {out, "
-        /// Enforces that `{func_snake}({args0})` is defined, adjoining a new element if necessary.
+        /// Enforces that `{func_snake}({args})` is defined, adjoining a new element if necessary.
         #[allow(dead_code)]
         pub fn define_{func_snake}(&mut self, {fn_args}) -> {codomain_camel} {{
-            match self.{func_snake}({args1}) {{
+            match self.{func_snake}({args}) {{
                 Some(result) => result,
                 None => {{
-                    let {result_var} = self.new_{codomain_snake}_internal();
+                    // TODO: The parent var, if any, is only correct if the codomain type
+                    // is defined in the same model (and not a parent model) that the function
+                    // is declared in.
+                    let {result_var} = self.new_{codomain_snake}_internal({parent_arg});
                     self.insert_{func_snake}({rel_args});
                     {result_var}
                 }}
@@ -2306,13 +2379,15 @@ fn write_theory_impl(
     }
 
     for typ in eqlog.iter_type() {
-        write_new_element_internal(out, typ, eqlog, identifiers)?;
+        let new_element_fn_internal = display_new_element_fn_internal(typ, eqlog, identifiers);
+        writeln!(out, "{new_element_fn_internal}")?;
         write_equate_elements(out, typ, eqlog, identifiers)?;
     }
 
     for typ in eqlog.iter_type() {
         if eqlog.is_normal_type(typ) || eqlog.is_model_type(typ) {
-            write_new_element(out, typ, eqlog, identifiers)?;
+            let new_el_fn = display_new_element_fn(typ, eqlog, identifiers);
+            writeln!(out, "{new_el_fn}")?;
         } else if eqlog.is_enum_type(typ) {
             let type_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
             let enum_node = eqlog

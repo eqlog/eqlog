@@ -22,10 +22,8 @@ fn single_external_terminal_set() {
     let set = model.new_set();
     model.insert_is_subterminal_set(set);
 
-    let a = model.new_s();
-    let b = model.new_s();
-    model.insert_s_parent(a, set);
-    model.insert_s_parent(b, set);
+    let a = model.new_s(set);
+    let b = model.new_s(set);
     assert!(!model.are_equal_s(a, b));
     model.close();
 
@@ -39,10 +37,8 @@ fn merge_non_empty_models() {
     let set0 = model.new_set();
     let set1 = model.new_set();
 
-    let a = model.new_s();
-    let b = model.new_s();
-    model.insert_s_parent(a, set0);
-    model.insert_s_parent(b, set1);
+    model.new_s(set0);
+    model.new_s(set1);
 
     model.equate_set(set0, set1);
     model.close();
@@ -59,10 +55,8 @@ fn merge_non_empty_models_terminal() {
 
     model.insert_is_subterminal_set(set0);
 
-    let a = model.new_s();
-    let b = model.new_s();
-    model.insert_s_parent(a, set0);
-    model.insert_s_parent(b, set1);
+    let a = model.new_s(set0);
+    let b = model.new_s(set1);
 
     model.close();
 
@@ -85,10 +79,8 @@ fn merge_non_empty_models_internal() {
 
     model.insert_is_subterminal(set0);
 
-    let a = model.new_s();
-    let b = model.new_s();
-    model.insert_s_parent(a, set0);
-    model.insert_s_parent(b, set1);
+    let a = model.new_s(set0);
+    let b = model.new_s(set1);
 
     model.close();
 
@@ -101,29 +93,3 @@ fn merge_non_empty_models_internal() {
     assert_eq!(model.iter_s().count(), 1);
     assert!(model.are_equal_s(a, b));
 }
-
-//#[test]
-//fn merge_non_empty_models_with_pt() {
-//    let mut model = IndexedSet::new();
-//
-//    let set0 = model.new_set();
-//    let set1 = model.new_set();
-//
-//    model.insert_is_subterminal_set(set0);
-//
-//    let a = model.define_pt(set0);
-//    let b = model.define_pt(set1);
-//    model.insert_s_parent(a, set0);
-//    model.insert_s_parent(b, set1);
-//
-//    model.close();
-//
-//    assert!(!model.are_equal_set(set0, set1));
-//    assert!(!model.are_equal_s(a, b));
-//
-//    model.equate_set(set0, set1);
-//
-//    model.close();
-//    assert_eq!(model.iter_s().count(), 1);
-//    assert!(model.are_equal_s(a, b));
-//}
