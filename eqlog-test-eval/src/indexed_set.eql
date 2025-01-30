@@ -1,0 +1,34 @@
+model Set {
+    type S;
+
+    pred is_subterminal();
+
+    rule reflexivity_member {
+        if x: S;
+        then x = x;
+    }
+
+    rule is_subterminal_member_collapse {
+        if is_subterminal();
+        if x: S;
+        if y: S;
+        then x = y;
+    }
+}
+
+rule pointed_reflexivity_global {
+    if set: Set;
+    if x: set.S;
+    then x = x;
+}
+
+pred is_subterminal_set(set: Set);
+rule pointed_collapse_convoluted {
+    if set_0: Set;
+    if set_1: Set;
+    if x: set_0.S;
+    if y: set_0.S;
+    if is_subterminal_set(set_0);
+    if set_0 = set_1;
+    then x = y;
+}

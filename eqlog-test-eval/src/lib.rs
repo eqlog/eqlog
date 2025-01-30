@@ -21,6 +21,7 @@ eqlog_mod!(matches);
 eqlog_mod!(matches_rel);
 eqlog_mod!(triple_join);
 eqlog_mod!(int);
+eqlog_mod!(indexed_set);
 eqlog_mod!(indexed_pointed);
 eqlog_mod!(empty);
 eqlog_mod!(subset);
@@ -45,6 +46,8 @@ mod monoid_test;
 mod branches_test;
 #[cfg(test)]
 mod indexed_pointed_test;
+#[cfg(test)]
+mod indexed_set_test;
 #[cfg(test)]
 mod inference_test;
 #[cfg(test)]

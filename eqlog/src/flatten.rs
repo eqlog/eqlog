@@ -431,9 +431,10 @@ fn flatten_non_surj_then(
     );
 
     let rel = eqlog.func_rel(func).unwrap();
-    let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, func_arg_els);
+    let rel_arg_els = eqlog.snoc_el_list(func_arg_els, new_el).unwrap();
+    let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, rel_arg_els);
 
-    let func_args: Vec<FlatVar> = model_el
+    let flat_func_args: Vec<FlatVar> = model_el
         .into_iter()
         .chain(func_arg_els_vec)
         .map(|el| *el_vars.get(&el).unwrap())
@@ -442,7 +443,7 @@ fn flatten_non_surj_then(
     let result = *el_vars.get(&new_el).unwrap();
     Some(FlatNonSurjThenStmt {
         func,
-        func_args,
+        func_args: flat_func_args,
         result,
     })
 }
