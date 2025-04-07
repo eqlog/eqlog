@@ -7,12 +7,27 @@ fn empty_model() {
 }
 
 #[test]
-fn single_set() {
+fn single_empty_set() {
     let mut model = IndexedSet::new();
     model.new_set();
 
     model.close();
     assert_eq!(model.iter_set().count(), 1);
+}
+
+#[test]
+fn singleton_set() {
+    let mut model = IndexedSet::new();
+
+    let set = model.new_set();
+    let a = model.new_s(set);
+
+    assert!(model.are_equal_set(model.s_parent(a), set));
+    model.close();
+    assert!(model.are_equal_set(model.s_parent(a), set));
+
+    assert_eq!(model.iter_set().count(), 1);
+    assert_eq!(model.iter_s().count(), 1);
 }
 
 #[test]

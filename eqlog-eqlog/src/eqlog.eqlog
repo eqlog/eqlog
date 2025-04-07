@@ -792,8 +792,16 @@ rule member_flat_domain_law {
     then flat_domain(function) = cons_d;
 }
 
-// ## Structures
 
+pred is_total_func(Func);
+
+rule parent_func_is_total {
+    if function = parent_model_func(_);
+    then is_total_func(function);
+}
+
+
+// ## Structures
 type Structure;
 
 type El;

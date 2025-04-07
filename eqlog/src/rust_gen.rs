@@ -903,48 +903,95 @@ fn write_pub_predicate_holds_fn(
     "}
 }
 
-fn write_pub_function_eval_fn(
-    out: &mut impl Write,
-    relation: &str,
-    arity: &[&str],
-) -> io::Result<()> {
-    let relation_snake = relation.to_case(Snake);
-    let dom = &arity[..(arity.len() - 1)];
-    let cod_index = dom.len();
-    let cod = arity[cod_index];
+fn display_pub_function_eval_fn<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel = eqlog.func_rel(func).unwrap();
 
-    let rel_fn_args = dom
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
+        let relation = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let relation_snake = relation.to_case(Snake);
 
-    let canonicalize = dom
-        .iter()
-        .copied()
-        .enumerate()
-        .format_with("\n", |(i, s), f| {
-            let sort_snake = s.to_case(Snake);
-            f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
+        let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let flat_dom_len = flat_dom.len();
+
+        let cod = eqlog.codomain(func).unwrap();
+        let cod_camel = display_type(cod, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+
+        let params = flat_dom
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ)| {
+                FmtFn(move |f| {
+                    let type_camel = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(UpperCamel);
+                    write!(f, "mut arg{i}: {type_camel}, ")
+                })
+            })
+            .format("");
+
+        let result_type = FmtFn(move |f| {
+            if eqlog.is_total_func(func) {
+                write!(f, "{cod_camel}")
+            } else {
+                write!(f, "Option<{cod_camel}>")
+            }
         });
 
-    let query = QuerySpec {
-        projections: (0..dom.len()).collect(),
-        diagonals: BTreeSet::new(),
-        age: QueryAge::All,
-    };
-    let iter = IterName(relation, &query);
-    let args0 = (0..dom.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-    let args1 = args0.clone();
+        let maybe_unwrap_result = FmtFn(move |f| {
+            if eqlog.is_total_func(func) {
+                write!(f, ".unwrap()")?;
+            }
 
-    writedoc! {out, "
-        /// Evaluates `{relation}({args0})`.
-        #[allow(dead_code)]
-        pub fn {relation_snake}(&self{rel_fn_args}) -> Option<{cod}> {{
-            {canonicalize}
-            self.{iter}({args1}).next().map(|t| t.{cod_index})
-        }}
-    "}
+            Ok(())
+        });
+
+        let canonicalize = flat_dom
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ)| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    write!(f, "arg{i} = self.root_{type_snake}(arg{i});")
+                })
+            })
+            .format("\n");
+
+        let query = QuerySpec {
+            projections: (0..flat_dom.len()).collect(),
+            diagonals: BTreeSet::new(),
+            age: QueryAge::All,
+        };
+
+        let iter = IterName(relation.as_str(), &query);
+        let args = (0..flat_dom.len())
+            .map(|i| FmtFn(move |f| write!(f, "arg{i}")))
+            .format(", ")
+            .to_string();
+
+        writedoc! {f, "
+            /// Evaluates `{relation}({args})`.
+            #[allow(dead_code)]
+            pub fn {relation_snake}(&self, {params}) -> {result_type} {{
+                {canonicalize}
+                self.{iter}({args})
+                    .next()
+                    .map(|t| t.{flat_dom_len})
+                    {maybe_unwrap_result}
+            }}
+        "}
+    })
 }
 
 fn write_pub_iter_fn(
@@ -2425,7 +2472,8 @@ fn write_theory_impl(
             .to_string()
             .to_case(Snake);
         let func_name = func_name.as_str();
-        write_pub_function_eval_fn(out, func_name, &arity)?;
+        let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
+        write!(out, "{eval_fn}")?;
         write_pub_iter_fn(out, func_name, &arity, true)?;
         write_pub_insert_relation(out, func_name, &arity, true)?;
         write!(out, "\n")?;
