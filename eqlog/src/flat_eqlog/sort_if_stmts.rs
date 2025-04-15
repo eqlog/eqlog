@@ -9,6 +9,7 @@ struct IfStmtGoodness {
     is_equal: bool,
     age: QueryAge,
     new_variables: usize,
+    restrained_variables: usize,
 }
 
 impl Default for IfStmtGoodness {
@@ -17,6 +18,7 @@ impl Default for IfStmtGoodness {
             is_equal: false,
             age: QueryAge::All,
             new_variables: 0,
+            restrained_variables: 0,
         }
     }
 }
@@ -35,8 +37,13 @@ impl Ord for IfStmtGoodness {
         let age_goodness = cmp_age_goodness(self.age, other.age);
         // Smaller is better than greater.
         let new_variables = self.new_variables.cmp(&other.new_variables).reverse();
+        // Greater is better than smaller.
+        let restrained_variables = self.restrained_variables.cmp(&other.restrained_variables);
 
-        is_equal.then(age_goodness).then(new_variables)
+        is_equal
+            .then(age_goodness)
+            .then(new_variables)
+            .then(restrained_variables)
     }
 }
 
@@ -75,7 +82,7 @@ fn only_dirty_is_better() {
 }
 
 #[test]
-fn less_variables_is_better() {
+fn less_new_variables_is_better() {
     let few_vars = IfStmtGoodness {
         new_variables: 2,
         ..IfStmtGoodness::default()
@@ -85,6 +92,19 @@ fn less_variables_is_better() {
         ..IfStmtGoodness::default()
     };
     assert!(few_vars > many_vars);
+}
+
+#[test]
+fn more_restrained_variables_is_better() {
+    let few_vars = IfStmtGoodness {
+        restrained_variables: 2,
+        ..IfStmtGoodness::default()
+    };
+    let many_vars = IfStmtGoodness {
+        restrained_variables: 3,
+        ..IfStmtGoodness::default()
+    };
+    assert!(many_vars > few_vars);
 }
 
 fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
@@ -99,10 +119,16 @@ fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmt
         .unique()
         .filter(|var| !fixed_vars.contains(&var))
         .count();
+    let restrained_variables = stmt
+        .iter_vars()
+        .unique()
+        .filter(|var| fixed_vars.contains(&var))
+        .count();
     IfStmtGoodness {
         is_equal,
         age,
         new_variables,
+        restrained_variables,
     }
 }
 
