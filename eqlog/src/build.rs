@@ -1,3 +1,4 @@
+use crate::eqlog_util::display_rel;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
@@ -21,6 +22,7 @@ use std::io;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::process::Command;
 
 fn whipe_comments(source: &str) -> String {
     let lines: Vec<String> = source
@@ -147,17 +149,20 @@ fn write_src_digest(out: &mut impl io::Write, digest: &[u8]) -> Result<(), Box<d
     Ok(())
 }
 
-fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn Error>> {
+fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn Error>> {
     let theory_name = in_file
         .file_stem()
         .unwrap()
         .to_str()
         .unwrap()
         .to_case(Case::UpperCamel);
+    let out_file = out_dir
+        .join(theory_name.to_case(Case::Snake))
+        .with_extension("rs");
     let source = fs::read_to_string(in_file)?;
 
     let src_digest = digest_source(theory_name.as_str(), source.as_str());
-    let out_digest = read_out_digest(out_file);
+    let out_digest = read_out_digest(out_file.as_path());
 
     // TODO: Add a check to verify that the out file hasn't been corrupted?
     if out_digest.as_ref().map(|od| od.as_slice()) == Some(src_digest.as_slice()) {
@@ -235,6 +240,31 @@ fn process_file<'a>(in_file: &'a Path, out_file: &'a Path) -> Result<(), Box<dyn
     )?;
     fs::write(&out_file, &result)?;
 
+    for rel in eqlog.iter_rel() {
+        let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
+        let table_out_file_name = format!(
+            "{}_{}.rs",
+            theory_name.to_case(Case::Snake),
+            rel_name.to_case(Case::Snake)
+        );
+        let table_out_file = out_dir.join(table_out_file_name);
+
+        let indices = index_selection
+            .get(&rel_name)
+            .expect("Index selection should be present for all relations");
+        let table_lib = display_table_lib(rel, &indices, &eqlog, &identifiers).to_string();
+        fs::write(table_out_file.as_path(), table_lib)?;
+
+        let status = Command::new("rustc")
+            .arg("--crate-type=rlib")
+            .arg("--out-dir")
+            .arg(out_dir)
+            .arg(table_out_file.as_path())
+            .status()
+            .expect("Failed to compile table lib");
+        assert!(status.success());
+    }
+
     #[cfg(feature = "rustfmt")]
     match std::process::Command::new("rustfmt")
         .arg(&out_file)
@@ -286,19 +316,7 @@ pub fn process(config: &Config) -> Result<(), Box<dyn Error>> {
         };
         std::fs::create_dir_all(&out_parent)?;
 
-        let name = in_file
-            .file_stem()
-            .expect("in_file should not be empty")
-            .to_str()
-            .unwrap_or_else(|| {
-                eprintdoc! {"
-                Input file name is not valid utf8
-            "};
-                exit(1)
-            });
-        let out_file = out_parent.join(name).with_extension("rs");
-
-        process_file(&in_file, &out_file)?;
+        process_file(&in_file, &out_parent)?;
     }
 
     Ok(())
