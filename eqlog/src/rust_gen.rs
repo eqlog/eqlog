@@ -213,6 +213,7 @@ fn write_sort_fields(out: &mut impl Write, sort: &str) -> io::Result<()> {
     "}
 }
 
+#[derive(Copy, Clone)]
 struct OrderName<'a>(&'a [usize]);
 impl<'a> Display for OrderName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -226,6 +227,7 @@ impl<'a> Display for OrderName<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
 struct IndexName<'a>(&'a IndexSpec);
 
 impl<'a> Display for IndexName<'a> {
@@ -354,23 +356,6 @@ fn write_table_permute_inverse_fn(
     "}
 }
 
-struct DiagonalCheck<'a>(&'a BTreeSet<BTreeSet<usize>>);
-impl<'a> Display for DiagonalCheck<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let diags = &self.0;
-        let all_clauses = diags.iter().format_with(" && ", |diag, f| {
-            let diag_clauses = diag
-                .iter()
-                .zip(diag.iter().skip(1))
-                .format_with(" && ", |(prev, next), f| {
-                    f(&format_args!("t.{prev} == t.{next}"))
-                });
-            f(&format_args!("{diag_clauses}"))
-        });
-        write!(f, "{all_clauses}")
-    }
-}
-
 fn write_table_insert_fn(
     out: &mut impl Write,
     relation: &str,
@@ -420,7 +405,7 @@ fn write_table_insert_fn(
             } else {
                 let check = DiagonalCheck(&index.diagonals);
                 f(&format_args! {"
-                    if {check} {{
+                    if {{let row = t; {check}}} {{
                         self.index_{index_name}.insert(Self::permute{order}(t));
                     }}
                 "})
@@ -2646,7 +2631,7 @@ pub fn display_table_struct<'a>(
 
         writedoc! {f, "
             #[derive(Clone, Hash, Debug)]
-            struct {rel_camel}Table {{
+            pub struct {rel_camel}Table {{
             {index_fields}
 
             {element_index_fields}
@@ -2774,6 +2759,319 @@ fn display_permute_inverse_fn<'a>(
     })
 }
 
+fn display_contains_fn<'a>(
+    rel: Rel,
+    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let rel_snake = rel_camel.to_case(Snake);
+        let row_type = display_rel_row_type(rel, eqlog).to_string();
+
+        let indices = index_selection.get(&QuerySpec::all()).unwrap();
+
+        let checks = indices
+            .iter()
+            .map(|index| {
+                FmtFn(|f| {
+                    let index_name = IndexName(index);
+                    let order_name = OrderName(&index.order);
+                    write!(
+                        f,
+                        "table.index_{index_name}.contains(&permute{order_name}(row))"
+                    )
+                })
+            })
+            .format(" || ");
+
+        writedoc! {f, r#"
+            #[allow(unused)]
+            pub extern "Rust" fn {rel_snake}_contains(table: &{rel_camel}Table, row: {row_type}) -> bool {{
+            {checks}
+            }}
+        "#}
+    })
+}
+
+struct DiagonalCheck<'a>(&'a BTreeSet<BTreeSet<usize>>);
+impl<'a> Display for DiagonalCheck<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let diags = &self.0;
+        let all_clauses = diags.iter().format_with(" && ", |diag, f| {
+            let diag_clauses = diag
+                .iter()
+                .zip(diag.iter().skip(1))
+                .format_with(" && ", |(prev, next), f| {
+                    f(&format_args!("row.{prev} == row.{next}"))
+                });
+            f(&format_args!("{diag_clauses}"))
+        });
+        write!(f, "{all_clauses}")
+    }
+}
+
+fn display_insert_fn<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&'a IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let rel_snake = rel_camel.to_case(Snake);
+        let row_type = display_rel_row_type(rel, eqlog).to_string();
+
+        let primary_new = indices
+            .iter()
+            .copied()
+            .find(
+                |IndexSpec {
+                     order: _,
+                     diagonals,
+                     age,
+                 }| { diagonals.is_empty() && *age == IndexAge::New },
+            )
+            .expect("Every relation should have a primary new index");
+        let primary_old = indices
+            .iter()
+            .find(
+                |IndexSpec {
+                     order: _,
+                     diagonals,
+                     age,
+                 }| { diagonals.is_empty() && *age == IndexAge::Old },
+            )
+            .expect("Every relation should have a primary old index");
+
+        let primary_new_order = OrderName(&primary_new.order);
+        let primary_old_order = OrderName(&primary_old.order);
+
+        let other_new_inserts = indices
+            .into_iter()
+            .copied()
+            .filter(|index| index.age == IndexAge::New && *index != primary_new)
+            .map(|index| {
+                FmtFn(move |f| {
+                    let index_name = IndexName(index);
+                    let order = OrderName(&index.order);
+                    if index.diagonals.is_empty() {
+                        writedoc! {f, "
+                            table.index_{index_name}.insert(permute{order}(row));"
+                        }
+                    } else {
+                        let check = DiagonalCheck(&index.diagonals);
+                        writedoc! {f, "
+                            let check = {check};
+                            if check {{
+                                table.index_{index_name}.insert(permute{order}(row));
+                            }}
+                        "}
+                    }
+                })
+            })
+            .format("\n");
+
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let element_inserts = arity
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, typ)| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    writedoc! {f, "
+                    match table.element_index_{type_snake}.entry(row[{i}]) {{
+                    btree_map::Entry::Occupied(mut entry) => {{
+                    entry.get_mut().push(row);
+                    }}
+                    btree_map::Entry::Vacant(entry) => {{
+                    entry.insert(vec![row]);
+                    }}
+                    }}
+                "}
+                })
+            })
+            .format("\n");
+
+        let primary_old = IndexName(primary_old);
+        let primary_new = IndexName(primary_new);
+
+        writedoc! {f, r#"
+            #[allow(unused)]
+            pub extern "Rust" fn {rel_snake}_insert(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
+            if table.index_{primary_old}.contains(&permute{primary_old_order}(row)) {{
+            return false;
+            }}
+            if !table.index_{primary_new}.insert(permute{primary_new_order}(row)) {{
+            return false;
+            }}
+
+            {other_new_inserts}
+
+            {element_inserts}
+
+            true
+            }}
+        "#}
+    })
+}
+
+fn display_remove_from_row_indices_fn<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&'a IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let row_type = display_rel_row_type(rel, eqlog).to_string();
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+
+        let primary_new = indices
+            .iter()
+            .copied()
+            .find(
+                |IndexSpec {
+                     order: _,
+                     diagonals,
+                     age,
+                 }| { diagonals.is_empty() && *age == IndexAge::New },
+            )
+            .expect("Every relation should have a primary new index");
+        let primary_old = indices
+            .iter()
+            .copied()
+            .find(
+                |IndexSpec {
+                     order: _,
+                     diagonals,
+                     age,
+                 }| { diagonals.is_empty() && *age == IndexAge::Old },
+            )
+            .expect("Every relation should have a primary old index");
+
+        let primary_new_order = OrderName(&primary_new.order);
+        let primary_old_order = OrderName(&primary_old.order);
+
+        let other_new_removes = indices
+            .into_iter()
+            .copied()
+            .filter(|index| index.age == IndexAge::New && *index != primary_new)
+            .map(|index| {
+                FmtFn(move |f| {
+                    let index_name = IndexName(index);
+                    let order = OrderName(&index.order);
+                    if index.diagonals.is_empty() {
+                        writedoc! {f, "
+                            table.index_{index_name}.remove(&permute{order}(row));"
+                        }
+                    } else {
+                        let check = DiagonalCheck(&index.diagonals);
+                        writedoc! {f, "
+                        let check = {check};
+                        if check {{
+                            table.index_{index_name}.remove(&permute{order}(row));
+                        }}
+                    "}
+                    }
+                })
+            })
+            .format("\n");
+
+        let other_old_removes = indices
+            .into_iter()
+            .copied()
+            .filter(|index| index.age == IndexAge::Old && *index != primary_old)
+            .map(|index| {
+                FmtFn(move |f| {
+                    let index_name = IndexName(index);
+                    let order = OrderName(&index.order);
+                    if index.diagonals.is_empty() {
+                        writedoc! {f, "
+                            table.index_{index_name}.remove(&permute{order}(row));"
+                        }
+                    } else {
+                        let check = DiagonalCheck(&index.diagonals);
+                        writedoc! {f, "
+                        let check = {check};
+                        if check {{
+                            table.index_{index_name}.remove(&permute{order}(row));
+                        }}
+                    "}
+                    }
+                })
+            })
+            .format("\n");
+
+        let primary_new = IndexName(primary_new);
+        let primary_old = IndexName(primary_old);
+
+        writedoc! {f, "
+            fn remove_from_row_indices(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
+                if table.index_{primary_new}.remove(&permute{primary_new_order}(row)) {{
+                    {other_new_removes}
+                    true
+                }} else if table.index_{primary_old}.remove(&permute{primary_old_order}(row)) {{
+                    {other_old_removes}
+                    true
+                }} else {{
+                    false
+                }}
+            }}
+        "}
+    })
+}
+
+fn display_drain_with_element_fns<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    let types: BTreeSet<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+        .into_iter()
+        .collect();
+    types.into_iter().map(move |typ| FmtFn(move |f| {
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let rel_snake = rel_camel.to_case(Snake);
+
+        let row_type = display_rel_row_type(rel, eqlog).to_string();
+
+        let type_snake = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+
+        writedoc!{f, r#"
+            #[unsafe(no_mangle)]
+            pub extern "Rust" fn {rel_snake}_drain_with_element_{type_snake}(table: &mut {rel_camel}Table, el: u32) -> Vec<{row_type}> {{
+                let mut rows = table.element_index_{type_snake}.remove(&el).unwrap_or_default();
+
+                let mut i = 0;
+                while i < rows.len() {{
+                    let row = rows[i];
+                    if remove_from_row_indices(table, row) {{
+                        rows.swap_remove(i);
+                    }} else {{
+                        i += 1;
+                    }}
+                }}
+
+                rows
+            }}
+        "#}
+    })).format("\n")
+}
+
 pub fn display_iter_ty<'a>(
     index_num: usize,
     rel: Rel,
@@ -2788,10 +3086,13 @@ pub fn display_iter_ty<'a>(
         let row_type = display_rel_row_type(rel, eqlog).to_string();
         let row_type = row_type.as_str();
         let fields = (0..index_num)
-            .map(|_| FmtFn(move |f| write!(f, "Range<'a, {row_type}>")))
+            .map(|_| FmtFn(move |f| write!(f, "btree_set::Range<'a, {row_type}>")))
             .format(", ");
 
-        write!(f, "struct {rel_camel}RangeIter{index_num}<'a>({fields});")
+        write!(
+            f,
+            "pub struct {rel_camel}RangeIter{index_num}<'a>({fields});"
+        )
     })
 }
 
@@ -2992,6 +3293,13 @@ pub fn display_table_lib<'a>(
             })
             .format("");
 
+        let contains_fn = display_contains_fn(rel, &index_selection, eqlog, identifiers);
+        let insert_fn = display_insert_fn(rel, &indices, eqlog, identifiers);
+
+        let remove_from_row_indices_fn =
+            display_remove_from_row_indices_fn(rel, &indices, eqlog, identifiers);
+        let drain_with_element_fns = display_drain_with_element_fns(rel, eqlog, identifiers);
+
         let iter_ty_structs = display_iter_ty_structs(rel, index_selection, eqlog, identifiers);
         let iter_fns = index_selection
             .iter()
@@ -3006,10 +3314,11 @@ pub fn display_table_lib<'a>(
                 display_iter_next_fn(query_spec, indices, rel, eqlog, identifiers)
             })
             .format("\n");
+
         writedoc! {f, "
             use std::collections::{{BTreeSet, BTreeMap}};
-            use std::collections::btree_set::Range;
-            use std::ops::Bound;
+            use std::collections::btree_set;
+            use std::collections::btree_map;
             use std::ptr::NonNull;
 
             {strct}
@@ -3017,6 +3326,12 @@ pub fn display_table_lib<'a>(
             {drop_fn}
 
             {permutation_fns}
+
+            {contains_fn}
+            {insert_fn}
+
+            {remove_from_row_indices_fn}
+            {drain_with_element_fns}
 
             {iter_ty_structs}
 
