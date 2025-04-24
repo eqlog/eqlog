@@ -137,7 +137,7 @@ pub fn display_table_drop_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
             pub unsafe extern "Rust" fn drop_{rel_snake}_table(ptr: NonNull<*mut {rel_camel}Table>) {{
-            Box::from_raw(ptr.as_ptr());
+            drop(Box::from_raw(ptr.as_ptr()));
             }}
         "#}
     })
