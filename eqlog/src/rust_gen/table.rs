@@ -8,18 +8,17 @@ use indoc::writedoc;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display, Formatter};
-use std::io::Write;
 
 use Case::{ScreamingSnake, Snake, UpperCamel};
 
-pub fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
+fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
     FmtFn(move |f| {
         let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
         write!(f, "[u32; {arity_len}]")
     })
 }
 
-pub fn display_table_struct<'a>(
+fn display_table_struct<'a>(
     rel: Rel,
     indices: &'a BTreeSet<&'a IndexSpec>,
     eqlog: &'a Eqlog,
@@ -74,7 +73,7 @@ pub fn display_table_struct<'a>(
     })
 }
 
-pub fn display_table_new_fn<'a>(
+fn display_table_new_fn<'a>(
     rel: Rel,
     indices: &'a BTreeSet<&'a IndexSpec>,
     eqlog: &'a Eqlog,
@@ -124,7 +123,7 @@ pub fn display_table_new_fn<'a>(
     })
 }
 
-pub fn display_table_drop_fn<'a>(
+fn display_table_drop_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -240,7 +239,7 @@ impl<'a> Display for DiagonalCheck<'a> {
                 .iter()
                 .zip(diag.iter().skip(1))
                 .format_with(" && ", |(prev, next), f| {
-                    f(&format_args!("row.{prev} == row.{next}"))
+                    f(&format_args!("row[{prev}] == row[{next}]"))
                 });
             f(&format_args!("{diag_clauses}"))
         });
@@ -617,7 +616,7 @@ fn display_has_new_data_fn<'a>(
     })
 }
 
-pub fn display_iter_ty<'a>(
+fn display_iter_ty<'a>(
     index_num: usize,
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -641,7 +640,7 @@ pub fn display_iter_ty<'a>(
     })
 }
 
-pub fn display_iter_ty_structs<'a>(
+fn display_iter_ty_structs<'a>(
     rel: Rel,
     index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
     eqlog: &'a Eqlog,
@@ -806,7 +805,7 @@ fn display_iter_next_fn<'a>(
     })
 }
 
-pub fn display_weight_static<'a>(
+fn display_weight_static<'a>(
     rel: Rel,
     indices: &'a BTreeSet<&IndexSpec>,
     eqlog: &'a Eqlog,

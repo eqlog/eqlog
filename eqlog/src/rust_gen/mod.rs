@@ -360,6 +360,23 @@ fn write_table_permute_inverse_fn(
     "}
 }
 
+pub struct DiagonalCheck<'a>(pub &'a BTreeSet<BTreeSet<usize>>);
+impl<'a> Display for DiagonalCheck<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let diags = &self.0;
+        let all_clauses = diags.iter().format_with(" && ", |diag, f| {
+            let diag_clauses = diag
+                .iter()
+                .zip(diag.iter().skip(1))
+                .format_with(" && ", |(prev, next), f| {
+                    f(&format_args!("t.{prev} == t.{next}"))
+                });
+            f(&format_args!("{diag_clauses}"))
+        });
+        write!(f, "{all_clauses}")
+    }
+}
+
 fn write_table_insert_fn(
     out: &mut impl Write,
     relation: &str,
@@ -409,7 +426,7 @@ fn write_table_insert_fn(
             } else {
                 let check = DiagonalCheck(&index.diagonals);
                 f(&format_args! {"
-                    if {{let row = t; {check}}} {{
+                    if {check} {{
                         self.index_{index_name}.insert(Self::permute{order}(t));
                     }}
                 "})
