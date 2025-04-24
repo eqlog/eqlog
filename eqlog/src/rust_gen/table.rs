@@ -78,6 +78,7 @@ fn display_table_new_fn<'a>(
     indices: &'a BTreeSet<&'a IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, eqlog, identifiers)
@@ -110,7 +111,7 @@ fn display_table_new_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn new_{rel_snake}_table() -> &'static mut {rel_camel}Table {{
+            pub extern "Rust" fn {symbol_prefix}_new_{rel_snake}_table() -> &'static mut {rel_camel}Table {{
             let table = Box::new({rel_camel}Table {{
             {index_fields}
 
@@ -127,6 +128,7 @@ fn display_table_drop_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, eqlog, identifiers)
@@ -135,7 +137,7 @@ fn display_table_drop_fn<'a>(
         let rel_camel = rel_snake.to_case(UpperCamel);
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub unsafe extern "Rust" fn drop_{rel_snake}_table(ptr: NonNull<*mut {rel_camel}Table>) {{
+            pub unsafe extern "Rust" fn {symbol_prefix}_drop_{rel_snake}_table(ptr: NonNull<*mut {rel_camel}Table>) {{
             drop(Box::from_raw(ptr.as_ptr()));
             }}
         "#}
@@ -197,6 +199,7 @@ fn display_contains_fn<'a>(
     index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_camel = display_rel(rel, eqlog, identifiers)
@@ -223,7 +226,7 @@ fn display_contains_fn<'a>(
 
         writedoc! {f, r#"
             #[allow(unused)]
-            pub extern "Rust" fn {rel_snake}_contains(table: &{rel_camel}Table, row: {row_type}) -> bool {{
+            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_contains(table: &{rel_camel}Table, row: {row_type}) -> bool {{
             {checks}
             }}
         "#}
@@ -252,6 +255,7 @@ fn display_insert_fn<'a>(
     indices: &'a BTreeSet<&'a IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_camel = display_rel(rel, eqlog, identifiers)
@@ -339,7 +343,7 @@ fn display_insert_fn<'a>(
 
         writedoc! {f, r#"
             #[allow(unused)]
-            pub extern "Rust" fn {rel_snake}_insert(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
+            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_insert(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
             if table.index_{primary_old}.contains(&permute{primary_old_order}(row)) {{
             return false;
             }}
@@ -468,6 +472,7 @@ fn display_drain_with_element_fns<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     let types: BTreeSet<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
         .into_iter()
@@ -486,7 +491,7 @@ fn display_drain_with_element_fns<'a>(
 
         writedoc!{f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {rel_snake}_drain_with_element_{type_snake}(table: &mut {rel_camel}Table, el: u32) -> Vec<{row_type}> {{
+            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_drain_with_element_{type_snake}(table: &mut {rel_camel}Table, el: u32) -> Vec<{row_type}> {{
                 let mut rows = table.element_index_{type_snake}.remove(&el).unwrap_or_default();
 
                 let mut i = 0;
@@ -510,6 +515,7 @@ fn display_move_new_to_old_fn<'a>(
     indices: &'a BTreeSet<&IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, eqlog, identifiers)
@@ -571,7 +577,7 @@ fn display_move_new_to_old_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {rel_snake}_move_new_to_old(table: &mut {rel_camel}Table) {{
+            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_move_new_to_old(table: &mut {rel_camel}Table) {{
             for row in table.index_{primary_new}.iter().copied() {{
             let row = permute_inverse{primary_new_order}(row);
             {old_inserts}
@@ -588,6 +594,7 @@ fn display_has_new_data_fn<'a>(
     indices: &'a BTreeSet<&IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, eqlog, identifiers)
@@ -609,7 +616,7 @@ fn display_has_new_data_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {rel_snake}_has_new_data(table: &{rel_camel}Table) -> bool {{
+            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_has_new_data(table: &{rel_camel}Table) -> bool {{
             !table.index_{primary_new}.is_empty()
             }}
         "#}
@@ -661,6 +668,7 @@ fn display_iter_fn_name<'a>(
     query_spec: &'a QuerySpec,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, eqlog, identifiers)
@@ -691,7 +699,10 @@ fn display_iter_fn_name<'a>(
             })
             .format("");
 
-        write!(f, "iter_{rel_snake}_{age_str}{projections}{diagonals}")
+        write!(
+            f,
+            "{symbol_prefix}_iter_{rel_snake}_{age_str}{projections}{diagonals}"
+        )
     })
 }
 
@@ -701,9 +712,10 @@ fn display_iter_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let fn_name = display_iter_fn_name(rel, query_spec, eqlog, identifiers);
+        let fn_name = display_iter_fn_name(rel, query_spec, eqlog, identifiers, symbol_prefix);
         let rel_camel = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(UpperCamel);
@@ -768,13 +780,14 @@ fn display_iter_next_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_camel = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(UpperCamel);
         let fn_name = FmtFn(move |f| {
-            let iter_fn = display_iter_fn_name(rel, query_spec, eqlog, identifiers);
+            let iter_fn = display_iter_fn_name(rel, query_spec, eqlog, identifiers, symbol_prefix);
             write!(f, "{iter_fn}_next")
         });
         let index_num = indices.len();
@@ -810,6 +823,7 @@ fn display_weight_static<'a>(
     indices: &'a BTreeSet<&IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
@@ -822,7 +836,7 @@ fn display_weight_static<'a>(
         let weight = el_lookup_weight + indices_weight;
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub static {rel_screaming_snake}_WEIGHT: u32 = {weight};
+            pub static {symbol_prefix}_{rel_screaming_snake}_WEIGHT: u32 = {weight};
         "#}
     })
 }
@@ -832,6 +846,7 @@ pub fn display_table_lib<'a>(
     index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let indices: BTreeSet<&IndexSpec> = index_selection
@@ -842,8 +857,8 @@ pub fn display_table_lib<'a>(
         let index_orders: BTreeSet<&[usize]> =
             indices.iter().map(|index| &index.order[..]).collect();
         let strct = display_table_struct(rel, &indices, eqlog, identifiers);
-        let new_fn = display_table_new_fn(rel, &indices, eqlog, identifiers);
-        let drop_fn = display_table_drop_fn(rel, eqlog, identifiers);
+        let new_fn = display_table_new_fn(rel, &indices, eqlog, identifiers, symbol_prefix);
+        let drop_fn = display_table_drop_fn(rel, eqlog, identifiers, symbol_prefix);
         let permutation_fns = index_orders
             .iter()
             .copied()
@@ -859,32 +874,36 @@ pub fn display_table_lib<'a>(
             })
             .format("");
 
-        let contains_fn = display_contains_fn(rel, &index_selection, eqlog, identifiers);
-        let insert_fn = display_insert_fn(rel, &indices, eqlog, identifiers);
+        let contains_fn =
+            display_contains_fn(rel, &index_selection, eqlog, identifiers, symbol_prefix);
+        let insert_fn = display_insert_fn(rel, &indices, eqlog, identifiers, symbol_prefix);
 
         let remove_from_row_indices_fn =
             display_remove_from_row_indices_fn(rel, &indices, eqlog, identifiers);
-        let drain_with_element_fns = display_drain_with_element_fns(rel, eqlog, identifiers);
+        let drain_with_element_fns =
+            display_drain_with_element_fns(rel, eqlog, identifiers, symbol_prefix);
 
-        let move_new_to_old_fn = display_move_new_to_old_fn(rel, &indices, eqlog, identifiers);
-        let has_new_data_fn = display_has_new_data_fn(rel, &indices, eqlog, identifiers);
+        let move_new_to_old_fn =
+            display_move_new_to_old_fn(rel, &indices, eqlog, identifiers, symbol_prefix);
+        let has_new_data_fn =
+            display_has_new_data_fn(rel, &indices, eqlog, identifiers, symbol_prefix);
 
         let iter_ty_structs = display_iter_ty_structs(rel, index_selection, eqlog, identifiers);
         let iter_fns = index_selection
             .iter()
             .map(|(query_spec, indices)| {
-                display_iter_fn(query_spec, indices, rel, eqlog, identifiers)
+                display_iter_fn(query_spec, indices, rel, eqlog, identifiers, symbol_prefix)
             })
             .format("\n");
 
         let iter_next_fns = index_selection
             .iter()
             .map(|(query_spec, indices)| {
-                display_iter_next_fn(query_spec, indices, rel, eqlog, identifiers)
+                display_iter_next_fn(query_spec, indices, rel, eqlog, identifiers, symbol_prefix)
             })
             .format("\n");
 
-        let weight_static = display_weight_static(rel, &indices, eqlog, identifiers);
+        let weight_static = display_weight_static(rel, &indices, eqlog, identifiers, symbol_prefix);
 
         writedoc! {f, "
             use std::collections::{{BTreeSet, BTreeMap}};

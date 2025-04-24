@@ -240,19 +240,21 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
     )?;
     fs::write(&out_file, &result)?;
 
+    let theory_name_snake = theory_name.to_case(Case::Snake);
+    let theory_name_len = theory_name_snake.len();
+    let symbol_prefix = format!("eql_{theory_name_len}_{theory_name_snake}");
     for rel in eqlog.iter_rel() {
         let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
-        let table_out_file_name = format!(
-            "{}_{}.rs",
-            theory_name.to_case(Case::Snake),
-            rel_name.to_case(Case::Snake)
-        );
+        let rel_snake = rel_name.to_case(Case::Snake);
+        let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
         let table_out_file = out_dir.join(table_out_file_name);
 
         let indices = index_selection
             .get(&rel_name)
             .expect("Index selection should be present for all relations");
-        let table_lib = display_table_lib(rel, &indices, &eqlog, &identifiers).to_string();
+        let table_lib =
+            display_table_lib(rel, &indices, &eqlog, &identifiers, symbol_prefix.as_str())
+                .to_string();
         fs::write(table_out_file.as_path(), table_lib)?;
 
         let status = Command::new("rustc")
