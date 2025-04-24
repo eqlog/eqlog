@@ -3150,6 +3150,39 @@ fn display_move_new_to_old_fn<'a>(
     })
 }
 
+fn display_has_new_data_fn<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        let primary_new = indices
+            .iter()
+            .copied()
+            .find(
+                |IndexSpec {
+                     order: _,
+                     diagonals,
+                     age,
+                 }| { diagonals.is_empty() && *age == IndexAge::New },
+            )
+            .expect("Every relation should have a primary new index");
+        let primary_new = IndexName(primary_new);
+
+        writedoc! {f, r#"
+            #[unsafe(no_mangle)]
+            pub extern "Rust" fn {rel_snake}_has_new_data(table: &{rel_camel}Table) -> bool {{
+            !table.index_{primary_new}.is_empty()
+            }}
+        "#}
+    })
+}
+
 pub fn display_iter_ty<'a>(
     index_num: usize,
     rel: Rel,
@@ -3379,6 +3412,7 @@ pub fn display_table_lib<'a>(
         let drain_with_element_fns = display_drain_with_element_fns(rel, eqlog, identifiers);
 
         let move_new_to_old_fn = display_move_new_to_old_fn(rel, &indices, eqlog, identifiers);
+        let has_new_data_fn = display_has_new_data_fn(rel, &indices, eqlog, identifiers);
 
         let iter_ty_structs = display_iter_ty_structs(rel, index_selection, eqlog, identifiers);
         let iter_fns = index_selection
@@ -3414,6 +3448,7 @@ pub fn display_table_lib<'a>(
             {drain_with_element_fns}
 
             {move_new_to_old_fn}
+            {has_new_data_fn}
 
             {iter_ty_structs}
 
