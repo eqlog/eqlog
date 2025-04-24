@@ -3072,6 +3072,84 @@ fn display_drain_with_element_fns<'a>(
     })).format("\n")
 }
 
+fn display_move_new_to_old_fn<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        let primary_new = indices
+            .iter()
+            .copied()
+            .find(
+                |IndexSpec {
+                     order: _,
+                     diagonals,
+                     age,
+                 }| { diagonals.is_empty() && *age == IndexAge::New },
+            )
+            .expect("Every relation should have a primary new index");
+        let primary_new_order = OrderName(&primary_new.order);
+        let primary_new = IndexName(primary_new);
+
+        let old_inserts = indices
+            .iter()
+            .copied()
+            .filter(|index| index.age == IndexAge::Old)
+            .map(|index| {
+                FmtFn(|f| {
+                    let index_order = OrderName(&index.order);
+                    let diagonals = &index.diagonals;
+                    let index = IndexName(index);
+                    if diagonals.is_empty() {
+                        writedoc! {f, "
+                            table.index_{index}.insert(permute{index_order}(row));
+                        "}
+                    } else {
+                        let check = DiagonalCheck(&diagonals);
+                        writedoc! {f, "
+                            if {check} {{
+                            table.index_{index}.insert(permute{index_order}(row));
+                            }}
+                        "}
+                    }
+                })
+            })
+            .format("\n");
+
+        let clear_new_indices = indices
+            .iter()
+            .copied()
+            .filter(|index| index.age == IndexAge::New)
+            .map(|index| {
+                FmtFn(move |f| {
+                    let index_name = IndexName(index);
+                    writedoc! {f, "
+                        table.index_{index_name}.clear();
+                    "}
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, r#"
+            #[unsafe(no_mangle)]
+            pub extern "Rust" fn {rel_snake}_move_new_to_old(table: &mut {rel_camel}Table) {{
+            for row in table.index_{primary_new}.iter().copied() {{
+            let row = permute_inverse{primary_new_order}(row);
+            {old_inserts}
+            }}
+
+            {clear_new_indices}
+            }}
+        "#}
+    })
+}
+
 pub fn display_iter_ty<'a>(
     index_num: usize,
     rel: Rel,
@@ -3300,6 +3378,8 @@ pub fn display_table_lib<'a>(
             display_remove_from_row_indices_fn(rel, &indices, eqlog, identifiers);
         let drain_with_element_fns = display_drain_with_element_fns(rel, eqlog, identifiers);
 
+        let move_new_to_old_fn = display_move_new_to_old_fn(rel, &indices, eqlog, identifiers);
+
         let iter_ty_structs = display_iter_ty_structs(rel, index_selection, eqlog, identifiers);
         let iter_fns = index_selection
             .iter()
@@ -3332,6 +3412,8 @@ pub fn display_table_lib<'a>(
 
             {remove_from_row_indices_fn}
             {drain_with_element_fns}
+
+            {move_new_to_old_fn}
 
             {iter_ty_structs}
 
