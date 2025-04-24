@@ -12,7 +12,7 @@ use std::io::{self, Write};
 use std::iter::once;
 use std::iter::repeat;
 
-use Case::{Snake, UpperCamel};
+use Case::{ScreamingSnake, Snake, UpperCamel};
 
 fn from_singleton<T>(supposed_singleton: &[T]) -> &T {
     let mut iter = supposed_singleton.into_iter();
@@ -3372,6 +3372,28 @@ fn display_iter_next_fn<'a>(
     })
 }
 
+pub fn display_weight_static<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(ScreamingSnake);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let tuple_weight = arity.len();
+        let el_lookup_weight = tuple_weight;
+        let indices_weight = indices.len() * tuple_weight;
+        let weight = el_lookup_weight + indices_weight;
+        writedoc! {f, r#"
+            #[unsafe(no_mangle)]
+            pub static {rel_screaming_snake}_WEIGHT: u32 = {weight};
+        "#}
+    })
+}
+
 pub fn display_table_lib<'a>(
     rel: Rel,
     index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
@@ -3429,6 +3451,8 @@ pub fn display_table_lib<'a>(
             })
             .format("\n");
 
+        let weight_static = display_weight_static(rel, &indices, eqlog, identifiers);
+
         writedoc! {f, "
             use std::collections::{{BTreeSet, BTreeMap}};
             use std::collections::btree_set;
@@ -3454,6 +3478,8 @@ pub fn display_table_lib<'a>(
 
             {iter_fns}
             {iter_next_fns}
+
+            {weight_static}
         "}
     })
 }
