@@ -73,6 +73,24 @@ fn display_table_struct<'a>(
     })
 }
 
+fn display_table_new_fn_signature<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        write!(
+            f,
+            "fn {symbol_prefix}_new_{rel_snake}_table() -> &'static mut {rel_camel}Table"
+        )
+    })
+}
+
 fn display_table_new_fn<'a>(
     rel: Rel,
     indices: &'a BTreeSet<&'a IndexSpec>,
@@ -81,6 +99,7 @@ fn display_table_new_fn<'a>(
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
+        let signature = display_table_new_fn_signature(rel, eqlog, identifiers, symbol_prefix);
         let rel_snake = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(Snake);
@@ -111,7 +130,7 @@ fn display_table_new_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {symbol_prefix}_new_{rel_snake}_table() -> &'static mut {rel_camel}Table {{
+            pub extern "Rust" {signature} {{
             let table = Box::new({rel_camel}Table {{
             {index_fields}
 
@@ -124,7 +143,172 @@ fn display_table_new_fn<'a>(
     })
 }
 
-fn display_table_drop_fn<'a>(
+pub fn display_table_new_fn_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_table_new_fn_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_table_drop_fn_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_table_drop_fn_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_contains_fn_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_contains_fn_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_insert_fn_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_insert_fn_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_drain_with_element_fn_decl<'a>(
+    rel: Rel,
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature =
+            display_drain_with_element_fn_signature(rel, typ, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_move_new_to_old_fn_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature =
+            display_move_new_to_old_fn_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_has_new_data_fn_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_has_new_data_fn_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_iter_fn_decl<'a>(
+    query_spec: &'a QuerySpec,
+    indices: &'a Vec<IndexSpec>,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_iter_fn_name(rel, query_spec, eqlog, identifiers, symbol_prefix);
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let index_num = indices.len();
+        let fn_args = query_spec
+            .projections
+            .iter()
+            .copied()
+            .map(|p| FmtFn(move |f| write!(f, "arg{p}: u32")))
+            .format(", ");
+
+        writedoc! {f, "
+            safe fn {fn_name}(table: &{rel_camel}Table, {fn_args}) -> {rel_camel}RangeIter{index_num};
+        "}
+    })
+}
+
+pub fn display_iter_next_fn_decl<'a>(
+    query_spec: &'a QuerySpec,
+    indices: &'a Vec<IndexSpec>,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_iter_next_fn_signature(
+            query_spec,
+            indices,
+            rel,
+            eqlog,
+            identifiers,
+            symbol_prefix,
+        );
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+pub fn display_weight_static_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_weight_static_signature(rel, eqlog, identifiers, symbol_prefix);
+        writedoc! {f, "
+            safe {signature};
+        "}
+    })
+}
+
+fn display_table_drop_fn_signature<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -135,9 +319,24 @@ fn display_table_drop_fn<'a>(
             .to_string()
             .to_case(Snake);
         let rel_camel = rel_snake.to_case(UpperCamel);
+        write!(
+            f,
+            "fn {symbol_prefix}_drop_{rel_snake}_table(ptr: NonNull<*mut {rel_camel}Table>)"
+        )
+    })
+}
+
+fn display_table_drop_fn<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_table_drop_fn_signature(rel, eqlog, identifiers, symbol_prefix);
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub unsafe extern "Rust" fn {symbol_prefix}_drop_{rel_snake}_table(ptr: NonNull<*mut {rel_camel}Table>) {{
+            pub unsafe {signature} {{
             drop(Box::from_raw(ptr.as_ptr()));
             }}
         "#}
@@ -194,9 +393,8 @@ fn display_permute_inverse_fn<'a>(
     })
 }
 
-fn display_contains_fn<'a>(
+fn display_contains_fn_signature<'a>(
     rel: Rel,
-    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
@@ -207,7 +405,22 @@ fn display_contains_fn<'a>(
             .to_case(UpperCamel);
         let rel_snake = rel_camel.to_case(Snake);
         let row_type = display_rel_row_type(rel, eqlog).to_string();
+        write!(
+            f,
+            "fn {symbol_prefix}_{rel_snake}_contains(table: &{rel_camel}Table, row: {row_type}) -> bool"
+        )
+    })
+}
 
+fn display_contains_fn<'a>(
+    rel: Rel,
+    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_contains_fn_signature(rel, eqlog, identifiers, symbol_prefix);
         let indices = index_selection.get(&QuerySpec::all()).unwrap();
 
         let checks = indices
@@ -226,7 +439,7 @@ fn display_contains_fn<'a>(
 
         writedoc! {f, r#"
             #[allow(unused)]
-            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_contains(table: &{rel_camel}Table, row: {row_type}) -> bool {{
+            pub extern "Rust" {signature} {{
             {checks}
             }}
         "#}
@@ -250,9 +463,8 @@ impl<'a> Display for DiagonalCheck<'a> {
     }
 }
 
-fn display_insert_fn<'a>(
+fn display_insert_fn_signature<'a>(
     rel: Rel,
-    indices: &'a BTreeSet<&'a IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
@@ -263,6 +475,22 @@ fn display_insert_fn<'a>(
             .to_case(UpperCamel);
         let rel_snake = rel_camel.to_case(Snake);
         let row_type = display_rel_row_type(rel, eqlog).to_string();
+        write!(
+            f,
+            "fn {symbol_prefix}_{rel_snake}_insert(table: &mut {rel_camel}Table, row: {row_type}) -> bool"
+        )
+    })
+}
+
+fn display_insert_fn<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&'a IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_insert_fn_signature(rel, eqlog, identifiers, symbol_prefix);
 
         let primary_new = indices
             .iter()
@@ -343,7 +571,7 @@ fn display_insert_fn<'a>(
 
         writedoc! {f, r#"
             #[allow(unused)]
-            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_insert(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
+            pub extern "Rust" {signature} {{
             if table.index_{primary_old}.contains(&permute{primary_old_order}(row)) {{
             return false;
             }}
@@ -468,6 +696,29 @@ fn display_remove_from_row_indices_fn<'a>(
     })
 }
 
+fn display_drain_with_element_fn_signature<'a>(
+    rel: Rel,
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let rel_snake = rel_camel.to_case(Snake);
+        let row_type = display_rel_row_type(rel, eqlog).to_string();
+        let type_snake = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        write!(
+            f,
+            "fn {symbol_prefix}_{rel_snake}_drain_with_element_{type_snake}(table: &mut {rel_camel}Table, el: u32) -> Vec<{row_type}>"
+        )
+    })
+}
+
 fn display_drain_with_element_fns<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -477,21 +728,24 @@ fn display_drain_with_element_fns<'a>(
     let types: BTreeSet<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
         .into_iter()
         .collect();
-    types.into_iter().map(move |typ| FmtFn(move |f| {
-        let rel_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-        let rel_snake = rel_camel.to_case(Snake);
+    types
+        .into_iter()
+        .map(move |typ| {
+            FmtFn(move |f| {
+                let signature = display_drain_with_element_fn_signature(
+                    rel,
+                    typ,
+                    eqlog,
+                    identifiers,
+                    symbol_prefix,
+                );
+                let type_snake = display_type(typ, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
 
-        let row_type = display_rel_row_type(rel, eqlog).to_string();
-
-        let type_snake = display_type(typ, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-
-        writedoc!{f, r#"
+                writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_drain_with_element_{type_snake}(table: &mut {rel_camel}Table, el: u32) -> Vec<{row_type}> {{
+            pub extern "Rust" {signature} {{
                 let mut rows = table.element_index_{type_snake}.remove(&el).unwrap_or_default();
 
                 let mut i = 0;
@@ -507,7 +761,27 @@ fn display_drain_with_element_fns<'a>(
                 rows
             }}
         "#}
-    })).format("\n")
+            })
+        })
+        .format("\n")
+}
+
+fn display_move_new_to_old_fn_signature<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        write!(
+            f,
+            "fn {symbol_prefix}_{rel_snake}_move_new_to_old(table: &mut {rel_camel}Table)"
+        )
+    })
 }
 
 fn display_move_new_to_old_fn<'a>(
@@ -518,10 +792,8 @@ fn display_move_new_to_old_fn<'a>(
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        let rel_camel = rel_snake.to_case(UpperCamel);
+        let signature =
+            display_move_new_to_old_fn_signature(rel, eqlog, identifiers, symbol_prefix);
         let primary_new = indices
             .iter()
             .copied()
@@ -577,7 +849,7 @@ fn display_move_new_to_old_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_move_new_to_old(table: &mut {rel_camel}Table) {{
+            pub extern "Rust" {signature} {{
             for row in table.index_{primary_new}.iter().copied() {{
             let row = permute_inverse{primary_new_order}(row);
             {old_inserts}
@@ -589,9 +861,8 @@ fn display_move_new_to_old_fn<'a>(
     })
 }
 
-fn display_has_new_data_fn<'a>(
+fn display_has_new_data_fn_signature<'a>(
     rel: Rel,
-    indices: &'a BTreeSet<&IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
@@ -601,6 +872,22 @@ fn display_has_new_data_fn<'a>(
             .to_string()
             .to_case(Snake);
         let rel_camel = rel_snake.to_case(UpperCamel);
+        write!(
+            f,
+            "fn {symbol_prefix}_{rel_snake}_has_new_data(table: &{rel_camel}Table) -> bool"
+        )
+    })
+}
+
+fn display_has_new_data_fn<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_has_new_data_fn_signature(rel, eqlog, identifiers, symbol_prefix);
         let primary_new = indices
             .iter()
             .copied()
@@ -616,7 +903,7 @@ fn display_has_new_data_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {symbol_prefix}_{rel_snake}_has_new_data(table: &{rel_camel}Table) -> bool {{
+            pub extern "Rust" {signature} {{
             !table.index_{primary_new}.is_empty()
             }}
         "#}
@@ -774,7 +1061,7 @@ fn display_iter_fn<'a>(
     })
 }
 
-fn display_iter_next_fn<'a>(
+fn display_iter_next_fn_signature<'a>(
     query_spec: &'a QuerySpec,
     indices: &'a Vec<IndexSpec>,
     rel: Rel,
@@ -786,12 +1073,33 @@ fn display_iter_next_fn<'a>(
         let rel_camel = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(UpperCamel);
-        let fn_name = FmtFn(move |f| {
-            let iter_fn = display_iter_fn_name(rel, query_spec, eqlog, identifiers, symbol_prefix);
-            write!(f, "{iter_fn}_next")
-        });
+        let iter_fn = display_iter_fn_name(rel, query_spec, eqlog, identifiers, symbol_prefix);
         let index_num = indices.len();
         let row_type = display_rel_row_type(rel, eqlog);
+        write!(
+            f,
+            "fn {iter_fn}_next(it: &mut {rel_camel}RangeIter{index_num}) -> Option<{row_type}>"
+        )
+    })
+}
+
+fn display_iter_next_fn<'a>(
+    query_spec: &'a QuerySpec,
+    indices: &'a Vec<IndexSpec>,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let signature = display_iter_next_fn_signature(
+            query_spec,
+            indices,
+            rel,
+            eqlog,
+            identifiers,
+            symbol_prefix,
+        );
 
         let blocks = indices
             .iter()
@@ -810,11 +1118,28 @@ fn display_iter_next_fn<'a>(
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub extern "Rust" fn {fn_name}(it: &mut {rel_camel}RangeIter{index_num}) -> Option<{row_type}> {{
+            pub extern "Rust" {signature} {{
             {blocks}
             None
             }}
         "#}
+    })
+}
+
+fn display_weight_static_signature<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(ScreamingSnake);
+        write!(
+            f,
+            "static {symbol_prefix}_{rel_screaming_snake}_WEIGHT: u32"
+        )
     })
 }
 
@@ -826,9 +1151,7 @@ fn display_weight_static<'a>(
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(ScreamingSnake);
+        let signature = display_weight_static_signature(rel, eqlog, identifiers, symbol_prefix);
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
         let tuple_weight = arity.len();
         let el_lookup_weight = tuple_weight;
@@ -836,7 +1159,7 @@ fn display_weight_static<'a>(
         let weight = el_lookup_weight + indices_weight;
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub static {symbol_prefix}_{rel_screaming_snake}_WEIGHT: u32 = {weight};
+            pub {signature} = {weight};
         "#}
     })
 }

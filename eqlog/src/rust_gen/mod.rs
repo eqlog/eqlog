@@ -50,6 +50,8 @@ fn write_imports(out: &mut impl Write) -> io::Result<()> {
         use eqlog_runtime::Unification;
         #[allow(unused)]
         use std::ops::Bound;
+        #[allow(unused)]
+        use std::ptr::NonNull;
     "}
 }
 
@@ -282,7 +284,7 @@ fn write_table_struct(
 
     writedoc! {out, "
         #[derive(Clone, Hash, Debug)]
-        struct {relation_camel}Table {{
+        struct {relation_camel}TableOld {{
         {index_fields}
         {element_index_fields}
         }}
@@ -776,7 +778,7 @@ fn write_table_impl(
 ) -> io::Result<()> {
     let relation_camel = relation.to_case(UpperCamel);
     writedoc! {out, "
-        impl {relation_camel}Table {{
+        impl {relation_camel}TableOld {{
     "}?;
     write_table_weight(out, arity, &indices)?;
     write_table_new_fn(out, arity, &indices)?;
@@ -1113,7 +1115,7 @@ fn write_pub_insert_relation(
                 let rel_camel = relation.to_case(UpperCamel);
                 writedoc! {f, "
                     let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
-                    *weight{i} = weight{i}.saturating_add({rel_camel}Table::WEIGHT);
+                    *weight{i} = weight{i}.saturating_add({rel_camel}TableOld::WEIGHT);
                 "}
             })
         })
@@ -1540,7 +1542,7 @@ fn display_canonicalize_rel_block<'a>(
                                 .to_case(Snake);
                             writedoc! {f, "
                             let weight{i} = &mut self.{type_i_snake}_weights[t.{i}.0 as usize];
-                            *weight{i} = weight{i}.saturating_{op}({rel_camel}Table::WEIGHT);
+                            *weight{i} = weight{i}.saturating_{op}({rel_camel}TableOld::WEIGHT);
                         "}
                         })
                     })
@@ -2291,7 +2293,7 @@ fn write_new_fn(
             .to_string()
             .to_case(Snake);
         let rel_camel = rel_snake.to_case(UpperCamel);
-        write!(out, "{rel_snake}: {rel_camel}Table::new(),")?;
+        write!(out, "{rel_snake}: {rel_camel}TableOld::new(),")?;
     }
     write!(out, "empty_join_is_dirty: true,\n")?;
     write!(out, "}}\n")?;
@@ -2396,7 +2398,7 @@ fn write_theory_struct(
             .to_string()
             .to_case(Snake);
         let rel_camel = rel_snake.to_case(UpperCamel);
-        write!(out, "{rel_snake}: {rel_camel}Table,")?;
+        write!(out, "{rel_snake}: {rel_camel}TableOld,")?;
     }
 
     write!(out, "empty_join_is_dirty: bool,\n")?;
@@ -2533,6 +2535,128 @@ fn write_theory_impl(
     Ok(())
 }
 
+pub fn display_table_types<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    eqlog
+        .iter_rel()
+        .map(move |rel| {
+            FmtFn(move |f| {
+                let rel_camel = display_rel(rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(UpperCamel);
+                writedoc! {f, "
+                pub struct {rel_camel}Table {{
+                _data: (),
+                _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
+                }}
+            "}
+            })
+        })
+        .format("\n")
+}
+
+pub fn display_table_extern_decls<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+    index_selection: &'a IndexSelection,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_tables_fns = eqlog
+            .iter_rel()
+            .map(move |rel| {
+                FmtFn(move |f| {
+                    let rel_name = display_rel(rel, eqlog, identifiers).to_string();
+                    let indices = index_selection.get(&rel_name).unwrap();
+                    let types: BTreeSet<Type> =
+                        type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+                            .into_iter()
+                            .collect();
+
+                    // New function declaration
+                    let new_fn_decl =
+                        display_table_new_fn_decl(rel, eqlog, identifiers, symbol_prefix);
+                    writeln!(f, "{new_fn_decl}")?;
+
+                    // Drop function declaration
+                    let drop_fn_decl =
+                        display_table_drop_fn_decl(rel, eqlog, identifiers, symbol_prefix);
+                    writeln!(f, "{drop_fn_decl}")?;
+
+                    // Contains function declaration
+                    let contains_fn_decl =
+                        display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix);
+                    writeln!(f, "{contains_fn_decl}")?;
+
+                    // Insert function declaration
+                    let insert_fn_decl =
+                        display_insert_fn_decl(rel, eqlog, identifiers, symbol_prefix);
+                    writeln!(f, "{insert_fn_decl}")?;
+
+                    // Drain with element function declarations for each type
+                    for typ in types {
+                        let drain_fn_decl = display_drain_with_element_fn_decl(
+                            rel,
+                            typ,
+                            eqlog,
+                            identifiers,
+                            symbol_prefix,
+                        );
+                        writeln!(f, "{drain_fn_decl}")?;
+                    }
+
+                    // Move new to old function declaration
+                    let move_new_to_old_fn_decl =
+                        display_move_new_to_old_fn_decl(rel, eqlog, identifiers, symbol_prefix);
+                    writeln!(f, "{move_new_to_old_fn_decl}")?;
+
+                    // Has new data function declaration
+                    let has_new_data_fn_decl =
+                        display_has_new_data_fn_decl(rel, eqlog, identifiers, symbol_prefix);
+                    writeln!(f, "{has_new_data_fn_decl}")?;
+
+                    // Iterator function declarations for each query spec
+                    for (query_spec, indices) in indices {
+                        let iter_fn_decl = display_iter_fn_decl(
+                            query_spec,
+                            indices,
+                            rel,
+                            eqlog,
+                            identifiers,
+                            symbol_prefix,
+                        );
+                        writeln!(f, "{iter_fn_decl}")?;
+
+                        let iter_next_fn_decl = display_iter_next_fn_decl(
+                            query_spec,
+                            indices,
+                            rel,
+                            eqlog,
+                            identifiers,
+                            symbol_prefix,
+                        );
+                        writeln!(f, "{iter_next_fn_decl}")?;
+                    }
+
+                    // Weight static declaration
+                    let weight_static_decl =
+                        display_weight_static_decl(rel, eqlog, identifiers, symbol_prefix);
+                    write!(f, "{weight_static_decl}")
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, r#"
+            #[allow(dead_code)]
+            unsafe extern "Rust" {{
+            {rel_tables_fns}
+            }}
+        "#}
+    })
+}
+
 pub fn write_module(
     out: &mut impl Write,
     name: &str,
@@ -2541,9 +2665,17 @@ pub fn write_module(
     rules: &[FlatRule],
     analyses: &[FlatRuleAnalysis],
     index_selection: &IndexSelection,
+    symbol_prefix: &str,
 ) -> io::Result<()> {
     write_imports(out)?;
     write!(out, "\n")?;
+
+    writeln!(out, "{}", display_table_types(eqlog, identifiers))?;
+    writeln!(
+        out,
+        "{}",
+        display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection)
+    )?;
 
     for typ in eqlog.iter_type() {
         let type_camel = display_type(typ, eqlog, identifiers)

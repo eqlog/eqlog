@@ -229,6 +229,10 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
     let mut result: Vec<u8> = Vec::new();
     write_src_digest(&mut result, src_digest.as_slice())?;
 
+    let theory_name_snake = theory_name.to_case(Case::Snake);
+    let theory_name_len = theory_name_snake.len();
+    let symbol_prefix = format!("eql_{theory_name_len}_{theory_name_snake}");
+
     write_module(
         &mut result,
         &theory_name,
@@ -237,12 +241,10 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
         flat_rules.as_slice(),
         flat_analyses.as_slice(),
         &index_selection,
+        symbol_prefix.as_str(),
     )?;
     fs::write(&out_file, &result)?;
 
-    let theory_name_snake = theory_name.to_case(Case::Snake);
-    let theory_name_len = theory_name_snake.len();
-    let symbol_prefix = format!("eql_{theory_name_len}_{theory_name_snake}");
     for rel in eqlog.iter_rel() {
         let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
         let rel_snake = rel_name.to_case(Case::Snake);
