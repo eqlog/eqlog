@@ -15,7 +15,7 @@ use std::fmt::{self, Display, Formatter, Result};
 use std::iter::once;
 use std::iter::repeat;
 
-use Case::{ScreamingSnake, Snake, UpperCamel};
+use Case::{Snake, UpperCamel};
 
 fn from_singleton<T>(supposed_singleton: &[T]) -> &T {
     let mut iter = supposed_singleton.into_iter();
@@ -1151,27 +1151,37 @@ fn display_pub_iter_fn<'a>(
 }
 
 fn display_pub_insert_relation<'a>(
-    relation: &'a str,
-    arity: &'a [&'a str],
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
     is_function: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rel_snake = relation.to_case(Snake);
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
         let rel_snake = rel_snake.as_str();
-        let rel_caps = relation.to_case(ScreamingSnake);
-        let rel_caps = rel_caps.as_str();
 
-        let rel_args: Vec<FlatVar> = (0..arity.len()).map(FlatVar).collect();
+        let arity_types = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_camel: Vec<String> = arity_types
+            .iter()
+            .map(|&typ| {
+                display_type(typ, eqlog, identifiers)
+                    .to_string()
+                    .to_case(UpperCamel)
+            })
+            .collect();
+
+        let rel_args: Vec<FlatVar> = (0..arity_types.len()).map(FlatVar).collect();
 
         let rel_fn_args = rel_args
             .iter()
             .copied()
-            .zip(arity)
-            .map(|(arg, typ)| {
+            .zip(arity_camel.iter())
+            .map(|(arg, typ_camel)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let arg = display_var(arg);
-                    let type_camel = typ.to_case(UpperCamel);
-                    write!(f, "mut {arg}: {type_camel}")
+                    write!(f, "mut {arg}: {typ_camel}")
                 })
             })
             .format(", ");
@@ -1179,35 +1189,41 @@ fn display_pub_insert_relation<'a>(
         let canonicalize = rel_args
             .iter()
             .copied()
-            .zip(arity)
+            .zip(arity_types.iter())
             .map(|(arg, typ)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let arg = display_var(arg);
-                    let type_snake = typ.to_case(Snake);
-                    write!(f, "{arg} = self.{type_snake}_equalities.root({arg});")
+                    let type_snake = display_type(*typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    write!(f, "{arg} = self.root_{type_snake}({arg});")
                 })
             })
             .format("\n");
 
+        let weight_static_name = display_weight_static_name(rel, eqlog, identifiers).to_string(); // Convert to String
         let update_weights = rel_args
             .iter()
             .copied()
-            .zip(arity)
+            .zip(arity_types.iter())
             .enumerate()
             .map(move |(i, (arg, typ))| {
+                let weight_static_name = weight_static_name.clone(); // Clone the String
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let arg = display_var(arg);
-                    let type_snake = typ.to_case(Snake);
+                    let type_snake = display_type(*typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
                     writedoc! {f, "
                         let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
-                        *weight{i} = weight{i}.saturating_add({rel_caps}_WEIGHT);
+                        *weight{i} = weight{i}.saturating_add({weight_static_name});
                     "}
                 })
             })
             .format("\n");
 
         let docstring = if is_function {
-            let dom_len = arity.len() - 1;
+            let dom_len = arity_types.len() - 1;
             let func_args = rel_args[..dom_len]
                 .iter()
                 .copied()
@@ -1235,13 +1251,15 @@ fn display_pub_insert_relation<'a>(
             })
             .format(", ");
 
+        let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
+
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
                 let row = [{row_args}];
-                if {rel_snake}_insert(self.{rel_snake}_table, row) {{
+                if {insert_fn_name}(self.{rel_snake}_table, row) {{
                     {update_weights}
                 }}
             }}
@@ -2648,24 +2666,13 @@ fn display_theory_impl<'a>(
 
         for func in eqlog.iter_func() {
             let rel = eqlog.func_rel(func).unwrap();
-            let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-            let arity: Vec<String> = arity
-                .into_iter()
-                .map(|typ| display_type(typ, eqlog, identifiers).to_string())
-                .collect();
-            let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
-
-            let func_name = display_rel(rel, eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
-            let func_name = func_name.as_str();
             let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
             write!(f, "{eval_fn}").unwrap();
 
             let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
             write!(f, "{}", iter_fn).unwrap();
 
-            let insert_relation = display_pub_insert_relation(func_name, &arity, true);
+            let insert_relation = display_pub_insert_relation(rel, eqlog, identifiers, true);
             write!(f, "{}", insert_relation).unwrap();
 
             writeln!(f, "").unwrap();
@@ -2686,10 +2693,6 @@ fn display_theory_impl<'a>(
                 .map(|typ| display_type(typ, eqlog, identifiers).to_string())
                 .collect();
             let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
-            let pred = display_rel(rel, eqlog, identifiers)
-                .to_string()
-                .to_case(UpperCamel);
-            let pred = pred.as_str();
 
             let predicate_holds_fn = display_pub_predicate_holds_fn(rel, eqlog, identifiers);
             write!(f, "{}", predicate_holds_fn).unwrap();
@@ -2699,7 +2702,7 @@ fn display_theory_impl<'a>(
                 write!(f, "{}", iter_fn).unwrap();
             }
 
-            let insert_relation = display_pub_insert_relation(pred, &arity, false);
+            let insert_relation = display_pub_insert_relation(rel, eqlog, identifiers, false);
             write!(f, "{}", insert_relation).unwrap();
 
             writeln!(f, "").unwrap();
