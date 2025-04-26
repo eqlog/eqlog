@@ -899,31 +899,6 @@ fn display_is_dirty_fn<'a>(
     })
 }
 
-struct IterName<'a>(&'a str, &'a QuerySpec);
-
-impl<'a> Display for IterName<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let IterName(relation, query_spec) = self;
-        let relation_snake = relation.to_case(Snake);
-        let age_str = match query_spec.age {
-            QueryAge::New => "new",
-            QueryAge::Old => "old",
-            QueryAge::All => "all",
-        };
-        write!(f, "{relation_snake}.iter_{age_str}")?;
-        for p in query_spec.projections.iter() {
-            write!(f, "_{p}")?;
-        }
-        for diag in query_spec.diagonals.iter() {
-            write!(f, "_diagonal")?;
-            for d in diag.iter() {
-                write!(f, "_{d}")?;
-            }
-        }
-        Ok(())
-    }
-}
-
 fn display_pub_predicate_holds_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -2150,22 +2125,30 @@ fn display_surj_then<'a>(
                     format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(UpperCamel);
                 let relation_snake =
                     format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(Snake);
-                let query_spec = QuerySpec {
-                    projections: (0..args.len()).collect(),
-                    diagonals: BTreeSet::new(),
-                    age: QueryAge::All,
-                };
-                let args = args
+                let args_untyped = args
                     .iter()
                     .copied()
-                    .map(|arg| display_var(arg))
-                    .format(", ")
-                    .to_string();
-                let iter_name = IterName(relation_camel.as_str(), &query_spec);
+                    .map(|arg| {
+                        FmtFn(move |f| {
+                            let arg = display_var(arg);
+                            write!(f, "{arg}.0, ")
+                        })
+                    })
+                    .format("");
+                let args_typed = args
+                    .iter()
+                    .copied()
+                    .map(|arg| {
+                        FmtFn(move |f| {
+                            let arg = display_var(arg);
+                            write!(f, "{arg}, ")
+                        })
+                    })
+                    .format("");
+                let contains_fn_name = display_contains_fn_name(*rel, eqlog, identifiers);
                 writedoc! {f, "
-                    let exists_already = self.{iter_name}({args}).next().is_some();
-                    if !exists_already {{
-                    delta.new_{relation_snake}.push({relation_camel}({args}));
+                    if !{contains_fn_name}(self.{relation_snake}_table, [{args_untyped}]) {{
+                    delta.new_{relation_snake}.push({relation_camel}({args_typed}));
                     }}
                 "}?;
             }
@@ -2190,19 +2173,34 @@ fn display_non_surj_then<'a>(
         let relation_camel =
             format!("{}", display_rel(rel, eqlog, identifiers)).to_case(UpperCamel);
         let relation_snake = format!("{}", display_rel(rel, eqlog, identifiers)).to_case(Snake);
+        let cod_type = eqlog.codomain(*func).unwrap();
+        let cod_type_camel = display_type(cod_type, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
 
         let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
-        let iter_name = IterName(relation_camel.as_str(), &eval_func_spec);
+        let iter_fn_name = display_iter_fn_name(rel, &eval_func_spec, eqlog, identifiers);
+        let iter_next_fn_name = display_iter_next_fn_name(&eval_func_spec, rel, eqlog, identifiers);
 
-        let in_args0 = func_args.iter().copied().map(display_var).format(", ");
+        let in_args0 = func_args
+            .iter()
+            .copied()
+            .map(|var| {
+                FmtFn(move |f| {
+                    let var = display_var(var);
+                    write!(f, "{var}.0")
+                })
+            })
+            .format(", ");
         let in_args1 = func_args.iter().copied().map(display_var).format(", ");
 
         let out_arg_wildcards = repeat("_, ").take(func_args.len()).format("");
         let result = display_var(*result);
 
         writedoc! {f, "
-            let {result} = match self.{iter_name}({in_args0}).next() {{
-                Some({relation_camel}({out_arg_wildcards} res)) => res,
+            let mut it = {iter_fn_name}(self.{relation_snake}_table, {in_args0});
+            let {result} = match {iter_next_fn_name}(&mut it) {{
+                Some([{out_arg_wildcards} res]) => {cod_type_camel}(res),
                 None => {{ 
                     delta.new_{relation_snake}_def.push({relation_camel}Args({in_args1}));
                     break;
@@ -2461,9 +2459,9 @@ fn display_new_fn<'a>(
             let rel_snake = display_rel(rel, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
-            let rel_camel = rel_snake.to_case(UpperCamel);
+            //let rel_camel = rel_snake.to_case(UpperCamel);
             let new_fn_name = display_table_new_fn_name(rel, eqlog, identifiers);
-            writeln!(f, "{rel_snake}: {rel_camel}TableOld::new(),").unwrap();
+            //writeln!(f, "{rel_snake}: {rel_camel}TableOld::new(),").unwrap();
             writeln!(f, "{rel_snake}_table: {new_fn_name}(),").unwrap();
         }
         writeln!(f, "empty_join_is_dirty: true,").unwrap();
@@ -2605,8 +2603,8 @@ fn display_theory_struct<'a>(
                 .to_string()
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
-            writeln!(f, "#[allow(dead_code)]").unwrap();
-            writeln!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
+            //writeln!(f, "#[allow(dead_code)]").unwrap();
+            //writeln!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
             writeln!(f, "{rel_snake}_table: &'static mut {rel_camel}Table,").unwrap();
         }
 
