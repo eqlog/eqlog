@@ -855,10 +855,12 @@ fn display_is_dirty_fn<'a>(
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let relation_snake = display_rel(rel, eqlog, identifiers)
+                    let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    writedoc! {f, " || self.{relation_snake}.is_dirty()"}
+                    let has_new_data_fn_name =
+                        display_has_new_data_fn_name(rel, eqlog, identifiers);
+                    writedoc! {f, " || {has_new_data_fn_name}(self.{rel_snake}_table)"}
                 })
             })
             .format("");
