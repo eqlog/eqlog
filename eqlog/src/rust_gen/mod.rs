@@ -15,7 +15,7 @@ use std::fmt::{self, Display, Formatter, Result};
 use std::iter::once;
 use std::iter::repeat;
 
-use Case::{Snake, UpperCamel};
+use Case::{ScreamingSnake, Snake, UpperCamel};
 
 fn from_singleton<T>(supposed_singleton: &[T]) -> &T {
     let mut iter = supposed_singleton.into_iter();
@@ -1118,7 +1118,9 @@ fn display_pub_insert_relation<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let rel_snake = relation.to_case(Snake);
-        let rel_camel = relation.to_case(UpperCamel);
+        let rel_snake = rel_snake.as_str();
+        let rel_caps = relation.to_case(ScreamingSnake);
+        let rel_caps = rel_caps.as_str();
 
         let rel_args: Vec<FlatVar> = (0..arity.len()).map(FlatVar).collect();
 
@@ -1153,14 +1155,13 @@ fn display_pub_insert_relation<'a>(
             .copied()
             .zip(arity)
             .enumerate()
-            .map(|(i, (arg, typ))| {
+            .map(move |(i, (arg, typ))| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let arg = display_var(arg);
                     let type_snake = typ.to_case(Snake);
-                    let rel_camel = relation.to_case(UpperCamel);
                     writedoc! {f, "
                         let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
-                        *weight{i} = weight{i}.saturating_add({rel_camel}TableOld::WEIGHT);
+                        *weight{i} = weight{i}.saturating_add({rel_caps}_WEIGHT);
                     "}
                 })
             })
@@ -1184,14 +1185,24 @@ fn display_pub_insert_relation<'a>(
             "}
         };
 
-        let rel_args = rel_args.iter().copied().map(display_var).format(", ");
+        let row_args = rel_args
+            .iter()
+            .copied()
+            .map(|var| {
+                FmtFn(move |f| {
+                    let var = display_var(var);
+                    write!(f, "{var}.0")
+                })
+            })
+            .format(", ");
 
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
-                if self.{rel_snake}.insert({rel_camel}({rel_args})) {{
+                let row = [{row_args}];
+                if {rel_snake}_insert(self.{rel_snake}_table, row) {{
                     {update_weights}
                 }}
             }}

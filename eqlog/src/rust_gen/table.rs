@@ -1233,7 +1233,7 @@ fn display_weight_static_signature<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let static_name = display_weight_static_name(rel, eqlog, identifiers);
-        write!(f, "static {static_name}: u32")
+        write!(f, "static {static_name}: usize")
     })
 }
 
