@@ -2054,9 +2054,20 @@ fn display_if_stmt_header<'a>(
                     age: *age,
                 };
                 let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
-                let relation_camel = relation.to_case(UpperCamel);
+                let iter_fn_name = display_iter_fn_name(*rel, &query_spec, eqlog, identifiers);
+                let relation_snake = relation.to_case(Snake);
+                write!(
+                    f,
+                    "let mut it = {iter_fn_name}(self.{relation_snake}_table, "
+                )?;
+                for tm in in_projections.values().copied() {
+                    write!(f, "tm{}.0, ", tm.0)?;
+                }
+                write!(f, ");")?;
+                let iter_next_fn_name =
+                    display_iter_next_fn_name(&query_spec, *rel, eqlog, identifiers);
                 write!(f, "#[allow(unused_variables)]\n")?;
-                write!(f, "for {relation_camel}(")?;
+                write!(f, "while let Some([")?;
                 for i in 0..arity_len {
                     if let Some(var) = out_projections.get(&i) {
                         write!(f, "tm{}", var.0)?;
@@ -2065,14 +2076,17 @@ fn display_if_stmt_header<'a>(
                     }
                     write!(f, ", ")?;
                 }
-                write!(f, ") in self.")?;
-                let iter_name = IterName(relation.as_str(), &query_spec);
-                write!(f, "{iter_name}")?;
-                write!(f, "(")?;
-                for tm in in_projections.values().copied() {
-                    write!(f, "tm{}, ", tm.0)?;
+                write!(f, "]) = {iter_next_fn_name}(&mut it) {{")?;
+                for i in 0..arity_len {
+                    if let Some(var) = out_projections.get(&i) {
+                        let type_i = *analysis.var_types.get(var).unwrap();
+                        let type_i_camel = display_type(type_i, eqlog, identifiers)
+                            .to_string()
+                            .to_case(UpperCamel);
+                        let var = display_var(*var);
+                        writeln!(f, "let {var}: {type_i_camel} = {var}.into();")?;
+                    }
                 }
-                write!(f, ") {{\n")?;
             }
             FlatIfStmt::Type(type_stmt) => {
                 let FlatIfStmtType { var, age } = type_stmt;
