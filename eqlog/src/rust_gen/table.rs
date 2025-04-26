@@ -507,7 +507,7 @@ impl<'a> Display for DiagonalCheck<'a> {
     }
 }
 
-fn display_insert_fn_name<'a>(
+pub fn display_insert_fn_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -753,7 +753,7 @@ fn display_remove_from_row_indices_fn<'a>(
     })
 }
 
-fn display_drain_with_element_fn_name<'a>(
+pub fn display_drain_with_element_fn_name<'a>(
     rel: Rel,
     typ: Type,
     eqlog: &'a Eqlog,
@@ -936,7 +936,7 @@ fn display_move_new_to_old_fn<'a>(
     })
 }
 
-fn display_has_new_data_fn_name<'a>(
+pub fn display_has_new_data_fn_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -1213,7 +1213,7 @@ fn display_iter_next_fn<'a>(
     })
 }
 
-fn display_weight_static_name<'a>(
+pub fn display_weight_static_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
