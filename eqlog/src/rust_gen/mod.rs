@@ -2368,7 +2368,9 @@ fn display_new_fn<'a>(
                 .to_string()
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
+            let new_fn_name = display_table_new_fn_name(rel, eqlog, identifiers);
             write!(f, "{rel_snake}: {rel_camel}TableOld::new(),").unwrap();
+            writeln!(f, "{rel_snake}_table: {new_fn_name}(),").unwrap();
         }
         writeln!(f, "empty_join_is_dirty: true,").unwrap();
         writeln!(f, "}}").unwrap();
@@ -2460,7 +2462,6 @@ fn display_theory_struct<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "/// A model of the `{name}` theory.").unwrap();
-        writeln!(f, "#[derive(Debug, Clone)]").unwrap();
         writeln!(f, "pub struct {} {{", name).unwrap();
         for typ in eqlog.iter_type() {
             let type_camel = display_type(typ, eqlog, identifiers)
@@ -2477,6 +2478,7 @@ fn display_theory_struct<'a>(
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
             write!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
+            write!(f, "{rel_snake}_table: &'static {rel_camel}Table,").unwrap();
         }
 
         writeln!(f, "empty_join_is_dirty: bool,").unwrap();

@@ -73,7 +73,7 @@ fn display_table_struct<'a>(
     })
 }
 
-fn display_table_new_fn_name<'a>(
+pub fn display_table_new_fn_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
