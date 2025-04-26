@@ -1,7 +1,6 @@
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
-use crate::rust_gen::{IndexName, OrderName};
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::writedoc;
@@ -16,6 +15,44 @@ fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
         let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
         write!(f, "[u32; {arity_len}]")
     })
+}
+
+#[derive(Copy, Clone)]
+struct OrderName<'a>(&'a [usize]);
+impl<'a> Display for OrderName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .format_with("", |i, f| f(&format_args!("_{i}")))
+        )
+    }
+}
+
+#[derive(Copy, Clone)]
+struct IndexName<'a>(&'a IndexSpec);
+
+impl<'a> Display for IndexName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let index = self.0;
+        let age_str = match index.age {
+            IndexAge::New => "new",
+            IndexAge::Old => "old",
+        };
+        write!(f, "{age_str}")?;
+        for i in index.order.iter() {
+            write!(f, "_{i}")?;
+        }
+        for diag in index.diagonals.iter() {
+            write!(f, "_diagonal")?;
+            for d in diag.iter() {
+                write!(f, "_{d}")?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn display_table_struct<'a>(
