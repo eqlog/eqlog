@@ -924,17 +924,17 @@ fn display_iter_ty<'a>(
         let row_type = display_rel_row_type(rel, eqlog).to_string();
         let row_type = row_type.as_str();
         let fields = (0..index_num)
-            .map(|_| FmtFn(move |f| write!(f, "btree_set::Range<'a, {row_type}>")))
-            .format(", ");
+            .map(|_| FmtFn(move |f| write!(f, "btree_set::Range<'a, {row_type}>, ")))
+            .format("");
 
         write!(
             f,
-            "pub struct {rel_camel}RangeIter{index_num}<'a>({fields});"
+            "pub type {rel_camel}RangeIter{index_num}<'a> = ({fields});"
         )
     })
 }
 
-fn display_iter_ty_structs<'a>(
+pub fn display_iter_ty_structs<'a>(
     rel: Rel,
     index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
     eqlog: &'a Eqlog,
@@ -1048,14 +1048,14 @@ fn display_iter_fn<'a>(
             .format("\n");
 
         let range_args = (0..indices.len())
-            .map(|i| FmtFn(move |f| write!(f, "range{i}")))
-            .format(", ");
+            .map(|i| FmtFn(move |f| write!(f, "range{i}, ")))
+            .format("");
 
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
             pub extern "Rust" fn {fn_name}(table: &{rel_camel}Table, {fn_args}) -> {rel_camel}RangeIter{index_num} {{
             {range_defs}
-            {rel_camel}RangeIter{index_num}({range_args})
+            ({range_args})
             }}
         "#}
     })

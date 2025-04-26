@@ -43,7 +43,7 @@ fn display_func_snake<'a>(
 fn write_imports(out: &mut impl Write) -> io::Result<()> {
     writedoc! { out, "
         #[allow(unused)]
-        use std::collections::{{BTreeSet, BTreeMap}};
+        use std::collections::{{btree_set, BTreeSet, BTreeMap}};
         #[allow(unused)]
         use std::fmt;
         #[allow(unused)]
@@ -2657,6 +2657,28 @@ pub fn display_table_extern_decls<'a>(
     })
 }
 
+fn display_table_iter_ty_structs<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
+) -> impl 'a + Display {
+    eqlog
+        .iter_rel()
+        .map(move |rel| {
+            FmtFn(move |f| {
+                let rel_selection = index_selection
+                    .get(&display_rel(rel, eqlog, identifiers).to_string())
+                    .unwrap();
+                let iter_ty = display_iter_ty_structs(rel, rel_selection, eqlog, identifiers);
+                writedoc! {f, "
+                #[allow(dead_code)]
+                {iter_ty}
+            "}
+            })
+        })
+        .format("\n")
+}
+
 pub fn write_module(
     out: &mut impl Write,
     name: &str,
@@ -2671,6 +2693,11 @@ pub fn write_module(
     write!(out, "\n")?;
 
     writeln!(out, "{}", display_table_types(eqlog, identifiers))?;
+    writeln!(
+        out,
+        "{}",
+        display_table_iter_ty_structs(eqlog, identifiers, index_selection)
+    )?;
     writeln!(
         out,
         "{}",
