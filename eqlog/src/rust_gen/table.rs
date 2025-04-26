@@ -855,9 +855,9 @@ fn display_drain_with_element_fns<'a>(
                 while i < rows.len() {{
                     let row = rows[i];
                     if remove_from_row_indices(table, row) {{
-                        rows.swap_remove(i);
-                    }} else {{
                         i += 1;
+                    }} else {{
+                        rows.swap_remove(i);
                     }}
                 }}
 

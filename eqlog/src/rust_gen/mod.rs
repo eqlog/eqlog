@@ -1060,6 +1060,9 @@ fn display_canonicalize_fn<'a>(
             })
             .format("\n");
 
+        // TODO: In case a relation contains has elements of the same type in two columsn, it
+        // appears we're draining and reinserting rows twice for that type. The second time shold
+        // be a no-op, so we should remove this.
         writedoc! {f, "
             fn canonicalize(&mut self) {{
                 {rel_blocks}
