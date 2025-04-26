@@ -977,7 +977,8 @@ fn display_canonicalize_rel_block<'a>(
             .to_case(Snake);
 
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-        for typ in arity.iter().copied() {
+        let tys: BTreeSet<_> = arity.iter().copied().collect();
+        for typ in tys {
             let type_snake = display_type(typ, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
@@ -1060,9 +1061,6 @@ fn display_canonicalize_fn<'a>(
             })
             .format("\n");
 
-        // TODO: In case a relation contains has elements of the same type in two columsn, it
-        // appears we're draining and reinserting rows twice for that type. The second time shold
-        // be a no-op, so we should remove this.
         writedoc! {f, "
             fn canonicalize(&mut self) {{
                 {rel_blocks}
