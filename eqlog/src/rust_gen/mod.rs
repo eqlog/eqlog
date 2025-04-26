@@ -921,35 +921,52 @@ impl<'a> Display for IterName<'a> {
 }
 
 fn display_pub_predicate_holds_fn<'a>(
-    relation: &'a str,
-    arity: &'a [&'a str],
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let relation_snake = relation.to_case(Snake);
-        let rel_fn_args = arity
+        let relation_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let arity_types: Vec<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_camel: Vec<String> = arity_types
             .iter()
-            .copied()
+            .map(|&typ| {
+                display_type(typ, eqlog, identifiers)
+                    .to_string()
+                    .to_case(UpperCamel)
+            })
+            .collect();
+
+        let rel_fn_args = arity_camel
+            .iter()
             .enumerate()
             .format_with("", |(i, s), f| f(&format_args!(", mut arg{i}: {s}")));
 
-        let canonicalize = arity
+        let canonicalize = arity_camel
             .iter()
-            .copied()
             .enumerate()
             .format_with("\n", |(i, s), f| {
                 let sort_snake = s.to_case(Snake);
                 f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
             });
 
-        let rel_args0 = (0..arity.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-        let rel_args1 = rel_args0.clone();
-        let relation_camel = relation.to_case(UpperCamel);
+        let rel_args_doc =
+            (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
+        let row_args =
+            (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}.0")));
+
+        let contains_fn_name = display_contains_fn_name(rel, eqlog, identifiers);
+
         writedoc! {f, "
-            /// Returns `true` if `{relation}({rel_args0})` holds.
+            /// Returns `true` if `{relation_snake}({rel_args_doc})` holds.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
                 {canonicalize}
-                self.{relation_snake}.contains({relation_camel}({rel_args1}))
+                let row = [{row_args}];
+                #[allow(unused_unsafe)]
+                unsafe {{ {contains_fn_name}(self.{relation_snake}_table, row) }}
             }}
         "}
     })
@@ -2671,10 +2688,10 @@ fn display_theory_impl<'a>(
                 .to_case(UpperCamel);
             let pred = pred.as_str();
 
-            let predicate_holds_fn = display_pub_predicate_holds_fn(pred, &arity);
+            let predicate_holds_fn = display_pub_predicate_holds_fn(rel, eqlog, identifiers);
             write!(f, "{}", predicate_holds_fn).unwrap();
 
-            if arity.len() > 0 {
+            if !arity.is_empty() {
                 let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
                 write!(f, "{}", iter_fn).unwrap();
             }
