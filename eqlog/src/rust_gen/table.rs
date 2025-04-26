@@ -1035,7 +1035,7 @@ pub fn display_iter_ty_structs<'a>(
         .format("\n")
 }
 
-fn display_iter_fn_name<'a>(
+pub fn display_iter_fn_name<'a>(
     rel: Rel,
     query_spec: &'a QuerySpec,
     eqlog: &'a Eqlog,
@@ -1142,7 +1142,7 @@ fn display_iter_fn<'a>(
     })
 }
 
-fn display_iter_next_fn_name<'a>(
+pub fn display_iter_next_fn_name<'a>(
     query_spec: &'a QuerySpec,
     rel: Rel,
     eqlog: &'a Eqlog,

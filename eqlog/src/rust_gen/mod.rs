@@ -1047,68 +1047,87 @@ fn display_pub_function_eval_fn<'a>(
 }
 
 fn display_pub_iter_fn<'a>(
-    relation: &'a str,
-    arity: &'a [&'a str],
-    is_function: bool,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let rel_snake = relation.to_case(Snake);
-        let rel_type = if arity.len() == 1 {
-            arity.first().unwrap().to_string()
-        } else {
-            let args = arity
-                .iter()
-                .copied()
-                .format_with(", ", |s, f| f(&format_args!("{}", s)));
-            format!("({args})")
-        };
+    let is_function = match eqlog.rel_case(rel) {
+        RelCase::FuncRel(_) => true,
+        RelCase::PredRel(_) => false,
+    };
+    let relation = display_rel(rel, eqlog, identifiers);
+    let rel_snake = display_rel(rel, eqlog, identifiers)
+        .to_string()
+        .to_case(Snake);
+    let arity: Vec<String> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
+        .into_iter()
+        .map(move |ty| {
+            display_type(ty, eqlog, identifiers)
+                .to_string()
+                .to_case(UpperCamel)
+        })
+        .collect();
+    let arity = arity.as_slice();
+    let rel_type = if arity.len() == 1 {
+        arity[0].clone()
+    } else {
+        format!("({})", arity.iter().format(", "))
+    };
 
-        let tuple_unpack = match arity.len() {
-            0 => "|_| ()".to_string(),
-            1 => "|t| t.0".to_string(),
-            n => {
-                let args = (0..n).format_with(", ", |i, f| f(&format_args!("t.{i}")));
-                format!("|t| ({args})")
-            }
-        };
+    let tuple_unpack = match arity.len() {
+        0 => "|_| ()".to_string(),
+        1 => format!("|row| {}::from(row[0])", arity[0]),
+        n => {
+            let args = (0..n).format_with(", ", |i, f| {
+                f(&format_args!("{}::from(row[{i}])", arity[i]))
+            });
+            format!("|row| ({args})")
+        }
+    };
 
-        let docstring = match (is_function, arity.len()) {
-            (false, 0) => todo!("Shouldn't generate an iter_...() function for truth values."),
-            (false, 1) => {
-                formatdoc! {"
+    let docstring = match (is_function, arity.len()) {
+        //(false, 0) => todo!("Shouldn't generate an iter_...() function for truth values."),
+        (false, 1) => {
+            formatdoc! {"
                     /// Returns an iterator over elements satisfying the `{relation}` predicate.
                 "}
-            }
-            (false, n) => {
-                debug_assert!(n > 0);
-                formatdoc! {"
+        }
+        (false, n) => {
+            assert!(n != 1);
+            formatdoc! {"
                     /// Returns an iterator over tuples of elements satisfying the `{relation}` predicate.
                 "}
-            }
-            (true, 0) => panic!("Functions cannot have empty arity"),
-            (true, 1) => {
-                formatdoc! {"
+        }
+        (true, 0) => panic!("Functions cannot have empty arity"),
+        (true, 1) => {
+            formatdoc! {"
                     /// Returns an iterator over `{relation}` constants.
                     /// The iterator may yield more than one element if the model is not closed.
                 "}
-            }
-            (true, n) => {
-                debug_assert!(n > 1);
-                formatdoc! {"
+        }
+        (true, n) => {
+            assert!(n > 1);
+            formatdoc! {"
                     /// Returns an iterator over tuples in the graph of the `{relation}` function.
                     /// The relation yielded by the iterator need not be functional if the model is not closed.
                 "}
-            }
-        };
+        }
+    };
 
-        writedoc! {f, "
+    let query_spec = QuerySpec::all();
+    let iter_fn_name = display_iter_fn_name(rel, &query_spec, eqlog, identifiers);
+
+    let next_fn_name = display_iter_next_fn_name(&query_spec, rel, eqlog, identifiers);
+
+    //writedoc! {f, "
+    formatdoc! {"
             {docstring}
             #[allow(dead_code)]
             pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={rel_type}> {{
-                self.{rel_snake}.iter_all().map({tuple_unpack})
+                let mut row_it = {iter_fn_name}(self.{rel_snake}_table);
+                std::iter::from_fn(move || {next_fn_name}(&mut row_it)).map({tuple_unpack})
             }}
         "}
-    })
 }
 
 fn display_pub_insert_relation<'a>(
@@ -2623,7 +2642,7 @@ fn display_theory_impl<'a>(
             let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
             write!(f, "{eval_fn}").unwrap();
 
-            let iter_fn = display_pub_iter_fn(func_name, &arity, true);
+            let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
             write!(f, "{}", iter_fn).unwrap();
 
             let insert_relation = display_pub_insert_relation(func_name, &arity, true);
@@ -2656,7 +2675,7 @@ fn display_theory_impl<'a>(
             write!(f, "{}", predicate_holds_fn).unwrap();
 
             if arity.len() > 0 {
-                let iter_fn = display_pub_iter_fn(pred, &arity, false);
+                let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
                 write!(f, "{}", iter_fn).unwrap();
             }
 
