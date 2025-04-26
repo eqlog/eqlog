@@ -965,8 +965,7 @@ fn display_pub_predicate_holds_fn<'a>(
             pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
                 {canonicalize}
                 let row = [{row_args}];
-                #[allow(unused_unsafe)]
-                unsafe {{ {contains_fn_name}(self.{relation_snake}_table, row) }}
+                {contains_fn_name}(self.{relation_snake}_table, row)
             }}
         "}
     })
