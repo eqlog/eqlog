@@ -1637,7 +1637,7 @@ fn display_canonicalize_rel_block<'a>(
                 .to_string()
                 .to_case(Snake);
 
-            let canonicalize_ts = arity
+            let canonicalize_row = arity
                 .iter()
                 .copied()
                 .enumerate()
@@ -1646,7 +1646,7 @@ fn display_canonicalize_rel_block<'a>(
                         let type_i_snake = display_type(type_i, eqlog, identifiers)
                             .to_string()
                             .to_case(Snake);
-                        write!(f, "t.{i} = self.root_{type_i_snake}(t.{i});")
+                        write!(f, "row[{i}] = self.root_{type_i_snake}(row[{i}].into()).0;")
                     })
                 })
                 .format("\n");
@@ -1662,9 +1662,9 @@ fn display_canonicalize_rel_block<'a>(
                                 .to_string()
                                 .to_case(Snake);
                             writedoc! {f, "
-                            let weight{i} = &mut self.{type_i_snake}_weights[t.{i}.0 as usize];
-                            *weight{i} = weight{i}.saturating_{op}({rel_camel}TableOld::WEIGHT);
-                        "}
+                                let weight{i} = &mut self.{type_i_snake}_weights[row[{i}] as usize];
+                                *weight{i} = weight{i}.saturating_{op}({rel_camel}TableOld::WEIGHT);
+                            "}
                         })
                     })
                     .format("\n")
@@ -1672,13 +1672,16 @@ fn display_canonicalize_rel_block<'a>(
             let reduce_weights = adjust_weights("sub");
             let increase_weights = adjust_weights("add");
 
+            let drain_fn_name = display_drain_with_element_fn_name(rel, typ, eqlog, identifiers);
+            let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
+
             writedoc! {f, "
                 for el in self.{type_snake}_uprooted.iter().copied() {{
-                    let ts = self.{rel_snake}.drain_with_element_{type_snake}(el);
-                    for mut t in ts {{
+                    let rows = {drain_fn_name}(self.{rel_snake}_table, el.0);
+                    for mut row in rows {{
                         {reduce_weights}
-                        {canonicalize_ts}
-                        if self.{rel_snake}.insert(t) {{
+                        {canonicalize_row}
+                        if {insert_fn_name}(self.{rel_snake}_table, row) {{
                             {increase_weights}
                         }}
                     }}
