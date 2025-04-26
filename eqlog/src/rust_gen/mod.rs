@@ -992,6 +992,7 @@ fn display_pub_function_eval_fn<'a>(
         let cod_camel = display_type(cod, eqlog, identifiers)
             .to_string()
             .to_case(UpperCamel);
+        let cod_camel_for_closure = cod_camel.clone();
 
         let params = flat_dom
             .iter()
@@ -1009,9 +1010,9 @@ fn display_pub_function_eval_fn<'a>(
 
         let result_type = FmtFn(move |f| {
             if eqlog.is_total_func(func) {
-                write!(f, "{cod_camel}")
+                write!(f, "{cod_camel_for_closure}")
             } else {
-                write!(f, "Option<{cod_camel}>")
+                write!(f, "Option<{cod_camel_for_closure}>")
             }
         });
 
@@ -1037,26 +1038,29 @@ fn display_pub_function_eval_fn<'a>(
             })
             .format("\n");
 
-        let query = QuerySpec {
-            projections: (0..flat_dom.len()).collect(),
-            diagonals: BTreeSet::new(),
-            age: QueryAge::All,
-        };
-
-        let iter = IterName(relation.as_str(), &query);
-        let args = (0..flat_dom.len())
+        let doc_args = (0..flat_dom.len())
             .map(|i| FmtFn(move |f| write!(f, "arg{i}")))
             .format(", ")
             .to_string();
 
+        let extern_call_args = (0..flat_dom.len())
+            .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
+            .format(", ")
+            .to_string();
+
+        let query_spec = QuerySpec::eval_func(func, eqlog);
+        let iter_fn_name = display_iter_fn_name(rel, &query_spec, eqlog, identifiers);
+        let next_fn_name = display_iter_next_fn_name(&query_spec, rel, eqlog, identifiers);
+
         writedoc! {f, "
-            /// Evaluates `{relation}({args})`.
+            /// Evaluates `{relation_snake}({doc_args})`.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self, {params}) -> {result_type} {{
                 {canonicalize}
-                self.{iter}({args})
-                    .next()
-                    .map(|t| t.{flat_dom_len})
+                let mut iter_state = {iter_fn_name}(self.{relation_snake}_table, {extern_call_args});
+                let result_row = {next_fn_name}(&mut iter_state);
+                result_row
+                    .map(|row| {cod_camel}::from(row[{flat_dom_len}]))
                     {maybe_unwrap_result}
             }}
         "}
