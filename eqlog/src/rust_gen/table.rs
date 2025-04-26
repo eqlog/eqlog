@@ -329,7 +329,7 @@ pub fn display_weight_static_decl<'a>(
     })
 }
 
-fn display_table_drop_fn_name<'a>(
+pub fn display_table_drop_fn_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -352,7 +352,7 @@ fn display_table_drop_fn_signature<'a>(
         let rel_camel = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(UpperCamel);
-        write!(f, "fn {fn_name}(ptr: NonNull<*mut {rel_camel}Table>)")
+        write!(f, "fn {fn_name}(ptr: NonNull<{rel_camel}Table>)")
     })
 }
 

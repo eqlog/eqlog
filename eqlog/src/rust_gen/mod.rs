@@ -2455,6 +2455,40 @@ fn display_define_fn<'a>(
     })
 }
 
+fn display_theory_drop_impl<'a>(
+    theory_type_name: &'a str,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let drop_tables = eqlog
+            .iter_rel()
+            .map(|rel| {
+                FmtFn(move |f| {
+                    let rel_snake = display_rel(rel, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    let drop_fn_name = display_table_drop_fn_name(rel, eqlog, identifiers);
+                    write!(
+                        f,
+                        "{drop_fn_name}(NonNull::new_unchecked(self.{rel_snake}_table as *mut _));"
+                    )
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            impl Drop for {theory_type_name} {{
+            fn drop(&mut self) {{
+            #[allow(unused_unsafe)]
+            unsafe {{
+            {drop_tables}
+            }}
+            }}
+            }}"}
+    })
+}
+
 fn display_theory_struct<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
@@ -2478,7 +2512,7 @@ fn display_theory_struct<'a>(
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
             write!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
-            write!(f, "{rel_snake}_table: &'static {rel_camel}Table,").unwrap();
+            write!(f, "{rel_snake}_table: &'static mut {rel_camel}Table,").unwrap();
         }
 
         writeln!(f, "empty_join_is_dirty: bool,").unwrap();
@@ -2878,6 +2912,9 @@ pub fn display_module<'a>(
 
         let theory_impl = display_theory_impl(name, rules, analyses, eqlog, identifiers);
         write!(f, "{}", theory_impl)?;
+
+        let drop_impl = display_theory_drop_impl(name, eqlog, identifiers);
+        write!(f, "{}", drop_impl)?;
 
         Ok(())
     })
