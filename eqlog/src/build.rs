@@ -233,8 +233,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
     let theory_name_len = theory_name_snake.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name_snake}");
 
-    write_module(
-        &mut result,
+    let result = display_module(
         &theory_name,
         &eqlog,
         &identifiers,
@@ -242,7 +241,8 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
         flat_analyses.as_slice(),
         &index_selection,
         symbol_prefix.as_str(),
-    )?;
+    )
+    .to_string();
     fs::write(&out_file, &result)?;
 
     for rel in eqlog.iter_rel() {
