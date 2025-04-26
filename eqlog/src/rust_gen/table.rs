@@ -832,7 +832,7 @@ fn display_drain_with_element_fns<'a>(
         .format("\n")
 }
 
-fn display_move_new_to_old_fn_name<'a>(
+pub fn display_move_new_to_old_fn_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,

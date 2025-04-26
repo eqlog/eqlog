@@ -625,6 +625,7 @@ fn display_table_is_dirty_fn<'a>(
         let master_index_new = IndexName(master_index_new);
 
         writedoc! {f, "
+            #[allow(dead_code)]
             fn is_dirty(&self) -> bool {{
                 !self.index_{master_index_new}.is_empty()
             }}
@@ -675,6 +676,7 @@ fn display_table_drop_dirt_fn<'a>(
             })
             .format("\n");
         writedoc! {f, "
+            #[allow(dead_code)]
             fn drop_dirt(&mut self) {{
             {old_extends}
             {new_clears}
@@ -2314,10 +2316,15 @@ fn display_drop_dirt_fn<'a>(
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
+                    let move_new_to_old_fn_name =
+                        display_move_new_to_old_fn_name(rel, eqlog, identifiers);
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    write!(f, "self.{rel_snake}.drop_dirt();")
+                    writedoc! {f, "
+                        #[allow(unused_unsafe)]
+                        unsafe {{ {move_new_to_old_fn_name}(self.{rel_snake}_table) }};
+                    "}
                 })
             })
             .format("\n");
@@ -2442,7 +2449,7 @@ fn display_new_fn<'a>(
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
             let new_fn_name = display_table_new_fn_name(rel, eqlog, identifiers);
-            write!(f, "{rel_snake}: {rel_camel}TableOld::new(),").unwrap();
+            writeln!(f, "{rel_snake}: {rel_camel}TableOld::new(),").unwrap();
             writeln!(f, "{rel_snake}_table: {new_fn_name}(),").unwrap();
         }
         writeln!(f, "empty_join_is_dirty: true,").unwrap();
@@ -2584,8 +2591,9 @@ fn display_theory_struct<'a>(
                 .to_string()
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
-            write!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
-            write!(f, "{rel_snake}_table: &'static mut {rel_camel}Table,").unwrap();
+            writeln!(f, "#[allow(dead_code)]").unwrap();
+            writeln!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
+            writeln!(f, "{rel_snake}_table: &'static mut {rel_camel}Table,").unwrap();
         }
 
         writeln!(f, "empty_join_is_dirty: bool,").unwrap();
