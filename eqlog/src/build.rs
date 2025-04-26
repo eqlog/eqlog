@@ -245,6 +245,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
     .to_string();
     fs::write(&out_file, &result)?;
 
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
     for rel in eqlog.iter_rel() {
         let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
         let rel_snake = rel_name.to_case(Case::Snake);
@@ -267,6 +268,12 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
             .status()
             .expect("Failed to compile table lib");
         assert!(status.success());
+
+        let rlib_filename = format!(
+            "lib{}.rlib",
+            table_out_file.file_stem().unwrap().to_str().unwrap()
+        );
+        println!("cargo:rustc-link-lib=static:+verbatim={}", rlib_filename);
     }
 
     #[cfg(feature = "rustfmt")]
