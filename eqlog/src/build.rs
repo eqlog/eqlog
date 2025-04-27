@@ -245,6 +245,9 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
     .to_string();
     fs::write(&out_file, &result)?;
 
+    let incremental_dir = out_dir.join("incremental");
+    fs::create_dir_all(&incremental_dir)?;
+
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     for rel in eqlog.iter_rel() {
         let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
@@ -265,6 +268,10 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
             .arg("--out-dir")
             .arg(out_dir)
             .arg(table_out_file.as_path())
+            .arg("-C")
+            .arg("embed-bitcode=no")
+            .arg("-C")
+            .arg(format!("incremental={}", incremental_dir.display()))
             .status()
             .expect("Failed to compile table lib");
         assert!(status.success());
