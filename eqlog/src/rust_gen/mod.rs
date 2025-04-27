@@ -1971,8 +1971,6 @@ fn display_theory_struct<'a>(
                 .to_string()
                 .to_case(Snake);
             let rel_camel = rel_snake.to_case(UpperCamel);
-            //writeln!(f, "#[allow(dead_code)]").unwrap();
-            //writeln!(f, "{rel_snake}: {rel_camel}TableOld,").unwrap();
             writeln!(f, "{rel_snake}_table: &'static mut {rel_camel}Table,").unwrap();
         }
 
