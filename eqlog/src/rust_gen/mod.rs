@@ -2165,27 +2165,22 @@ pub fn display_table_extern_decls<'a>(
                             .into_iter()
                             .collect();
 
-                    // New function declaration
                     let new_fn_decl =
                         display_table_new_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{new_fn_decl}")?;
 
-                    // Drop function declaration
                     let drop_fn_decl =
                         display_table_drop_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{drop_fn_decl}")?;
 
-                    // Contains function declaration
                     let contains_fn_decl =
                         display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{contains_fn_decl}")?;
 
-                    // Insert function declaration
                     let insert_fn_decl =
                         display_insert_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{insert_fn_decl}")?;
 
-                    // Drain with element function declarations for each type
                     for typ in types {
                         let drain_fn_decl = display_drain_with_element_fn_decl(
                             rel,
@@ -2197,17 +2192,14 @@ pub fn display_table_extern_decls<'a>(
                         writeln!(f, "{drain_fn_decl}")?;
                     }
 
-                    // Move new to old function declaration
                     let move_new_to_old_fn_decl =
                         display_move_new_to_old_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{move_new_to_old_fn_decl}")?;
 
-                    // Has new data function declaration
                     let has_new_data_fn_decl =
                         display_has_new_data_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{has_new_data_fn_decl}")?;
 
-                    // Iterator function declarations for each query spec
                     for (query_spec, indices) in indices {
                         let iter_fn_decl = display_iter_fn_decl(
                             query_spec,
@@ -2230,7 +2222,6 @@ pub fn display_table_extern_decls<'a>(
                         writeln!(f, "{iter_next_fn_decl}")?;
                     }
 
-                    // Weight static declaration
                     let weight_static_decl =
                         display_weight_static_decl(rel, eqlog, identifiers, symbol_prefix);
                     write!(f, "{weight_static_decl}")
