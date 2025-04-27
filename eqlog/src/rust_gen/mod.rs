@@ -1703,8 +1703,7 @@ fn display_drop_dirt_fn<'a>(
                         .to_string()
                         .to_case(Snake);
                     writedoc! {f, "
-                        #[allow(unused_unsafe)]
-                        unsafe {{ {move_new_to_old_fn_name}(self.{rel_snake}_table) }};
+                        {move_new_to_old_fn_name}(self.{rel_snake}_table);
                     "}
                 })
             })
