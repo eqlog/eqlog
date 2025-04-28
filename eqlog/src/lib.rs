@@ -13,4 +13,4 @@ mod fmt_util;
 mod rust_gen;
 mod source_display;
 
-pub use crate::build::{process, process_root, Config};
+pub use crate::build::{process, process_root, Config, Error, Result};

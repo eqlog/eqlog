@@ -3,9 +3,10 @@ use std::{
     iter::{once, repeat},
 };
 
-use super::ast::*;
 use super::var_info::*;
+use super::{ast::*, FlatRuleAnalysis};
 use crate::eqlog_util::*;
+use by_address::ByAddress;
 use eqlog_eqlog::*;
 use maplit::btreeset;
 
@@ -127,11 +128,17 @@ impl IndexSpec {
 // Maps relation name and query spec to the indices of the the relation that can serve the query.
 pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, Vec<IndexSpec>>>;
 
-pub fn select_indices<'a>(
-    if_stmt_rel_infos: &BTreeSet<(&'a FlatIfStmtRelation, &'a RelationInfo)>,
+pub fn select_indices(
+    flat_analyses: &[FlatRuleAnalysis],
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
 ) -> IndexSelection {
+    let if_stmt_rel_infos: BTreeSet<(&FlatIfStmtRelation, &RelationInfo)> = flat_analyses
+        .iter()
+        .flat_map(|analysis| analysis.if_stmt_rel_infos.iter())
+        .map(|(ByAddress(if_stmt_rel), info)| (*if_stmt_rel, info))
+        .collect();
+
     // Every relation needs a QuerySpec for all tuples, and a QuerySpec for one specific tuple.
     // TODO: Can't we do without the QuerySpec for all dirty tuples though?
     let mut query_specs: BTreeMap<Rel, BTreeSet<QuerySpec>> = eqlog
@@ -152,7 +159,7 @@ pub fn select_indices<'a>(
     }
 
     // Every relation if stmt needs a QuerySpec.
-    for (if_stmt_rel, info) in if_stmt_rel_infos {
+    for (if_stmt_rel, info) in if_stmt_rel_infos.iter() {
         let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
         let rel_str = crate::eqlog_util::display_rel(*rel, eqlog, identifiers).to_string();
         if rel_str == "is_subterminal" {

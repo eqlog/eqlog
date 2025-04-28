@@ -2,23 +2,24 @@ use crate::eqlog_util::display_rel;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
+use crate::fmt_util::FmtFn;
 use crate::grammar::*;
 use crate::grammar_util::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
-use by_address::ByAddress;
+use anyhow::anyhow;
+use anyhow::Context as _;
+pub use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
-use indoc::eprintdoc;
+use indoc::indoc;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::env;
-use std::error::Error;
-use std::ffi::OsStr;
+use std::ffi::OsString;
+use std::fmt::Display;
 use std::fs;
 use std::fs::File;
-use std::io;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -53,13 +54,19 @@ fn parse(
     ),
     CompileError,
 > {
+    let source = whipe_comments(&source);
     let mut eqlog = Eqlog::new();
 
     let mut identifiers: BTreeMap<String, Ident> = BTreeMap::new();
     let mut locations: BTreeMap<Location, Loc> = BTreeMap::new();
 
     let module = ModuleParser::new()
-        .parse(&mut eqlog, &mut identifiers, &mut locations, source)
+        .parse(
+            &mut eqlog,
+            &mut identifiers,
+            &mut locations,
+            source.as_str(),
+        )
         .map_err(CompileError::from)?;
 
     let identifiers = identifiers.into_iter().map(|(s, i)| (i, s)).collect();
@@ -71,35 +78,38 @@ fn parse(
     Ok((eqlog, identifiers, locations, module))
 }
 
-fn eqlog_files(root_path: &Path) -> io::Result<Vec<PathBuf>> {
+fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
     let mut result = Vec::new();
 
-    if root_path.is_file() {
-        let ext = root_path.extension();
-        if ext != Some(OsStr::new("eql")) && ext != Some(OsStr::new("eqlog")) {
-            eprintln!("Not an eqlog file: {}", root_path.display());
-            return Ok(vec![]);
-        }
-
-        return Ok(vec![PathBuf::from(root_path)]);
+    if !root_path.is_dir() {
+        return Err(anyhow!("Path is not a directory: {}", root_path.is_dir()));
     }
 
-    for entry in fs::read_dir(root_path)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-
+    let entries = fs::read_dir(root_path)
+        .with_context(|| format!("Reading directory: {}", root_path.display()))?;
+    for entry in entries {
+        let entry = entry.context("Reading directory entry")?;
         let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("Getting file type for entry: {}", entry.path().display()))?;
 
         if file_type.is_dir() {
-            result.extend(eqlog_files(&path)?);
+            result.extend(
+                eqlog_files(&path)?
+                    .into_iter()
+                    .map(|p| PathBuf::from(entry.file_name()).join(p)),
+            );
         }
 
-        let is_symlink_file = || -> io::Result<bool> {
+        let is_symlink_file = || -> Result<bool> {
             if !file_type.is_symlink() {
                 Ok(false)
             } else {
+                let metadata = fs::metadata(&path)
+                    .with_context(|| format!("Resolving symlink: {}", path.display()))?;
                 // Ensure all symlinks are resolved
-                Ok(fs::metadata(&path)?.is_file())
+                Ok(metadata.is_file())
             }
         };
 
@@ -113,11 +123,14 @@ fn eqlog_files(root_path: &Path) -> io::Result<Vec<PathBuf>> {
                 continue;
             }
         };
+        let file_name = path
+            .file_name()
+            .expect("Files with extensions always have file names");
 
         // TODO: We should emit an error if both a .eql and an .eqlog file exist, since both files
         // will correspond to the same rust file and module.
         if extension == "eql" || extension == "eqlog" {
-            result.push(path);
+            result.push(PathBuf::from(file_name));
         }
     }
     Ok(result)
@@ -140,16 +153,14 @@ fn read_out_digest(out_file_path: &Path) -> Option<Vec<u8>> {
     base16ct::upper::decode_vec(digest_part.as_bytes()).ok()
 }
 
-fn write_src_digest(out: &mut impl io::Write, digest: &[u8]) -> Result<(), Box<dyn Error>> {
-    writeln!(
-        out,
-        "// src-digest: {}",
-        base16ct::upper::encode_string(digest)
-    )?;
-    Ok(())
+fn display_src_digest<'a>(digest: &'a [u8]) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let digest = base16ct::upper::encode_string(digest);
+        writeln!(f, "// src-digest: {digest}")
+    })
 }
 
-fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn Error>> {
+fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
     let theory_name = in_file
         .file_stem()
         .unwrap()
@@ -159,7 +170,8 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
     let out_file = out_dir
         .join(theory_name.to_case(Case::Snake))
         .with_extension("rs");
-    let source = fs::read_to_string(in_file)?;
+    let source = fs::read_to_string(in_file)
+        .with_context(|| format!("Reading file {}", in_file.display()))?;
 
     let src_digest = digest_source(theory_name.as_str(), source.as_str());
     let out_digest = read_out_digest(out_file.as_path());
@@ -169,55 +181,29 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
         return Ok(());
     }
 
-    let source_without_comments = whipe_comments(&source);
-    let (mut eqlog, identifiers, locations, _module) =
-        parse(&source_without_comments).map_err(|error| CompileErrorWithContext {
-            error,
-            // TODO: Get rid of this copy; necessary because of the usage to create a
-            // CompileErrorWithContext below.
-            source: source.clone(),
-            source_path: in_file.into(),
-        })?;
+    let (mut eqlog, identifiers, locations, _module) = match parse(source.as_str()) {
+        Ok(x) => x,
+        Err(error) => {
+            return Err(CompileErrorWithContext {
+                error,
+                source,
+                source_path: in_file.into(),
+            }
+            .into());
+        }
+    };
     eqlog.close();
 
     check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
         error,
-        source: source,
+        source,
         source_path: in_file.into(),
     })?;
     assert!(!eqlog.absurd());
 
-    let mut flat_rules: Vec<FlatRule> = eqlog
-        .iter_func()
-        .map(|func| functionality_v2(func, &eqlog))
-        .collect();
-    let functionality_rule_num = flat_rules.len();
-    flat_rules.extend(eqlog.iter_rule_decl_node().map(|rule| {
-        let mut flat_rule = flatten(rule, &eqlog, &identifiers);
-        // Necessary here for explicit rules, but not for implicit functionality rules, since the
-        // latter are already ordered reasonably.
-        sort_if_stmts(&mut flat_rule);
-        flat_rule
-    }));
+    let flat_rules = flatten(&eqlog, &identifiers);
 
-    let (flat_functionality_rules, flat_explicit_rules) =
-        flat_rules.split_at(functionality_rule_num);
-    let flat_analyses: Vec<FlatRuleAnalysis> = flat_functionality_rules
-        .iter()
-        .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::No))
-        .chain(
-            flat_explicit_rules
-                .iter()
-                .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::Yes)),
-        )
-        .collect();
-
-    let if_stmt_rel_infos: BTreeSet<(&FlatIfStmtRelation, &RelationInfo)> = flat_analyses
-        .iter()
-        .flat_map(|analysis| analysis.if_stmt_rel_infos.iter())
-        .map(|(ByAddress(if_stmt_rel), info)| (*if_stmt_rel, info))
-        .collect();
-    let index_selection = select_indices(&if_stmt_rel_infos, &eqlog, &identifiers);
+    let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
 
     let theory_name = in_file
         .file_stem()
@@ -227,7 +213,11 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
         .to_case(Case::UpperCamel);
 
     let mut result: Vec<u8> = Vec::new();
-    write_src_digest(&mut result, src_digest.as_slice())?;
+    result.extend(
+        display_src_digest(src_digest.as_slice())
+            .to_string()
+            .as_bytes(),
+    );
 
     let theory_name_snake = theory_name.to_case(Case::Snake);
     let theory_name_len = theory_name_snake.len();
@@ -237,8 +227,8 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<(), Box<dyn 
         &theory_name,
         &eqlog,
         &identifiers,
-        flat_rules.as_slice(),
-        flat_analyses.as_slice(),
+        flat_rules.rules(),
+        flat_rules.analyses(),
         &index_selection,
         symbol_prefix.as_str(),
     )
@@ -322,19 +312,23 @@ pub fn print_cargo_set_eqlog_out_dir(out_dir: &Path) {
 }
 
 #[doc(hidden)]
-pub fn process(config: &Config) -> Result<(), Box<dyn Error>> {
+pub fn process(config: &Config) -> Result<()> {
     let Config { in_dir, out_dir } = config;
-    for in_file in eqlog_files(&in_dir)? {
-        let src_rel = in_file
-            .strip_prefix(&in_dir)
-            .expect("File yielded by eqlog_files(dir) should be in in_dir");
-        let out_parent = match src_rel.parent() {
+    let in_files = eqlog_files(&in_dir).with_context(|| {
+        format!(
+            "Searching for eqlog files in directory: {}",
+            in_dir.display()
+        )
+    })?;
+
+    for in_file in in_files {
+        let out_parent = match in_file.parent() {
             Some(parent) => out_dir.clone().join(parent),
             None => out_dir.clone(),
         };
         std::fs::create_dir_all(&out_parent)?;
 
-        process_file(&in_file, &out_parent)?;
+        process_file(in_dir.join(in_file).as_path(), &out_parent)?;
     }
 
     Ok(())
@@ -352,27 +346,14 @@ pub fn process(config: &Config) -> Result<(), Box<dyn Error>> {
 ///     eqlog::process_root();
 /// }
 /// ```
-pub fn process_root() {
+pub fn process_root() -> Result<()> {
     let in_dir: PathBuf = "src".into();
-    let out_dir: PathBuf = env::var("OUT_DIR")
-        .unwrap_or_else(|err| {
-            match err {
-                env::VarError::NotPresent => {
-                    eprintdoc! {"
-                        Error: OUT_DIR environment variable not set
-                        
-                        process_root should only be called from build.rs via cargo.
-                "};
-                }
-                env::VarError::NotUnicode(_) => {
-                    eprintdoc! {"
-                        Error: OUT_DIR environment variable is not valid utf8
-                    "};
-                }
-            }
-            exit(1)
-        })
-        .into();
+    let out_dir: OsString = env::var_os("OUT_DIR").context(indoc! {"
+            Error: Failed to read OUT_DIR environment variable
+
+            process_root should only be called from build.rs via cargo.
+        "})?;
+    let out_dir: PathBuf = out_dir.into();
 
     let config = Config { in_dir, out_dir };
 
@@ -382,4 +363,5 @@ pub fn process_root() {
     }
 
     print_cargo_set_eqlog_out_dir(config.out_dir.as_path());
+    Ok(())
 }

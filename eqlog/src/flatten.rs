@@ -5,6 +5,7 @@ use maplit::btreemap;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::pin::Pin;
 
 /// Assign compatible [FlatTerm]s to the [El]s in the codomains of a list of morphisms.
 ///
@@ -449,7 +450,7 @@ fn flatten_non_surj_then(
 }
 
 /// Compiles an Eqlog [RuleDeclNode] into a [FlatRule].
-pub fn flatten(
+fn flatten_rule(
     rule: RuleDeclNode,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
@@ -676,5 +677,55 @@ pub fn flatten(
         name,
         funcs,
         var_types,
+    }
+}
+
+pub struct FlatRules {
+    rules_vec: Pin<Box<Vec<FlatRule>>>,
+    analyses_vec: Vec<FlatRuleAnalysis<'static>>,
+}
+
+impl FlatRules {
+    pub fn rules<'a>(&'a self) -> &'a [FlatRule] {
+        self.rules_vec.as_slice()
+    }
+    pub fn analyses<'a>(&'a self) -> &'a [FlatRuleAnalysis<'a>] {
+        self.analyses_vec.as_slice()
+    }
+}
+
+pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> FlatRules {
+    let mut rules_vec: Vec<FlatRule> = Vec::new();
+
+    rules_vec.extend(eqlog.iter_func().map(|func| functionality_v2(func, &eqlog)));
+
+    let functionality_rule_num = rules_vec.len();
+    rules_vec.extend(eqlog.iter_rule_decl_node().map(|rule| {
+        let mut flat_rule = flatten_rule(rule, &eqlog, &identifiers);
+        // Necessary here for explicit rules, but not for implicit functionality rules, since the
+        // latter are already ordered reasonably.
+        sort_if_stmts(&mut flat_rule);
+        flat_rule
+    }));
+
+    let rules_vec = Box::pin(rules_vec);
+
+    let rules_slice = rules_vec.as_slice();
+    let rules_slice =
+        unsafe { std::mem::transmute::<&[FlatRule], &'static [FlatRule]>(rules_slice) };
+    let (flat_functionality_rules, flat_explicit_rules) =
+        rules_slice.split_at(functionality_rule_num);
+    let analyses_vec = flat_functionality_rules
+        .iter()
+        .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::No))
+        .chain(
+            flat_explicit_rules
+                .iter()
+                .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::Yes)),
+        )
+        .collect();
+    FlatRules {
+        rules_vec,
+        analyses_vec,
     }
 }
