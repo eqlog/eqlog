@@ -295,29 +295,6 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
     let encoded_digest = base16ct::upper::encode_string(&src_digest);
     fs::write(&digest_file, encoded_digest)?;
 
-    #[cfg(feature = "rustfmt")]
-    match std::process::Command::new("rustfmt")
-        .arg(&out_file)
-        .status()
-    {
-        Err(_) => {
-            // In all likelyhood, rustfmt is not installed. This is OK, only print an info.
-            println!(
-                "Failed to run rustfmt on eqlog output file {}",
-                out_file.display()
-            );
-        }
-        Ok(status) => {
-            if !status.success() {
-                // rustfmt started but failed.
-                eprintln!(
-                    "Formatting eqlog output file \"{}\" failed",
-                    out_file.display()
-                );
-            }
-        }
-    }
-
     Ok(())
 }
 
