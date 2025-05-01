@@ -16,10 +16,10 @@ use indoc::indoc;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fmt::Display;
-use std::fs;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -78,7 +78,7 @@ fn parse(
     Ok((eqlog, identifiers, locations, module))
 }
 
-fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
+fn find_files_by_extension(root_path: &Path, extensions: &[&str]) -> Result<Vec<PathBuf>> {
     let mut result = Vec::new();
 
     if !root_path.is_dir() {
@@ -93,12 +93,13 @@ fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
         let file_type = entry
             .file_type()
             .with_context(|| format!("Getting file type for entry: {}", entry.path().display()))?;
+        let file_name = entry.file_name();
 
         if file_type.is_dir() {
             result.extend(
-                eqlog_files(&path)?
+                find_files_by_extension(&path, extensions)?
                     .into_iter()
-                    .map(|p| PathBuf::from(entry.file_name()).join(p)),
+                    .map(|p| PathBuf::from(&file_name).join(p)),
             );
         }
 
@@ -127,13 +128,22 @@ fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
             .file_name()
             .expect("Files with extensions always have file names");
 
-        // TODO: We should emit an error if both a .eql and an .eqlog file exist, since both files
-        // will correspond to the same rust file and module.
-        if extension == "eql" || extension == "eqlog" {
+        if extensions
+            .iter()
+            .find(|ext| OsStr::new(**ext) == extension)
+            .is_some()
+        {
             result.push(PathBuf::from(file_name));
         }
     }
     Ok(result)
+}
+
+fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
+    // TODO: We should emit an error if both a .eql and an .eqlog file exist, since both files
+    // will correspond to the same rust file and module.
+    let extensions = ["eqlog", "eql"];
+    find_files_by_extension(root_path, &extensions)
 }
 
 fn digest_source(theory_name: &str, src: &str) -> Vec<u8> {
@@ -167,9 +177,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         .to_str()
         .unwrap()
         .to_case(Case::UpperCamel);
-    let out_file = out_dir
-        .join(theory_name.to_case(Case::Snake))
-        .with_extension("rs");
+    let out_file = out_dir.join("mod.rs");
     let source = fs::read_to_string(in_file)
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
@@ -311,22 +319,61 @@ pub fn print_cargo_set_eqlog_out_dir(out_dir: &Path) {
     println!("cargo:rustc-env=EQLOG_OUT_DIR={}", out_dir.display());
 }
 
+pub fn lowest_common_ancestor_path<'a, 'b>(mut a: &'a Path, b: &'b Path) -> Option<&'a Path> {
+    loop {
+        if b.starts_with(a) {
+            return Some(a);
+        }
+
+        a = match a.parent() {
+            Some(p) => p,
+            None => {
+                break;
+            }
+        };
+    }
+
+    None
+}
+
+fn create_mod_dirs(in_dir: &Path, out_dir: &Path) -> Result<()> {
+    let workspace_root = lowest_common_ancestor_path(in_dir, out_dir)
+        .expect("TODO: Handle in_dir and out_dir not having common ancestor");
+    for rust_file_path in find_files_by_extension(in_dir, &["rs"])? {
+        let rust_file_path = in_dir.join(rust_file_path);
+        let rust_file_path = rust_file_path
+            .strip_prefix(workspace_root)
+            .expect("should have workspace_root <= in_dir <= rust_file_path");
+        fs::create_dir_all(out_dir.join(rust_file_path))?;
+    }
+    Ok(())
+}
+
 #[doc(hidden)]
 pub fn process(config: &Config) -> Result<()> {
     let Config { in_dir, out_dir } = config;
-    let in_files = eqlog_files(&in_dir).with_context(|| {
+    let in_dir = fs::canonicalize(in_dir.as_path())
+        .with_context(|| anyhow!("Canonicalizing input directory: {}", in_dir.display()))?;
+    let out_dir = fs::canonicalize(out_dir.as_path())
+        .with_context(|| anyhow!("Canonicalizing output directory: {}", out_dir.display()))?;
+    create_mod_dirs(in_dir.as_path(), out_dir.as_path()).with_context(|| {
         format!(
-            "Searching for eqlog files in directory: {}",
-            in_dir.display()
+            "Recreating rust file module directory structure in {}",
+            out_dir.display()
         )
     })?;
 
+    let in_files = eqlog_files(&in_dir)
+        .with_context(|| format!("Searching for eqlog files in  {}", in_dir.display()))?;
+
+    let workspace_root = lowest_common_ancestor_path(in_dir.as_path(), out_dir.as_path())
+        .ok_or_else(|| anyhow!("input and output directory don't have a common ancestor"))?;
+
     for in_file in in_files {
-        let out_parent = match in_file.parent() {
-            Some(parent) => out_dir.clone().join(parent),
-            None => out_dir.clone(),
-        };
-        std::fs::create_dir_all(&out_parent)?;
+        let in_file = in_dir.join(in_file);
+        let out_parent = out_dir.join(in_file.strip_prefix(workspace_root).unwrap());
+        fs::create_dir_all(&out_parent)
+            .with_context(|| format!("Creating output directory {}", out_parent.display()))?;
 
         process_file(in_dir.join(in_file).as_path(), &out_parent)?;
     }
@@ -347,13 +394,13 @@ pub fn process(config: &Config) -> Result<()> {
 /// }
 /// ```
 pub fn process_root() -> Result<()> {
-    let in_dir: PathBuf = "src".into();
+    let in_dir: PathBuf = fs::canonicalize(Path::new("src"))?;
     let out_dir: OsString = env::var_os("OUT_DIR").context(indoc! {"
             Error: Failed to read OUT_DIR environment variable
 
             process_root should only be called from build.rs via cargo.
         "})?;
-    let out_dir: PathBuf = out_dir.into();
+    let out_dir: PathBuf = fs::canonicalize(PathBuf::from(out_dir))?;
 
     let config = Config { in_dir, out_dir };
 
@@ -362,6 +409,6 @@ pub fn process_root() -> Result<()> {
         exit(1);
     }
 
-    print_cargo_set_eqlog_out_dir(config.out_dir.as_path());
+    print_cargo_set_eqlog_out_dir(PathBuf::from(env::var("OUT_DIR").unwrap()).as_path());
     Ok(())
 }
