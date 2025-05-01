@@ -2,7 +2,6 @@ use crate::eqlog_util::display_rel;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
-use crate::fmt_util::FmtFn;
 use crate::grammar::*;
 use crate::grammar_util::*;
 use crate::rust_gen::*;
@@ -18,9 +17,8 @@ use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
 use std::ffi::OsString;
-use std::fmt::Display;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::fs::{self};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::process::Command;
@@ -156,20 +154,6 @@ fn digest_source(theory_name: &str, src: &str) -> Vec<u8> {
         .into()
 }
 
-fn read_out_digest(out_file_path: &Path) -> Option<Vec<u8>> {
-    let file = File::open(out_file_path).ok()?;
-    let first_line = BufReader::new(file).lines().next()?.ok()?;
-    let digest_part = first_line.strip_prefix("// src-digest: ")?;
-    base16ct::upper::decode_vec(digest_part.as_bytes()).ok()
-}
-
-fn display_src_digest<'a>(digest: &'a [u8]) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let digest = base16ct::upper::encode_string(digest);
-        writeln!(f, "// src-digest: {digest}")
-    })
-}
-
 fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
     let theory_name = in_file
         .file_stem()
@@ -178,15 +162,40 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         .unwrap()
         .to_case(Case::UpperCamel);
     let out_file = out_dir.join("mod.rs");
+    // TODO: The digest mechanism is not very robust. We aren't careful about fsyncing in the right
+    // moments etc.
+    let digest_file = out_dir.join(format!("{theory_name}.digest"));
     let source = fs::read_to_string(in_file)
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
     let src_digest = digest_source(theory_name.as_str(), source.as_str());
-    let out_digest = read_out_digest(out_file.as_path());
+    let out_digest: Option<Vec<u8>> = match fs::read(digest_file.as_path()) {
+        Ok(content) => base16ct::upper::decode_vec(&content).ok(),
+        Err(err) if err.kind() == ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("Failed to read digest file {}", digest_file.display()));
+        }
+    };
 
-    // TODO: Add a check to verify that the out file hasn't been corrupted?
     if out_digest.as_ref().map(|od| od.as_slice()) == Some(src_digest.as_slice()) {
         return Ok(());
+    }
+
+    // We remove the digest file first here before we modify/overwrite generated files. Consider
+    // what state we would end up otherwise in case we fail half-way through.
+    match fs::remove_file(digest_file.as_path()) {
+        Ok(()) => {}
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => {
+            // Propagate other errors (e.g., permissions)
+            return Err(err).with_context(|| {
+                format!(
+                    "Failed to remove outdated digest file {}",
+                    digest_file.display()
+                )
+            });
+        }
     }
 
     let (mut eqlog, identifiers, locations, _module) = match parse(source.as_str()) {
@@ -219,13 +228,6 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         .to_str()
         .unwrap()
         .to_case(Case::UpperCamel);
-
-    let mut result: Vec<u8> = Vec::new();
-    result.extend(
-        display_src_digest(src_digest.as_slice())
-            .to_string()
-            .as_bytes(),
-    );
 
     let theory_name_snake = theory_name.to_case(Case::Snake);
     let theory_name_len = theory_name_snake.len();
@@ -280,6 +282,9 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         );
         println!("cargo:rustc-link-lib=static:+verbatim={}", rlib_filename);
     }
+
+    let encoded_digest = base16ct::upper::encode_string(&src_digest);
+    fs::write(&digest_file, encoded_digest)?;
 
     #[cfg(feature = "rustfmt")]
     match std::process::Command::new("rustfmt")
