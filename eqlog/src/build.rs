@@ -13,6 +13,8 @@ pub use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::indoc;
+use rayon::iter::ParallelBridge as _;
+use rayon::iter::ParallelIterator as _;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
@@ -269,7 +271,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         let incremental_dir = out_dir.join("incremental");
         fs::create_dir_all(&incremental_dir)?;
 
-        for rel in eqlog.iter_rel() {
+        eqlog.iter_rel().par_bridge().try_for_each(|rel| {
             let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
             let rel_snake = rel_name.to_case(Case::Snake);
             let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
@@ -318,6 +320,8 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
                 .arg("-C")
                 .arg(format!("opt-level={opt_level}"))
                 .arg("-C")
+                .arg("codegen-units=1")
+                .arg("-C")
                 .arg(format!("incremental={}", incremental_dir.display()));
             if debug {
                 rustc_command.arg("-g");
@@ -325,7 +329,8 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
 
             let status = rustc_command.status().context("Running rustc")?;
             ensure!(status.success(), "Rustc finished with status {status}");
-        }
+            Ok(())
+        })?;
 
         let encoded_digest = base16ct::upper::encode_string(&src_digest);
         fs::write(&digest_file, encoded_digest)?;
