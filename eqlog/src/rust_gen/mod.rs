@@ -187,8 +187,8 @@ fn display_sort_fields(sort: &str) -> impl Display + '_ {
         let sort_snake = sort.to_case(Snake);
         writedoc! {f, "
             {sort_snake}_equalities: Unification<{sort}>,
-            {sort_snake}_old: BTreeSet<{sort}>,
-            {sort_snake}_new: BTreeSet<{sort}>,
+            {sort_snake}_old: BTreeSet<u32>,
+            {sort_snake}_new: BTreeSet<u32>,
             {sort_snake}_weights: Vec<usize>,
             {sort_snake}_uprooted: Vec<{sort}>,
         "}
@@ -625,7 +625,7 @@ fn display_new_element_fn_internal<'a>(
                 return Ok(());
             }
 
-            write!(f, "self.insert_{type_snake}_parent(el, parent);")
+            write!(f, "self.insert_{type_snake}_parent(el.into(), parent);")
         });
 
         writedoc! {f, "
@@ -634,7 +634,7 @@ fn display_new_element_fn_internal<'a>(
             fn new_{type_snake}_internal(&mut self, {parent_param}) -> {type_camel} {{
                 let old_len = self.{type_snake}_equalities.len();
                 self.{type_snake}_equalities.increase_size_to(old_len + 1);
-                let el = {type_camel}::from(u32::try_from(old_len).unwrap());
+                let el = u32::try_from(old_len).unwrap();
 
                 self.{type_snake}_new.insert(el);
 
@@ -643,7 +643,7 @@ fn display_new_element_fn_internal<'a>(
                 
                 {insert_parent}
 
-                el
+                {type_camel}::from(el)
             }}
         "}
     })
@@ -893,8 +893,8 @@ fn display_equate_elements<'a>(
 
                 self.{type_snake}_equalities.union_roots_into(child, root);
                 
-                self.{type_snake}_old.remove(&child);
-                self.{type_snake}_new.remove(&child);
+                self.{type_snake}_old.remove(&child.0);
+                self.{type_snake}_new.remove(&child.0);
                 self.{type_snake}_uprooted.push(child);
             }}
         "}
@@ -934,12 +934,13 @@ fn display_are_equal_fn(sort: &str) -> impl Display + '_ {
 fn display_iter_sort_fn(sort: &str) -> impl Display + '_ {
     FmtFn(move |f| {
         let sort_snake = sort.to_case(Snake);
+        let sort_camel = sort.to_case(UpperCamel);
         writedoc! {f, "
             /// Returns and iterator over elements of sort `{sort}`.
             /// The iterator yields canonical representatives only.
             #[allow(dead_code)]
             pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
-                self.{sort_snake}_new.iter().chain(self.{sort_snake}_old.iter()).copied()
+                self.{sort_snake}_new.iter().chain(self.{sort_snake}_old.iter()).copied().map({sort_camel}::from)
             }}
         "}
     })
@@ -1423,8 +1424,8 @@ fn display_rule_env_var<'a>(
                         .to_string()
                         .to_case(Snake);
                     writedoc! {f, "
-                        {type_snake}_new: unsafe {{ std::mem::transmute::<&BTreeSet<_>, &BTreeSet<u32>>(&self.{type_snake}_new) }},
-                        {type_snake}_old: unsafe {{ std::mem::transmute::<&BTreeSet<_>, &BTreeSet<u32>>(&self.{type_snake}_old) }},
+                        {type_snake}_new: &self.{type_snake}_new,
+                        {type_snake}_old: &self.{type_snake}_old,
                     "}
                 })
             })
