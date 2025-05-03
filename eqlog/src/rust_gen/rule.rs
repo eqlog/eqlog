@@ -20,7 +20,7 @@ fn display_imports<'a>() -> impl 'a + Display {
     })
 }
 
-fn display_rule_env_struct<'a>(
+pub fn display_rule_env_struct<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,

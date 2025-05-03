@@ -1935,6 +1935,22 @@ pub fn display_module<'a>(
             display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection)
         )?;
 
+        let rule_env_structs = analyses
+            .iter()
+            .map(|analysis| display_rule_env_struct(analysis, eqlog, identifiers))
+            .format("\n");
+        writeln!(f, "{rule_env_structs}")?;
+
+        let rule_eval_fns = rules
+            .iter()
+            .map(|rule| display_rule_fn_decl(rule.name.as_str(), symbol_prefix))
+            .format("\n");
+        writedoc! {f, r#"
+            unsafe extern "Rust" {{
+                {rule_eval_fns}
+            }}
+        "#}?;
+
         for typ in eqlog.iter_type() {
             let type_camel = display_type(typ, eqlog, identifiers)
                 .to_string()
