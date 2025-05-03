@@ -342,7 +342,9 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
                 let rule_out_file_name = format!("{symbol_prefix}_{rule_name_snake}.rs");
                 let rule_out_file = out_dir.join(rule_out_file_name);
 
-                let rule_lib = display_rule_lib(rule, analysis, &eqlog, &identifiers).to_string();
+                let rule_lib =
+                    display_rule_lib(rule, analysis, &index_selection, &eqlog, &identifiers)
+                        .to_string();
 
                 fs::write(rule_out_file.as_path(), rule_lib)?;
 

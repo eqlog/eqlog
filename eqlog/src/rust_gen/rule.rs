@@ -5,6 +5,7 @@ use crate::rust_gen::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::writedoc;
+use itertools::Itertools;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter, Result};
 
@@ -14,6 +15,7 @@ fn display_imports<'a>() -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
             use std::collections::BTreeSet;
+            use std::collections::btree_set;
         "}
     })
 }
@@ -106,9 +108,72 @@ fn display_rule_env_struct<'a>(
     })
 }
 
+fn display_rule_iter_types<'a>(
+    analysis: &'a FlatRuleAnalysis<'a>,
+    index_selection: &'a IndexSelection,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    analysis
+        .used_rels
+        .iter()
+        .copied()
+        .map(|rel| {
+            let rel_name = display_rel(rel, eqlog, identifiers).to_string();
+            let query_indices = index_selection.get(&rel_name).unwrap();
+            display_iter_ty_structs(rel, query_indices, eqlog, identifiers)
+        })
+        .format("\n")
+}
+
+fn display_rule_iter_fns<'a>(
+    analysis: &'a FlatRuleAnalysis<'a>,
+    index_selection: &'a IndexSelection,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let used_queries = &analysis.used_queries;
+
+        let iter_fns = used_queries
+            .iter()
+            .map(|(rel, query_spec)| {
+                let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
+                let query_indices = index_selection.get(&rel_name).unwrap();
+                let indices = query_indices.get(query_spec).unwrap();
+
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let iter_fn_decl =
+                        display_iter_fn_decl(query_spec, indices, *rel, eqlog, identifiers, "");
+                    let iter_next_fn_decl = display_iter_next_fn_decl(
+                        query_spec,
+                        indices,
+                        *rel,
+                        eqlog,
+                        identifiers,
+                        "",
+                    );
+
+                    writedoc! {f, "
+                        {iter_fn_decl}
+                        {iter_next_fn_decl}
+                    "}
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, r#"
+            unsafe extern "Rust" {{
+            {iter_fns}
+            }}
+        "#}
+    })
+}
+
 pub fn display_rule_lib<'a>(
     _rule: &'a FlatRule,
     analysis: &'a FlatRuleAnalysis<'a>,
+    index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -122,9 +187,14 @@ pub fn display_rule_lib<'a>(
             .map(|rel| display_table_struct_decl(rel, eqlog, identifiers))
             .format("\n");
 
+        let iter_types = display_rule_iter_types(analysis, index_selection, eqlog, identifiers);
+        let iter_fns = display_rule_iter_fns(analysis, index_selection, eqlog, identifiers);
+
         writedoc! {f, "
             {imports}
             {table_struct_decls}
+            {iter_types}
+            {iter_fns}
             {env_struct}
         "}
     })
