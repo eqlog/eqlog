@@ -1,5 +1,7 @@
+mod rule;
 mod table;
 
+pub use rule::*;
 pub use table::*;
 
 use crate::eqlog_util::*;
@@ -2125,25 +2127,13 @@ fn display_theory_impl<'a>(
     })
 }
 
-pub fn display_table_types<'a>(
+pub fn display_table_struct_decls<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     eqlog
         .iter_rel()
-        .map(move |rel| {
-            FmtFn(move |f| {
-                let rel_camel = display_rel(rel, eqlog, identifiers)
-                    .to_string()
-                    .to_case(UpperCamel);
-                writedoc! {f, "
-                pub struct {rel_camel}Table {{
-                _data: (),
-                _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
-                }}
-            "}
-            })
-        })
+        .map(move |rel| display_table_struct_decl(rel, eqlog, identifiers))
         .format("\n")
 }
 
@@ -2274,7 +2264,7 @@ pub fn display_module<'a>(
         write!(f, "{}", imports)?;
         write!(f, "\n")?;
 
-        writeln!(f, "{}", display_table_types(eqlog, identifiers))?;
+        writeln!(f, "{}", display_table_struct_decls(eqlog, identifiers))?;
         writeln!(
             f,
             "{}",

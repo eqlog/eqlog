@@ -10,9 +10,18 @@ use std::fmt::{self, Display, Formatter};
 
 use Case::{ScreamingSnake, Snake, UpperCamel};
 
-fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
+pub fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
     FmtFn(move |f| {
         let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
+        write!(f, "[u32; {arity_len}]")
+    })
+}
+
+/// Displays the tuple type of the arguments of a function.
+pub fn display_func_args_type<'a>(func: Func, eqlog: &'a Eqlog) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let dom_list = eqlog.flat_domain(func).unwrap();
+        let arity_len = type_list_vec(dom_list, eqlog).len();
         write!(f, "[u32; {arity_len}]")
     })
 }
@@ -105,6 +114,25 @@ fn display_table_struct<'a>(
             {index_fields}
 
             {element_index_fields}
+            }}
+        "}
+    })
+}
+
+pub fn display_table_struct_decl<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| {
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        writedoc! {f, "
+            #[allow(unused)]
+            pub struct {rel_camel}Table {{
+                _data: (),
+                _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
             }}
         "}
     })
