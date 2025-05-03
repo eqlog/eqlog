@@ -149,29 +149,6 @@ fn display_enum<'a>(
     })
 }
 
-// #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-// pub struct RelationName(pub SortOne, pub SortTwo, ..., pub SortN);
-fn display_relation_struct<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let rel_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-        let flat_arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-        let args = flat_arity
-            .into_iter()
-            .map(|typ| display_type(typ, eqlog, identifiers))
-            .format(",");
-        writedoc! {f, "
-            #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-            struct {rel_camel}({args});
-        "}
-    })
-}
-
 fn display_func_args_struct<'a>(
     func: Func,
     eqlog: &'a Eqlog,
@@ -2075,13 +2052,6 @@ pub fn display_module<'a>(
 
         for (enum_decl, _, _) in eqlog.iter_enum_decl() {
             writeln!(f, "{}", display_enum(enum_decl, eqlog, identifiers))?;
-        }
-
-        for rel in eqlog.iter_rel() {
-            let rel_struct = display_relation_struct(rel, eqlog, identifiers);
-            writedoc! {f, "
-                {rel_struct}
-            "}?;
         }
 
         for func in eqlog.iter_func() {

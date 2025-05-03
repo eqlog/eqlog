@@ -195,18 +195,13 @@ fn display_if_stmt_header<'a>(
             FlatIfStmt::Equal(eq_stmt) => {
                 let FlatStmtEqual { lhs, rhs } = eq_stmt;
 
-                let typ = format!(
-                    "{}",
-                    display_type(*analysis.var_types.get(lhs).unwrap(), eqlog, identifiers)
-                );
-                let type_snake = typ.to_case(Snake);
-
                 let lhs = display_var(*lhs);
                 let rhs = display_var(*rhs);
 
+                // Beware: This works only if variables are always necessary canonical. That's true
+                // at the moment, but if it changes, then things will break.
                 writedoc! {f, "
-                    //if self.are_equal_{type_snake}({lhs}, {rhs}) {{
-                    if todo!() {{
+                    if {lhs} == {rhs} {{
                 "}?;
             }
             FlatIfStmt::Relation(rel_stmt) => {
