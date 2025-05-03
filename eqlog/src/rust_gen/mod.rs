@@ -1389,6 +1389,8 @@ fn display_if_stmt_header<'a>(
                     diagonals,
                     in_projections,
                     out_projections,
+                    rel: _,
+                    age: _,
                 } = analysis
                     .if_stmt_rel_infos
                     .get(&ByAddress(rel_stmt))

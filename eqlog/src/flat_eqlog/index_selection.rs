@@ -171,6 +171,8 @@ pub fn select_indices(
             diagonals,
             in_projections,
             out_projections: _,
+            age: _,
+            rel: _,
         } = info;
         let spec = QuerySpec {
             diagonals: diagonals.clone(),

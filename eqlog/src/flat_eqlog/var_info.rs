@@ -2,6 +2,7 @@
 
 use super::ast::*;
 use by_address::ByAddress;
+use eqlog_eqlog::Rel;
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -46,6 +47,8 @@ pub fn fixed_vars<'a>(
 /// Annotation of a [FlatIfStmt] that takes the context of the statement into account.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelationInfo {
+    pub rel: Rel,
+    pub age: QueryAge,
     /// The set of non-trivial diagonals among arguments.
     ///
     /// A diagonal is a maximal set of argument indices in which the same variable is passed. The
@@ -112,13 +115,11 @@ pub fn relation_info_rec<'a>(
                 FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
                 FlatIfStmt::Relation(rel_if_stmt) => {
                     let fixed_vars = fixed_vars.get(&ByAddress(tail)).unwrap();
-                    let FlatIfStmtRelation {
-                        rel: _,
-                        args,
-                        age: _,
-                    } = rel_if_stmt;
+                    let FlatIfStmtRelation { rel, args, age } = rel_if_stmt;
 
                     let info = RelationInfo {
+                        rel: *rel,
+                        age: *age,
                         diagonals: diagonals(args.as_slice()),
                         in_projections: in_projections(args.as_slice(), fixed_vars),
                         out_projections: out_projections(args.as_slice(), fixed_vars),

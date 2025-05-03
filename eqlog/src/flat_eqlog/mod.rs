@@ -94,6 +94,7 @@ pub struct FlatRuleAnalysis<'a> {
 
     pub used_rels: Vec<Rel>,
     pub used_types: Vec<Type>,
+    pub used_queries: Vec<(Rel, QuerySpec)>,
 }
 
 fn collect_used_rels(rule: &FlatRule, eqlog: &Eqlog) -> Vec<Rel> {
@@ -125,6 +126,25 @@ fn collect_used_rels(rule: &FlatRule, eqlog: &Eqlog) -> Vec<Rel> {
     used_rels.into_iter().collect()
 }
 
+fn collect_non_surj_then_queries<'a>(
+    rule: &FlatRule,
+    non_surj_then_queries: &mut BTreeSet<(Rel, QuerySpec)>,
+    eqlog: &Eqlog,
+) {
+    for func in &rule.funcs {
+        for stmt in func.body.iter() {
+            match stmt {
+                FlatStmt::If(_) | FlatStmt::SurjThen(_) | FlatStmt::Call { .. } => {}
+                FlatStmt::NonSurjThen(non_surj_then_stmt) => {
+                    let spec = QuerySpec::eval_func(non_surj_then_stmt.func, eqlog);
+                    non_surj_then_queries
+                        .insert((eqlog.func_rel(non_surj_then_stmt.func).unwrap(), spec));
+                }
+            }
+        }
+    }
+}
+
 impl<'a> FlatRuleAnalysis<'a> {
     pub fn new(
         rule: &'a FlatRule,
@@ -133,6 +153,22 @@ impl<'a> FlatRuleAnalysis<'a> {
     ) -> Self {
         let fixed_vars = fixed_vars(rule);
         let if_stmt_rel_infos = if_stmt_rel_infos(rule, can_assume_functionality, &fixed_vars);
+
+        let mut used_queries = if_stmt_rel_infos
+            .iter()
+            .map(|(_, info)| {
+                let rel = info.rel;
+                let spec = QuerySpec {
+                    projections: info.in_projections.keys().copied().collect(),
+                    diagonals: info.diagonals.clone(),
+                    age: info.age,
+                };
+                (rel, spec)
+            })
+            .collect();
+
+        collect_non_surj_then_queries(rule, &mut used_queries, eqlog);
+        let used_queries: Vec<(Rel, QuerySpec)> = used_queries.into_iter().collect();
 
         let used_rels = collect_used_rels(rule, eqlog);
         let used_types: BTreeSet<Type> = rule.var_types.values().copied().collect();
@@ -143,6 +179,7 @@ impl<'a> FlatRuleAnalysis<'a> {
             var_types: &rule.var_types,
             fixed_vars,
             if_stmt_rel_infos,
+            used_queries,
             used_rels,
             used_types,
         }
