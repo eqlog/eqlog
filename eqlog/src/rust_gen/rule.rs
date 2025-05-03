@@ -68,13 +68,15 @@ pub fn display_rule_env_struct<'a>(
                         .to_case(Snake);
                     let row_type = display_rel_row_type(*rel, eqlog);
                     writedoc! {f, "
-                    new_{rel_snake}: &'a mut Vec<{row_type}>,
-                "}?;
-                    if let RelCase::FuncRel(func) = eqlog.rel_case(*rel) {
-                        let args_type = display_func_args_type(func, eqlog);
-                        writedoc! {f, "
-                        new_{rel_snake}_def: &'a mut Vec<{args_type}>,
+                        new_{rel_snake}: &'a mut Vec<{row_type}>,
                     "}?;
+                    if let RelCase::FuncRel(func) = eqlog.rel_case(*rel) {
+                        if eqlog.function_can_be_made_defined(func) {
+                            let args_type = display_func_args_type(func, eqlog);
+                            writedoc! {f, "
+                                new_{rel_snake}_def: &'a mut Vec<{args_type}>,
+                            "}?;
+                        }
                     }
                     Ok(())
                 })
@@ -131,6 +133,7 @@ fn display_rule_iter_fns<'a>(
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     analysis
         .used_queries
@@ -141,10 +144,22 @@ fn display_rule_iter_fns<'a>(
             let indices = query_indices.get(query_spec).unwrap();
 
             FmtFn(move |f: &mut Formatter| -> Result {
-                let iter_fn_decl =
-                    display_iter_fn_decl(query_spec, indices, *rel, eqlog, identifiers, "");
-                let iter_next_fn_decl =
-                    display_iter_next_fn_decl(query_spec, indices, *rel, eqlog, identifiers, "");
+                let iter_fn_decl = display_iter_fn_decl(
+                    query_spec,
+                    indices,
+                    *rel,
+                    eqlog,
+                    identifiers,
+                    symbol_prefix,
+                );
+                let iter_next_fn_decl = display_iter_next_fn_decl(
+                    query_spec,
+                    indices,
+                    *rel,
+                    eqlog,
+                    identifiers,
+                    symbol_prefix,
+                );
 
                 writedoc! {f, "
                 {iter_fn_decl}
@@ -167,10 +182,6 @@ fn display_rule_contains_fns<'a>(
         .copied()
         .map(|rel| display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix))
         .format("\n")
-}
-
-fn display_rule_fn_decls<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
-    display_rule_fn_decl(rule_name, symbol_prefix)
 }
 
 fn display_if_stmt_header<'a>(
@@ -516,7 +527,8 @@ pub fn display_rule_lib<'a>(
             .format("\n");
 
         let iter_types = display_rule_iter_types(analysis, index_selection, eqlog, identifiers);
-        let iter_fns = display_rule_iter_fns(analysis, index_selection, eqlog, identifiers);
+        let iter_fns =
+            display_rule_iter_fns(analysis, index_selection, eqlog, identifiers, symbol_prefix);
         let contains_fns = display_rule_contains_fns(analysis, eqlog, identifiers, symbol_prefix);
 
         let internal_funcs = rule

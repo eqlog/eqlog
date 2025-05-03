@@ -1085,8 +1085,8 @@ fn display_model_delta_struct<'a>(
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    let rel_camel = rel_snake.to_case(UpperCamel);
-                    write!(f, "new_{rel_snake}: Vec<{rel_camel}>,")
+                    let row_type = display_rel_row_type(rel, eqlog);
+                    write!(f, "new_{rel_snake}: Vec<{row_type}>,")
                 })
             })
             .format("\n");
@@ -1098,11 +1098,7 @@ fn display_model_delta_struct<'a>(
                     let type_snake = display_type(typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    let type_camel = type_snake.to_case(UpperCamel);
-                    write!(
-                        f,
-                        "new_{type_snake}_equalities: Vec<({type_camel}, {type_camel})>,"
-                    )
+                    write!(f, "new_{type_snake}_equalities: Vec<(u32, u32)>,")
                 })
             })
             .format("\n");
@@ -1116,9 +1112,8 @@ fn display_model_delta_struct<'a>(
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    let rel_camel = rel_snake.to_string().to_case(UpperCamel);
-
-                    write!(f, "new_{rel_snake}_def: Vec<{rel_camel}Args>,")
+                    let args_type = display_func_args_type(func, eqlog);
+                    write!(f, "new_{rel_snake}_def: Vec<{args_type}>,")
                 })
             })
             .format("\n");
@@ -1257,7 +1252,7 @@ fn display_model_delta_apply_equalities_fn<'a>(
 
                     writedoc! {f, "
                         for (lhs, rhs) in self.new_{type_snake}_equalities.drain(..) {{
-                            model.equate_{type_snake}(lhs, rhs);
+                            model.equate_{type_snake}(lhs.into(), rhs.into());
                         }}
                     "}
                 })
@@ -1286,15 +1281,21 @@ fn display_model_delta_apply_tuples_fn<'a>(
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    let rel_camel = rel_snake.to_case(UpperCamel);
-                    let args = (0..arity.len())
-                        .map(FlatVar)
-                        .map(display_var)
-                        .format(", ")
-                        .to_string();
+                    let args_destructure =
+                        (0..arity.len()).map(FlatVar).map(display_var).format(", ");
+                    let insert_args = (0..arity.len())
+                        .map(|i| {
+                            FmtFn(move |f| {
+                                let var = FlatVar(i);
+                                let var = display_var(var);
+                                write!(f, "{var}.into()")
+                            })
+                        })
+                        .format(", ");
+
                     writedoc! {f, "
-                    for {rel_camel}({args}) in self.new_{rel_snake}.drain(..) {{
-                        model.insert_{rel_snake}({args});
+                    for [{args_destructure}] in self.new_{rel_snake}.drain(..) {{
+                        model.insert_{rel_snake}({insert_args});
                     }}
                 "}
                 })
@@ -1325,16 +1326,24 @@ fn display_model_delta_apply_def_fn<'a>(
 
                 let func_name = identifiers.get(&ident).unwrap();
                 let func_snake = func_name.to_case(Snake);
-                let func_camel = func_name.to_case(UpperCamel);
 
                 let domain = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
-                let args0 = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
-                let args1 = args0.clone();
+
+                let args_destructure = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
+                let define_args = (0..domain.len())
+                    .map(|i| {
+                        FmtFn(move |f| {
+                            let var = FlatVar(i);
+                            let var = display_var(var);
+                            write!(f, "{var}.into()")
+                        })
+                    })
+                    .format(", ");
 
                 Some(FmtFn(move |f: &mut Formatter| -> Result {
                     writedoc! {f, "
-                            for {func_camel}Args({args0}) in self.new_{func_snake}_def.drain(..) {{
-                                model.define_{func_snake}({args1});
+                            for [{args_destructure}] in self.new_{func_snake}_def.drain(..) {{
+                                model.define_{func_snake}({define_args});
                             }}
                         "}
                 }))
@@ -1406,14 +1415,116 @@ fn display_drop_dirt_fn<'a>(
     })
 }
 
-fn display_close_until_fn<'a>(rules: &'a [FlatRule]) -> impl Display + 'a {
+fn display_rule_env_var<'a>(
+    rule: &'a str,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let rule_camel = rule.to_case(UpperCamel);
+
+        let table_fields = analysis
+            .used_rels
+            .iter()
+            .map(|rel| {
+                FmtFn(move |f| {
+                    let rel_snake = display_rel(*rel, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    write!(f, "{rel_snake}_table: self.{rel_snake}_table,")
+                })
+            })
+            .format("\n");
+
+        let type_set_fields = analysis
+            .used_types
+            .iter()
+            .map(|typ| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(*typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    writedoc! {f, "
+                        {type_snake}_new: unsafe {{ std::mem::transmute::<&BTreeSet<_>, &BTreeSet<u32>>(&self.{type_snake}_new) }},
+                        {type_snake}_old: unsafe {{ std::mem::transmute::<&BTreeSet<_>, &BTreeSet<u32>>(&self.{type_snake}_old) }},
+                    "}
+                })
+            })
+            .format("\n");
+
+        let new_rel_fields = analysis
+            .used_rels
+            .iter()
+            .map(|rel| {
+                FmtFn(move |f| {
+                    let rel_snake = display_rel(*rel, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+
+                    writedoc! {f, "
+                        new_{rel_snake}: &mut delta.new_{rel_snake},
+                    "}?;
+
+                    if let RelCase::FuncRel(func) = eqlog.rel_case(*rel) {
+                        if eqlog.function_can_be_made_defined(func) {
+                            writedoc! {f, "
+                                new_{rel_snake}_def: &mut delta.new_{rel_snake}_def,
+                            "}?;
+                        }
+                    }
+
+                    Ok(())
+                })
+            })
+            .format("\n");
+
+        let new_type_equalities_fields = analysis
+            .used_types
+            .iter()
+            .map(|typ| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(*typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+
+                    writedoc! {f, "
+                        new_{type_snake}_equalities: &mut delta.new_{type_snake}_equalities,
+                    "}
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            let mut env = {rule_camel}Env {{
+                {table_fields}
+                {type_set_fields}
+                {new_rel_fields}
+                {new_type_equalities_fields}
+            }};
+        "}
+    })
+}
+
+fn display_close_until_fn<'a>(
+    rules: &'a [FlatRule],
+    analyses: &'a [FlatRuleAnalysis],
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
     FmtFn(move |f| {
         let rules = rules
             .iter()
-            .map(|rule| {
+            .zip(analyses.iter())
+            .map(|(rule, analysis)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let name = rule.name.as_str();
-                    write!(f, r#"todo!("Call {name}");"#)
+                    let rule_fn_name = display_rule_fn_name(name);
+                    let env_var = display_rule_env_var(name, analysis, eqlog, identifiers);
+                    writedoc! {f, r#"
+                        {env_var}
+                        {rule_fn_name}(&mut env);
+                    "#}
                 })
             })
             .format("\n");
@@ -1669,7 +1780,7 @@ fn display_theory_impl<'a>(
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn).unwrap();
 
-        let close_until_fn = display_close_until_fn(rules);
+        let close_until_fn = display_close_until_fn(rules, analyses, eqlog, identifiers);
         write!(f, "{}", close_until_fn).unwrap();
 
         for typ in eqlog.iter_type() {
