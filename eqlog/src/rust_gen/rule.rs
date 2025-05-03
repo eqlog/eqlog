@@ -58,7 +58,7 @@ fn display_rule_env_struct<'a>(
             })
             .format("\n");
 
-        let delta_new_rel_fields = analysis
+        let new_rel_fields = analysis
             .used_rels
             .iter()
             .map(|rel| {
@@ -68,12 +68,12 @@ fn display_rule_env_struct<'a>(
                         .to_case(Snake);
                     let row_type = display_rel_row_type(*rel, eqlog);
                     writedoc! {f, "
-                    delta_new_{rel_snake}: &'a mut Vec<{row_type}>,
+                    new_{rel_snake}: &'a mut Vec<{row_type}>,
                 "}?;
                     if let RelCase::FuncRel(func) = eqlog.rel_case(*rel) {
                         let args_type = display_func_args_type(func, eqlog);
                         writedoc! {f, "
-                        delta_new_{rel_snake}_def: &'a mut Vec<{args_type}>,
+                        new_{rel_snake}_def: &'a mut Vec<{args_type}>,
                     "}?;
                     }
                     Ok(())
@@ -81,7 +81,7 @@ fn display_rule_env_struct<'a>(
             })
             .format("\n");
 
-        let delta_new_type_equalities_fields = analysis
+        let new_type_equalities_fields = analysis
             .used_types
             .iter()
             .map(|typ| {
@@ -90,7 +90,7 @@ fn display_rule_env_struct<'a>(
                         .to_string()
                         .to_case(Snake);
                     writedoc! {f, "
-                        delta_new_{type_snake}_equalities: &'a mut Vec<(u32, u32)>,
+                        new_{type_snake}_equalities: &'a mut Vec<(u32, u32)>,
                     "}
                 })
             })
@@ -101,8 +101,8 @@ fn display_rule_env_struct<'a>(
             struct {rule_name_camel}Env<'a> {{
                 {table_fields}
                 {type_set_fields}
-                {delta_new_rel_fields}
-                {delta_new_type_equalities_fields}
+                {new_rel_fields}
+                {new_type_equalities_fields}
             }}
         "}
     })
@@ -132,42 +132,45 @@ fn display_rule_iter_fns<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    FmtFn(move |f: &mut Formatter| -> Result {
-        let used_queries = &analysis.used_queries;
+    analysis
+        .used_queries
+        .iter()
+        .map(move |(rel, query_spec)| {
+            let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
+            let query_indices = index_selection.get(&rel_name).unwrap();
+            let indices = query_indices.get(query_spec).unwrap();
 
-        let iter_fns = used_queries
-            .iter()
-            .map(|(rel, query_spec)| {
-                let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
-                let query_indices = index_selection.get(&rel_name).unwrap();
-                let indices = query_indices.get(query_spec).unwrap();
+            FmtFn(move |f: &mut Formatter| -> Result {
+                let iter_fn_decl =
+                    display_iter_fn_decl(query_spec, indices, *rel, eqlog, identifiers, "");
+                let iter_next_fn_decl =
+                    display_iter_next_fn_decl(query_spec, indices, *rel, eqlog, identifiers, "");
 
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let iter_fn_decl =
-                        display_iter_fn_decl(query_spec, indices, *rel, eqlog, identifiers, "");
-                    let iter_next_fn_decl = display_iter_next_fn_decl(
-                        query_spec,
-                        indices,
-                        *rel,
-                        eqlog,
-                        identifiers,
-                        "",
-                    );
-
-                    writedoc! {f, "
-                        {iter_fn_decl}
-                        {iter_next_fn_decl}
-                    "}
-                })
+                writedoc! {f, "
+                {iter_fn_decl}
+                {iter_next_fn_decl}
+            "}
             })
-            .format("\n");
+        })
+        .format("\n")
+}
 
-        writedoc! {f, r#"
-            unsafe extern "Rust" {{
-            {iter_fns}
-            }}
-        "#}
-    })
+fn display_rule_contains_fns<'a>(
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    analysis
+        .used_rels
+        .iter()
+        .copied()
+        .map(|rel| display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix))
+        .format("\n")
+}
+
+fn display_rule_fn_decls<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
+    display_rule_fn_decl(rule_name, symbol_prefix)
 }
 
 fn display_if_stmt_header<'a>(
@@ -221,7 +224,7 @@ fn display_if_stmt_header<'a>(
                     "let mut it = {iter_fn_name}(env.{relation_snake}_table, "
                 )?;
                 for tm in in_projections.values().copied() {
-                    write!(f, "tm{}.0, ", tm.0)?;
+                    write!(f, "tm{}, ", tm.0)?;
                 }
                 write!(f, ");")?;
                 let iter_next_fn_name =
@@ -296,10 +299,9 @@ fn display_surj_then<'a>(
             }
             FlatSurjThenStmt::Relation(rel_stmt) => {
                 let FlatSurjThenStmtRelation { rel, args } = rel_stmt;
-                let relation_camel =
-                    format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(UpperCamel);
-                let relation_snake =
-                    format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(Snake);
+                let relation_snake = display_rel(*rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
                 let args = args
                     .iter()
                     .copied()
@@ -314,7 +316,7 @@ fn display_surj_then<'a>(
                 let contains_fn_name = display_contains_fn_name(*rel, eqlog, identifiers);
                 writedoc! {f, "
                     if !{contains_fn_name}(env.{relation_snake}_table, [{args}]) {{
-                    delta.new_{relation_snake}.push([{args}]);
+                    env.new_{relation_snake}.push([{args}]);
                     }}
                 "}?;
             }
@@ -337,10 +339,6 @@ fn display_non_surj_then<'a>(
         } = stmt;
         let rel = eqlog.func_rel(*func).unwrap();
         let relation_snake = format!("{}", display_rel(rel, eqlog, identifiers)).to_case(Snake);
-        let cod_type = eqlog.codomain(*func).unwrap();
-        let cod_type_camel = display_type(cod_type, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
 
         let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
         let iter_fn_name = display_iter_fn_name(rel, &eval_func_spec, eqlog, identifiers);
@@ -359,7 +357,7 @@ fn display_non_surj_then<'a>(
         writedoc! {f, "
             let mut it = {iter_fn_name}(env.{relation_snake}_table, {in_args});
             let {result} = match {iter_next_fn_name}(&mut it) {{
-                Some([{out_arg_wildcards} res]) => {cod_type_camel}(res),
+                Some([{out_arg_wildcards} res]) => res,
                 None => {{
                     env.new_{relation_snake}_def.push([{in_args}]);
                     break;
@@ -443,9 +441,7 @@ fn display_rule_func<'a>(
             .copied()
             .map(|var| {
                 let var_name = display_var(var);
-                let typ = *analysis.var_types.get(&var).unwrap();
-                let type_name = display_type(typ, eqlog, identifiers);
-                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: {type_name}") })
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: u32") })
             })
             .format(", ");
 
@@ -461,6 +457,45 @@ fn display_rule_func<'a>(
         "}
     })
 }
+pub fn display_rule_fn_name<'a>(rule_name: &'a str) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rule_snake = rule_name.to_case(Snake);
+        write!(f, "evaluate_{rule_snake}")
+    })
+}
+
+fn display_rule_fn_signature<'a>(rule_name: &'a str) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_rule_fn_name(rule_name);
+        let rule_camel = rule_name.to_case(UpperCamel);
+        write!(f, "fn {fn_name}(env: &mut {rule_camel}Env)")
+    })
+}
+
+pub fn display_rule_fn_decl<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_rule_fn_name(rule_name);
+        let signature = display_rule_fn_signature(rule_name);
+        writedoc! {f, r#"
+            #[link_name = "{symbol_prefix}_{fn_name}"]
+            safe {signature};
+        "#}
+    })
+}
+
+fn display_rule_fn<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_rule_fn_name(rule_name);
+        let signature = display_rule_fn_signature(rule_name);
+
+        writedoc! {f, r#"
+            #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
+            pub extern "Rust" {signature} {{
+                {rule_name}_0(env);
+            }}
+        "#}
+    })
+}
 
 pub fn display_rule_lib<'a>(
     rule: &'a FlatRule,
@@ -468,6 +503,7 @@ pub fn display_rule_lib<'a>(
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
@@ -481,20 +517,27 @@ pub fn display_rule_lib<'a>(
 
         let iter_types = display_rule_iter_types(analysis, index_selection, eqlog, identifiers);
         let iter_fns = display_rule_iter_fns(analysis, index_selection, eqlog, identifiers);
+        let contains_fns = display_rule_contains_fns(analysis, eqlog, identifiers, symbol_prefix);
 
-        let funcs = rule
+        let internal_funcs = rule
             .funcs
             .iter()
             .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
             .format("\n");
 
-        writedoc! {f, "
+        let exported_rule_func = display_rule_fn(rule.name.as_str(), symbol_prefix);
+
+        writedoc! {f, r#"
             {imports}
             {table_struct_decls}
             {iter_types}
+            unsafe extern "Rust" {{
             {iter_fns}
+            {contains_fns}
+            }}
             {env_struct}
-            {funcs}
-        "}
+            {internal_funcs}
+            {exported_rule_func}
+        "#}
     })
 }
