@@ -170,8 +170,300 @@ fn display_rule_iter_fns<'a>(
     })
 }
 
+fn display_if_stmt_header<'a>(
+    stmt: &'a FlatIfStmt,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        match stmt {
+            FlatIfStmt::Equal(eq_stmt) => {
+                let FlatStmtEqual { lhs, rhs } = eq_stmt;
+
+                let typ = format!(
+                    "{}",
+                    display_type(*analysis.var_types.get(lhs).unwrap(), eqlog, identifiers)
+                );
+                let type_snake = typ.to_case(Snake);
+
+                let lhs = display_var(*lhs);
+                let rhs = display_var(*rhs);
+
+                writedoc! {f, "
+                    //if self.are_equal_{type_snake}({lhs}, {rhs}) {{
+                    if todo!() {{
+                "}?;
+            }
+            FlatIfStmt::Relation(rel_stmt) => {
+                let FlatIfStmtRelation { rel, args, age } = rel_stmt;
+                let RelationInfo {
+                    diagonals,
+                    in_projections,
+                    out_projections,
+                    rel: _,
+                    age: _,
+                } = analysis
+                    .if_stmt_rel_infos
+                    .get(&ByAddress(rel_stmt))
+                    .unwrap();
+                let arity_len = args.len();
+                let query_spec = QuerySpec {
+                    diagonals: diagonals.clone(),
+                    projections: in_projections.keys().copied().collect(),
+                    age: *age,
+                };
+                let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
+                let iter_fn_name = display_iter_fn_name(*rel, &query_spec, eqlog, identifiers);
+                let relation_snake = relation.to_case(Snake);
+                write!(
+                    f,
+                    "let mut it = {iter_fn_name}(env.{relation_snake}_table, "
+                )?;
+                for tm in in_projections.values().copied() {
+                    write!(f, "tm{}.0, ", tm.0)?;
+                }
+                write!(f, ");")?;
+                let iter_next_fn_name =
+                    display_iter_next_fn_name(&query_spec, *rel, eqlog, identifiers);
+                write!(f, "#[allow(unused_variables)]\n")?;
+                write!(f, "while let Some([")?;
+                for i in 0..arity_len {
+                    if let Some(var) = out_projections.get(&i) {
+                        write!(f, "tm{}", var.0)?;
+                    } else {
+                        write!(f, "_")?;
+                    }
+                    write!(f, ", ")?;
+                }
+                write!(f, "]) = {iter_next_fn_name}(&mut it) {{")?;
+            }
+            FlatIfStmt::Type(type_stmt) => {
+                let FlatIfStmtType { var, age } = type_stmt;
+                let typ = format!(
+                    "{}",
+                    display_type(*analysis.var_types.get(var).unwrap(), eqlog, identifiers)
+                );
+                let typ_snake = typ.to_case(Snake);
+                let var = display_var(*var);
+                match age {
+                    QueryAge::New => {
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in env.{typ_snake}_new.iter().copied() {{
+                        "}?;
+                    }
+                    QueryAge::Old => {
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in env.{typ_snake}_old.iter().copied() {{
+                        "}?;
+                    }
+                    QueryAge::All => {
+                        writedoc! {f, "
+                            #[allow(unused_variables)]
+                            for {var} in env.{typ_snake}_old.iter().chain(env.{typ_snake}_new.iter()).copied() {{
+                        "}?;
+                    }
+                }
+            }
+        };
+
+        Ok(())
+    })
+}
+
+fn display_surj_then<'a>(
+    stmt: &'a FlatSurjThenStmt,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        match stmt {
+            FlatSurjThenStmt::Equal(eq_stmt) => {
+                let FlatStmtEqual { lhs, rhs } = eq_stmt;
+
+                let typ = *analysis.var_types.get(lhs).unwrap();
+                let typ_snake = format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
+
+                let lhs = display_var(*lhs);
+                let rhs = display_var(*rhs);
+
+                writedoc! {f, "
+                    env.new_{typ_snake}_equalities.push(({lhs}, {rhs}));
+                "}?;
+            }
+            FlatSurjThenStmt::Relation(rel_stmt) => {
+                let FlatSurjThenStmtRelation { rel, args } = rel_stmt;
+                let relation_camel =
+                    format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(UpperCamel);
+                let relation_snake =
+                    format!("{}", display_rel(*rel, eqlog, identifiers)).to_case(Snake);
+                let args = args
+                    .iter()
+                    .copied()
+                    .map(|arg| {
+                        FmtFn(move |f| {
+                            let arg = display_var(arg);
+                            write!(f, "{arg}, ")
+                        })
+                    })
+                    .format("")
+                    .to_string();
+                let contains_fn_name = display_contains_fn_name(*rel, eqlog, identifiers);
+                writedoc! {f, "
+                    if !{contains_fn_name}(env.{relation_snake}_table, [{args}]) {{
+                    delta.new_{relation_snake}.push([{args}]);
+                    }}
+                "}?;
+            }
+        };
+
+        Ok(())
+    })
+}
+
+fn display_non_surj_then<'a>(
+    stmt: &'a FlatNonSurjThenStmt,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let FlatNonSurjThenStmt {
+            func,
+            func_args,
+            result,
+        } = stmt;
+        let rel = eqlog.func_rel(*func).unwrap();
+        let relation_snake = format!("{}", display_rel(rel, eqlog, identifiers)).to_case(Snake);
+        let cod_type = eqlog.codomain(*func).unwrap();
+        let cod_type_camel = display_type(cod_type, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+
+        let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
+        let iter_fn_name = display_iter_fn_name(rel, &eval_func_spec, eqlog, identifiers);
+        let iter_next_fn_name = display_iter_next_fn_name(&eval_func_spec, rel, eqlog, identifiers);
+
+        let in_args = func_args
+            .iter()
+            .copied()
+            .map(display_var)
+            .format(", ")
+            .to_string();
+
+        let out_arg_wildcards = repeat("_, ").take(func_args.len()).format("");
+        let result = display_var(*result);
+
+        writedoc! {f, "
+            let mut it = {iter_fn_name}(env.{relation_snake}_table, {in_args});
+            let {result} = match {iter_next_fn_name}(&mut it) {{
+                Some([{out_arg_wildcards} res]) => {cod_type_camel}(res),
+                None => {{
+                    env.new_{relation_snake}_def.push([{in_args}]);
+                    break;
+                }},
+            }};
+        "}?;
+        Ok(())
+    })
+}
+
+fn display_stmts<'a>(
+    stmts: &'a [FlatStmt],
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let (head, tail) = match stmts {
+            [] => {
+                return Ok(());
+            }
+            [head, tail @ ..] => (head, tail),
+        };
+
+        match head {
+            FlatStmt::If(if_stmt) => {
+                let if_header = display_if_stmt_header(if_stmt, analysis, eqlog, identifiers);
+                let if_footer = "}";
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {if_header}
+                    {tail}
+                    {if_footer}
+                "}?;
+            }
+            FlatStmt::SurjThen(surj_then) => {
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {surj_then}
+                    {tail}
+                "}?;
+            }
+            FlatStmt::NonSurjThen(non_surj_then) => {
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
+                writedoc! {f, "
+                    {non_surj_then}
+                    {tail}
+                "}?;
+            }
+            FlatStmt::Call { func_name, args } => {
+                let rule_name = analysis.rule_name;
+                let i = func_name.0;
+                let args = args.iter().copied().map(display_var).format(", ");
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                writedoc! {f, "
+                    {rule_name}_{i}(env, {args});
+                    {tail}
+                "}?;
+            }
+        };
+        Ok(())
+    })
+}
+
+fn display_rule_func<'a>(
+    rule_name: &'a str,
+    flat_func: &'a FlatFunc,
+    analysis: &'a FlatRuleAnalysis<'a>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        let func_name = flat_func.name.0;
+        let rule_camel = rule_name.to_case(UpperCamel);
+
+        let var_args = flat_func
+            .args
+            .iter()
+            .copied()
+            .map(|var| {
+                let var_name = display_var(var);
+                let typ = *analysis.var_types.get(&var).unwrap();
+                let type_name = display_type(typ, eqlog, identifiers);
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: {type_name}") })
+            })
+            .format(", ");
+
+        let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
+
+        writedoc! {f, "
+            #[allow(unused_variables)]
+            fn {rule_name}_{func_name}(env: &mut {rule_camel}Env, {var_args}) {{
+            for _ in [()] {{
+            {stmts}
+            }}
+            }}
+        "}
+    })
+}
+
 pub fn display_rule_lib<'a>(
-    _rule: &'a FlatRule,
+    rule: &'a FlatRule,
     analysis: &'a FlatRuleAnalysis<'a>,
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
@@ -190,12 +482,19 @@ pub fn display_rule_lib<'a>(
         let iter_types = display_rule_iter_types(analysis, index_selection, eqlog, identifiers);
         let iter_fns = display_rule_iter_fns(analysis, index_selection, eqlog, identifiers);
 
+        let funcs = rule
+            .funcs
+            .iter()
+            .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
+            .format("\n");
+
         writedoc! {f, "
             {imports}
             {table_struct_decls}
             {iter_types}
             {iter_fns}
             {env_struct}
+            {funcs}
         "}
     })
 }
