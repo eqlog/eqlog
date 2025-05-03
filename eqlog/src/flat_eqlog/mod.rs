@@ -91,18 +91,60 @@ pub struct FlatRuleAnalysis<'a> {
     pub fixed_vars: BTreeMap<ByAddress<&'a [FlatStmt]>, BTreeSet<FlatVar>>,
     /// A map that assigns to each [FlatIfStmtRelation] in a rule some additional information.
     pub if_stmt_rel_infos: BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
+
+    pub used_rels: Vec<Rel>,
+    pub used_types: Vec<Type>,
+}
+
+fn collect_used_rels(rule: &FlatRule, eqlog: &Eqlog) -> Vec<Rel> {
+    let mut used_rels = BTreeSet::new();
+
+    for func in &rule.funcs {
+        for stmt in &func.body {
+            match stmt {
+                FlatStmt::If(stmt) => match stmt {
+                    FlatIfStmt::Relation(stmt) => {
+                        used_rels.insert(stmt.rel);
+                    }
+                    FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => {}
+                },
+                FlatStmt::SurjThen(stmt) => match stmt {
+                    FlatSurjThenStmt::Relation(stmt) => {
+                        used_rels.insert(stmt.rel);
+                    }
+                    FlatSurjThenStmt::Equal(_) => {}
+                },
+                FlatStmt::NonSurjThen(stmt) => {
+                    used_rels.insert(eqlog.func_rel(stmt.func).unwrap());
+                }
+                FlatStmt::Call { .. } => {}
+            }
+        }
+    }
+
+    used_rels.into_iter().collect()
 }
 
 impl<'a> FlatRuleAnalysis<'a> {
-    pub fn new(rule: &'a FlatRule, can_assume_functionality: CanAssumeFunctionality) -> Self {
+    pub fn new(
+        rule: &'a FlatRule,
+        can_assume_functionality: CanAssumeFunctionality,
+        eqlog: &Eqlog,
+    ) -> Self {
         let fixed_vars = fixed_vars(rule);
         let if_stmt_rel_infos = if_stmt_rel_infos(rule, can_assume_functionality, &fixed_vars);
+
+        let used_rels = collect_used_rels(rule, eqlog);
+        let used_types: BTreeSet<Type> = rule.var_types.values().copied().collect();
+        let used_types: Vec<Type> = used_types.into_iter().collect();
 
         Self {
             rule_name: rule.name.as_str(),
             var_types: &rule.var_types,
             fixed_vars,
             if_stmt_rel_infos,
+            used_rels,
+            used_types,
         }
     }
 }

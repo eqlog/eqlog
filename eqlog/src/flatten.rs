@@ -717,11 +717,11 @@ pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> FlatRule
         rules_slice.split_at(functionality_rule_num);
     let analyses_vec = flat_functionality_rules
         .iter()
-        .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::No))
+        .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::No, eqlog))
         .chain(
             flat_explicit_rules
                 .iter()
-                .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::Yes)),
+                .map(|rule| FlatRuleAnalysis::new(rule, CanAssumeFunctionality::Yes, eqlog)),
         )
         .collect();
     FlatRules {
