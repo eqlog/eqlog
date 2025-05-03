@@ -509,10 +509,7 @@ pub fn process_root() -> Result<()> {
 
     let config = Config { in_dir, out_dir };
 
-    if let Err(err) = process(&config) {
-        eprintln!("{err}");
-        exit(1);
-    }
+    process(&config)?;
 
     print_cargo_set_eqlog_out_dir(PathBuf::from(env::var("OUT_DIR").unwrap()).as_path());
     Ok(())
