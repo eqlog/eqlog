@@ -23,7 +23,6 @@ use std::ffi::OsString;
 use std::fs::{self};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::process::exit;
 use std::process::Command;
 
 fn whipe_comments(source: &str) -> String {
