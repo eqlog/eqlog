@@ -12,7 +12,7 @@ use anyhow::Context as _;
 pub use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use rayon::iter::ParallelBridge as _;
 use rayon::iter::ParallelIterator as _;
 use sha2::{Digest, Sha256};
@@ -142,7 +142,7 @@ fn find_files_by_extension(root_path: &Path, extensions: &[&str]) -> Result<Vec<
 fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
     // TODO: We should emit an error if both a .eql and an .eqlog file exist, since both files
     // will correspond to the same rust file and module.
-    let extensions = ["eqlog", "eql"];
+    let extensions = ["eql"];
     find_files_by_extension(root_path, &extensions)
 }
 
@@ -156,9 +156,12 @@ fn digest_source(theory_name: &str, src: &str) -> Vec<u8> {
         .into()
 }
 
-fn print_cargo_link_directives(out_dir: &Path) -> Result<()> {
-    println!("cargo:rustc-link-search=native={}", out_dir.display());
-    for entry in fs::read_dir(out_dir)? {
+fn print_cargo_link_directives(component_out_dir: &Path) -> Result<()> {
+    println!(
+        "cargo:rustc-link-search=native={}",
+        component_out_dir.display()
+    );
+    for entry in fs::read_dir(component_out_dir)? {
         let entry = entry?;
         let path = entry.path();
         if !path.is_file() {
@@ -179,18 +182,40 @@ fn print_cargo_link_directives(out_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path) -> Result<()> {
+fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
+    let module_parent = match in_file.parent() {
+        None => config.out_dir.clone(),
+        Some(p) => config.out_dir.join(p),
+    };
+
+    fs::create_dir_all(&module_parent)
+        .with_context(|| format!("Creating module directory {}", module_parent.display()))?;
+
+    let component_out_dir = match &config.component_build {
+        Some(component_config) => component_config.component_out_dir.join(in_file),
+        None => {
+            todo!("Non-component builds are not yet implemented")
+        }
+    };
+    fs::create_dir_all(component_out_dir.as_path()).with_context(|| {
+        format!(
+            "Creating component out directory {}",
+            component_out_dir.display()
+        )
+    })?;
+
     let theory_name = in_file
         .file_stem()
         .unwrap()
         .to_str()
         .unwrap()
-        .to_case(Case::UpperCamel);
-    let out_file = module_dir.join("mod.rs");
+        .to_case(Case::Snake);
+    let module_out_path = module_parent.join(format!("{theory_name}.eql.rs"));
+
     // TODO: The digest mechanism is not very robust. We aren't careful about fsyncing in the right
     // moments etc.
-    let digest_file = build_dir.join(format!("{theory_name}.digest"));
-    let source = fs::read_to_string(in_file)
+    let digest_file = component_out_dir.join(format!("{theory_name}.digest"));
+    let source = fs::read_to_string(config.in_dir.join(in_file))
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
     let src_digest = digest_source(theory_name.as_str(), source.as_str());
@@ -210,12 +235,8 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
             Ok(()) => {}
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => {
-                // Propagate other errors (e.g., permissions)
                 return Err(err).with_context(|| {
-                    format!(
-                        "Failed to remove outdated digest file {}",
-                        digest_file.display()
-                    )
+                    format!("Failed to remove digest file {}", digest_file.display())
                 });
             }
         }
@@ -244,19 +265,11 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
 
         let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
 
-        let theory_name = in_file
-            .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_case(Case::UpperCamel);
+        let theory_name_len = theory_name.len();
+        let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
 
-        let theory_name_snake = theory_name.to_case(Case::Snake);
-        let theory_name_len = theory_name_snake.len();
-        let symbol_prefix = format!("eql_{theory_name_len}_{theory_name_snake}");
-
-        let result = display_module(
-            &theory_name,
+        let module_contents = display_module(
+            &theory_name.to_case(Case::UpperCamel),
             &eqlog,
             &identifiers,
             flat_rules.rules(),
@@ -265,16 +278,16 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
             symbol_prefix.as_str(),
         )
         .to_string();
-        fs::write(&out_file, &result)?;
+        fs::write(&module_out_path, module_contents.as_str())?;
 
-        let incremental_dir = build_dir.join("incremental");
+        let incremental_dir = component_out_dir.join("incremental");
         fs::create_dir_all(&incremental_dir)?;
 
         eqlog.iter_rel().par_bridge().try_for_each(|rel| {
             let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
             let rel_snake = rel_name.to_case(Case::Snake);
             let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
-            let table_out_file = build_dir.join(table_out_file_name);
+            let table_out_file = component_out_dir.join(table_out_file_name);
 
             let indices = index_selection
                 .get(&rel_name)
@@ -313,7 +326,7 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
                 .arg(table_out_file.as_path())
                 .arg("--crate-type=rlib")
                 .arg("-o")
-                .arg(build_dir.join(rlib_filename.as_str()))
+                .arg(component_out_dir.join(rlib_filename.as_str()))
                 .arg("-C")
                 .arg("embed-bitcode=no")
                 .arg("-C")
@@ -339,7 +352,7 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
             .try_for_each(|(rule, analysis)| -> Result<()> {
                 let rule_name_snake = rule.name.to_case(Case::Snake);
                 let rule_out_file_name = format!("{symbol_prefix}_{rule_name_snake}.rs");
-                let rule_out_file = build_dir.join(rule_out_file_name);
+                let rule_out_file = component_out_dir.join(rule_out_file_name);
 
                 let rule_lib = display_rule_lib(
                     rule,
@@ -382,7 +395,7 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
                     .arg(rule_out_file.as_path())
                     .arg("--crate-type=rlib")
                     .arg("-o")
-                    .arg(build_dir.join(rlib_filename.as_str()))
+                    .arg(component_out_dir.join(rlib_filename.as_str()))
                     .arg("-C")
                     .arg("embed-bitcode=no")
                     .arg("-C")
@@ -404,16 +417,22 @@ fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path
         fs::write(&digest_file, encoded_digest)?;
     }
 
-    print_cargo_link_directives(build_dir)?;
+    print_cargo_link_directives(component_out_dir.as_path())?;
     Ok(())
+}
+
+/// ComponentConfig contains settings for component-based builds
+#[doc(hidden)]
+pub struct ComponentConfig {
+    pub component_out_dir: PathBuf,
 }
 
 /// [Config] and [process] are public for testing only, they shouldn't be used by third parties.
 #[doc(hidden)]
 pub struct Config {
     pub in_dir: PathBuf,
-    pub module_dir: PathBuf,
-    pub build_dir: PathBuf,
+    pub out_dir: PathBuf,
+    pub component_build: Option<ComponentConfig>,
 }
 
 #[doc(hidden)]
@@ -439,13 +458,7 @@ pub fn lowest_common_ancestor_path<'a, 'b>(mut a: &'a Path, b: &'b Path) -> Opti
 }
 
 fn create_mod_dirs(in_dir: &Path, out_dir: &Path) -> Result<()> {
-    let workspace_root = lowest_common_ancestor_path(in_dir, out_dir)
-        .expect("TODO: Handle in_dir and out_dir not having common ancestor");
     for rust_file_path in find_files_by_extension(in_dir, &["rs"])? {
-        let rust_file_path = in_dir.join(rust_file_path);
-        let rust_file_path = rust_file_path
-            .strip_prefix(workspace_root)
-            .expect("should have workspace_root <= in_dir <= rust_file_path");
         fs::create_dir_all(out_dir.join(rust_file_path))?;
     }
     Ok(())
@@ -453,44 +466,17 @@ fn create_mod_dirs(in_dir: &Path, out_dir: &Path) -> Result<()> {
 
 #[doc(hidden)]
 pub fn process(config: &Config) -> Result<()> {
-    let Config {
-        in_dir,
-        module_dir,
-        build_dir,
-    } = config;
-    let in_dir = fs::canonicalize(in_dir.as_path())
-        .with_context(|| anyhow!("Canonicalizing input directory: {}", in_dir.display()))?;
-    let module_dir = fs::canonicalize(module_dir.as_path())
-        .with_context(|| anyhow!("Canonicalizing module directory: {}", module_dir.display()))?;
-    let build_dir = fs::canonicalize(build_dir.as_path())
-        .with_context(|| anyhow!("Canonicalizing build directory: {}", build_dir.display()))?;
+    fs::create_dir_all(config.out_dir.as_path()).context("Creating out dir")?;
+    if let Some(component_build) = &config.component_build {
+        fs::create_dir_all(component_build.component_out_dir.as_path())
+            .context("Creating component out dir")?;
+    }
 
-    fs::create_dir_all(module_dir.as_path())
-        .with_context(|| format!("Creating module directory {}", module_dir.display()))?;
-    fs::create_dir_all(build_dir.as_path())
-        .with_context(|| format!("Creating module directory {}", build_dir.display()))?;
-
-    let in_files = eqlog_files(&in_dir)
-        .with_context(|| format!("Searching for eqlog files in  {}", in_dir.display()))?;
-
-    let workspace_root = lowest_common_ancestor_path(in_dir.as_path(), module_dir.as_path())
-        .ok_or_else(|| anyhow!("input and module directory don't have a common ancestor"))?;
+    let in_files = eqlog_files(config.in_dir.as_path())
+        .with_context(|| format!("Searching for eqlog files in {}", config.in_dir.display()))?;
 
     for in_file in in_files {
-        let in_file = in_dir.join(in_file);
-        let module_parent = module_dir.join(in_file.strip_prefix(workspace_root).unwrap());
-        let build_parent = build_dir.join(in_file.strip_prefix(workspace_root).unwrap());
-
-        fs::create_dir_all(&module_parent)
-            .with_context(|| format!("Creating module directory {}", module_parent.display()))?;
-        fs::create_dir_all(&build_parent)
-            .with_context(|| format!("Creating build directory {}", build_parent.display()))?;
-
-        process_file(
-            in_dir.join(in_file).as_path(),
-            &module_parent,
-            &build_parent,
-        )?;
+        process_file(in_file.as_path(), config)?;
     }
 
     Ok(())
@@ -515,7 +501,21 @@ pub fn process_root() -> Result<()> {
 
             process_root should only be called from build.rs via cargo.
         "})?;
-    let out_dir: PathBuf = fs::canonicalize(PathBuf::from(out_dir))?;
+    let mut out_dir: PathBuf = fs::canonicalize(PathBuf::from(out_dir))?;
+    let component_out_dir = out_dir.join("eqlog-components");
+
+    let workspace_root = lowest_common_ancestor_path(in_dir.as_path(), out_dir.as_path())
+        .ok_or_else(|| {
+            anyhow!(formatdoc! {"
+            Source and output paths do not have a common ancestor
+            - Source: {src}
+            - Out: {out}
+        ", src=in_dir.display(), out=out_dir.display()})
+        })?;
+    let workspace_root_to_in_dir = in_dir
+        .strip_prefix(workspace_root)
+        .expect("workspace_root is ancestor of in_dir by construction");
+    out_dir.push(workspace_root_to_in_dir);
 
     create_mod_dirs(in_dir.as_path(), out_dir.as_path()).with_context(|| {
         format!(
@@ -526,8 +526,8 @@ pub fn process_root() -> Result<()> {
 
     let config = Config {
         in_dir,
-        module_dir: out_dir.clone(),
-        build_dir: out_dir,
+        out_dir,
+        component_build: Some(ComponentConfig { component_out_dir }),
     };
 
     process(&config)?;

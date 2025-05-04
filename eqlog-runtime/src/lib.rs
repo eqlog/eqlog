@@ -28,9 +28,7 @@ macro_rules! eqlog_mod {
                 "..",
                 "/",
                 stringify!($modname),
-                ".eql",
-                "/",
-                "mod.rs"
+                ".eql.rs"
             ));
         }
     };
