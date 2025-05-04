@@ -179,17 +179,17 @@ fn print_cargo_link_directives(out_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
+fn process_file<'a>(in_file: &'a Path, module_dir: &'a Path, build_dir: &'a Path) -> Result<()> {
     let theory_name = in_file
         .file_stem()
         .unwrap()
         .to_str()
         .unwrap()
         .to_case(Case::UpperCamel);
-    let out_file = out_dir.join("mod.rs");
+    let out_file = module_dir.join("mod.rs");
     // TODO: The digest mechanism is not very robust. We aren't careful about fsyncing in the right
     // moments etc.
-    let digest_file = out_dir.join(format!("{theory_name}.digest"));
+    let digest_file = build_dir.join(format!("{theory_name}.digest"));
     let source = fs::read_to_string(in_file)
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
@@ -267,14 +267,14 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         .to_string();
         fs::write(&out_file, &result)?;
 
-        let incremental_dir = out_dir.join("incremental");
+        let incremental_dir = build_dir.join("incremental");
         fs::create_dir_all(&incremental_dir)?;
 
         eqlog.iter_rel().par_bridge().try_for_each(|rel| {
             let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
             let rel_snake = rel_name.to_case(Case::Snake);
             let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
-            let table_out_file = out_dir.join(table_out_file_name);
+            let table_out_file = build_dir.join(table_out_file_name);
 
             let indices = index_selection
                 .get(&rel_name)
@@ -313,7 +313,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
                 .arg(table_out_file.as_path())
                 .arg("--crate-type=rlib")
                 .arg("-o")
-                .arg(out_dir.join(rlib_filename.as_str()))
+                .arg(build_dir.join(rlib_filename.as_str()))
                 .arg("-C")
                 .arg("embed-bitcode=no")
                 .arg("-C")
@@ -339,7 +339,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
             .try_for_each(|(rule, analysis)| -> Result<()> {
                 let rule_name_snake = rule.name.to_case(Case::Snake);
                 let rule_out_file_name = format!("{symbol_prefix}_{rule_name_snake}.rs");
-                let rule_out_file = out_dir.join(rule_out_file_name);
+                let rule_out_file = build_dir.join(rule_out_file_name);
 
                 let rule_lib = display_rule_lib(
                     rule,
@@ -382,7 +382,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
                     .arg(rule_out_file.as_path())
                     .arg("--crate-type=rlib")
                     .arg("-o")
-                    .arg(out_dir.join(rlib_filename.as_str()))
+                    .arg(build_dir.join(rlib_filename.as_str()))
                     .arg("-C")
                     .arg("embed-bitcode=no")
                     .arg("-C")
@@ -404,7 +404,7 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
         fs::write(&digest_file, encoded_digest)?;
     }
 
-    print_cargo_link_directives(out_dir)?;
+    print_cargo_link_directives(build_dir)?;
     Ok(())
 }
 
@@ -412,7 +412,8 @@ fn process_file<'a>(in_file: &'a Path, out_dir: &'a Path) -> Result<()> {
 #[doc(hidden)]
 pub struct Config {
     pub in_dir: PathBuf,
-    pub out_dir: PathBuf,
+    pub module_dir: PathBuf,
+    pub build_dir: PathBuf,
 }
 
 #[doc(hidden)]
@@ -452,34 +453,44 @@ fn create_mod_dirs(in_dir: &Path, out_dir: &Path) -> Result<()> {
 
 #[doc(hidden)]
 pub fn process(config: &Config) -> Result<()> {
-    let Config { in_dir, out_dir } = config;
+    let Config {
+        in_dir,
+        module_dir,
+        build_dir,
+    } = config;
     let in_dir = fs::canonicalize(in_dir.as_path())
         .with_context(|| anyhow!("Canonicalizing input directory: {}", in_dir.display()))?;
-    let out_dir = fs::canonicalize(out_dir.as_path())
-        .with_context(|| anyhow!("Canonicalizing output directory: {}", out_dir.display()))?;
+    let module_dir = fs::canonicalize(module_dir.as_path())
+        .with_context(|| anyhow!("Canonicalizing module directory: {}", module_dir.display()))?;
+    let build_dir = fs::canonicalize(build_dir.as_path())
+        .with_context(|| anyhow!("Canonicalizing build directory: {}", build_dir.display()))?;
 
-    println!("cargo::rerun-if-changed={}", in_dir.display());
-
-    create_mod_dirs(in_dir.as_path(), out_dir.as_path()).with_context(|| {
-        format!(
-            "Recreating rust file module directory structure in {}",
-            out_dir.display()
-        )
-    })?;
+    fs::create_dir_all(module_dir.as_path())
+        .with_context(|| format!("Creating module directory {}", module_dir.display()))?;
+    fs::create_dir_all(build_dir.as_path())
+        .with_context(|| format!("Creating module directory {}", build_dir.display()))?;
 
     let in_files = eqlog_files(&in_dir)
         .with_context(|| format!("Searching for eqlog files in  {}", in_dir.display()))?;
 
-    let workspace_root = lowest_common_ancestor_path(in_dir.as_path(), out_dir.as_path())
-        .ok_or_else(|| anyhow!("input and output directory don't have a common ancestor"))?;
+    let workspace_root = lowest_common_ancestor_path(in_dir.as_path(), module_dir.as_path())
+        .ok_or_else(|| anyhow!("input and module directory don't have a common ancestor"))?;
 
     for in_file in in_files {
         let in_file = in_dir.join(in_file);
-        let out_parent = out_dir.join(in_file.strip_prefix(workspace_root).unwrap());
-        fs::create_dir_all(&out_parent)
-            .with_context(|| format!("Creating output directory {}", out_parent.display()))?;
+        let module_parent = module_dir.join(in_file.strip_prefix(workspace_root).unwrap());
+        let build_parent = build_dir.join(in_file.strip_prefix(workspace_root).unwrap());
 
-        process_file(in_dir.join(in_file).as_path(), &out_parent)?;
+        fs::create_dir_all(&module_parent)
+            .with_context(|| format!("Creating module directory {}", module_parent.display()))?;
+        fs::create_dir_all(&build_parent)
+            .with_context(|| format!("Creating build directory {}", build_parent.display()))?;
+
+        process_file(
+            in_dir.join(in_file).as_path(),
+            &module_parent,
+            &build_parent,
+        )?;
     }
 
     Ok(())
@@ -506,7 +517,18 @@ pub fn process_root() -> Result<()> {
         "})?;
     let out_dir: PathBuf = fs::canonicalize(PathBuf::from(out_dir))?;
 
-    let config = Config { in_dir, out_dir };
+    create_mod_dirs(in_dir.as_path(), out_dir.as_path()).with_context(|| {
+        format!(
+            "Recreating rust file module directory structure in {}",
+            out_dir.display()
+        )
+    })?;
+
+    let config = Config {
+        in_dir,
+        module_dir: out_dir.clone(),
+        build_dir: out_dir,
+    };
 
     process(&config)?;
 
