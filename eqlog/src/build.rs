@@ -146,6 +146,8 @@ fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
     find_files_by_extension(root_path, &extensions)
 }
 
+// TODO: The digest mechanism is not very robust. We aren't careful about fsyncing in the right
+// moments etc.
 type Digest = [u8; 32];
 
 fn digest_source(theory_name: &str, src: &str) -> Digest {
@@ -158,12 +160,18 @@ fn digest_source(theory_name: &str, src: &str) -> Digest {
     digest
 }
 
-fn print_cargo_link_directives(component_out_dir: &Path) -> Result<()> {
-    println!(
-        "cargo:rustc-link-search=native={}",
-        component_out_dir.display()
-    );
-    for entry in fs::read_dir(component_out_dir)? {
+fn component_out_dir(in_file: &Path, config: &ComponentConfig) -> PathBuf {
+    config.component_out_dir.join(in_file)
+}
+
+fn print_cargo_link_directives(in_file: &Path, config: Option<&ComponentConfig>) -> Result<()> {
+    let config = match config {
+        Some(config) => config,
+        None => return Ok(()),
+    };
+    let comp_out_dir = component_out_dir(in_file, config);
+    println!("cargo:rustc-link-search=native={}", comp_out_dir.display());
+    for entry in fs::read_dir(comp_out_dir)? {
         let entry = entry?;
         let path = entry.path();
         if !path.is_file() {
@@ -361,18 +369,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     fs::create_dir_all(&module_parent)
         .with_context(|| format!("Creating module directory {}", module_parent.display()))?;
 
-    let component_out_dir = match &config.component_build {
-        Some(component_config) => component_config.component_out_dir.join(in_file),
-        None => {
-            todo!("Non-component builds are not yet implemented")
-        }
-    };
-    fs::create_dir_all(component_out_dir.as_path()).with_context(|| {
-        format!(
-            "Creating component out directory {}",
-            component_out_dir.display()
-        )
-    })?;
+    let build_type = config.build_type();
 
     let theory_name = in_file
         .file_stem()
@@ -382,82 +379,165 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .to_case(Case::Snake);
     let module_out_path = module_out_path(in_file, config);
 
-    // TODO: The digest mechanism is not very robust. We aren't careful about fsyncing in the right
-    // moments etc.
     let source = fs::read_to_string(config.in_dir.join(in_file))
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
+    // TODO: Build type should contribute to the source digest.
     let src_digest = digest_source(theory_name.as_str(), source.as_str());
     let out_digest = read_digest(in_file, config)?;
 
-    if out_digest.as_ref().map(|od| od.as_slice()) != Some(src_digest.as_slice()) {
-        // We remove the digest file first here before we modify/overwrite generated files. Consider
-        // what state we would end up otherwise in case we fail half-way through.
-        remove_digest(in_file, config)?;
+    if out_digest.as_ref().map(|od| od.as_slice()) == Some(src_digest.as_slice()) {
+        print_cargo_link_directives(in_file, config.component_build.as_ref())?;
+        return Ok(());
+    }
 
-        let (mut eqlog, identifiers, locations, _module) = match parse(source.as_str()) {
-            Ok(x) => x,
-            Err(error) => {
-                return Err(CompileErrorWithContext {
-                    error,
-                    source,
-                    source_path: in_file.into(),
-                }
-                .into());
+    // We remove the digest file first here before we modify/overwrite generated files. Consider
+    // what state we would end up otherwise in case we fail half-way through.
+    remove_digest(in_file, config)?;
+
+    let (mut eqlog, identifiers, locations, _module) = match parse(source.as_str()) {
+        Ok(x) => x,
+        Err(error) => {
+            return Err(CompileErrorWithContext {
+                error,
+                source,
+                source_path: in_file.into(),
+            }
+            .into());
+        }
+    };
+    eqlog.close();
+
+    check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
+        error,
+        source,
+        source_path: in_file.into(),
+    })?;
+    assert!(!eqlog.absurd());
+
+    let flat_rules = flatten(&eqlog, &identifiers);
+
+    let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
+
+    let theory_name_len = theory_name.len();
+    let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
+
+    let module_contents = display_module(
+        &theory_name.to_case(Case::UpperCamel),
+        &eqlog,
+        &identifiers,
+        flat_rules.rules(),
+        flat_rules.analyses(),
+        &index_selection,
+        symbol_prefix.as_str(),
+        build_type,
+    )
+    .to_string();
+    fs::write(&module_out_path, module_contents.as_str())?;
+
+    let component_config = match config.component_build.as_ref() {
+        None => {
+            write_digest(in_file, config, &src_digest)?;
+            return Ok(());
+        }
+        Some(component_config) => component_config,
+    };
+
+    let component_out_dir = component_out_dir(in_file, component_config);
+
+    let incremental_dir = component_out_dir.join("incremental");
+    fs::create_dir_all(&incremental_dir)?;
+
+    eqlog.iter_rel().par_bridge().try_for_each(|rel| {
+        let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
+        let rel_snake = rel_name.to_case(Case::Snake);
+        let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
+        let table_out_file = component_out_dir.join(table_out_file_name);
+
+        let indices = index_selection
+            .get(&rel_name)
+            .expect("Index selection should be present for all relations");
+        let table_lib =
+            display_table_lib(rel, &indices, &eqlog, &identifiers, symbol_prefix.as_str())
+                .to_string();
+        fs::write(table_out_file.as_path(), table_lib)?;
+
+        let rlib_filename = format!(
+            "lib{}.rlib",
+            table_out_file
+                .file_stem()
+                .expect("table_out_file was generated by us, should have file stem")
+                .to_str()
+                .expect("table_out_file was generated by us, should be unicode")
+        );
+
+        let rustc_path: PathBuf = env::var_os("RUSTC")
+            .context("Reading RUSTC environment variable")?
+            .into();
+
+        let debug_var = env::var("DEBUG").context("Reading DEBUG env var")?;
+        let debug = match debug_var.as_str() {
+            "true" => true,
+            "false" => false,
+            _ => {
+                return Err(anyhow!("Invalid DEBUG var value: {debug_var}"));
             }
         };
-        eqlog.close();
 
-        check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
-            error,
-            source,
-            source_path: in_file.into(),
-        })?;
-        assert!(!eqlog.absurd());
+        let opt_level = env::var("OPT_LEVEL").context("Reading OPT_LEVEL env var")?;
 
-        let flat_rules = flatten(&eqlog, &identifiers);
+        let mut rustc_command = Command::new(rustc_path);
+        rustc_command
+            .arg(table_out_file.as_path())
+            .arg("--crate-type=rlib")
+            .arg("-o")
+            .arg(component_out_dir.join(rlib_filename.as_str()))
+            .arg("-C")
+            .arg("embed-bitcode=no")
+            .arg("-C")
+            .arg(format!("opt-level={opt_level}"))
+            .arg("-C")
+            .arg("codegen-units=1")
+            .arg("-C")
+            .arg(format!("incremental={}", incremental_dir.display()));
+        if debug {
+            rustc_command.arg("-g");
+        }
 
-        let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
+        let status = rustc_command.status().context("Running rustc")?;
+        ensure!(status.success(), "Rustc finished with status {status}");
+        Ok(())
+    })?;
 
-        let theory_name_len = theory_name.len();
-        let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
+    flat_rules
+        .rules()
+        .iter()
+        .zip(flat_rules.analyses())
+        .par_bridge()
+        .try_for_each(|(rule, analysis)| -> Result<()> {
+            let rule_name_snake = rule.name.to_case(Case::Snake);
+            let rule_out_file_name = format!("{symbol_prefix}_{rule_name_snake}.rs");
+            let rule_out_file = component_out_dir.join(rule_out_file_name);
 
-        let module_contents = display_module(
-            &theory_name.to_case(Case::UpperCamel),
-            &eqlog,
-            &identifiers,
-            flat_rules.rules(),
-            flat_rules.analyses(),
-            &index_selection,
-            symbol_prefix.as_str(),
-        )
-        .to_string();
-        fs::write(&module_out_path, module_contents.as_str())?;
+            let rule_lib = display_rule_lib(
+                rule,
+                analysis,
+                &index_selection,
+                &eqlog,
+                &identifiers,
+                symbol_prefix.as_str(),
+            )
+            .to_string();
 
-        let incremental_dir = component_out_dir.join("incremental");
-        fs::create_dir_all(&incremental_dir)?;
-
-        eqlog.iter_rel().par_bridge().try_for_each(|rel| {
-            let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
-            let rel_snake = rel_name.to_case(Case::Snake);
-            let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
-            let table_out_file = component_out_dir.join(table_out_file_name);
-
-            let indices = index_selection
-                .get(&rel_name)
-                .expect("Index selection should be present for all relations");
-            let table_lib =
-                display_table_lib(rel, &indices, &eqlog, &identifiers, symbol_prefix.as_str())
-                    .to_string();
-            fs::write(table_out_file.as_path(), table_lib)?;
+            fs::write(rule_out_file.as_path(), rule_lib)?;
 
             let rlib_filename = format!(
                 "lib{}.rlib",
-                table_out_file
+                rule_out_file
                     .file_stem()
-                    .expect("table_out_file was generated by us, should have file stem")
+                    .expect("rule_out_file was generated by us, should have file stem")
                     .to_str()
-                    .expect("table_out_file was generated by us, should be unicode")
+                    .expect("rule_out_file was generated by us, should be unicode")
             );
 
             let rustc_path: PathBuf = env::var_os("RUSTC")
@@ -477,7 +557,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
             let mut rustc_command = Command::new(rustc_path);
             rustc_command
-                .arg(table_out_file.as_path())
+                .arg(rule_out_file.as_path())
                 .arg("--crate-type=rlib")
                 .arg("-o")
                 .arg(component_out_dir.join(rlib_filename.as_str()))
@@ -498,79 +578,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             Ok(())
         })?;
 
-        flat_rules
-            .rules()
-            .iter()
-            .zip(flat_rules.analyses())
-            .par_bridge()
-            .try_for_each(|(rule, analysis)| -> Result<()> {
-                let rule_name_snake = rule.name.to_case(Case::Snake);
-                let rule_out_file_name = format!("{symbol_prefix}_{rule_name_snake}.rs");
-                let rule_out_file = component_out_dir.join(rule_out_file_name);
+    write_digest(in_file, config, &src_digest)?;
+    print_cargo_link_directives(in_file, Some(component_config))?;
 
-                let rule_lib = display_rule_lib(
-                    rule,
-                    analysis,
-                    &index_selection,
-                    &eqlog,
-                    &identifiers,
-                    symbol_prefix.as_str(),
-                )
-                .to_string();
-
-                fs::write(rule_out_file.as_path(), rule_lib)?;
-
-                let rlib_filename = format!(
-                    "lib{}.rlib",
-                    rule_out_file
-                        .file_stem()
-                        .expect("rule_out_file was generated by us, should have file stem")
-                        .to_str()
-                        .expect("rule_out_file was generated by us, should be unicode")
-                );
-
-                let rustc_path: PathBuf = env::var_os("RUSTC")
-                    .context("Reading RUSTC environment variable")?
-                    .into();
-
-                let debug_var = env::var("DEBUG").context("Reading DEBUG env var")?;
-                let debug = match debug_var.as_str() {
-                    "true" => true,
-                    "false" => false,
-                    _ => {
-                        return Err(anyhow!("Invalid DEBUG var value: {debug_var}"));
-                    }
-                };
-
-                let opt_level = env::var("OPT_LEVEL").context("Reading OPT_LEVEL env var")?;
-
-                let mut rustc_command = Command::new(rustc_path);
-                rustc_command
-                    .arg(rule_out_file.as_path())
-                    .arg("--crate-type=rlib")
-                    .arg("-o")
-                    .arg(component_out_dir.join(rlib_filename.as_str()))
-                    .arg("-C")
-                    .arg("embed-bitcode=no")
-                    .arg("-C")
-                    .arg(format!("opt-level={opt_level}"))
-                    .arg("-C")
-                    .arg("codegen-units=1")
-                    .arg("-C")
-                    .arg(format!("incremental={}", incremental_dir.display()));
-                if debug {
-                    rustc_command.arg("-g");
-                }
-
-                let status = rustc_command.status().context("Running rustc")?;
-                ensure!(status.success(), "Rustc finished with status {status}");
-                Ok(())
-            })?;
-
-        write_digest(in_file, config, &src_digest)?;
-    }
-
-    print_cargo_link_directives(component_out_dir.as_path())?;
     Ok(())
 }
 
@@ -585,6 +595,15 @@ pub struct Config {
     pub in_dir: PathBuf,
     pub out_dir: PathBuf,
     pub component_build: Option<ComponentConfig>,
+}
+
+impl Config {
+    fn build_type(&self) -> BuildType {
+        match &self.component_build {
+            Some(_) => BuildType::Component,
+            None => BuildType::Module,
+        }
+    }
 }
 
 #[doc(hidden)]

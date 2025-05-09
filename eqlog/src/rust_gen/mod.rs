@@ -1,8 +1,10 @@
 mod rule;
 mod table;
+mod types;
 
 pub use rule::*;
 pub use table::*;
+pub use types::*;
 
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
@@ -1998,6 +2000,25 @@ fn display_table_iter_ty_structs<'a>(
         .format("\n")
 }
 
+fn display_component_tables<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let table_struct_decls = display_table_struct_decls(eqlog, identifiers);
+        let iter_ty_structs = display_table_iter_ty_structs(eqlog, identifiers, index_selection);
+        let extern_decls =
+            display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection);
+        writedoc! {f, "
+            {table_struct_decls}
+            {iter_ty_structs}
+            {extern_decls}
+        "}
+    })
+}
+
 pub fn display_module<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
@@ -2006,23 +2027,25 @@ pub fn display_module<'a>(
     analyses: &'a [FlatRuleAnalysis],
     index_selection: &'a IndexSelection,
     symbol_prefix: &'a str,
+    build_type: BuildType,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let imports = display_imports();
         write!(f, "{}", imports)?;
         write!(f, "\n")?;
 
-        writeln!(f, "{}", display_table_struct_decls(eqlog, identifiers))?;
-        writeln!(
-            f,
-            "{}",
-            display_table_iter_ty_structs(eqlog, identifiers, index_selection)
-        )?;
-        writeln!(
-            f,
-            "{}",
-            display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection)
-        )?;
+        match build_type {
+            BuildType::Component => {
+                writeln!(
+                    f,
+                    "{}",
+                    display_component_tables(eqlog, identifiers, index_selection, symbol_prefix)
+                )?;
+            }
+            BuildType::Module => {
+                todo!()
+            }
+        }
 
         let rule_env_structs = analyses
             .iter()
