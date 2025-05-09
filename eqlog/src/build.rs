@@ -15,7 +15,7 @@ use eqlog_eqlog::*;
 use indoc::{formatdoc, indoc};
 use rayon::iter::ParallelBridge as _;
 use rayon::iter::ParallelIterator as _;
-use sha2::{Digest, Sha256};
+use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
@@ -146,14 +146,16 @@ fn eqlog_files(root_path: &Path) -> Result<Vec<PathBuf>> {
     find_files_by_extension(root_path, &extensions)
 }
 
-fn digest_source(theory_name: &str, src: &str) -> Vec<u8> {
+type Digest = [u8; 32];
+
+fn digest_source(theory_name: &str, src: &str) -> Digest {
+    let mut digest = Digest::default();
     Sha256::new()
         .chain_update(env!("EQLOG_SOURCE_DIGEST").as_bytes())
         .chain_update(theory_name.as_bytes())
         .chain_update(src.as_bytes())
-        .finalize()
-        .as_slice()
-        .into()
+        .finalize_into((&mut digest).into());
+    digest
 }
 
 fn print_cargo_link_directives(component_out_dir: &Path) -> Result<()> {
@@ -178,6 +180,174 @@ fn print_cargo_link_directives(component_out_dir: &Path) -> Result<()> {
             .to_str()
             .expect("Eqlog generates unicode filenames only");
         println!("cargo:rustc-link-lib=static:+verbatim={}", file_name);
+    }
+    Ok(())
+}
+
+fn module_out_path(in_file: &Path, config: &Config) -> PathBuf {
+    let module_parent = match in_file.parent() {
+        None => config.out_dir.clone(),
+        Some(p) => config.out_dir.join(p),
+    };
+
+    let theory_name = in_file
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_case(Case::Snake);
+
+    module_parent.join(format!("{theory_name}.eql.rs"))
+}
+
+fn parse_digest_hex(digest_hex: &[u8]) -> Option<Digest> {
+    let mut digest: Digest = [0; 32];
+    let digest_len = digest.len();
+    // Invalid digests might happen if we have previously crashed after creating the digest
+    // file but before writing all of the digest to it.
+    // Shouldn't happen too often though, so print a warning in case it goes wrong
+    // every time.
+    // TODO: Need to use the cargo warn directive.
+    let warning = "Ignoring digest with invalid format";
+    match base16ct::upper::decode(&digest_hex, digest.as_mut_slice()) {
+        Ok(out_slice) => {
+            if out_slice.len() != digest_len {
+                eprintln!("{warning}");
+                return None;
+            }
+        }
+        Err(_) => {
+            eprintln!("{warning}");
+            return None;
+        }
+    }
+
+    Some(digest)
+}
+
+fn digest_file_path(in_file: &Path, config: &Config) -> PathBuf {
+    match &config.component_build {
+        Some(component_config) => {
+            // For component builds, the digest is in a separate file.
+            let theory_name = in_file
+                .file_stem()
+                // TODO: Do we catch this somewhere up the call stack?
+                .expect("Eqlog files must have file stem")
+                .to_str()
+                .unwrap()
+                .to_case(Case::Snake);
+            let digest_file = component_config
+                .component_out_dir
+                .join(in_file)
+                .join(format!("{theory_name}.digest"));
+            digest_file
+        }
+        None => {
+            // For module builds, the digest is in a comment on th last line of the generated module.
+            module_out_path(in_file, config)
+        }
+    }
+}
+
+fn read_digest(in_file: &Path, config: &Config) -> Result<Option<Digest>> {
+    if let Some(_) = &config.component_build {
+        let content = match fs::read(digest_file_path(in_file, config).as_path()) {
+            Ok(content) => content,
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                return Ok(None);
+            }
+            Err(err) => {
+                return Err(err).context("Reading digest file");
+            }
+        };
+
+        let digest = parse_digest_hex(&content);
+        Ok(digest)
+    } else {
+        // For non-component builds, read from the last line of the module out file
+        let module_path = module_out_path(in_file, config);
+
+        if !module_path.exists() {
+            return Ok(None);
+        }
+
+        // TODO: No need to read the whole line; we know exactly how long the digest should be, so
+        // we can just seek.
+        let content = fs::read_to_string(&module_path)
+            .with_context(|| format!("Reading module file {}", module_path.display()))?;
+
+        let lines: Vec<&str> = content.lines().collect();
+        let last_line = match lines.last() {
+            Some(last_line) => last_line,
+            None => {
+                return Ok(None);
+            }
+        };
+        let hex_digest = match last_line.strip_prefix("// DIGEST: ") {
+            Some(hex_digest) => hex_digest,
+            None => {
+                return Ok(None);
+            }
+        };
+        let digest = parse_digest_hex(hex_digest.as_bytes());
+        Ok(digest)
+    }
+}
+
+fn write_digest(in_file: &Path, config: &Config, digest: &[u8]) -> Result<()> {
+    let encoded_digest = base16ct::upper::encode_string(digest);
+
+    if let Some(component_config) = &config.component_build {
+        // For component builds, write to the digest file in component out dir
+        let theory_name = in_file
+            .file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_case(Case::Snake);
+        let digest_file = component_config
+            .component_out_dir
+            .join(in_file)
+            .join(format!("{theory_name}.digest"));
+
+        fs::write(&digest_file, &encoded_digest)
+            .with_context(|| format!("Writing digest file {}", digest_file.display()))
+    } else {
+        // For non-component builds, append to the module out file
+        let module_path = module_out_path(in_file, config);
+
+        if module_path.exists() {
+            let mut content = fs::read_to_string(&module_path)
+                .with_context(|| format!("Reading module file {}", module_path.display()))?;
+
+            // Remove existing digest line if present
+            let lines: Vec<&str> = content.lines().collect();
+            if let Some(last_line) = lines.last() {
+                if last_line.starts_with("// DIGEST: ") {
+                    content = lines[..lines.len() - 1].join("\n") + "\n";
+                }
+            }
+
+            // Append new digest line
+            content.push_str(&format!("// DIGEST: {}\n", encoded_digest));
+
+            fs::write(&module_path, content)
+                .with_context(|| format!("Writing module file {}", module_path.display()))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn remove_digest(in_file: &Path, config: &Config) -> Result<()> {
+    let p = digest_file_path(in_file, config);
+    match fs::remove_file(p.as_path()) {
+        Ok(()) => {}
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("Failed to remove digest file {}", p.display()));
+        }
     }
     Ok(())
 }
@@ -210,36 +380,20 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .to_str()
         .unwrap()
         .to_case(Case::Snake);
-    let module_out_path = module_parent.join(format!("{theory_name}.eql.rs"));
+    let module_out_path = module_out_path(in_file, config);
 
     // TODO: The digest mechanism is not very robust. We aren't careful about fsyncing in the right
     // moments etc.
-    let digest_file = component_out_dir.join(format!("{theory_name}.digest"));
     let source = fs::read_to_string(config.in_dir.join(in_file))
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 
     let src_digest = digest_source(theory_name.as_str(), source.as_str());
-    let out_digest: Option<Vec<u8>> = match fs::read(digest_file.as_path()) {
-        Ok(content) => base16ct::upper::decode_vec(&content).ok(),
-        Err(err) if err.kind() == ErrorKind::NotFound => None,
-        Err(err) => {
-            return Err(err)
-                .with_context(|| format!("Failed to read digest file {}", digest_file.display()));
-        }
-    };
+    let out_digest = read_digest(in_file, config)?;
 
     if out_digest.as_ref().map(|od| od.as_slice()) != Some(src_digest.as_slice()) {
         // We remove the digest file first here before we modify/overwrite generated files. Consider
         // what state we would end up otherwise in case we fail half-way through.
-        match fs::remove_file(digest_file.as_path()) {
-            Ok(()) => {}
-            Err(err) if err.kind() == ErrorKind::NotFound => {}
-            Err(err) => {
-                return Err(err).with_context(|| {
-                    format!("Failed to remove digest file {}", digest_file.display())
-                });
-            }
-        }
+        remove_digest(in_file, config)?;
 
         let (mut eqlog, identifiers, locations, _module) = match parse(source.as_str()) {
             Ok(x) => x,
@@ -413,15 +567,13 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
                 Ok(())
             })?;
 
-        let encoded_digest = base16ct::upper::encode_string(&src_digest);
-        fs::write(&digest_file, encoded_digest)?;
+        write_digest(in_file, config, &src_digest)?;
     }
 
     print_cargo_link_directives(component_out_dir.as_path())?;
     Ok(())
 }
 
-/// ComponentConfig contains settings for component-based builds
 #[doc(hidden)]
 pub struct ComponentConfig {
     pub component_out_dir: PathBuf,
