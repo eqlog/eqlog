@@ -2000,25 +2000,6 @@ fn display_table_iter_ty_structs<'a>(
         .format("\n")
 }
 
-fn display_component_tables<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let table_struct_decls = display_table_struct_decls(eqlog, identifiers);
-        let iter_ty_structs = display_table_iter_ty_structs(eqlog, identifiers, index_selection);
-        let extern_decls =
-            display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection);
-        writedoc! {f, "
-            {table_struct_decls}
-            {iter_ty_structs}
-            {extern_decls}
-        "}
-    })
-}
-
 fn display_table_modules<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
