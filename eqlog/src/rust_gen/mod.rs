@@ -2019,6 +2019,66 @@ fn display_component_tables<'a>(
     })
 }
 
+fn display_table_modules<'a>(
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    eqlog
+        .iter_rel()
+        .map(move |rel| {
+            FmtFn(move |f| {
+                let rel_string = display_rel(rel, eqlog, identifiers).to_string();
+                let rel_snake = rel_string.to_case(Snake);
+
+                let index_selection = index_selection.get(&rel_string).unwrap();
+
+                let lib =
+                    display_table_lib(rel, index_selection, eqlog, identifiers, symbol_prefix);
+
+                writedoc! {f, "
+                mod {rel_snake} {{
+                    {lib}
+                }}
+            "}
+            })
+        })
+        .format("\n")
+}
+
+fn display_rule_modules<'a>(
+    rules: &'a [FlatRule],
+    analyses: &'a [FlatRuleAnalysis],
+    index_selection: &'a IndexSelection,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    rules
+        .iter()
+        .zip(analyses)
+        .map(move |(rule, analysis)| {
+            FmtFn(move |f| {
+                let lib = display_rule_lib(
+                    rule,
+                    analysis,
+                    index_selection,
+                    eqlog,
+                    identifiers,
+                    symbol_prefix,
+                );
+                let rule_snake = rule.name.to_case(Snake);
+                writedoc! {f, "
+                mod {rule_snake} {{
+                    {lib}
+                }}
+            "}
+            })
+        })
+        .format("\n")
+}
+
 pub fn display_module<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
@@ -2035,17 +2095,32 @@ pub fn display_module<'a>(
         write!(f, "\n")?;
 
         match build_type {
-            BuildType::Component => {
-                writeln!(
-                    f,
-                    "{}",
-                    display_component_tables(eqlog, identifiers, index_selection, symbol_prefix)
-                )?;
-            }
+            BuildType::Component => {}
             BuildType::Module => {
-                todo!()
+                display_table_modules(eqlog, identifiers, index_selection, symbol_prefix).fmt(f)?;
+                display_rule_modules(
+                    rules,
+                    analyses,
+                    index_selection,
+                    eqlog,
+                    identifiers,
+                    symbol_prefix,
+                )
+                .fmt(f)?;
             }
         }
+
+        writeln!(f, "{}", display_table_struct_decls(eqlog, identifiers))?;
+        writeln!(
+            f,
+            "{}",
+            display_table_iter_ty_structs(eqlog, identifiers, index_selection)
+        )?;
+        writeln!(
+            f,
+            "{}",
+            display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection)
+        )?;
 
         let rule_env_structs = analyses
             .iter()
