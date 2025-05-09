@@ -14,6 +14,7 @@ use Case::{Snake, UpperCamel};
 fn display_imports<'a>() -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
+            #[allow(unused)]
             use std::collections::BTreeSet;
             use std::collections::btree_set;
         "}
@@ -100,7 +101,7 @@ pub fn display_rule_env_struct<'a>(
 
         writedoc! {f, "
             #[allow(unused)]
-            struct {rule_name_camel}Env<'a> {{
+            pub struct {rule_name_camel}Env<'a> {{
                 {table_fields}
                 {type_set_fields}
                 {new_rel_fields}
@@ -538,6 +539,7 @@ pub fn display_rule_lib<'a>(
             {imports}
             {table_struct_decls}
             {iter_types}
+            #[allow(unused, clashing_extern_declarations)]
             unsafe extern "Rust" {{
             {iter_fns}
             {contains_fns}

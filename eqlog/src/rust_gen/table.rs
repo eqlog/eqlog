@@ -803,6 +803,7 @@ fn display_remove_from_row_indices_fn<'a>(
         let primary_old = IndexName(primary_old);
 
         writedoc! {f, "
+            #[allow(unused)]
             fn remove_from_row_indices(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
                 if table.index_{primary_new}.remove(&permute{primary_new_order}(row)) {{
                     {other_new_removes}
@@ -1077,10 +1078,10 @@ fn display_iter_ty<'a>(
             .map(|_| FmtFn(move |f| write!(f, "btree_set::Range<'a, {row_type}>, ")))
             .format("");
 
-        write!(
-            f,
-            "pub type {rel_camel}RangeIter{index_num}<'a> = ({fields});"
-        )
+        writedoc! { f, "
+            #[allow(unused)]
+            pub type {rel_camel}RangeIter{index_num}<'a> = ({fields});
+        "}
     })
 }
 
@@ -1389,9 +1390,14 @@ pub fn display_table_lib<'a>(
         let weight_static = display_weight_static(rel, &indices, eqlog, identifiers, symbol_prefix);
 
         writedoc! {f, "
-            use std::collections::{{BTreeSet, BTreeMap}};
+            use std::collections::BTreeSet;
+            #[allow(unused)]
+            use std::collections::BTreeMap;
+
             use std::collections::btree_set;
+            #[allow(unused)]
             use std::collections::btree_map;
+
             use std::ptr::NonNull;
 
             {strct}

@@ -1970,7 +1970,7 @@ pub fn display_table_extern_decls<'a>(
             .format("\n");
 
         writedoc! {f, r#"
-            #[allow(dead_code)]
+            #[allow(unused, clashing_extern_declarations)]
             unsafe extern "Rust" {{
             {rel_tables_fns}
             }}
@@ -2114,6 +2114,7 @@ pub fn display_module<'a>(
             .map(|rule| display_rule_fn_decl(rule.name.as_str(), symbol_prefix))
             .format("\n");
         writedoc! {f, r#"
+            #[allow(clashing_extern_declarations)]
             unsafe extern "Rust" {{
                 {rule_eval_fns}
             }}
