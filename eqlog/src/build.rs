@@ -542,6 +542,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     Ok(())
 }
 
+/// Configuration for component-based builds
 #[doc(hidden)]
 pub struct ComponentConfig {
     pub component_out_dir: PathBuf,
