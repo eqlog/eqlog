@@ -503,6 +503,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     };
 
     let component_out_dir = component_out_dir(in_file, component_config);
+    fs::create_dir_all(component_out_dir.as_path())
+        .with_context(|| format!("Creating component out dir {}", component_out_dir.display()))?;
 
     eqlog
         .iter_rel()
