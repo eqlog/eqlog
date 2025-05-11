@@ -69,7 +69,7 @@ fn diagonals(args: &[FlatVar]) -> BTreeSet<BTreeSet<usize>> {
 
     enumerated_args
         .iter()
-        .group_by(|(_, tm)| tm)
+        .chunk_by(|(_, tm)| tm)
         .into_iter()
         .map(|(_, group)| -> BTreeSet<usize> { group.map(|(i, _)| *i).collect() })
         .filter(|diagonal| diagonal.len() > 1)

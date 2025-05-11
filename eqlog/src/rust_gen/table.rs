@@ -8,7 +8,7 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display, Formatter};
 
-use Case::{ScreamingSnake, Snake, UpperCamel};
+use Case::{Snake, UpperCamel, UpperSnake};
 
 pub fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
     FmtFn(move |f| {
@@ -1287,7 +1287,7 @@ pub fn display_weight_static_name<'a>(
     FmtFn(move |f| {
         let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
             .to_string()
-            .to_case(ScreamingSnake);
+            .to_case(UpperSnake);
         write!(f, "{rel_screaming_snake}_WEIGHT")
     })
 }

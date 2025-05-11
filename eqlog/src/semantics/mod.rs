@@ -71,7 +71,7 @@ fn iter_match_conflicting_enum<'a>(
 
     match_stmt_contains_ctor_of_enum
         .into_iter()
-        .group_by(|(match_stmt, _, _)| *match_stmt)
+        .chunk_by(|(match_stmt, _, _)| *match_stmt)
         .into_iter()
         .filter_map(move |(match_stmt, rows)| {
             let enum_ctors: BTreeMap<EnumDeclNode, CtorDeclNode> = rows
