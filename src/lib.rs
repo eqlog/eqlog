@@ -58,33 +58,17 @@
 
 #![allow(incomplete_features)]
 #![allow(unused_attributes)]
-#![stable(feature = "alloc", since = "1.36.0")]
 #![doc(
     html_playground_url = "https://play.rust-lang.org/",
     issue_tracker_base_url = "https://github.com/rust-lang/rust/issues/",
     test(no_crate_inject, attr(allow(unused_variables), deny(warnings)))
 )]
-#![doc(cfg_hide(
-    not(test),
-    not(any(test, bootstrap)),
-    no_global_oom_handling,
-    not(no_global_oom_handling),
-    not(no_rc),
-    not(no_sync),
-    target_has_atomic = "ptr"
-))]
-#![doc(rust_logo)]
-#![feature(rustdoc_internals)]
-#![no_std]
-#![needs_allocator]
 // Lints:
 #![deny(unsafe_op_in_unsafe_fn)]
-#![deny(fuzzy_provenance_casts)]
 #![warn(deprecated_in_future)]
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
 #![allow(explicit_outlives_requirements)]
-#![warn(multiple_supertrait_upcastable)]
 #![allow(internal_features)]
 #![allow(rustdoc::redundant_explicit_links)]
 #![warn(rustdoc::unescaped_backticks)]
@@ -179,7 +163,6 @@
 #![feature(rustc_allow_const_fn_unstable)]
 #![feature(rustc_attrs)]
 #![feature(slice_internals)]
-#![feature(staged_api)]
 #![feature(stmt_expr_attributes)]
 #![feature(strict_provenance_lints)]
 #![feature(unboxed_closures)]
@@ -197,42 +180,14 @@
 // from other crates, but since this can only appear for lang items, it doesn't seem worth fixing.
 #![feature(intra_doc_pointers)]
 
-// Module with internal macros used by other modules (needs to be included before other modules).
-#[macro_use]
-mod macros;
-
-mod raw_vec;
-
-// Heaps provided for low-level allocation strategies
-pub mod alloc;
-
 // Primitive types using the heaps above
 
 // Need to conditionally define the mod from `boxed.rs` to avoid
 // duplicating the lang-items when building in test cfg; but also need
 // to allow code to have `use boxed::Box;` declarations.
-pub mod borrow;
-pub mod boxed;
-#[unstable(feature = "bstr", issue = "134915")]
-pub mod bstr;
 pub mod collections;
-#[cfg(all(not(no_rc), not(no_sync), not(no_global_oom_handling)))]
-pub mod ffi;
-pub mod fmt;
-#[cfg(not(no_rc))]
-pub mod rc;
-pub mod slice;
-pub mod str;
-pub mod string;
-#[cfg(all(not(no_rc), not(no_sync), target_has_atomic = "ptr"))]
-pub mod sync;
-#[cfg(all(not(no_global_oom_handling), not(no_rc), not(no_sync)))]
-pub mod task;
-pub mod vec;
+//mod alloc;
 
-#[doc(hidden)]
-#[unstable(feature = "liballoc_internals", issue = "none", reason = "implementation detail")]
-pub mod __export {
-    pub use core::format_args;
-    pub use core::hint::must_use;
-}
+use std::alloc;
+use std::boxed;
+use std::vec;

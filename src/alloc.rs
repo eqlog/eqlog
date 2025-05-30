@@ -1,39 +1,9 @@
 //! Memory allocation APIs
 
-#![stable(feature = "alloc_module", since = "1.28.0")]
-
-#[stable(feature = "alloc_module", since = "1.28.0")]
 #[doc(inline)]
-pub use core::alloc::*;
+pub use core::alloc::{AllocError, Allocator, Layout};
 use core::hint;
 use core::ptr::{self, NonNull};
-
-unsafe extern "Rust" {
-    // These are the magic symbols to call the global allocator. rustc generates
-    // them to call the global allocator if there is a `#[global_allocator]` attribute
-    // (the code expanding that attribute macro generates those functions), or to call
-    // the default implementations in std (`__rdl_alloc` etc. in `library/std/src/alloc.rs`)
-    // otherwise.
-    #[rustc_allocator]
-    #[rustc_nounwind]
-    #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-    fn __rust_alloc(size: usize, align: usize) -> *mut u8;
-    #[rustc_deallocator]
-    #[rustc_nounwind]
-    #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-    fn __rust_dealloc(ptr: *mut u8, size: usize, align: usize);
-    #[rustc_reallocator]
-    #[rustc_nounwind]
-    #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-    fn __rust_realloc(ptr: *mut u8, old_size: usize, align: usize, new_size: usize) -> *mut u8;
-    #[rustc_allocator_zeroed]
-    #[rustc_nounwind]
-    #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-    fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8;
-
-    #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-    static __rust_no_alloc_shim_is_unstable: u8;
-}
 
 /// The global memory allocator.
 ///
@@ -43,10 +13,8 @@ unsafe extern "Rust" {
 ///
 /// Note: while this type is unstable, the functionality it provides can be
 /// accessed through the [free functions in `alloc`](self#functions).
-#[unstable(feature = "allocator_api", issue = "32838")]
 #[derive(Copy, Clone, Default, Debug)]
 // the compiler needs to know when a Box uses the global allocator vs a custom one
-#[lang = "global_alloc_ty"]
 pub struct Global;
 
 /// Allocates memory with the global allocator.
@@ -80,18 +48,11 @@ pub struct Global;
 ///     dealloc(ptr, layout);
 /// }
 /// ```
-#[stable(feature = "global_alloc", since = "1.28.0")]
 #[must_use = "losing the pointer will leak memory"]
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn alloc(layout: Layout) -> *mut u8 {
-    unsafe {
-        // Make sure we don't accidentally allow omitting the allocator shim in
-        // stable code until it is actually stabilized.
-        core::ptr::read_volatile(&__rust_no_alloc_shim_is_unstable);
-
-        __rust_alloc(layout.size(), layout.align())
-    }
+    std::alloc::alloc(layout)
 }
 
 /// Deallocates memory with the global allocator.
@@ -106,7 +67,6 @@ pub unsafe fn alloc(layout: Layout) -> *mut u8 {
 /// # Safety
 ///
 /// See [`GlobalAlloc::dealloc`].
-#[stable(feature = "global_alloc", since = "1.28.0")]
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
@@ -125,7 +85,6 @@ pub unsafe fn dealloc(ptr: *mut u8, layout: Layout) {
 /// # Safety
 ///
 /// See [`GlobalAlloc::realloc`].
-#[stable(feature = "global_alloc", since = "1.28.0")]
 #[must_use = "losing the pointer will leak memory"]
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
@@ -163,18 +122,11 @@ pub unsafe fn realloc(ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 
 ///     dealloc(ptr, layout);
 /// }
 /// ```
-#[stable(feature = "global_alloc", since = "1.28.0")]
 #[must_use = "losing the pointer will leak memory"]
 #[inline]
 #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
 pub unsafe fn alloc_zeroed(layout: Layout) -> *mut u8 {
-    unsafe {
-        // Make sure we don't accidentally allow omitting the allocator shim in
-        // stable code until it is actually stabilized.
-        core::ptr::read_volatile(&__rust_no_alloc_shim_is_unstable);
-
-        __rust_alloc_zeroed(layout.size(), layout.align())
-    }
+    std::alloc::alloc_zeroed(layout)
 }
 
 impl Global {
@@ -241,7 +193,6 @@ impl Global {
     }
 }
 
-#[unstable(feature = "allocator_api", issue = "32838")]
 unsafe impl Allocator for Global {
     #[inline]
     #[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
@@ -336,108 +287,6 @@ unsafe impl Allocator for Global {
                 self.deallocate(ptr, old_layout);
                 Ok(new_ptr)
             },
-        }
-    }
-}
-
-/// The allocator for `Box`.
-#[cfg(not(no_global_oom_handling))]
-#[lang = "exchange_malloc"]
-#[inline]
-#[cfg_attr(miri, track_caller)] // even without panics, this helps for Miri backtraces
-unsafe fn exchange_malloc(size: usize, align: usize) -> *mut u8 {
-    let layout = unsafe { Layout::from_size_align_unchecked(size, align) };
-    match Global.allocate(layout) {
-        Ok(ptr) => ptr.as_mut_ptr(),
-        Err(_) => handle_alloc_error(layout),
-    }
-}
-
-// # Allocation error handler
-
-#[cfg(not(no_global_oom_handling))]
-unsafe extern "Rust" {
-    // This is the magic symbol to call the global alloc error handler. rustc generates
-    // it to call `__rg_oom` if there is a `#[alloc_error_handler]`, or to call the
-    // default implementations below (`__rdl_oom`) otherwise.
-    #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-    fn __rust_alloc_error_handler(size: usize, align: usize) -> !;
-}
-
-/// Signals a memory allocation error.
-///
-/// Callers of memory allocation APIs wishing to cease execution
-/// in response to an allocation error are encouraged to call this function,
-/// rather than directly invoking [`panic!`] or similar.
-///
-/// This function is guaranteed to diverge (not return normally with a value), but depending on
-/// global configuration, it may either panic (resulting in unwinding or aborting as per
-/// configuration for all panics), or abort the process (with no unwinding).
-///
-/// The default behavior is:
-///
-///  * If the binary links against `std` (typically the case), then
-///   print a message to standard error and abort the process.
-///   This behavior can be replaced with [`set_alloc_error_hook`] and [`take_alloc_error_hook`].
-///   Future versions of Rust may panic by default instead.
-///
-/// * If the binary does not link against `std` (all of its crates are marked
-///   [`#![no_std]`][no_std]), then call [`panic!`] with a message.
-///   [The panic handler] applies as to any panic.
-///
-/// [`set_alloc_error_hook`]: ../../std/alloc/fn.set_alloc_error_hook.html
-/// [`take_alloc_error_hook`]: ../../std/alloc/fn.take_alloc_error_hook.html
-/// [The panic handler]: https://doc.rust-lang.org/reference/runtime.html#the-panic_handler-attribute
-/// [no_std]: https://doc.rust-lang.org/reference/names/preludes.html#the-no_std-attribute
-#[stable(feature = "global_alloc", since = "1.28.0")]
-#[rustc_const_unstable(feature = "const_alloc_error", issue = "92523")]
-#[cfg(not(no_global_oom_handling))]
-#[cold]
-#[optimize(size)]
-pub const fn handle_alloc_error(layout: Layout) -> ! {
-    const fn ct_error(_: Layout) -> ! {
-        panic!("allocation failed");
-    }
-
-    #[inline]
-    fn rt_error(layout: Layout) -> ! {
-        unsafe {
-            __rust_alloc_error_handler(layout.size(), layout.align());
-        }
-    }
-
-    #[cfg(not(feature = "panic_immediate_abort"))]
-    {
-        core::intrinsics::const_eval_select((layout,), ct_error, rt_error)
-    }
-
-    #[cfg(feature = "panic_immediate_abort")]
-    ct_error(layout)
-}
-
-#[cfg(not(no_global_oom_handling))]
-#[doc(hidden)]
-#[allow(unused_attributes)]
-#[unstable(feature = "alloc_internals", issue = "none")]
-pub mod __alloc_error_handler {
-    // called via generated `__rust_alloc_error_handler` if there is no
-    // `#[alloc_error_handler]`.
-    #[rustc_std_internal_symbol]
-    pub unsafe fn __rdl_oom(size: usize, _align: usize) -> ! {
-        unsafe extern "Rust" {
-            // This symbol is emitted by rustc next to __rust_alloc_error_handler.
-            // Its value depends on the -Zoom={panic,abort} compiler option.
-            #[cfg_attr(not(bootstrap), rustc_std_internal_symbol)]
-            static __rust_alloc_error_handler_should_panic: u8;
-        }
-
-        if unsafe { __rust_alloc_error_handler_should_panic != 0 } {
-            panic!("memory allocation of {size} bytes failed")
-        } else {
-            core::panicking::panic_nounwind_fmt(
-                format_args!("memory allocation of {size} bytes failed"),
-                /* force_no_backtrace */ false,
-            )
         }
     }
 }

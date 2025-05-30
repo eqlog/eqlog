@@ -37,7 +37,7 @@ use core::ptr::{self, NonNull};
 use core::slice::SliceIndex;
 
 use crate::alloc::{Allocator, Layout};
-use crate::boxed::Box;
+use std::boxed::Box;
 
 const B: usize = 6;
 pub(super) const CAPACITY: usize = 2 * B - 1;

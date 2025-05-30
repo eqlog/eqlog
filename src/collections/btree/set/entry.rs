@@ -38,11 +38,10 @@ use crate::alloc::{Allocator, Global};
 /// println!("Our BTreeSet: {:?}", set);
 /// assert!(set.iter().eq(&["a", "b", "c", "d", "e"]));
 /// ```
-#[unstable(feature = "btree_set_entry", issue = "133549")]
 pub enum Entry<
     'a,
     T,
-    #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator + Clone = Global,
+    A: Allocator + Clone = Global,
 > {
     /// An occupied entry.
     ///
@@ -60,7 +59,6 @@ pub enum Entry<
     ///     Entry::Occupied(_) => { }
     /// }
     /// ```
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     Occupied(OccupiedEntry<'a, T, A>),
 
     /// A vacant entry.
@@ -79,11 +77,9 @@ pub enum Entry<
     ///     Entry::Vacant(_) => { }
     /// }
     /// ```
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     Vacant(VacantEntry<'a, T, A>),
 }
 
-#[unstable(feature = "btree_set_entry", issue = "133549")]
 impl<T: Debug + Ord, A: Allocator + Clone> Debug for Entry<'_, T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -129,16 +125,14 @@ impl<T: Debug + Ord, A: Allocator + Clone> Debug for Entry<'_, T, A> {
 /// assert_eq!(set.get(&"c"), None);
 /// assert_eq!(set.len(), 2);
 /// ```
-#[unstable(feature = "btree_set_entry", issue = "133549")]
 pub struct OccupiedEntry<
     'a,
     T,
-    #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator + Clone = Global,
+    A: Allocator + Clone = Global,
 > {
     pub(super) inner: map::OccupiedEntry<'a, T, SetValZST, A>,
 }
 
-#[unstable(feature = "btree_set_entry", issue = "133549")]
 impl<T: Debug + Ord, A: Allocator + Clone> Debug for OccupiedEntry<'_, T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OccupiedEntry").field("value", self.get()).finish()
@@ -171,16 +165,14 @@ impl<T: Debug + Ord, A: Allocator + Clone> Debug for OccupiedEntry<'_, T, A> {
 /// }
 /// assert!(set.contains("b") && set.len() == 2);
 /// ```
-#[unstable(feature = "btree_set_entry", issue = "133549")]
 pub struct VacantEntry<
     'a,
     T,
-    #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator + Clone = Global,
+    A: Allocator + Clone = Global,
 > {
     pub(super) inner: map::VacantEntry<'a, T, SetValZST, A>,
 }
 
-#[unstable(feature = "btree_set_entry", issue = "133549")]
 impl<T: Debug + Ord, A: Allocator + Clone> Debug for VacantEntry<'_, T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("VacantEntry").field(self.get()).finish()
@@ -203,7 +195,6 @@ impl<'a, T: Ord, A: Allocator + Clone> Entry<'a, T, A> {
     /// assert_eq!(entry.get(), &"horseyland");
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn insert(self) -> OccupiedEntry<'a, T, A> {
         match self {
             Occupied(entry) => entry,
@@ -232,7 +223,6 @@ impl<'a, T: Ord, A: Allocator + Clone> Entry<'a, T, A> {
     /// assert_eq!(set.len(), 1);
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn or_insert(self) {
         if let Vacant(entry) = self {
             entry.insert();
@@ -257,7 +247,6 @@ impl<'a, T: Ord, A: Allocator + Clone> Entry<'a, T, A> {
     /// assert_eq!(set.entry("horseland").get(), &"horseland");
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn get(&self) -> &T {
         match *self {
             Occupied(ref entry) => entry.get(),
@@ -285,7 +274,6 @@ impl<'a, T: Ord, A: Allocator + Clone> OccupiedEntry<'a, T, A> {
     /// }
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn get(&self) -> &T {
         self.inner.key()
     }
@@ -310,7 +298,6 @@ impl<'a, T: Ord, A: Allocator + Clone> OccupiedEntry<'a, T, A> {
     /// assert_eq!(set.contains("poneyland"), false);
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn remove(self) -> T {
         self.inner.remove_entry().0
     }
@@ -331,7 +318,6 @@ impl<'a, T: Ord, A: Allocator + Clone> VacantEntry<'a, T, A> {
     /// assert_eq!(set.entry("poneyland").get(), &"poneyland");
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn get(&self) -> &T {
         self.inner.key()
     }
@@ -353,7 +339,6 @@ impl<'a, T: Ord, A: Allocator + Clone> VacantEntry<'a, T, A> {
     /// }
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn into_value(self) -> T {
         self.inner.into_key()
     }
@@ -376,7 +361,6 @@ impl<'a, T: Ord, A: Allocator + Clone> VacantEntry<'a, T, A> {
     /// assert!(set.contains("poneyland"));
     /// ```
     #[inline]
-    #[unstable(feature = "btree_set_entry", issue = "133549")]
     pub fn insert(self) {
         self.inner.insert(SetValZST);
     }
