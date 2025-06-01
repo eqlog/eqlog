@@ -1,7 +1,8 @@
-mod unification;
-
 #[doc(hidden)]
-pub use crate::unification::Unification;
+pub mod btree_set;
+mod types;
+#[doc(hidden)]
+pub mod unification;
 
 /// Declare an eqlog module.
 ///

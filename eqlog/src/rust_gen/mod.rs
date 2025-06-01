@@ -41,7 +41,7 @@ fn display_imports() -> impl Display {
             #[allow(unused)]
             use std::fmt;
             #[allow(unused)]
-            use eqlog_runtime::Unification;
+            use eqlog_runtime::unification;
             #[allow(unused)]
             use std::ops::Bound;
             #[allow(unused)]
@@ -188,7 +188,7 @@ fn display_sort_fields(sort: &str) -> impl Display + '_ {
     FmtFn(move |f| {
         let sort_snake = sort.to_case(Snake);
         writedoc! {f, "
-            {sort_snake}_equalities: Unification<{sort}>,
+            {sort_snake}_equalities: unification::Unification,
             {sort_snake}_old: BTreeSet<u32>,
             {sort_snake}_new: BTreeSet<u32>,
             {sort_snake}_weights: Vec<usize>,
@@ -634,8 +634,8 @@ fn display_new_element_fn_internal<'a>(
             /// Adjoins a new element of type [{type_camel}].
             #[allow(dead_code)]
             fn new_{type_snake}_internal(&mut self, {parent_param}) -> {type_camel} {{
-                let old_len = self.{type_snake}_equalities.len();
-                self.{type_snake}_equalities.increase_size_to(old_len + 1);
+                let old_len = unification::len(&self.{type_snake}_equalities);
+                unification::increase_size_to(&mut self.{type_snake}_equalities, old_len + 1);
                 let el = u32::try_from(old_len).unwrap();
 
                 self.{type_snake}_new.insert(el);
@@ -851,8 +851,8 @@ fn display_enum_cases_fn<'a>(
         writedoc! {f, "
             /// Returns an iterator over ways to destructure an [{enum_name_camel}] element.
             #[allow(dead_code)]
-            pub fn {enum_name_snake}_cases<'a>(&'a self, el: {enum_name_camel}) -> impl 'a + Iterator<Item = {enum_name_camel}Case> {{
-            let el = self.{enum_name_snake}_equalities.root_const(el);
+            pub fn {enum_name_snake}_cases<'a>(&'a self, mut el: {enum_name_camel}) -> impl 'a + Iterator<Item = {enum_name_camel}Case> {{
+            el = unification::root_const(&self.{enum_name_snake}_equalities, el.into()).into();
             #[allow(unused_parens)]
             [].into_iter(){ctor_value_iters}
             }}
@@ -878,8 +878,8 @@ fn display_equate_elements<'a>(
             /// Enforces the equality `lhs = rhs`.
             #[allow(dead_code)]
             pub fn equate_{type_snake}(&mut self, mut lhs: {type_camel}, mut rhs: {type_camel}) {{
-                lhs = self.{type_snake}_equalities.root(lhs);
-                rhs = self.{type_snake}_equalities.root(rhs);
+                lhs = unification::root(&mut self.{type_snake}_equalities, lhs.into()).into();
+                rhs = unification::root(&mut self.{type_snake}_equalities, rhs.into()).into();
                 if lhs == rhs {{
                     return;
                 }}
@@ -893,7 +893,7 @@ fn display_equate_elements<'a>(
                         (rhs, lhs)
                     }};
 
-                self.{type_snake}_equalities.union_roots_into(child, root);
+                unification::union_roots_into(&mut self.{type_snake}_equalities, child.into(), root.into());
                 
                 self.{type_snake}_old.remove(&child.0);
                 self.{type_snake}_new.remove(&child.0);
@@ -910,10 +910,10 @@ fn display_root_fn(sort: &str) -> impl Display + '_ {
             /// Returns the canonical representative of the equivalence class of `el`.
             #[allow(dead_code)]
             pub fn root_{sort_snake}(&self, el: {sort}) -> {sort} {{
-                if el.0 as usize >= self.{sort_snake}_equalities.len() {{
+                if el.0 as usize >= unification::len(&self.{sort_snake}_equalities) {{
                     el
                 }} else {{
-                    self.{sort_snake}_equalities.root_const(el)
+                    unification::root_const(&self.{sort_snake}_equalities, el.into()).into()
                 }}
             }}
         "}
@@ -1579,7 +1579,11 @@ fn display_new_fn<'a>(
             let type_snake = display_type(typ, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
-            writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
+            writeln!(
+                f,
+                "{type_snake}_equalities: unification::new_unification(),"
+            )
+            .unwrap();
             writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
             writeln!(f, "{type_snake}_new: BTreeSet::new(),").unwrap();
             writeln!(f, "{type_snake}_old: BTreeSet::new(),").unwrap();

@@ -77,6 +77,7 @@ fn display_table_struct<'a>(
         let rel_camel = rel_snake.to_case(UpperCamel);
 
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
 
         let row_type = display_rel_row_type(rel, eqlog).to_string();
         let row_type = row_type.as_str();
@@ -86,7 +87,7 @@ fn display_table_struct<'a>(
             .map(|index| {
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
-                    write!(f, "index_{index_name}: BTreeSet<{row_type}>,")
+                    write!(f, "index_{index_name}: btree_set::BTreeSet{arity_len},")
                 })
             })
             .format("\n");
@@ -109,7 +110,6 @@ fn display_table_struct<'a>(
             .format("\n");
 
         writedoc! {f, "
-            #[derive(Clone, Hash, Debug)]
             pub struct {rel_camel}Table {{
             {index_fields}
 
@@ -179,16 +179,17 @@ fn display_table_new_fn<'a>(
             .to_string()
             .to_case(Snake);
         let rel_camel = rel_snake.to_case(UpperCamel);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
         let index_fields = indices
             .iter()
             .map(|index| {
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
-                    write!(f, "index_{index_name}: BTreeSet::new(),")
+                    write!(f, "index_{index_name}: btree_set::new{arity_len}(),")
                 })
             })
             .format("\n");
-        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
         let types: BTreeSet<Type> = arity.iter().copied().collect();
         let element_index_fields = types
             .iter()
@@ -433,7 +434,7 @@ fn display_table_drop_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub unsafe {signature} {{
-            drop(Box::from_raw(ptr.as_ptr()));
+            drop(unsafe {{ Box::from_raw(ptr.as_ptr()) }});
             }}
         "#}
     })
@@ -538,9 +539,10 @@ fn display_contains_fn<'a>(
                 FmtFn(|f| {
                     let index_name = IndexName(index);
                     let order_name = OrderName(&index.order);
+                    let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                     write!(
                         f,
-                        "table.index_{index_name}.contains(&permute{order_name}(row))"
+                        "btree_set::contains{arity_len}(&table.index_{index_name}, &permute{order_name}(row))"
                     )
                 })
             })
@@ -648,15 +650,17 @@ fn display_insert_fn<'a>(
                     let index_name = IndexName(index);
                     let order = OrderName(&index.order);
                     if index.diagonals.is_empty() {
+                        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                         writedoc! {f, "
-                            table.index_{index_name}.insert(permute{order}(row));"
+                            btree_set::insert{arity_len}(&mut table.index_{index_name}, permute{order}(row));"
                         }
                     } else {
                         let check = DiagonalCheck(&index.diagonals);
+                        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                         writedoc! {f, "
                             let check = {check};
                             if check {{
-                                table.index_{index_name}.insert(permute{order}(row));
+                                btree_set::insert{arity_len}(&mut table.index_{index_name}, permute{order}(row));
                             }}
                         "}
                     }
@@ -665,6 +669,7 @@ fn display_insert_fn<'a>(
             .format("\n");
 
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
         let element_inserts = arity
             .iter()
             .copied()
@@ -694,10 +699,10 @@ fn display_insert_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub extern "Rust" {signature} {{
-            if table.index_{primary_old}.contains(&permute{primary_old_order}(row)) {{
+            if btree_set::contains{arity_len}(&table.index_{primary_old}, &permute{primary_old_order}(row)) {{
             return false;
             }}
-            if !table.index_{primary_new}.insert(permute{primary_new_order}(row)) {{
+            if !btree_set::insert{arity_len}(&mut table.index_{primary_new}, permute{primary_new_order}(row)) {{
             return false;
             }}
 
@@ -718,6 +723,9 @@ fn display_remove_from_row_indices_fn<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
+
         let row_type = display_rel_row_type(rel, eqlog).to_string();
         let rel_camel = display_rel(rel, eqlog, identifiers)
             .to_string()
@@ -758,15 +766,17 @@ fn display_remove_from_row_indices_fn<'a>(
                     let index_name = IndexName(index);
                     let order = OrderName(&index.order);
                     if index.diagonals.is_empty() {
+                        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                         writedoc! {f, "
-                            table.index_{index_name}.remove(&permute{order}(row));"
+                            btree_set::remove{arity_len}(&mut table.index_{index_name}, &permute{order}(row));"
                         }
                     } else {
                         let check = DiagonalCheck(&index.diagonals);
+                        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                         writedoc! {f, "
                         let check = {check};
                         if check {{
-                            table.index_{index_name}.remove(&permute{order}(row));
+                            btree_set::remove{arity_len}(&mut table.index_{index_name}, &permute{order}(row));
                         }}
                     "}
                     }
@@ -783,15 +793,17 @@ fn display_remove_from_row_indices_fn<'a>(
                     let index_name = IndexName(index);
                     let order = OrderName(&index.order);
                     if index.diagonals.is_empty() {
+                        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                         writedoc! {f, "
-                            table.index_{index_name}.remove(&permute{order}(row));"
+                            btree_set::remove{arity_len}(&mut table.index_{index_name}, &permute{order}(row));"
                         }
                     } else {
                         let check = DiagonalCheck(&index.diagonals);
+                        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                         writedoc! {f, "
                         let check = {check};
                         if check {{
-                            table.index_{index_name}.remove(&permute{order}(row));
+                            btree_set::remove{arity_len}(&mut table.index_{index_name}, &permute{order}(row));
                         }}
                     "}
                     }
@@ -805,10 +817,10 @@ fn display_remove_from_row_indices_fn<'a>(
         writedoc! {f, "
             #[allow(unused)]
             fn remove_from_row_indices(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
-                if table.index_{primary_new}.remove(&permute{primary_new_order}(row)) {{
+                if btree_set::remove{arity_len}(&mut table.index_{primary_new}, &permute{primary_new_order}(row)) {{
                     {other_new_removes}
                     true
-                }} else if table.index_{primary_old}.remove(&permute{primary_old_order}(row)) {{
+                }} else if btree_set::remove{arity_len}(&mut table.index_{primary_old}, &permute{primary_old_order}(row)) {{
                     {other_old_removes}
                     true
                 }} else {{
@@ -935,6 +947,9 @@ fn display_move_new_to_old_fn<'a>(
     FmtFn(move |f| {
         let fn_name = display_move_new_to_old_fn_name(rel, eqlog, identifiers);
         let signature = display_move_new_to_old_fn_signature(rel, eqlog, identifiers);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
+
         let primary_new = indices
             .iter()
             .copied()
@@ -960,13 +975,13 @@ fn display_move_new_to_old_fn<'a>(
                     let index = IndexName(index);
                     if diagonals.is_empty() {
                         writedoc! {f, "
-                            table.index_{index}.insert(permute{index_order}(row));
+                            btree_set::insert{arity_len}(&mut table.index_{index}, permute{index_order}(row));
                         "}
                     } else {
                         let check = DiagonalCheck(&diagonals);
                         writedoc! {f, "
                             if {check} {{
-                            table.index_{index}.insert(permute{index_order}(row));
+                            btree_set::insert{arity_len}(&mut table.index_{index}, permute{index_order}(row));
                             }}
                         "}
                     }
@@ -982,7 +997,7 @@ fn display_move_new_to_old_fn<'a>(
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
                     writedoc! {f, "
-                        table.index_{index_name}.clear();
+                        btree_set::clear{arity_len}(&mut table.index_{index_name});
                     "}
                 })
             })
@@ -991,9 +1006,13 @@ fn display_move_new_to_old_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub extern "Rust" {signature} {{
-            for row in table.index_{primary_new}.iter().copied() {{
-            let row = permute_inverse{primary_new_order}(row);
-            {old_inserts}
+            let mut iter = btree_set::iter{arity_len}(&table.index_{primary_new});
+            let mut row_opt = btree_set::iter_next{arity_len}(&mut iter);
+            
+            while let Some(row_ref) = row_opt {{
+                let row = permute_inverse{primary_new_order}(*row_ref);
+                {old_inserts}
+                row_opt = btree_set::iter_next{arity_len}(&mut iter);
             }}
 
             {clear_new_indices}
@@ -1037,6 +1056,8 @@ fn display_has_new_data_fn<'a>(
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
         let fn_name = display_has_new_data_fn_name(rel, eqlog, identifiers);
         let signature = display_has_new_data_fn_signature(rel, eqlog, identifiers);
         let primary_new = indices
@@ -1055,7 +1076,7 @@ fn display_has_new_data_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub extern "Rust" {signature} {{
-            !table.index_{primary_new}.is_empty()
+            !btree_set::is_empty{arity_len}(&table.index_{primary_new})
             }}
         "#}
     })
@@ -1072,10 +1093,18 @@ fn display_iter_ty<'a>(
             .to_string()
             .to_case(UpperCamel);
 
-        let row_type = display_rel_row_type(rel, eqlog).to_string();
-        let row_type = row_type.as_str();
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
+
         let fields = (0..index_num)
-            .map(|_| FmtFn(move |f| write!(f, "btree_set::Range<'a, {row_type}>, ")))
+            .map(|_| {
+                FmtFn(move |f| {
+                    write!(
+                        f,
+                        "eqlog_runtime::btree_set::BTreeSetRange{arity_len}<'a>, "
+                    )
+                })
+            })
             .format("");
 
         writedoc! { f, "
@@ -1185,10 +1214,11 @@ fn display_iter_fn<'a>(
                 let open_args_max = (0..open_arg_len).map(|_| "u32::MAX, ").format("");
 
                 FmtFn(move |f| {
+                    let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
                     writedoc! {f, "
                         let lower: {row_type} = [{fixed_args}{open_args_min}];
                         let upper: {row_type} = [{fixed_args}{open_args_max}];
-                        let range{i} = table.index_{index_name}.range(lower..=upper);
+                        let range{i} = btree_set::range{arity_len}(&table.index_{index_name}, std::ops::Bound::Included(lower), std::ops::Bound::Included(upper));
                     "}
                 })
             })
@@ -1250,6 +1280,9 @@ fn display_iter_next_fn<'a>(
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
+
         let fn_name = display_iter_next_fn_name(query_spec, rel, eqlog, identifiers);
         let signature =
             display_iter_next_fn_signature(query_spec, indices, rel, eqlog, identifiers);
@@ -1261,7 +1294,7 @@ fn display_iter_next_fn<'a>(
                 FmtFn(move |f| {
                     let order_name = OrderName(index.order.as_slice());
                     writedoc! {f, "
-                        if let Some(permuted_row) = it.{i}.next() {{
+                        if let Some(permuted_row) = btree_set::range_next{arity_len}(&mut it.{i}) {{
                             return Some(permute_inverse{order_name}(*permuted_row));
                         }}
                     "}
@@ -1390,11 +1423,9 @@ pub fn display_table_lib<'a>(
         let weight_static = display_weight_static(rel, &indices, eqlog, identifiers, symbol_prefix);
 
         writedoc! {f, "
-            use std::collections::BTreeSet;
+            use eqlog_runtime::btree_set;
             #[allow(unused)]
             use std::collections::BTreeMap;
-
-            use std::collections::btree_set;
             #[allow(unused)]
             use std::collections::btree_map;
 

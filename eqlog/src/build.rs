@@ -397,8 +397,14 @@ fn compile_component_rlib(
     rustc_command
         .arg(component_src_path)
         .arg("--crate-type=rlib")
+        .arg("--edition=2024")
         .arg("-o")
         .arg(&rlib_path)
+        .arg("--extern")
+        .arg(format!(
+            "eqlog_runtime={}",
+            component_config.runtime_rlib_path.display()
+        ))
         .arg("-C")
         .arg("embed-bitcode=no")
         .arg("-C")
@@ -571,6 +577,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 pub struct ComponentConfig {
     pub component_out_dir: PathBuf,
     pub rustc_path: PathBuf,
+    pub runtime_rlib_path: PathBuf,
     pub debug: bool,
     pub opt_level: String,
 }
@@ -616,12 +623,10 @@ impl Config {
         let mut final_out_dir = out_dir.clone();
         final_out_dir.push(workspace_root_to_in_dir);
 
-        // Get rustc path from environment
         let rustc_path: PathBuf = env::var_os("RUSTC")
             .context("Reading RUSTC environment variable")?
             .into();
 
-        // Get debug setting from environment
         let debug_var = env::var("DEBUG").context("Reading DEBUG env var")?;
         let debug = match debug_var.as_str() {
             "true" => true,
@@ -631,8 +636,11 @@ impl Config {
             }
         };
 
-        // Get optimization level from environment
         let opt_level = env::var("OPT_LEVEL").context("Reading OPT_LEVEL env var")?;
+
+        let runtime_rlib_path: PathBuf = env::var("DEP_EQLOG_RUNTIME_RLIB_PATH")
+            .context("Reading EQLOG_RUNTIME_RLIB environment variable")?
+            .into();
 
         Ok(Config {
             in_dir,
@@ -642,6 +650,7 @@ impl Config {
                 rustc_path,
                 debug,
                 opt_level,
+                runtime_rlib_path,
             }),
         })
     }
