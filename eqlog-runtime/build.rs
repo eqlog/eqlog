@@ -45,8 +45,10 @@ fn compile_lib_impl(
 
     let mut rustc_command = Command::new(rustc_path);
     rustc_command
+        .env("RUSTC_BOOTSTRAP", "1")
         .arg(lib_rs_path)
         .arg("--crate-name=eqlog_runtime_impl")
+        .arg("--edition=2024")
         .arg("--crate-type=rlib")
         .arg("-o")
         .arg(&lib_impl_rlib_path)
@@ -55,9 +57,7 @@ fn compile_lib_impl(
         .arg("-C")
         .arg("embed-bitcode=no")
         .arg("-C")
-        .arg(format!("opt-level={}", opt_level))
-        .arg("-C")
-        .arg("codegen-units=1");
+        .arg(format!("opt-level={}", opt_level));
 
     if debug {
         rustc_command.arg("-g");
