@@ -65,15 +65,10 @@
 )]
 // Lints:
 #![deny(unsafe_op_in_unsafe_fn)]
-#![warn(deprecated_in_future)]
-#![warn(missing_debug_implementations)]
-#![warn(missing_docs)]
 #![allow(explicit_outlives_requirements)]
 #![allow(internal_features)]
 #![allow(rustdoc::redundant_explicit_links)]
-#![warn(rustdoc::unescaped_backticks)]
 #![deny(ffi_unwind_calls)]
-#![warn(unreachable_pub)]
 //
 // Library features:
 // tidy-alphabetical-start
