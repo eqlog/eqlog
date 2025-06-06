@@ -1,36 +1,9 @@
 pub use crate::types::{
-    BTreeSet0,
-    BTreeSet1,
-    BTreeSet2,
-    BTreeSet3,
-    BTreeSet4,
-    BTreeSet5,
-    BTreeSet6,
-    BTreeSet7,
-    BTreeSet8,
-    BTreeSet9,
-
-    BTreeSetIter0,
-    BTreeSetIter1,
-    BTreeSetIter2,
-    BTreeSetIter3,
-    BTreeSetIter4,
-    BTreeSetIter5,
-    BTreeSetIter6,
-    BTreeSetIter7,
-    BTreeSetIter8,
-    BTreeSetIter9,
-
-    BTreeSetRange0,
-    BTreeSetRange1,
-    BTreeSetRange2,
-    BTreeSetRange3,
-    BTreeSetRange4,
-    BTreeSetRange5,
-    BTreeSetRange6,
-    BTreeSetRange7,
-    BTreeSetRange8,
-    BTreeSetRange9,
+    BTreeSet0, BTreeSet1, BTreeSet2, BTreeSet3, BTreeSet4, BTreeSet5, BTreeSet6, BTreeSet7,
+    BTreeSet8, BTreeSet9, BTreeSetIter0, BTreeSetIter1, BTreeSetIter2, BTreeSetIter3,
+    BTreeSetIter4, BTreeSetIter5, BTreeSetIter6, BTreeSetIter7, BTreeSetIter8, BTreeSetIter9,
+    BTreeSetRange0, BTreeSetRange1, BTreeSetRange2, BTreeSetRange3, BTreeSetRange4, BTreeSetRange5,
+    BTreeSetRange6, BTreeSetRange7, BTreeSetRange8, BTreeSetRange9,
 };
 use std::collections::BTreeSet;
 use std::ops::Bound;
@@ -364,43 +337,83 @@ pub fn iter_next9<'a>(iter: &mut BTreeSetIter9<'a>) -> Option<&'a [u32; 9]> {
 }
 
 #[unsafe(export_name = "eqlog_runtime_btree_set_range0")]
-pub fn range0<'a>(set: &'a BTreeSet0, lower: Bound<[u32; 0]>, upper: Bound<[u32; 0]>) -> BTreeSetRange0<'a> {
+pub fn range0<'a>(
+    set: &'a BTreeSet0,
+    lower: Bound<[u32; 0]>,
+    upper: Bound<[u32; 0]>,
+) -> BTreeSetRange0<'a> {
     BTreeSetRange0(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range1")]
-pub fn range1<'a>(set: &'a BTreeSet1, lower: Bound<[u32; 1]>, upper: Bound<[u32; 1]>) -> BTreeSetRange1<'a> {
+pub fn range1<'a>(
+    set: &'a BTreeSet1,
+    lower: Bound<[u32; 1]>,
+    upper: Bound<[u32; 1]>,
+) -> BTreeSetRange1<'a> {
     BTreeSetRange1(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range2")]
-pub fn range2<'a>(set: &'a BTreeSet2, lower: Bound<[u32; 2]>, upper: Bound<[u32; 2]>) -> BTreeSetRange2<'a> {
+pub fn range2<'a>(
+    set: &'a BTreeSet2,
+    lower: Bound<[u32; 2]>,
+    upper: Bound<[u32; 2]>,
+) -> BTreeSetRange2<'a> {
     BTreeSetRange2(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range3")]
-pub fn range3<'a>(set: &'a BTreeSet3, lower: Bound<[u32; 3]>, upper: Bound<[u32; 3]>) -> BTreeSetRange3<'a> {
+pub fn range3<'a>(
+    set: &'a BTreeSet3,
+    lower: Bound<[u32; 3]>,
+    upper: Bound<[u32; 3]>,
+) -> BTreeSetRange3<'a> {
     BTreeSetRange3(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range4")]
-pub fn range4<'a>(set: &'a BTreeSet4, lower: Bound<[u32; 4]>, upper: Bound<[u32; 4]>) -> BTreeSetRange4<'a> {
+pub fn range4<'a>(
+    set: &'a BTreeSet4,
+    lower: Bound<[u32; 4]>,
+    upper: Bound<[u32; 4]>,
+) -> BTreeSetRange4<'a> {
     BTreeSetRange4(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range5")]
-pub fn range5<'a>(set: &'a BTreeSet5, lower: Bound<[u32; 5]>, upper: Bound<[u32; 5]>) -> BTreeSetRange5<'a> {
+pub fn range5<'a>(
+    set: &'a BTreeSet5,
+    lower: Bound<[u32; 5]>,
+    upper: Bound<[u32; 5]>,
+) -> BTreeSetRange5<'a> {
     BTreeSetRange5(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range6")]
-pub fn range6<'a>(set: &'a BTreeSet6, lower: Bound<[u32; 6]>, upper: Bound<[u32; 6]>) -> BTreeSetRange6<'a> {
+pub fn range6<'a>(
+    set: &'a BTreeSet6,
+    lower: Bound<[u32; 6]>,
+    upper: Bound<[u32; 6]>,
+) -> BTreeSetRange6<'a> {
     BTreeSetRange6(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range7")]
-pub fn range7<'a>(set: &'a BTreeSet7, lower: Bound<[u32; 7]>, upper: Bound<[u32; 7]>) -> BTreeSetRange7<'a> {
+pub fn range7<'a>(
+    set: &'a BTreeSet7,
+    lower: Bound<[u32; 7]>,
+    upper: Bound<[u32; 7]>,
+) -> BTreeSetRange7<'a> {
     BTreeSetRange7(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range8")]
-pub fn range8<'a>(set: &'a BTreeSet8, lower: Bound<[u32; 8]>, upper: Bound<[u32; 8]>) -> BTreeSetRange8<'a> {
+pub fn range8<'a>(
+    set: &'a BTreeSet8,
+    lower: Bound<[u32; 8]>,
+    upper: Bound<[u32; 8]>,
+) -> BTreeSetRange8<'a> {
     BTreeSetRange8(set.0.range((lower, upper)))
 }
 #[unsafe(export_name = "eqlog_runtime_btree_set_range9")]
-pub fn range9<'a>(set: &'a BTreeSet9, lower: Bound<[u32; 9]>, upper: Bound<[u32; 9]>) -> BTreeSetRange9<'a> {
+pub fn range9<'a>(
+    set: &'a BTreeSet9,
+    lower: Bound<[u32; 9]>,
+    upper: Bound<[u32; 9]>,
+) -> BTreeSetRange9<'a> {
     BTreeSetRange9(set.0.range((lower, upper)))
 }
 
