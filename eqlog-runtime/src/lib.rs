@@ -175,7 +175,7 @@
 // from other crates, but since this can only appear for lang items, it doesn't seem worth fixing.
 #![feature(intra_doc_pointers)]
 
-mod collections;
+pub mod collections;
 // These are there so that code in `collections` can use them via the crate root:
 use std::alloc;
 use std::boxed;

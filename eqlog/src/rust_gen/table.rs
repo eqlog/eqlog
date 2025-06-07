@@ -1390,13 +1390,13 @@ pub fn display_table_lib<'a>(
         let weight_static = display_weight_static(rel, &indices, eqlog, identifiers, symbol_prefix);
 
         writedoc! {f, "
-            use std::collections::BTreeSet;
+            use eqlog_runtime::collections::BTreeSet;
             #[allow(unused)]
-            use std::collections::BTreeMap;
+            use eqlog_runtime::collections::BTreeMap;
 
-            use std::collections::btree_set;
+            use eqlog_runtime::collections::btree_set;
             #[allow(unused)]
-            use std::collections::btree_map;
+            use eqlog_runtime::collections::btree_map;
 
             use std::ptr::NonNull;
 
