@@ -1,21 +1,72 @@
-pub use crate::types::Unification;
-use std::fmt::{self, Formatter};
+use std::collections::BTreeMap;
+use std::fmt;
 
-unsafe extern "Rust" {
-    #[link_name = "eqlog_runtime_new_unification"]
-    pub safe fn new_unification() -> Unification;
-    #[link_name = "eqlog_runtime_root"]
-    pub safe fn root(unification: &mut Unification, el: u32) -> u32;
-    #[link_name = "eqlog_runtime_root_const"]
-    pub safe fn root_const(unification: &Unification, el: u32) -> u32;
-    #[link_name = "eqlog_runtime_union_roots_into"]
-    pub safe fn union_roots_into(unification: &mut Unification, lhs: u32, rhs: u32);
-    #[link_name = "eqlog_runtime_increase_size_to"]
-    pub safe fn increase_size_to(unification: &mut Unification, new_size: usize);
-    #[link_name = "eqlog_runtime_len"]
-    pub safe fn len(unification: &Unification) -> usize;
-    #[link_name = "eqlog_runtime_clone_unification"]
-    pub safe fn clone_unification(unification: &Unification) -> Unification;
-    #[link_name = "eqlog_runtime_fmt_unification"]
-    pub safe fn fmt_unification(unification: &Unification, f: &mut Formatter<'_>) -> fmt::Result;
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+pub struct Unification<T> {
+    parents: Vec<T>,
+    sizes: Vec<u32>,
 }
+
+impl<T: Copy + PartialEq + From<u32> + Into<u32>> Unification<T> {
+    pub fn new() -> Self {
+        Unification {
+            parents: Vec::new(),
+            sizes: Vec::new(),
+        }
+    }
+    pub fn root(&mut self, mut el: T) -> T {
+        let mut parent = self.parents[el.into() as usize];
+        while el != parent {
+            self.parents[el.into() as usize] = self.parents[parent.into() as usize];
+            el = parent;
+            parent = self.parents[parent.into() as usize];
+        }
+        el
+    }
+    pub fn root_const(&self, mut el: T) -> T {
+        let mut parent = self.parents[el.into() as usize];
+        while el != parent {
+            el = parent;
+            parent = self.parents[el.into() as usize];
+        }
+        el
+    }
+    pub fn union_roots_into(&mut self, lhs: T, rhs: T) {
+        assert!(lhs == self.root(lhs));
+        assert!(rhs == self.root(rhs));
+        self.parents[lhs.into() as usize] = rhs;
+    }
+    pub fn increase_size_to(&mut self, new_size: usize) {
+        assert!(new_size >= self.len());
+        assert!((u32::MAX as usize) > new_size);
+        for i in self.len()..new_size {
+            self.parents.push(T::from(i as u32));
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.parents.len()
+    }
+}
+
+impl<T: Copy + PartialEq + From<u32> + Into<u32> + PartialOrd + Ord> Unification<T> {
+    pub fn classes(&self) -> BTreeMap<T, Vec<T>> {
+        let mut result = BTreeMap::new();
+        for p in 0..self.parents.len() {
+            let p = T::from(p as u32);
+            let root = self.root_const(p);
+
+            // TODO: Eliminate one search once try_insert is stabilized.
+            if !result.contains_key(&root) {
+                result.insert(root, Vec::new());
+            }
+            let class_els = result.get_mut(&root).unwrap();
+
+            if p != root {
+                class_els.push(p);
+            }
+        }
+        result
+    }
+}
+
+impl<T: Copy + PartialEq + From<u32> + Into<u32> + PartialOrd + Ord + fmt::Display> Unification<T> {}

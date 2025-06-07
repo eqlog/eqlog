@@ -181,15 +181,6 @@ use std::alloc;
 use std::boxed;
 use std::vec;
 
-mod types;
-
-#[doc(hidden)]
-pub mod btree_set;
-mod btree_set_impl;
-#[doc(hidden)]
-pub mod unification;
-mod unification_impl;
-
 // This is here to support our cursed way of finding the eqlog runtime rlib file in the cargo
 // target directory. Cargo does not let build scripts know where it put rlib files of dependencies.
 // The build script in a crate that compiles eqlog modules must know where the rlib is though (at
@@ -204,6 +195,11 @@ mod unification_impl;
 // for the value of the TAG variable below.
 #[used]
 static TAG: &'static str = "EQLOG_RUNTIME_LIBRARY_TAG";
+
+mod unification;
+
+#[doc(hidden)]
+pub use crate::unification::Unification;
 
 /// Declare an eqlog module.
 ///

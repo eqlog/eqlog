@@ -19,7 +19,6 @@ exclude = [
   "examples/semilattice",
 	"cwf-theory",
 	"exp-epa",
-	"eqlog-runtime/eqlog-alloc",
 ]
 
 [workspace.package]
