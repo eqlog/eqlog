@@ -6,6 +6,9 @@ use eqlog_eqlog::*;
 pub struct FlatVar(pub usize);
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatRangeVar(pub usize);
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatFuncName(pub usize);
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -29,6 +32,12 @@ pub struct FlatIfStmtRelation {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatIfStmtRange {
+    pub range_var: FlatRangeVar,
+    pub args: Vec<FlatVar>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtType {
     pub var: FlatVar,
     pub age: QueryAge,
@@ -38,7 +47,22 @@ pub struct FlatIfStmtType {
 pub enum FlatIfStmt {
     Equal(FlatStmtEqual),
     Relation(FlatIfStmtRelation),
+    Range(FlatIfStmtRange),
     Type(FlatIfStmtType),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum FlatRangeSource {
+    FromRel(Rel),
+    FromRange(FlatRangeVar),
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatDefineRangeStmt {
+    pub defined_var: FlatRangeVar,
+    pub included_lower: Vec<FlatVar>,
+    pub included_upper: Vec<FlatVar>,
+    pub source: FlatRangeSource,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -63,6 +87,7 @@ pub struct FlatNonSurjThenStmt {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatStmt {
     If(FlatIfStmt),
+    DefineRange(FlatDefineRangeStmt),
     SurjThen(FlatSurjThenStmt),
     NonSurjThen(FlatNonSurjThenStmt),
     Call {
@@ -96,6 +121,13 @@ impl FlatIfStmtRelation {
     }
 }
 
+impl FlatIfStmtRange {
+    pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
+        let FlatIfStmtRange { range_var: _, args } = self;
+        args.iter().copied()
+    }
+}
+
 impl FlatIfStmtType {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
         let FlatIfStmtType { var, age: _ } = self;
@@ -112,6 +144,9 @@ impl FlatIfStmt {
             }
             FlatIfStmt::Relation(rel) => {
                 result.extend(rel.iter_vars());
+            }
+            FlatIfStmt::Range(range) => {
+                result.extend(range.iter_vars());
             }
             FlatIfStmt::Type(typ) => {
                 result.extend(typ.iter_vars());
@@ -160,6 +195,14 @@ impl FlatStmt {
         match self {
             FlatStmt::If(if_stmt) => {
                 vars.extend(if_stmt.iter_vars());
+            }
+            FlatStmt::DefineRange(define_range_stmt) => {
+                vars.extend(define_range_stmt.included_lower.iter().copied());
+                vars.extend(define_range_stmt.included_upper.iter().copied());
+                match &define_range_stmt.source {
+                    FlatRangeSource::FromRel(_) => {}
+                    FlatRangeSource::FromRange(_) => {}
+                }
             }
             FlatStmt::SurjThen(surj_then_stmt) => {
                 vars.extend(surj_then_stmt.iter_vars());

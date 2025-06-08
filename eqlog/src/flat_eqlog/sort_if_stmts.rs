@@ -112,6 +112,7 @@ fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmt
     let age = match stmt {
         FlatIfStmt::Equal(_) => QueryAge::All,
         FlatIfStmt::Relation(FlatIfStmtRelation { age, .. }) => *age,
+        FlatIfStmt::Range(_) => todo!(),
         FlatIfStmt::Type(FlatIfStmtType { age, .. }) => *age,
     };
     let new_variables = stmt
@@ -149,6 +150,7 @@ fn sort_if_block<'a>(if_stmts: &mut [FlatIfStmt], fixed_vars: &mut BTreeSet<Flat
 fn if_stmt(stmt: &FlatStmt) -> Option<&FlatIfStmt> {
     match stmt {
         FlatStmt::If(if_stmt) => Some(if_stmt),
+        FlatStmt::DefineRange(_) => todo!(),
         FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => None,
     }
 }
@@ -185,6 +187,7 @@ fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatV
                     FlatStmt::If(_) => {
                         panic!("An if statement should not occur in a non-if stmt group")
                     }
+                    FlatStmt::DefineRange(_) => todo!(),
                     FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => {
                         fixed_vars.extend(stmt.iter_vars());
                     }

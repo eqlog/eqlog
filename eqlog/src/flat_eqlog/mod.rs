@@ -108,6 +108,7 @@ fn collect_used_rels(rule: &FlatRule, eqlog: &Eqlog) -> Vec<Rel> {
                         used_rels.insert(stmt.rel);
                     }
                     FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => {}
+                    FlatIfStmt::Range(_) => todo!(),
                 },
                 FlatStmt::SurjThen(stmt) => match stmt {
                     FlatSurjThenStmt::Relation(stmt) => {
@@ -119,6 +120,7 @@ fn collect_used_rels(rule: &FlatRule, eqlog: &Eqlog) -> Vec<Rel> {
                     used_rels.insert(eqlog.func_rel(stmt.func).unwrap());
                 }
                 FlatStmt::Call { .. } => {}
+                FlatStmt::DefineRange(_) => todo!(),
             }
         }
     }
@@ -135,6 +137,7 @@ fn collect_non_surj_then_queries<'a>(
         for stmt in func.body.iter() {
             match stmt {
                 FlatStmt::If(_) | FlatStmt::SurjThen(_) | FlatStmt::Call { .. } => {}
+                FlatStmt::DefineRange(_) => todo!(),
                 FlatStmt::NonSurjThen(non_surj_then_stmt) => {
                     let spec = QuerySpec::eval_func(non_surj_then_stmt.func, eqlog);
                     non_surj_then_queries

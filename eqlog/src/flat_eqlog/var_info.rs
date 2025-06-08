@@ -16,14 +16,7 @@ fn fixed_vars_rec<'a>(
         all_fixed_vars.insert(ByAddress(suffix), current_fixed_vars.clone());
 
         let stmt = &stmts[i];
-        match stmt {
-            FlatStmt::If(_)
-            | FlatStmt::SurjThen(_)
-            | FlatStmt::NonSurjThen(_)
-            | FlatStmt::Call { .. } => {
-                current_fixed_vars.extend(stmt.iter_vars());
-            }
-        }
+        current_fixed_vars.extend(stmt.iter_vars());
     }
     let empty_suffix = &stmts[stmts.len()..];
     all_fixed_vars.insert(ByAddress(empty_suffix), current_fixed_vars);
@@ -113,6 +106,7 @@ pub fn relation_info_rec<'a>(
         match stmt {
             FlatStmt::If(if_stmt) => match if_stmt {
                 FlatIfStmt::Equal(_) | FlatIfStmt::Type(_) => (),
+                FlatIfStmt::Range(_) => todo!(),
                 FlatIfStmt::Relation(rel_if_stmt) => {
                     let fixed_vars = fixed_vars.get(&ByAddress(tail)).unwrap();
                     let FlatIfStmtRelation { rel, args, age } = rel_if_stmt;
@@ -127,6 +121,7 @@ pub fn relation_info_rec<'a>(
                     infos.insert(ByAddress(rel_if_stmt), info);
                 }
             },
+            FlatStmt::DefineRange(_) => todo!(),
             FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => (),
         }
     }

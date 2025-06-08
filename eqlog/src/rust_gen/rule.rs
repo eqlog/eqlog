@@ -248,6 +248,7 @@ fn display_if_stmt_header<'a>(
                 }
                 write!(f, "]) = {iter_next_fn_name}(&mut it) {{")?;
             }
+            FlatIfStmt::Range(_) => todo!(),
             FlatIfStmt::Type(type_stmt) => {
                 let FlatIfStmtType { var, age } = type_stmt;
                 let typ = format!(
@@ -400,6 +401,7 @@ fn display_stmts<'a>(
                     {if_footer}
                 "}?;
             }
+            FlatStmt::DefineRange(_) => todo!(),
             FlatStmt::SurjThen(surj_then) => {
                 let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
