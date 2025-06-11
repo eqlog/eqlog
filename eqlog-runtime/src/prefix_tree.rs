@@ -23,6 +23,14 @@ impl PrefixTree1 {
         self.set.remove(&el0);
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.set.clear();
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = [u32; 1]> + '_ {
         self.set.iter().map(|&x| [x])
     }
@@ -69,6 +77,14 @@ impl PrefixTree2 {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = [u32; 2]> + '_ {
         self.map
             .iter()
@@ -111,6 +127,14 @@ impl PrefixTree3 {
                 self.map.remove(&el0);
             }
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.map.clear();
     }
 
     pub fn iter(&self) -> impl Iterator<Item = [u32; 3]> + '_ {
