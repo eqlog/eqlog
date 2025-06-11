@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use crate::collections::{BTreeMap, BTreeSet};
 
 pub struct PrefixTree1 {
     set: BTreeSet<u32>,
