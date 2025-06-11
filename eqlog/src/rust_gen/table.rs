@@ -433,7 +433,7 @@ fn display_table_drop_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub unsafe {signature} {{
-            drop(Box::from_raw(ptr.as_ptr()));
+            drop(unsafe {{ Box::from_raw(ptr.as_ptr()) }});
             }}
         "#}
     })
@@ -1325,6 +1325,79 @@ fn display_weight_static<'a>(
     })
 }
 
+pub fn display_index_getter_fn_name<'a>(
+    index: &'a IndexSpec,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let age_str = match index.age {
+            IndexAge::New => "new",
+            IndexAge::Old => "old",
+        };
+        let diagonals = index.diagonals.iter().format_with("", |diag, f| {
+            let diag_str = diag.iter().format_with("", |d, f| f(&format_args!("_{d}")));
+            f(&format_args!("_diagonal{diag_str}"))
+        });
+        let order = index
+            .order
+            .iter()
+            .format_with("", |o, f| f(&format_args!("_{o}")));
+        write!(f, "get_index_{rel_snake}_{age_str}{diagonals}{order}")
+    })
+}
+
+fn display_index_getter_fn_signature<'a>(
+    index: &'a IndexSpec,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rel_camel = rel_snake.to_case(UpperCamel);
+        let age_str = match index.age {
+            IndexAge::New => "new",
+            IndexAge::Old => "old",
+        };
+        let diagonals = index.diagonals.iter().format_with("", |diag, f| {
+            let diag_str = diag.iter().format_with("", |d, f| f(&format_args!("_{d}")));
+            f(&format_args!("_diagonal{diag_str}"))
+        });
+        let row_type = display_rel_row_type(rel, eqlog);
+        let order = index
+            .order
+            .iter()
+            .format_with("", |o, f| f(&format_args!("_{o}")));
+        write!(f, "fn get_index_{rel_snake}_{age_str}{diagonals}{order}(table: &{rel_camel}Table) -> &BTreeSet<{row_type}>")
+    })
+}
+
+fn display_index_getter_fn<'a>(
+    index: &'a IndexSpec,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_index_getter_fn_name(index, rel, eqlog, identifiers);
+        let signature = display_index_getter_fn_signature(index, rel, eqlog, identifiers);
+        let index_name = IndexName(index);
+        writedoc! {f, r#"
+            #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
+            pub extern "Rust" {signature} {{
+                &table.index_{index_name} }}
+        "#}
+    })
+}
+
 pub fn display_table_lib<'a>(
     rel: Rel,
     index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
@@ -1341,6 +1414,11 @@ pub fn display_table_lib<'a>(
         let index_orders: BTreeSet<&[usize]> =
             indices.iter().map(|index| &index.order[..]).collect();
         let strct = display_table_struct(rel, &indices, eqlog, identifiers);
+        let index_getters = indices
+            .iter()
+            .map(|index| display_index_getter_fn(index, rel, eqlog, identifiers, symbol_prefix))
+            .format("\n");
+
         let new_fn = display_table_new_fn(rel, &indices, eqlog, identifiers, symbol_prefix);
         let drop_fn = display_table_drop_fn(rel, eqlog, identifiers, symbol_prefix);
         let permutation_fns = index_orders
@@ -1401,6 +1479,7 @@ pub fn display_table_lib<'a>(
             use std::ptr::NonNull;
 
             {strct}
+            {index_getters}
             {new_fn}
             {drop_fn}
 
