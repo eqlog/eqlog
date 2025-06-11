@@ -196,8 +196,11 @@ use std::vec;
 #[used]
 static TAG: &'static str = "EQLOG_RUNTIME_LIBRARY_TAG";
 
+mod prefix_tree;
 mod unification;
 
+#[doc(hidden)]
+pub use crate::prefix_tree::{PrefixTree1, PrefixTree2, PrefixTree3};
 #[doc(hidden)]
 pub use crate::unification::Unification;
 
