@@ -1379,6 +1379,23 @@ fn display_index_getter_fn_signature<'a>(
     })
 }
 
+pub fn display_index_getter_decl<'a>(
+    index: &'a IndexSpec,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_index_getter_fn_name(index, rel, eqlog, identifiers);
+        let signature = display_index_getter_fn_signature(index, rel, eqlog, identifiers);
+        writedoc! {f, r#"
+            #[link_name = "{symbol_prefix}_{fn_name}"]
+            safe {signature};
+        "#}
+    })
+}
+
 fn display_index_getter_fn<'a>(
     index: &'a IndexSpec,
     rel: Rel,

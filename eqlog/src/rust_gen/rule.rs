@@ -136,39 +136,67 @@ fn display_rule_iter_fns<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
-    analysis
-        .used_queries
-        .iter()
-        .map(move |(rel, query_spec)| {
-            let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
-            let query_indices = index_selection.get(&rel_name).unwrap();
-            let indices = query_indices.get(query_spec).unwrap();
-
-            FmtFn(move |f: &mut Formatter| -> Result {
-                let iter_fn_decl = display_iter_fn_decl(
-                    query_spec,
-                    indices,
-                    *rel,
-                    eqlog,
-                    identifiers,
-                    symbol_prefix,
-                );
-                let iter_next_fn_decl = display_iter_next_fn_decl(
-                    query_spec,
-                    indices,
-                    *rel,
-                    eqlog,
-                    identifiers,
-                    symbol_prefix,
-                );
-
-                writedoc! {f, "
-                {iter_fn_decl}
-                {iter_next_fn_decl}
-            "}
+    FmtFn(move |f: &mut Formatter| -> Result {
+        // Unique indices:
+        let indices: BTreeSet<(Rel, &IndexSpec)> = analysis
+            .used_queries
+            .iter()
+            .flat_map(|(rel, query_spec)| {
+                let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
+                let index_specs = index_selection
+                    .get(rel_name.as_str())
+                    .unwrap()
+                    .get(query_spec)
+                    .unwrap();
+                index_specs.iter().map(move |index| (*rel, index))
             })
-        })
-        .format("\n")
+            .collect();
+
+        let index_getter_fn_decls = indices
+            .iter()
+            .map(|(rel, index)| {
+                display_index_getter_decl(index, *rel, eqlog, identifiers, symbol_prefix)
+            })
+            .format("\n");
+
+        let iter_fns = analysis
+            .used_queries
+            .iter()
+            .map(move |(rel, query_spec)| {
+                let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
+                let query_indices = index_selection.get(&rel_name).unwrap();
+                let indices = query_indices.get(query_spec).unwrap();
+
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let iter_fn_decl = display_iter_fn_decl(
+                        query_spec,
+                        indices,
+                        *rel,
+                        eqlog,
+                        identifiers,
+                        symbol_prefix,
+                    );
+                    let iter_next_fn_decl = display_iter_next_fn_decl(
+                        query_spec,
+                        indices,
+                        *rel,
+                        eqlog,
+                        identifiers,
+                        symbol_prefix,
+                    );
+
+                    writedoc! {f, "
+                    {iter_fn_decl}
+                    {iter_next_fn_decl}
+                "}
+                })
+            })
+            .format("\n");
+        writedoc! {f, "
+            {index_getter_fn_decls}
+            {iter_fns}
+        "}
+    })
 }
 
 fn display_rule_contains_fns<'a>(
@@ -190,6 +218,7 @@ fn display_if_stmt_header<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         match stmt {
@@ -223,9 +252,20 @@ fn display_if_stmt_header<'a>(
                     projections: in_projections.keys().copied().collect(),
                     age: *age,
                 };
+                let index = index_selection
+                    .get(&display_rel(*rel, eqlog, identifiers).to_string())
+                    .unwrap()
+                    .get(&query_spec)
+                    .unwrap();
                 let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
                 let iter_fn_name = display_iter_fn_name(*rel, &query_spec, eqlog, identifiers);
                 let relation_snake = relation.to_case(Snake);
+                if let [index] = index.as_slice() {
+                    let getter_fn = display_index_getter_fn_name(index, *rel, eqlog, identifiers);
+                    writedoc! {f, "
+                        let mut index = {getter_fn}(&env.{relation_snake}_table);\n"
+                    }?;
+                }
                 write!(
                     f,
                     "let mut it = {iter_fn_name}(env.{relation_snake}_table, "
@@ -381,6 +421,7 @@ fn display_stmts<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let (head, tail) = match stmts {
@@ -392,9 +433,10 @@ fn display_stmts<'a>(
 
         match head {
             FlatStmt::If(if_stmt) => {
-                let if_header = display_if_stmt_header(if_stmt, analysis, eqlog, identifiers);
+                let if_header =
+                    display_if_stmt_header(if_stmt, analysis, eqlog, identifiers, index_selection);
                 let if_footer = "}";
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
                 writedoc! {f, "
                     {if_header}
                     {tail}
@@ -403,7 +445,7 @@ fn display_stmts<'a>(
             }
             FlatStmt::DefineRange(_) => todo!(),
             FlatStmt::SurjThen(surj_then) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
                 let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {surj_then}
@@ -411,7 +453,7 @@ fn display_stmts<'a>(
                 "}?;
             }
             FlatStmt::NonSurjThen(non_surj_then) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
                 let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
                 writedoc! {f, "
                     {non_surj_then}
@@ -422,7 +464,7 @@ fn display_stmts<'a>(
                 let rule_name = analysis.rule_name;
                 let i = func_name.0;
                 let args = args.iter().copied().map(display_var).format(", ");
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
                 writedoc! {f, "
                     {rule_name}_{i}(env, {args});
                     {tail}
@@ -439,6 +481,7 @@ fn display_rule_func<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let func_name = flat_func.name.0;
@@ -454,7 +497,13 @@ fn display_rule_func<'a>(
             })
             .format(", ");
 
-        let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
+        let stmts = display_stmts(
+            flat_func.body.as_slice(),
+            analysis,
+            eqlog,
+            identifiers,
+            index_selection,
+        );
 
         writedoc! {f, "
             #[allow(unused_variables)]
@@ -532,7 +581,16 @@ pub fn display_rule_lib<'a>(
         let internal_funcs = rule
             .funcs
             .iter()
-            .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
+            .map(|func| {
+                display_rule_func(
+                    rule.name.as_str(),
+                    func,
+                    analysis,
+                    eqlog,
+                    identifiers,
+                    index_selection,
+                )
+            })
             .format("\n");
 
         let exported_rule_func = display_rule_fn(rule.name.as_str(), symbol_prefix);
