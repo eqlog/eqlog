@@ -252,7 +252,7 @@ fn display_if_stmt_header<'a>(
                     projections: in_projections.keys().copied().collect(),
                     age: *age,
                 };
-                let index = index_selection
+                let indices = index_selection
                     .get(&display_rel(*rel, eqlog, identifiers).to_string())
                     .unwrap()
                     .get(&query_spec)
@@ -260,33 +260,77 @@ fn display_if_stmt_header<'a>(
                 let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
                 let iter_fn_name = display_iter_fn_name(*rel, &query_spec, eqlog, identifiers);
                 let relation_snake = relation.to_case(Snake);
-                if let [index] = index.as_slice() {
-                    let getter_fn = display_index_getter_fn_name(index, *rel, eqlog, identifiers);
-                    writedoc! {f, "
-                        let mut index = {getter_fn}(&env.{relation_snake}_table);\n"
-                    }?;
-                }
-                write!(
-                    f,
-                    "let mut it = {iter_fn_name}(env.{relation_snake}_table, "
-                )?;
-                for tm in in_projections.values().copied() {
-                    write!(f, "tm{}, ", tm.0)?;
-                }
-                write!(f, ");")?;
-                let iter_next_fn_name =
-                    display_iter_next_fn_name(&query_spec, *rel, eqlog, identifiers);
+                let relation_snake = &relation_snake;
+                let row_type = display_rel_row_type(*rel, eqlog);
+                let row_type = &row_type;
+                let arity_len = type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog).len();
+                let fixed_arg_len = query_spec.projections.len();
+                let open_arg_len = arity_len - fixed_arg_len;
+
+                let range_defs = indices
+                    .iter()
+                    .enumerate()
+                    .map(|(i, index)| {
+                        let fixed_args = index.order[..fixed_arg_len]
+                            .iter()
+                            .map(|i| {
+                                FmtFn(move |f| {
+                                    let var = *in_projections.get(i).unwrap();
+                                    let var = display_var(var);
+                                    write!(f, "{var}, ")
+                                })
+                            })
+                            .format("")
+                            .to_string();
+
+                        let open_args_min = (0..open_arg_len).map(|_| "u32::MIN, ").format("");
+                        let open_args_max = (0..open_arg_len).map(|_| "u32::MAX, ").format("");
+                        let getter_fn =
+                            display_index_getter_fn_name(index, *rel, eqlog, identifiers);
+
+                        let row_args = (0..arity_len)
+                            .map(|i| FmtFn(move |f| write!(f, "r{i}, ")))
+                            .format("");
+                        let out_proj_args = (0..arity_len)
+                            .filter(|i| out_projections.contains_key(&i))
+                            .map(|i| {
+                                let j = index.order.iter().position(|&x| x == i).unwrap();
+                                FmtFn(move |f| write!(f, "*r{j}"))
+                            })
+                            .format(", ");
+                        let out_proj_arg_num = out_projections.len();
+
+                        FmtFn(move |f| {
+                            writedoc! {f, "
+                                    let lower: {row_type} = [{fixed_args}{open_args_min}];
+                                    let upper: {row_type} = [{fixed_args}{open_args_max}];
+                                    let range{i} =
+                                    {getter_fn}(&env.{relation_snake}_table).range(lower..=upper)
+                                    .map(|[{row_args}]| -> [u32; {out_proj_arg_num}] {{
+                                        [{out_proj_args}]
+                                    }});
+                                "}
+                        })
+                    })
+                    .format("\n");
+
+                let range_chains = (0..indices.len())
+                    .map(|i| FmtFn(move |f| write!(f, ".chain(range{i})")))
+                    .format("");
+
+                writedoc! {f, "
+                        {range_defs}
+                        let mut it = [].into_iter(){range_chains};
+                    "}?;
                 write!(f, "#[allow(unused_variables)]\n")?;
                 write!(f, "while let Some([")?;
                 for i in 0..arity_len {
                     if let Some(var) = out_projections.get(&i) {
                         write!(f, "tm{}", var.0)?;
-                    } else {
-                        write!(f, "_")?;
+                        write!(f, ", ")?;
                     }
-                    write!(f, ", ")?;
                 }
-                write!(f, "]) = {iter_next_fn_name}(&mut it) {{")?;
+                write!(f, "]) = it.next() {{")?;
             }
             FlatIfStmt::Range(_) => todo!(),
             FlatIfStmt::Type(type_stmt) => {
