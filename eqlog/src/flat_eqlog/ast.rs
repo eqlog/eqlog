@@ -47,10 +47,12 @@ pub struct FlatIfStmtType {
 pub enum FlatIfStmt {
     Equal(FlatStmtEqual),
     Relation(FlatIfStmtRelation),
+    #[allow(dead_code)]
     Range(FlatIfStmtRange),
     Type(FlatIfStmtType),
 }
 
+#[allow(dead_code)]
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatRangeSource {
     FromRel(Rel),
@@ -87,6 +89,7 @@ pub struct FlatNonSurjThenStmt {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatStmt {
     If(FlatIfStmt),
+    #[allow(dead_code)]
     DefineRange(FlatDefineRangeStmt),
     SurjThen(FlatSurjThenStmt),
     NonSurjThen(FlatNonSurjThenStmt),

@@ -235,7 +235,7 @@ fn display_if_stmt_header<'a>(
                 "}?;
             }
             FlatIfStmt::Relation(rel_stmt) => {
-                let FlatIfStmtRelation { rel, args, age } = rel_stmt;
+                let FlatIfStmtRelation { rel, args: _, age } = rel_stmt;
                 let RelationInfo {
                     diagonals,
                     in_projections,
@@ -246,7 +246,6 @@ fn display_if_stmt_header<'a>(
                     .if_stmt_rel_infos
                     .get(&ByAddress(rel_stmt))
                     .unwrap();
-                let arity_len = args.len();
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
                     projections: in_projections.keys().copied().collect(),
@@ -258,7 +257,6 @@ fn display_if_stmt_header<'a>(
                     .get(&query_spec)
                     .unwrap();
                 let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
-                let iter_fn_name = display_iter_fn_name(*rel, &query_spec, eqlog, identifiers);
                 let relation_snake = relation.to_case(Snake);
                 let relation_snake = &relation_snake;
                 let row_type = display_rel_row_type(*rel, eqlog);
