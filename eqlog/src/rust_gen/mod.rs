@@ -303,6 +303,7 @@ fn display_pub_function_eval_fn<'a>(
     func: Func,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel = eqlog.func_rel(func).unwrap();
@@ -311,6 +312,7 @@ fn display_pub_function_eval_fn<'a>(
             .to_string()
             .to_case(UpperCamel);
         let relation_snake = relation.to_case(Snake);
+        let relation_snake = relation_snake.as_str();
 
         let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
         let flat_dom_len = flat_dom.len();
@@ -319,7 +321,7 @@ fn display_pub_function_eval_fn<'a>(
         let cod_camel = display_type(cod, eqlog, identifiers)
             .to_string()
             .to_case(UpperCamel);
-        let cod_camel_for_closure = cod_camel.clone();
+        let cod_camel = &cod_camel;
 
         let params = flat_dom
             .iter()
@@ -337,18 +339,10 @@ fn display_pub_function_eval_fn<'a>(
 
         let result_type = FmtFn(move |f| {
             if eqlog.is_total_func(func) {
-                write!(f, "{cod_camel_for_closure}")
+                write!(f, "{cod_camel}")
             } else {
-                write!(f, "Option<{cod_camel_for_closure}>")
+                write!(f, "Option<{cod_camel}>")
             }
-        });
-
-        let maybe_unwrap_result = FmtFn(move |f| {
-            if eqlog.is_total_func(func) {
-                write!(f, ".unwrap()")?;
-            }
-
-            Ok(())
         });
 
         let canonicalize = flat_dom
@@ -370,25 +364,58 @@ fn display_pub_function_eval_fn<'a>(
             .format(", ")
             .to_string();
 
-        let extern_call_args = (0..flat_dom.len())
-            .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
-            .format(", ")
-            .to_string();
-
         let query_spec = QuerySpec::eval_func(func, eqlog);
-        let iter_fn_name = display_iter_fn_name(rel, &query_spec, eqlog, identifiers);
-        let next_fn_name = display_iter_next_fn_name(&query_spec, rel, eqlog, identifiers);
+        let indices = index_selection
+            .get(&display_rel(rel, eqlog, identifiers).to_string())
+            .unwrap()
+            .get(&query_spec)
+            .unwrap();
+
+        let return_result = if eqlog.is_total_func(func) {
+            "return result;"
+        } else {
+            "return Some(result);"
+        };
+
+        let result_if_not_found = if eqlog.is_total_func(func) {
+            "unreachable!()"
+        } else {
+            "None"
+        };
+
+        let index_gets = indices
+            .into_iter()
+            .map(|index| {
+                FmtFn(move |f| {
+                    let getter_fn = display_index_getter_fn_name(index, rel, eqlog, identifiers);
+                    let fixed_args = &index.order[0..flat_dom_len]
+                        .iter()
+                        .map(|i| FmtFn(move |f| write!(f, "arg{i}.0, ")))
+                        .format("")
+                        .to_string();
+                    writedoc! {f, "
+                        let index = {getter_fn}(&self.{relation_snake}_table);
+                        let lower = [{fixed_args} u32::MIN];
+                        let upper = [{fixed_args} u32::MAX];
+                        let mut range = index.range(lower..=upper);
+                        if let Some([.., result]) = range.next() {{
+                            let result = {cod_camel}::from(*result);
+                            {return_result}
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
 
         writedoc! {f, "
             /// Evaluates `{relation_snake}({doc_args})`.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self, {params}) -> {result_type} {{
                 {canonicalize}
-                let mut iter_state = {iter_fn_name}(self.{relation_snake}_table, {extern_call_args});
-                let result_row = {next_fn_name}(&mut iter_state);
-                result_row
-                    .map(|row| {cod_camel}::from(row[{flat_dom_len}]))
-                    {maybe_unwrap_result}
+                
+                {index_gets}
+
+                {result_if_not_found}
             }}
         "}
     })
@@ -1750,6 +1777,7 @@ fn display_theory_impl<'a>(
     analyses: &'a [FlatRuleAnalysis],
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name).unwrap();
@@ -1820,7 +1848,7 @@ fn display_theory_impl<'a>(
 
         for func in eqlog.iter_func() {
             let rel = eqlog.func_rel(func).unwrap();
-            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
+            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers, index_selection);
             write!(f, "{eval_fn}").unwrap();
 
             let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
@@ -1940,6 +1968,18 @@ pub fn display_table_extern_decls<'a>(
                     let has_new_data_fn_decl =
                         display_has_new_data_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{has_new_data_fn_decl}")?;
+
+                    let index_specs: BTreeSet<&IndexSpec> = indices.values().flatten().collect();
+                    for index in index_specs {
+                        let index_getter_fn_decl = display_index_getter_decl(
+                            index,
+                            rel,
+                            eqlog,
+                            identifiers,
+                            symbol_prefix,
+                        );
+                        writeln!(f, "{index_getter_fn_decl}")?;
+                    }
 
                     for (query_spec, indices) in indices {
                         let iter_fn_decl = display_iter_fn_decl(
@@ -2153,7 +2193,8 @@ pub fn display_module<'a>(
         write!(f, "{}", model_delta_impl)?;
         write!(f, "\n")?;
 
-        let theory_impl = display_theory_impl(name, rules, analyses, eqlog, identifiers);
+        let theory_impl =
+            display_theory_impl(name, rules, analyses, eqlog, identifiers, index_selection);
         write!(f, "{}", theory_impl)?;
 
         let drop_impl = display_theory_drop_impl(name, eqlog, identifiers);
