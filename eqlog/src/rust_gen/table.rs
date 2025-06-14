@@ -331,53 +331,6 @@ pub fn display_has_new_data_fn_decl<'a>(
     })
 }
 
-pub fn display_iter_fn_decl<'a>(
-    query_spec: &'a QuerySpec,
-    indices: &'a Vec<IndexSpec>,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_iter_fn_name(rel, query_spec, eqlog, identifiers);
-        let rel_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-        let index_num = indices.len();
-        let fn_args = query_spec
-            .projections
-            .iter()
-            .copied()
-            .map(|p| FmtFn(move |f| write!(f, "arg{p}: u32")))
-            .format(", ");
-
-        writedoc! {f, "
-            #[link_name = \"{symbol_prefix}_{fn_name}\"]
-            safe fn {fn_name}(table: &{rel_camel}Table, {fn_args}) -> {rel_camel}RangeIter{index_num};
-        "}
-    })
-}
-
-pub fn display_iter_next_fn_decl<'a>(
-    query_spec: &'a QuerySpec,
-    indices: &'a Vec<IndexSpec>,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_iter_next_fn_name(query_spec, rel, eqlog, identifiers);
-        let signature =
-            display_iter_next_fn_signature(query_spec, indices, rel, eqlog, identifiers);
-        writedoc! {f, "
-            #[link_name = \"{symbol_prefix}_{fn_name}\"]
-            safe {signature};
-        "}
-    })
-}
-
 pub fn display_weight_static_decl<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -1002,6 +955,116 @@ fn display_move_new_to_old_fn<'a>(
     })
 }
 
+pub fn display_eval_fn_name<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel = eqlog.func_rel(func).unwrap();
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        write!(f, "{rel_snake}_eval_fn")
+    })
+}
+
+fn display_eval_fn_signature<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_eval_fn_name(func, eqlog, identifiers);
+
+        let rel = eqlog.func_rel(func).unwrap();
+        let rel_camel = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+
+        let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let args = (0..flat_dom.len())
+            .map(move |i| FmtFn(move |f| write!(f, "arg{i}: u32")))
+            .format(",");
+
+        write!(
+            f,
+            "fn {fn_name}(table: &{rel_camel}Table, {args}) -> Option<u32>"
+        )
+    })
+}
+
+fn display_eval_fn<'a>(
+    func: Func,
+    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_eval_fn_name(func, eqlog, identifiers);
+        let signature = display_eval_fn_signature(func, eqlog, identifiers);
+
+        let rel = eqlog.func_rel(func).unwrap();
+
+        let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let flat_dom_len = flat_dom.len();
+
+        let query_spec = QuerySpec::eval_func(func, eqlog);
+        let indices = index_selection
+            .get(&query_spec)
+            .expect("Query spec should have indices");
+        let index_gets = indices
+            .iter()
+            .map(|index| {
+                FmtFn(move |f| {
+                    let index_name = IndexName(index);
+                    let getter_fn = display_index_getter_fn_name(index, rel, eqlog, identifiers);
+                    let fixed_args = &index.order[0..flat_dom_len]
+                        .iter()
+                        .map(|i| FmtFn(move |f| write!(f, "arg{i}, ")))
+                        .format("")
+                        .to_string();
+                    writedoc! {f, "
+                        let index = &table.index_{index_name};
+                        let lower = [{fixed_args} u32::MIN];
+                        let upper = [{fixed_args} u32::MAX];
+                        let mut range = index.range(lower..=upper);
+                        if let Some([.., result]) = range.next() {{
+                        return Some(*result);
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, r#"
+            #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
+            pub extern "Rust" {signature} {{
+            {index_gets}
+
+            None
+            }}
+        "#}
+    })
+}
+
+pub fn display_eval_fn_decl<'a>(
+    func: Func,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_eval_fn_name(func, eqlog, identifiers);
+        let signature = display_eval_fn_signature(func, eqlog, identifiers);
+        writedoc! {f, "
+            #[link_name = \"{symbol_prefix}_{fn_name}\"]
+            safe {signature};
+        "}
+    })
+}
+
 pub fn display_has_new_data_fn_name<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -1056,224 +1119,6 @@ fn display_has_new_data_fn<'a>(
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub extern "Rust" {signature} {{
             !table.index_{primary_new}.is_empty()
-            }}
-        "#}
-    })
-}
-
-fn display_iter_ty<'a>(
-    index_num: usize,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let rel_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-
-        let row_type = display_rel_row_type(rel, eqlog).to_string();
-        let row_type = row_type.as_str();
-        let fields = (0..index_num)
-            .map(|_| FmtFn(move |f| write!(f, "btree_set::Range<'a, {row_type}>, ")))
-            .format("");
-
-        writedoc! { f, "
-            #[allow(unused)]
-            pub type {rel_camel}RangeIter{index_num}<'a> = ({fields});
-        "}
-    })
-}
-
-pub fn display_iter_ty_structs<'a>(
-    rel: Rel,
-    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    let query_indices_lens: BTreeSet<usize> = index_selection
-        .values()
-        .map(|indices| indices.len())
-        .collect();
-    query_indices_lens
-        .into_iter()
-        .map(move |i| display_iter_ty(i, rel, eqlog, identifiers))
-        .format("\n")
-}
-
-pub fn display_iter_fn_name<'a>(
-    rel: Rel,
-    query_spec: &'a QuerySpec,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        let age_str = match query_spec.age {
-            QueryAge::New => "new",
-            QueryAge::Old => "old",
-            QueryAge::All => "all",
-        };
-        let projections = query_spec
-            .projections
-            .iter()
-            .map(|proj| FmtFn(move |f| write!(f, "_{proj}")))
-            .format("");
-
-        let diagonals = query_spec
-            .diagonals
-            .iter()
-            .map(|diag| {
-                FmtFn(move |f| {
-                    let diag = diag
-                        .iter()
-                        .map(|d| FmtFn(move |f| write!(f, "_{d}")))
-                        .format("");
-                    write!(f, "_diagonal{diag}")
-                })
-            })
-            .format("");
-
-        write!(f, "iter_{rel_snake}_{age_str}{projections}{diagonals}")
-    })
-}
-
-fn display_iter_fn<'a>(
-    query_spec: &'a QuerySpec,
-    indices: &'a Vec<IndexSpec>,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_iter_fn_name(rel, query_spec, eqlog, identifiers);
-        let rel_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-
-        let row_type = display_rel_row_type(rel, eqlog).to_string();
-        let row_type = row_type.as_str();
-
-        let fn_args = query_spec
-            .projections
-            .iter()
-            .copied()
-            .map(|p| FmtFn(move |f| write!(f, "arg{p}: u32")))
-            .format(", ");
-        let index_num = indices.len();
-
-        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
-        let fixed_arg_len = query_spec.projections.len();
-        let open_arg_len = arity_len - fixed_arg_len;
-
-        let range_defs = indices
-            .iter()
-            .enumerate()
-            .map(|(i, index)| {
-                let index_name = IndexName(index);
-
-                let fixed_args = index.order[..fixed_arg_len]
-                    .iter()
-                    .map(|i| FmtFn(move |f| write!(f, "arg{i}, ")))
-                    .format("")
-                    .to_string();
-
-                let open_args_min = (0..open_arg_len).map(|_| "u32::MIN, ").format("");
-                let open_args_max = (0..open_arg_len).map(|_| "u32::MAX, ").format("");
-
-                FmtFn(move |f| {
-                    writedoc! {f, "
-                        let lower: {row_type} = [{fixed_args}{open_args_min}];
-                        let upper: {row_type} = [{fixed_args}{open_args_max}];
-                        let range{i} = table.index_{index_name}.range(lower..=upper);
-                    "}
-                })
-            })
-            .format("\n");
-
-        let range_args = (0..indices.len())
-            .map(|i| FmtFn(move |f| write!(f, "range{i}, ")))
-            .format("");
-
-        writedoc! {f, r#"
-            #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
-            pub extern "Rust" fn {fn_name}(table: &{rel_camel}Table, {fn_args}) -> {rel_camel}RangeIter{index_num} {{
-            {range_defs}
-            ({range_args})
-            }}
-        "#}
-    })
-}
-
-pub fn display_iter_next_fn_name<'a>(
-    query_spec: &'a QuerySpec,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let iter_fn = display_iter_fn_name(rel, query_spec, eqlog, identifiers);
-        write!(f, "{iter_fn}_next")
-    })
-}
-
-fn display_iter_next_fn_signature<'a>(
-    query_spec: &'a QuerySpec,
-    indices: &'a Vec<IndexSpec>,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_iter_next_fn_name(query_spec, rel, eqlog, identifiers);
-        let rel_camel = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(UpperCamel);
-        let index_num = indices.len();
-        let row_type = display_rel_row_type(rel, eqlog);
-        write!(
-            f,
-            "fn {fn_name}(it: &mut {rel_camel}RangeIter{index_num}) -> Option<{row_type}>"
-        )
-    })
-}
-
-fn display_iter_next_fn<'a>(
-    query_spec: &'a QuerySpec,
-    indices: &'a Vec<IndexSpec>,
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_iter_next_fn_name(query_spec, rel, eqlog, identifiers);
-        let signature =
-            display_iter_next_fn_signature(query_spec, indices, rel, eqlog, identifiers);
-
-        let blocks = indices
-            .iter()
-            .enumerate()
-            .map(|(i, index)| {
-                FmtFn(move |f| {
-                    let order_name = OrderName(index.order.as_slice());
-                    writedoc! {f, "
-                        if let Some(permuted_row) = it.{i}.next() {{
-                            return Some(permute_inverse{order_name}(*permuted_row));
-                        }}
-                    "}
-                })
-            })
-            .format("\n");
-
-        writedoc! {f, r#"
-            #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
-            pub extern "Rust" {signature} {{
-            {blocks}
-            None
             }}
         "#}
     })
@@ -1467,29 +1312,25 @@ pub fn display_table_lib<'a>(
         let has_new_data_fn =
             display_has_new_data_fn(rel, &indices, eqlog, identifiers, symbol_prefix);
 
-        let iter_ty_structs = display_iter_ty_structs(rel, index_selection, eqlog, identifiers);
-        let iter_fns = index_selection
-            .iter()
-            .map(|(query_spec, indices)| {
-                display_iter_fn(query_spec, indices, rel, eqlog, identifiers, symbol_prefix)
-            })
-            .format("\n");
-
-        let iter_next_fns = index_selection
-            .iter()
-            .map(|(query_spec, indices)| {
-                display_iter_next_fn(query_spec, indices, rel, eqlog, identifiers, symbol_prefix)
-            })
-            .format("\n");
-
         let weight_static = display_weight_static(rel, &indices, eqlog, identifiers, symbol_prefix);
+
+        let eval_fn = FmtFn(move |f| {
+            let func = match eqlog.rel_case(rel) {
+                RelCase::FuncRel(func) => func,
+                RelCase::PredRel(_) => {
+                    return Ok(());
+                }
+            };
+            let eval_fn = display_eval_fn(func, index_selection, eqlog, identifiers, symbol_prefix);
+
+            write!(f, "{eval_fn}")
+        });
 
         writedoc! {f, "
             use eqlog_runtime::collections::BTreeSet;
             #[allow(unused)]
             use eqlog_runtime::collections::BTreeMap;
 
-            use eqlog_runtime::collections::btree_set;
             #[allow(unused)]
             use eqlog_runtime::collections::btree_map;
 
@@ -1504,17 +1345,13 @@ pub fn display_table_lib<'a>(
 
             {contains_fn}
             {insert_fn}
+            {eval_fn}
 
             {remove_from_row_indices_fn}
             {drain_with_element_fns}
 
             {move_new_to_old_fn}
             {has_new_data_fn}
-
-            {iter_ty_structs}
-
-            {iter_fns}
-            {iter_next_fns}
 
             {weight_static}
         "}

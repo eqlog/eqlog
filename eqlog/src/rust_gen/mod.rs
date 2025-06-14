@@ -2023,28 +2023,6 @@ pub fn display_table_extern_decls<'a>(
                         writeln!(f, "{index_getter_fn_decl}")?;
                     }
 
-                    for (query_spec, indices) in indices {
-                        let iter_fn_decl = display_iter_fn_decl(
-                            query_spec,
-                            indices,
-                            rel,
-                            eqlog,
-                            identifiers,
-                            symbol_prefix,
-                        );
-                        writeln!(f, "{iter_fn_decl}")?;
-
-                        let iter_next_fn_decl = display_iter_next_fn_decl(
-                            query_spec,
-                            indices,
-                            rel,
-                            eqlog,
-                            identifiers,
-                            symbol_prefix,
-                        );
-                        writeln!(f, "{iter_next_fn_decl}")?;
-                    }
-
                     let weight_static_decl =
                         display_weight_static_decl(rel, eqlog, identifiers, symbol_prefix);
                     write!(f, "{weight_static_decl}")
@@ -2059,28 +2037,6 @@ pub fn display_table_extern_decls<'a>(
             }}
         "#}
     })
-}
-
-fn display_table_iter_ty_structs<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
-) -> impl 'a + Display {
-    eqlog
-        .iter_rel()
-        .map(move |rel| {
-            FmtFn(move |f| {
-                let rel_selection = index_selection
-                    .get(&display_rel(rel, eqlog, identifiers).to_string())
-                    .unwrap();
-                let iter_ty = display_iter_ty_structs(rel, rel_selection, eqlog, identifiers);
-                writedoc! {f, "
-                #[allow(dead_code)]
-                {iter_ty}
-            "}
-            })
-        })
-        .format("\n")
 }
 
 fn display_table_modules<'a>(
@@ -2175,11 +2131,6 @@ pub fn display_module<'a>(
         }
 
         writeln!(f, "{}", display_table_struct_decls(eqlog, identifiers))?;
-        writeln!(
-            f,
-            "{}",
-            display_table_iter_ty_structs(eqlog, identifiers, index_selection)
-        )?;
         writeln!(
             f,
             "{}",

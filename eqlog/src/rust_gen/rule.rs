@@ -16,7 +16,6 @@ fn display_imports<'a>() -> impl 'a + Display {
         writedoc! {f, "
             #[allow(unused)]
             use eqlog_runtime::collections::BTreeSet;
-            use eqlog_runtime::collections::btree_set;
         "}
     })
 }
@@ -111,106 +110,60 @@ pub fn display_rule_env_struct<'a>(
     })
 }
 
-fn display_rule_iter_types<'a>(
+fn display_table_fn_decls<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
-    index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
+    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
-    analysis
+    let rels = analysis
         .used_rels
         .iter()
         .copied()
-        .map(|rel| {
-            let rel_name = display_rel(rel, eqlog, identifiers).to_string();
-            let query_indices = index_selection.get(&rel_name).unwrap();
-            display_iter_ty_structs(rel, query_indices, eqlog, identifiers)
-        })
-        .format("\n")
-}
+        .map(move |rel| {
+            FmtFn(move |f| {
+                let contains_fn = display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix);
 
-fn display_rule_iter_fns<'a>(
-    analysis: &'a FlatRuleAnalysis<'a>,
-    index_selection: &'a IndexSelection,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    FmtFn(move |f: &mut Formatter| -> Result {
-        // Unique indices:
-        let indices: BTreeSet<(Rel, &IndexSpec)> = analysis
-            .used_queries
-            .iter()
-            .flat_map(|(rel, query_spec)| {
-                let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
-                let index_specs = index_selection
-                    .get(rel_name.as_str())
+                let eval_fn = FmtFn(move |f| match eqlog.rel_case(rel) {
+                    RelCase::FuncRel(func) => {
+                        let func_name =
+                            display_eval_fn_decl(func, eqlog, identifiers, symbol_prefix);
+                        write!(f, "{func_name}")
+                    }
+                    RelCase::PredRel(_) => Ok(()),
+                });
+
+                // TODO: Look at "used_queries" here instead.
+                let indices: BTreeSet<&IndexSpec> = index_selection
+                    .get(&display_rel(rel, eqlog, identifiers).to_string())
                     .unwrap()
-                    .get(query_spec)
-                    .unwrap();
-                index_specs.iter().map(move |index| (*rel, index))
+                    .values()
+                    .flatten()
+                    .collect();
+                let index_getters = indices
+                    .into_iter()
+                    .map(|index| {
+                        display_index_getter_decl(index, rel, eqlog, identifiers, symbol_prefix)
+                    })
+                    .format("\n");
+                writedoc! {f, "
+                {contains_fn}
+                {eval_fn}
+                {index_getters}
+            "}
             })
-            .collect();
+        })
+        .format("\n");
 
-        let index_getter_fn_decls = indices
-            .iter()
-            .map(|(rel, index)| {
-                display_index_getter_decl(index, *rel, eqlog, identifiers, symbol_prefix)
-            })
-            .format("\n");
-
-        let iter_fns = analysis
-            .used_queries
-            .iter()
-            .map(move |(rel, query_spec)| {
-                let rel_name = display_rel(*rel, eqlog, identifiers).to_string();
-                let query_indices = index_selection.get(&rel_name).unwrap();
-                let indices = query_indices.get(query_spec).unwrap();
-
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let iter_fn_decl = display_iter_fn_decl(
-                        query_spec,
-                        indices,
-                        *rel,
-                        eqlog,
-                        identifiers,
-                        symbol_prefix,
-                    );
-                    let iter_next_fn_decl = display_iter_next_fn_decl(
-                        query_spec,
-                        indices,
-                        *rel,
-                        eqlog,
-                        identifiers,
-                        symbol_prefix,
-                    );
-
-                    writedoc! {f, "
-                    {iter_fn_decl}
-                    {iter_next_fn_decl}
-                "}
-                })
-            })
-            .format("\n");
-        writedoc! {f, "
-            {index_getter_fn_decls}
-            {iter_fns}
-        "}
+    FmtFn(move |f| {
+        writedoc! {f, r#"
+            #[allow(unused, clashing_extern_declarations)]
+            unsafe extern "Rust" {{
+            {rels}
+            }}
+        "#}
     })
-}
-
-fn display_rule_contains_fns<'a>(
-    analysis: &'a FlatRuleAnalysis<'a>,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    analysis
-        .used_rels
-        .iter()
-        .copied()
-        .map(|rel| display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix))
-        .format("\n")
 }
 
 fn display_if_stmt_header<'a>(
@@ -430,26 +383,22 @@ fn display_non_surj_then<'a>(
         let rel = eqlog.func_rel(*func).unwrap();
         let relation_snake = format!("{}", display_rel(rel, eqlog, identifiers)).to_case(Snake);
 
-        let eval_func_spec = QuerySpec::eval_func(*func, eqlog);
-        let iter_fn_name = display_iter_fn_name(rel, &eval_func_spec, eqlog, identifiers);
-        let iter_next_fn_name = display_iter_next_fn_name(&eval_func_spec, rel, eqlog, identifiers);
+        let eval_fn = display_eval_fn_name(*func, eqlog, identifiers);
 
-        let in_args = func_args
+        let func_args = func_args
             .iter()
             .copied()
             .map(display_var)
             .format(", ")
             .to_string();
 
-        let out_arg_wildcards = repeat("_, ").take(func_args.len()).format("");
         let result = display_var(*result);
 
         writedoc! {f, "
-            let mut it = {iter_fn_name}(env.{relation_snake}_table, {in_args});
-            let {result} = match {iter_next_fn_name}(&mut it) {{
-                Some([{out_arg_wildcards} res]) => res,
+            let {result} = match {eval_fn}(env.{relation_snake}_table, {func_args}) {{
+                Some(res) => res,
                 None => {{
-                    env.new_{relation_snake}_def.push([{in_args}]);
+                    env.new_{relation_snake}_def.push([{func_args}]);
                     break;
                 }},
             }};
@@ -615,10 +564,8 @@ pub fn display_rule_lib<'a>(
             .map(|rel| display_table_struct_decl(rel, eqlog, identifiers))
             .format("\n");
 
-        let iter_types = display_rule_iter_types(analysis, index_selection, eqlog, identifiers);
-        let iter_fns =
-            display_rule_iter_fns(analysis, index_selection, eqlog, identifiers, symbol_prefix);
-        let contains_fns = display_rule_contains_fns(analysis, eqlog, identifiers, symbol_prefix);
+        let table_fn_decls =
+            display_table_fn_decls(analysis, eqlog, identifiers, index_selection, symbol_prefix);
 
         let internal_funcs = rule
             .funcs
@@ -640,12 +587,7 @@ pub fn display_rule_lib<'a>(
         writedoc! {f, r#"
             {imports}
             {table_struct_decls}
-            {iter_types}
-            #[allow(unused, clashing_extern_declarations)]
-            unsafe extern "Rust" {{
-            {iter_fns}
-            {contains_fns}
-            }}
+            {table_fn_decls}
             {env_struct}
             {internal_funcs}
             {exported_rule_func}
