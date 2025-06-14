@@ -425,6 +425,7 @@ fn display_pub_iter_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let is_function = match eqlog.rel_case(rel) {
@@ -435,10 +436,13 @@ fn display_pub_iter_fn<'a>(
         let rel_snake = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(Snake);
-        let arity: Vec<String> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
-            .into_iter()
+        let rel_snake = rel_snake.as_str();
+        let arity_tys: Vec<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_tys = &arity_tys;
+        let arity: Vec<String> = arity_tys
+            .iter()
             .map(move |ty| {
-                display_type(ty, eqlog, identifiers)
+                display_type(*ty, eqlog, identifiers)
                     .to_string()
                     .to_case(UpperCamel)
             })
@@ -448,17 +452,6 @@ fn display_pub_iter_fn<'a>(
             arity[0].clone()
         } else {
             format!("({})", arity.iter().format(", "))
-        };
-
-        let tuple_unpack = match arity.len() {
-            0 => "|_| ()".to_string(),
-            1 => format!("|row| {}::from(row[0])", arity[0]),
-            n => {
-                let args = (0..n).format_with(", ", |i, f| {
-                    f(&format_args!("{}::from(row[{i}])", arity[i]))
-                });
-                format!("|row| ({args})")
-            }
         };
 
         let docstring = match (is_function, arity.len()) {
@@ -491,16 +484,65 @@ fn display_pub_iter_fn<'a>(
         };
 
         let query_spec = QuerySpec::all();
-        let iter_fn_name = display_iter_fn_name(rel, &query_spec, eqlog, identifiers);
+        let indices = index_selection
+            .get(&display_rel(rel, eqlog, identifiers).to_string())
+            .unwrap()
+            .get(&query_spec)
+            .unwrap();
+        let index_its = indices
+            .into_iter()
+            .enumerate()
+            .map(|(i, index)| {
+                FmtFn(move |f| {
+                    let getter_fn = display_index_getter_fn_name(index, rel, eqlog, identifiers);
+                    let row_unpack_args = index
+                        .order
+                        .iter()
+                        .map(|i| FmtFn(move |f| write!(f, "arg{i}")))
+                        .format(",");
+                    let row_args = arity_tys
+                        .iter()
+                        .enumerate()
+                        .map(|(i, typ)| {
+                            FmtFn(move |f| {
+                                let type_camel = display_type(*typ, eqlog, identifiers)
+                                    .to_string()
+                                    .to_case(UpperCamel);
+                                write!(f, "{type_camel}::from(*arg{i})")
+                            })
+                        })
+                        .format(",");
 
-        let next_fn_name = display_iter_next_fn_name(&query_spec, rel, eqlog, identifiers);
+                    let row = FmtFn(move |f| {
+                        if arity_tys.len() == 1 {
+                            write!(f, "{row_args}")
+                        } else {
+                            write!(f, "({row_args})")
+                        }
+                    });
+                    writedoc! {f, "
+                        let index_it{i} =
+                        {getter_fn}(&self.{rel_snake}_table)
+                        .iter()
+                        .map(|[{row_unpack_args}]| {{
+                        {row}
+                        }});
+                    "}
+                })
+            })
+            .format("\n");
+
+        let index_it_chains = (0..indices.len())
+            .map(|i| FmtFn(move |f| write!(f, ".chain(index_it{i})")))
+            .format("");
 
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
             pub fn iter_{rel_snake}(&self) -> impl '_ + Iterator<Item={rel_type}> {{
-                let mut row_it = {iter_fn_name}(self.{rel_snake}_table);
-                std::iter::from_fn(move || {next_fn_name}(&mut row_it)).map({tuple_unpack})
+            {index_its}
+
+            [].into_iter(){index_it_chains}
             }}
         "}
     })
@@ -1851,7 +1893,7 @@ fn display_theory_impl<'a>(
             let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers, index_selection);
             write!(f, "{eval_fn}").unwrap();
 
-            let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
+            let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
             write!(f, "{}", iter_fn).unwrap();
 
             let insert_relation = display_pub_insert_relation(rel, eqlog, identifiers, true);
@@ -1880,7 +1922,7 @@ fn display_theory_impl<'a>(
             write!(f, "{}", predicate_holds_fn).unwrap();
 
             if !arity.is_empty() {
-                let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers);
+                let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
                 write!(f, "{}", iter_fn).unwrap();
             }
 
