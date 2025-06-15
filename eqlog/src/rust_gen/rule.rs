@@ -134,11 +134,25 @@ fn display_table_fn_decls<'a>(
                     RelCase::PredRel(_) => Ok(()),
                 });
 
+                let rel_string = display_rel(rel, eqlog, identifiers).to_string();
+
                 // TODO: Look at "used_queries" here instead.
-                let indices: BTreeSet<&IndexSpec> = index_selection
-                    .get(&display_rel(rel, eqlog, identifiers).to_string())
-                    .unwrap()
-                    .values()
+                let indices: BTreeSet<&IndexSpec> = analysis
+                    .used_queries
+                    .iter()
+                    .filter_map(|(r, query)| {
+                        if *r == rel {
+                            Some(
+                                index_selection
+                                    .get(&rel_string)
+                                    .unwrap()
+                                    .get(query)
+                                    .unwrap(),
+                            )
+                        } else {
+                            None
+                        }
+                    })
                     .flatten()
                     .collect();
                 let index_getters = indices

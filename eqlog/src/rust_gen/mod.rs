@@ -17,7 +17,6 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
-use std::iter::repeat;
 
 use Case::{Snake, UpperCamel};
 
@@ -303,7 +302,6 @@ fn display_pub_function_eval_fn<'a>(
     func: Func,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel = eqlog.func_rel(func).unwrap();
@@ -1858,7 +1856,7 @@ fn display_theory_impl<'a>(
 
         for func in eqlog.iter_func() {
             let rel = eqlog.func_rel(func).unwrap();
-            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers, index_selection);
+            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
             write!(f, "{eval_fn}").unwrap();
 
             let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
@@ -1962,7 +1960,7 @@ pub fn display_table_extern_decls<'a>(
                                 display_eval_fn_decl(func, eqlog, identifiers, symbol_prefix);
                             writeln!(f, "{eval_fn_decl}")?;
                         }
-                        RelCase::PredRel(pred) => {}
+                        RelCase::PredRel(_) => {}
                     }
 
                     let insert_fn_decl =

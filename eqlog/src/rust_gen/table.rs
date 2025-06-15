@@ -1005,8 +1005,6 @@ fn display_eval_fn<'a>(
         let fn_name = display_eval_fn_name(func, eqlog, identifiers);
         let signature = display_eval_fn_signature(func, eqlog, identifiers);
 
-        let rel = eqlog.func_rel(func).unwrap();
-
         let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
         let flat_dom_len = flat_dom.len();
 
@@ -1019,7 +1017,6 @@ fn display_eval_fn<'a>(
             .map(|index| {
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
-                    let getter_fn = display_index_getter_fn_name(index, rel, eqlog, identifiers);
                     let fixed_args = &index.order[0..flat_dom_len]
                         .iter()
                         .map(|i| FmtFn(move |f| write!(f, "arg{i}, ")))
