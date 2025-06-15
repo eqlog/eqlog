@@ -364,58 +364,26 @@ fn display_pub_function_eval_fn<'a>(
             .format(", ")
             .to_string();
 
-        let query_spec = QuerySpec::eval_func(func, eqlog);
-        let indices = index_selection
-            .get(&display_rel(rel, eqlog, identifiers).to_string())
-            .unwrap()
-            .get(&query_spec)
-            .unwrap();
+        let eval_fn = display_eval_fn_name(func, eqlog, identifiers);
 
-        let return_result = if eqlog.is_total_func(func) {
-            "return result;"
+        let table_eval_args = (0..flat_dom_len)
+            .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
+            .format(", ");
+        let result = if eqlog.is_total_func(func) {
+            "result.unwrap().into()"
         } else {
-            "return Some(result);"
+            "result.map(|x| x.into())"
         };
-
-        let result_if_not_found = if eqlog.is_total_func(func) {
-            "unreachable!()"
-        } else {
-            "None"
-        };
-
-        let index_gets = indices
-            .into_iter()
-            .map(|index| {
-                FmtFn(move |f| {
-                    let getter_fn = display_index_getter_fn_name(index, rel, eqlog, identifiers);
-                    let fixed_args = &index.order[0..flat_dom_len]
-                        .iter()
-                        .map(|i| FmtFn(move |f| write!(f, "arg{i}.0, ")))
-                        .format("")
-                        .to_string();
-                    writedoc! {f, "
-                        let index = {getter_fn}(&self.{relation_snake}_table);
-                        let lower = [{fixed_args} u32::MIN];
-                        let upper = [{fixed_args} u32::MAX];
-                        let mut range = index.range(lower..=upper);
-                        if let Some([.., result]) = range.next() {{
-                            let result = {cod_camel}::from(*result);
-                            {return_result}
-                        }}
-                    "}
-                })
-            })
-            .format("\n");
 
         writedoc! {f, "
             /// Evaluates `{relation_snake}({doc_args})`.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self, {params}) -> {result_type} {{
-                {canonicalize}
+            {canonicalize}
                 
-                {index_gets}
+            let result: Option<u32> = {eval_fn}(&self.{relation_snake}_table, {table_eval_args}).into();
 
-                {result_if_not_found}
+            {result}
             }}
         "}
     })
@@ -1987,6 +1955,15 @@ pub fn display_table_extern_decls<'a>(
                     let contains_fn_decl =
                         display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{contains_fn_decl}")?;
+
+                    match eqlog.rel_case(rel) {
+                        RelCase::FuncRel(func) => {
+                            let eval_fn_decl =
+                                display_eval_fn_decl(func, eqlog, identifiers, symbol_prefix);
+                            writeln!(f, "{eval_fn_decl}")?;
+                        }
+                        RelCase::PredRel(pred) => {}
+                    }
 
                     let insert_fn_decl =
                         display_insert_fn_decl(rel, eqlog, identifiers, symbol_prefix);
