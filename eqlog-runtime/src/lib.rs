@@ -200,7 +200,10 @@ mod prefix_tree;
 mod unification;
 
 #[doc(hidden)]
-pub use crate::prefix_tree::{PrefixTree1, PrefixTree2, PrefixTree3};
+pub use crate::prefix_tree::{
+    PrefixTree1, PrefixTree2, PrefixTree3, PrefixTree4, PrefixTree5, PrefixTree6, PrefixTree7,
+    PrefixTree8, PrefixTree9,
+};
 #[doc(hidden)]
 pub use crate::unification::Unification;
 
