@@ -77,6 +77,7 @@ fn display_table_struct<'a>(
         let rel_camel = rel_snake.to_case(UpperCamel);
 
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
 
         let row_type = display_rel_row_type(rel, eqlog).to_string();
         let row_type = row_type.as_str();
@@ -86,7 +87,7 @@ fn display_table_struct<'a>(
             .map(|index| {
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
-                    write!(f, "index_{index_name}: BTreeSet<{row_type}>,")
+                    write!(f, "index_{index_name}: PrefixTree{arity_len},")
                 })
             })
             .format("\n");
@@ -109,7 +110,6 @@ fn display_table_struct<'a>(
             .format("\n");
 
         writedoc! {f, "
-            #[derive(Clone, Hash, Debug)]
             pub struct {rel_camel}Table {{
             {index_fields}
 
@@ -179,12 +179,14 @@ fn display_table_new_fn<'a>(
             .to_string()
             .to_case(Snake);
         let rel_camel = rel_snake.to_case(UpperCamel);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
         let index_fields = indices
             .iter()
             .map(|index| {
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
-                    write!(f, "index_{index_name}: BTreeSet::new(),")
+                    write!(f, "index_{index_name}: PrefixTree{arity_len}::new(),")
                 })
             })
             .format("\n");
@@ -493,7 +495,7 @@ fn display_contains_fn<'a>(
                     let order_name = OrderName(&index.order);
                     write!(
                         f,
-                        "table.index_{index_name}.contains(&permute{order_name}(row))"
+                        "table.index_{index_name}.contains(permute{order_name}(row))"
                     )
                 })
             })
@@ -647,7 +649,7 @@ fn display_insert_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub extern "Rust" {signature} {{
-            if table.index_{primary_old}.contains(&permute{primary_old_order}(row)) {{
+            if table.index_{primary_old}.contains(permute{primary_old_order}(row)) {{
             return false;
             }}
             if !table.index_{primary_new}.insert(permute{primary_new_order}(row)) {{
@@ -712,14 +714,14 @@ fn display_remove_from_row_indices_fn<'a>(
                     let order = OrderName(&index.order);
                     if index.diagonals.is_empty() {
                         writedoc! {f, "
-                            table.index_{index_name}.remove(&permute{order}(row));"
+                            table.index_{index_name}.remove(permute{order}(row));"
                         }
                     } else {
                         let check = DiagonalCheck(&index.diagonals);
                         writedoc! {f, "
                         let check = {check};
                         if check {{
-                            table.index_{index_name}.remove(&permute{order}(row));
+                            table.index_{index_name}.remove(permute{order}(row));
                         }}
                     "}
                     }
@@ -737,14 +739,14 @@ fn display_remove_from_row_indices_fn<'a>(
                     let order = OrderName(&index.order);
                     if index.diagonals.is_empty() {
                         writedoc! {f, "
-                            table.index_{index_name}.remove(&permute{order}(row));"
+                            table.index_{index_name}.remove(permute{order}(row));"
                         }
                     } else {
                         let check = DiagonalCheck(&index.diagonals);
                         writedoc! {f, "
                         let check = {check};
                         if check {{
-                            table.index_{index_name}.remove(&permute{order}(row));
+                            table.index_{index_name}.remove(permute{order}(row));
                         }}
                     "}
                     }
@@ -758,10 +760,10 @@ fn display_remove_from_row_indices_fn<'a>(
         writedoc! {f, "
             #[allow(unused)]
             fn remove_from_row_indices(table: &mut {rel_camel}Table, row: {row_type}) -> bool {{
-                if table.index_{primary_new}.remove(&permute{primary_new_order}(row)) {{
+                if table.index_{primary_new}.remove(permute{primary_new_order}(row)) {{
                     {other_new_removes}
                     true
-                }} else if table.index_{primary_old}.remove(&permute{primary_old_order}(row)) {{
+                }} else if table.index_{primary_old}.remove(permute{primary_old_order}(row)) {{
                     {other_old_removes}
                     true
                 }} else {{
@@ -944,7 +946,7 @@ fn display_move_new_to_old_fn<'a>(
         writedoc! {f, r#"
             #[unsafe(export_name = "{symbol_prefix}_{fn_name}")]
             pub extern "Rust" {signature} {{
-            for row in table.index_{primary_new}.iter().copied() {{
+            for row in table.index_{primary_new}.iter() {{
             let row = permute_inverse{primary_new_order}(row);
             {old_inserts}
             }}
@@ -1017,20 +1019,47 @@ fn display_eval_fn<'a>(
             .map(|index| {
                 FmtFn(move |f| {
                     let index_name = IndexName(index);
-                    let fixed_args = &index.order[0..flat_dom_len]
-                        .iter()
-                        .map(|i| FmtFn(move |f| write!(f, "arg{i}, ")))
-                        .format("")
-                        .to_string();
-                    writedoc! {f, "
-                        let index = &table.index_{index_name};
-                        let lower = [{fixed_args} u32::MIN];
-                        let upper = [{fixed_args} u32::MAX];
-                        let mut range = index.range(lower..=upper);
-                        if let Some([.., result]) = range.next() {{
-                        return Some(*result);
-                        }}
-                    "}
+                    if flat_dom_len == 0 {
+                        writedoc! {f, "
+                            let results = &table.index_{index_name};
+                            let result = results.iter().next();
+                            if let Some([result]) = result {{
+                            return Some(result);
+                            }}
+                        "}?;
+                    } else {
+                        let gets = index
+                            .order
+                            .iter()
+                            .take(flat_dom_len)
+                            .map(|i| {
+                                FmtFn(move |f| {
+                                    writedoc! {f, "
+                                    .and_then(|index| {{
+                                        index.get(arg{i})
+                                    }})
+                                "}
+                                })
+                            })
+                            .format("\n");
+
+                        writedoc! {f, "
+                            #[allow(unused_parens)]
+                            let results =
+                            Some(&table.index_{index_name})
+                            {gets}
+                            ;
+
+                            if let Some(results) = results {{
+                            let result = results.iter().next();
+                            if let Some([result]) = result {{
+                            return Some(result);
+                            }}
+                            }}
+                        "}?;
+                    }
+
+                    Ok(())
                 })
             })
             .format("\n");
@@ -1213,11 +1242,13 @@ fn display_index_getter_fn_signature<'a>(
             f(&format_args!("_diagonal{diag_str}"))
         });
         let row_type = display_rel_row_type(rel, eqlog);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_len = arity.len();
         let order = index
             .order
             .iter()
             .format_with("", |o, f| f(&format_args!("_{o}")));
-        write!(f, "fn get_index_{rel_snake}_{age_str}{diagonals}{order}(table: &{rel_camel}Table) -> &BTreeSet<{row_type}>")
+        write!(f, "fn get_index_{rel_snake}_{age_str}{diagonals}{order}(table: &{rel_camel}Table) -> &PrefixTree{arity_len}")
     })
 }
 
@@ -1324,10 +1355,10 @@ pub fn display_table_lib<'a>(
         });
 
         writedoc! {f, "
-            use eqlog_runtime::collections::BTreeSet;
+            #[allow(unused)]
+            use eqlog_runtime::*;
             #[allow(unused)]
             use eqlog_runtime::collections::BTreeMap;
-
             #[allow(unused)]
             use eqlog_runtime::collections::btree_map;
 
