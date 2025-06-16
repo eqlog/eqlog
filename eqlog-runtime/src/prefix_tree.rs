@@ -1,6 +1,8 @@
 use crate::collections::{BTreeMap, BTreeSet};
 
 // type definitions
+pub struct PrefixTree0(Option<()>);
+
 pub struct PrefixTree1 {
     set: BTreeSet<u32>,
 }
@@ -38,6 +40,12 @@ pub struct PrefixTree9 {
 }
 
 // new methods
+impl PrefixTree0 {
+    pub fn new() -> Self {
+        PrefixTree0(None)
+    }
+}
+
 impl PrefixTree1 {
     pub fn new() -> Self {
         Self {
@@ -111,6 +119,11 @@ impl PrefixTree9 {
 }
 
 // insert methods.
+impl PrefixTree0 {
+    pub fn insert(&mut self, []: [u32; 0]) {
+        self.0 = Some(());
+    }
+}
 impl PrefixTree1 {
     pub fn insert(&mut self, [el0]: [u32; 1]) {
         self.set.insert(el0);
@@ -190,6 +203,12 @@ impl PrefixTree9 {
 }
 
 // contains methods.
+impl PrefixTree0 {
+    pub fn contains(&self, []: [u32; 0]) -> bool {
+        self.0.is_some()
+    }
+}
+
 impl PrefixTree1 {
     pub fn contains(&self, [el0]: [u32; 1]) -> bool {
         self.set.contains(&el0)
@@ -261,6 +280,11 @@ impl PrefixTree9 {
 }
 
 // remove methods.
+impl PrefixTree0 {
+    pub fn remove(&mut self, []: [u32; 0]) {
+        self.0 = None;
+    }
+}
 impl PrefixTree1 {
     pub fn remove(&mut self, [el0]: [u32; 1]) {
         self.set.remove(&el0);
@@ -356,6 +380,12 @@ impl PrefixTree9 {
 }
 
 // is_empty methods
+impl PrefixTree0 {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
 impl PrefixTree1 {
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
@@ -411,6 +441,12 @@ impl PrefixTree9 {
 }
 
 // clear methods
+impl PrefixTree0 {
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+}
+
 impl PrefixTree1 {
     pub fn clear(&mut self) {
         self.set.clear();
@@ -466,6 +502,12 @@ impl PrefixTree9 {
 }
 
 // iter methods
+impl PrefixTree0 {
+    pub fn iter(&self) -> impl Iterator<Item = [u32; 0]> + '_ {
+        self.0.iter().map(|_| [])
+    }
+}
+
 impl PrefixTree1 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 1]> + '_ {
         self.set.iter().map(|&x| [x])
@@ -540,16 +582,6 @@ impl PrefixTree9 {
 }
 
 // get methods
-impl PrefixTree1 {
-    pub fn get(&self, first_el: u32) -> Option<&Self> {
-        if self.set.contains(&first_el) {
-            Some(self)
-        } else {
-            None
-        }
-    }
-}
-
 impl PrefixTree2 {
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree1> {
         self.map.get(&first_el)
