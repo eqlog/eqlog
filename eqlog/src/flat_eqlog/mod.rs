@@ -1,5 +1,6 @@
 mod ast;
 mod index_selection;
+mod resolve_age_all_queries;
 mod slice_group_by;
 mod sort_if_stmts;
 mod var_info;
@@ -14,7 +15,8 @@ pub use ast::*;
 use by_address::ByAddress;
 use eqlog_eqlog::*;
 pub use index_selection::*;
-pub use sort_if_stmts::sort_if_stmts;
+pub use resolve_age_all_queries::*;
+pub use sort_if_stmts::*;
 use var_info::*;
 pub use var_info::{CanAssumeFunctionality, RelationInfo};
 
