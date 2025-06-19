@@ -705,9 +705,12 @@ pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> FlatRule
         // Necessary here for explicit rules, but not for implicit functionality rules, since the
         // latter are already ordered reasonably.
         sort_if_stmts(&mut flat_rule);
-        resolve_age_all_queries(&mut flat_rule);
         flat_rule
     }));
+
+    for flat_rule in rules_vec.iter_mut() {
+        resolve_age_all_queries(flat_rule);
+    }
 
     let rules_vec = Box::pin(rules_vec);
 

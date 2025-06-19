@@ -141,9 +141,9 @@ fn collect_non_surj_then_queries<'a>(
                 FlatStmt::If(_) | FlatStmt::SurjThen(_) | FlatStmt::Call { .. } => {}
                 FlatStmt::DefineRange(_) => todo!(),
                 FlatStmt::NonSurjThen(non_surj_then_stmt) => {
-                    let spec = QuerySpec::eval_func(non_surj_then_stmt.func, eqlog);
-                    non_surj_then_queries
-                        .insert((eqlog.func_rel(non_surj_then_stmt.func).unwrap(), spec));
+                    let specs = QuerySpec::eval_func(non_surj_then_stmt.func, eqlog);
+                    let func_rel = eqlog.func_rel(non_surj_then_stmt.func).unwrap();
+                    non_surj_then_queries.extend(specs.into_iter().map(|spec| (func_rel, spec)));
                 }
             }
         }

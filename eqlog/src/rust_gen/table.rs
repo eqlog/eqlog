@@ -475,7 +475,7 @@ fn display_contains_fn_signature<'a>(
 
 fn display_contains_fn<'a>(
     rel: Rel,
-    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
+    index_selection: &'a BTreeMap<QuerySpec, IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
@@ -483,7 +483,10 @@ fn display_contains_fn<'a>(
     FmtFn(move |f| {
         let fn_name = display_contains_fn_name(rel, eqlog, identifiers);
         let signature = display_contains_fn_signature(rel, eqlog, identifiers);
-        let indices = index_selection.get(&QuerySpec::all()).unwrap();
+        let indices: Vec<&IndexSpec> = QuerySpec::all()
+            .into_iter()
+            .map(|query_spec| index_selection.get(&query_spec).unwrap())
+            .collect();
 
         let checks = indices
             .iter()
@@ -996,7 +999,7 @@ fn display_eval_fn_signature<'a>(
 
 fn display_eval_fn<'a>(
     func: Func,
-    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
+    index_selection: &'a BTreeMap<QuerySpec, IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
@@ -1008,10 +1011,10 @@ fn display_eval_fn<'a>(
         let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
         let flat_dom_len = flat_dom.len();
 
-        let query_spec = QuerySpec::eval_func(func, eqlog);
-        let indices = index_selection
-            .get(&query_spec)
-            .expect("Query spec should have indices");
+        let indices: Vec<&IndexSpec> = QuerySpec::eval_func(func, eqlog)
+            .into_iter()
+            .map(|query_spec| index_selection.get(&query_spec).unwrap())
+            .collect();
         let index_gets = indices
             .iter()
             .map(|index| {
@@ -1259,16 +1262,14 @@ fn display_index_getter_fn<'a>(
 
 pub fn display_table_lib<'a>(
     rel: Rel,
-    index_selection: &'a BTreeMap<QuerySpec, Vec<IndexSpec>>,
+    index_selection: &'a BTreeMap<QuerySpec, IndexSpec>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let indices: BTreeSet<&IndexSpec> = index_selection
-            .iter()
-            .flat_map(|(_, indices)| indices)
-            .collect();
+        let indices: BTreeSet<&IndexSpec> =
+            index_selection.iter().map(|(_, index)| index).collect();
 
         let index_orders: BTreeSet<&[usize]> =
             indices.iter().map(|index| &index.order[..]).collect();

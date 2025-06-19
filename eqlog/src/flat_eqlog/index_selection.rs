@@ -8,7 +8,6 @@ use super::{ast::*, FlatRuleAnalysis};
 use crate::eqlog_util::*;
 use by_address::ByAddress;
 use eqlog_eqlog::*;
-use maplit::btreeset;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct QuerySpec {
@@ -18,14 +17,22 @@ pub struct QuerySpec {
 }
 
 impl QuerySpec {
-    /// The [QuerySpec] to query for all tuples in a relation.
-    pub fn all() -> Self {
-        QuerySpec {
-            projections: BTreeSet::new(),
-            diagonals: BTreeSet::new(),
-            age: QueryAge::All,
-        }
+    /// The specs needed to query for all tuples in a relation.
+    pub fn all() -> Vec<Self> {
+        vec![
+            QuerySpec {
+                projections: BTreeSet::new(),
+                diagonals: BTreeSet::new(),
+                age: QueryAge::New,
+            },
+            QuerySpec {
+                projections: BTreeSet::new(),
+                diagonals: BTreeSet::new(),
+                age: QueryAge::Old,
+            },
+        ]
     }
+    // TODO: Rename this to all_new.
     /// The [QuerySpec] to query for all dirty tuples in a relation.
     pub fn all_dirty() -> Self {
         QuerySpec {
@@ -35,24 +42,38 @@ impl QuerySpec {
         }
     }
     /// The [QuerySpec] to query for one specific tuple in a relation.
-    pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
+    pub fn one(rel: Rel, eqlog: &Eqlog) -> Vec<Self> {
         let arity_len =
             type_list_vec(eqlog.flat_arity(rel).expect("arity should be total"), eqlog).len();
-        QuerySpec {
-            projections: (0..arity_len).collect(),
-            diagonals: BTreeSet::new(),
-            age: QueryAge::All,
-        }
+        vec![
+            QuerySpec {
+                projections: (0..arity_len).collect(),
+                diagonals: BTreeSet::new(),
+                age: QueryAge::New,
+            },
+            QuerySpec {
+                projections: (0..arity_len).collect(),
+                diagonals: BTreeSet::new(),
+                age: QueryAge::Old,
+            },
+        ]
     }
     /// The [QuerySpec] for evaluating a function.
-    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
+    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Vec<Self> {
         let domain = eqlog.flat_domain(func).expect("domain should be total");
         let dom_len = type_list_vec(domain, eqlog).len();
-        QuerySpec {
-            projections: (0..dom_len).collect(),
-            diagonals: BTreeSet::new(),
-            age: QueryAge::All,
-        }
+        vec![
+            QuerySpec {
+                projections: (0..dom_len).collect(),
+                diagonals: BTreeSet::new(),
+                age: QueryAge::New,
+            },
+            QuerySpec {
+                projections: (0..dom_len).collect(),
+                diagonals: BTreeSet::new(),
+                age: QueryAge::Old,
+            },
+        ]
     }
 
     pub fn le_restrictive(&self, rhs: &QuerySpec) -> bool {
@@ -125,8 +146,8 @@ impl IndexSpec {
     }
 }
 
-// Maps relation name and query spec to the indices of the the relation that can serve the query.
-pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, Vec<IndexSpec>>>;
+// Maps relation name and query spec to the index of the the relation that can serve the query.
+pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, IndexSpec>>;
 
 pub fn select_indices(
     flat_analyses: &[FlatRuleAnalysis],
@@ -144,8 +165,10 @@ pub fn select_indices(
     let mut query_specs: BTreeMap<Rel, BTreeSet<QuerySpec>> = eqlog
         .iter_rel()
         .map(|rel| {
-            let min_spec_set =
-                btreeset! {QuerySpec::all(), QuerySpec::one(rel, eqlog), QuerySpec::all_dirty()};
+            let mut min_spec_set: BTreeSet<QuerySpec> = BTreeSet::new();
+            min_spec_set.extend(QuerySpec::all());
+            min_spec_set.insert(QuerySpec::all_dirty());
+            min_spec_set.extend(QuerySpec::one(rel, eqlog));
             (rel, min_spec_set)
         })
         .collect();
@@ -154,19 +177,15 @@ pub fn select_indices(
     // the public eval function and for non surjective then statements.
     for func in eqlog.iter_func() {
         let rel = eqlog.func_rel(func).unwrap();
-        let spec = QuerySpec::eval_func(func, eqlog);
-        query_specs.get_mut(&rel).unwrap().insert(spec);
+        query_specs
+            .get_mut(&rel)
+            .unwrap()
+            .extend(QuerySpec::eval_func(func, eqlog));
     }
 
     // Every relation if stmt needs a QuerySpec.
     for (if_stmt_rel, info) in if_stmt_rel_infos.iter() {
         let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
-        let rel_str = crate::eqlog_util::display_rel(*rel, eqlog, identifiers).to_string();
-        if rel_str == "is_subterminal" {
-            println!("{rel_str}");
-            println!("{if_stmt_rel:?}");
-            println!("{info:?}");
-        }
         let RelationInfo {
             diagonals,
             in_projections,
@@ -185,67 +204,13 @@ pub fn select_indices(
     query_specs
         .into_iter()
         .map(|(rel, query_specs)| {
-            let desugared_query_specs: BTreeSet<QuerySpec> = query_specs
-                .iter()
-                .flat_map(|query_spec| match query_spec.age {
-                    QueryAge::All => {
-                        let new = QuerySpec {
-                            age: QueryAge::New,
-                            ..query_spec.clone()
-                        };
-                        let old = QuerySpec {
-                            age: QueryAge::Old,
-                            ..query_spec.clone()
-                        };
-                        vec![new, old]
-                    }
-                    QueryAge::New => vec![query_spec.clone()],
-                    QueryAge::Old => vec![query_spec.clone()],
-                })
-                .collect();
-            let desugared_chains = query_spec_chains(&desugared_query_specs);
-            let desugared_query_index_map: BTreeMap<QuerySpec, IndexSpec> = desugared_chains
+            let chains = query_spec_chains(&query_specs);
+            let query_index_map: BTreeMap<QuerySpec, IndexSpec> = chains
                 .into_iter()
                 .flat_map(|queries| {
                     let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
                     let index = IndexSpec::from_query_spec_chain(arity.len(), &queries);
                     queries.into_iter().zip(repeat(index))
-                })
-                .collect();
-
-            let query_index_map: BTreeMap<QuerySpec, Vec<IndexSpec>> = query_specs
-                .into_iter()
-                .map(|query| {
-                    let indices = match query.age {
-                        QueryAge::All => {
-                            let new_query_spec = QuerySpec {
-                                age: QueryAge::New,
-                                ..query.clone()
-                            };
-                            let old_query_spec = QuerySpec {
-                                age: QueryAge::Old,
-                                ..query.clone()
-                            };
-
-                            let new_index = desugared_query_index_map
-                                .get(&new_query_spec)
-                                .unwrap()
-                                .clone();
-                            let old_index = desugared_query_index_map
-                                .get(&old_query_spec)
-                                .unwrap()
-                                .clone();
-
-                            vec![new_index, old_index]
-                        }
-                        QueryAge::New => {
-                            vec![desugared_query_index_map.get(&query).unwrap().clone()]
-                        }
-                        QueryAge::Old => {
-                            vec![desugared_query_index_map.get(&query).unwrap().clone()]
-                        }
-                    };
-                    (query, indices)
                 })
                 .collect();
 

@@ -449,12 +449,15 @@ fn display_pub_iter_fn<'a>(
             }
         };
 
-        let query_spec = QuerySpec::all();
-        let indices = index_selection
+        let index_selection = index_selection
             .get(&display_rel(rel, eqlog, identifiers).to_string())
-            .unwrap()
-            .get(&query_spec)
             .unwrap();
+        let indices: Vec<&IndexSpec> = QuerySpec::all()
+            .into_iter()
+            .map(|query_spec| index_selection.get(&query_spec).unwrap())
+            .collect();
+        let indices = indices.as_slice();
+
         let index_its = indices
             .into_iter()
             .enumerate()
@@ -1986,7 +1989,7 @@ pub fn display_table_extern_decls<'a>(
                         display_has_new_data_fn_decl(rel, eqlog, identifiers, symbol_prefix);
                     writeln!(f, "{has_new_data_fn_decl}")?;
 
-                    let index_specs: BTreeSet<&IndexSpec> = indices.values().flatten().collect();
+                    let index_specs: BTreeSet<&IndexSpec> = indices.values().collect();
                     for index in index_specs {
                         let index_getter_fn_decl = display_index_getter_decl(
                             index,

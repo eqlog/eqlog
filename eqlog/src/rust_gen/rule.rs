@@ -136,7 +136,6 @@ fn display_table_fn_decls<'a>(
 
                 let rel_string = display_rel(rel, eqlog, identifiers).to_string();
 
-                // TODO: Look at "used_queries" here instead.
                 let indices: BTreeSet<&IndexSpec> = analysis
                     .used_queries
                     .iter()
@@ -153,7 +152,6 @@ fn display_table_fn_decls<'a>(
                             None
                         }
                     })
-                    .flatten()
                     .collect();
                 let index_getters = indices
                     .into_iter()
@@ -213,80 +211,66 @@ fn display_if_stmt_header<'a>(
                     .if_stmt_rel_infos
                     .get(&ByAddress(rel_stmt))
                     .unwrap();
+
                 let query_spec = QuerySpec {
                     diagonals: diagonals.clone(),
                     projections: in_projections.keys().copied().collect(),
                     age: *age,
                 };
-                let indices = index_selection
-                    .get(&display_rel(*rel, eqlog, identifiers).to_string())
+
+                let relation = display_rel(*rel, eqlog, identifiers).to_string();
+                let relation_snake = relation.to_case(Snake);
+
+                let index = index_selection
+                    .get(&relation)
                     .unwrap()
                     .get(&query_spec)
                     .unwrap();
-                let relation = format!("{}", display_rel(*rel, eqlog, identifiers));
-                let relation_snake = relation.to_case(Snake);
-                let relation_snake = &relation_snake;
+
                 let row_type = display_rel_row_type(*rel, eqlog);
-                let row_type = &row_type;
+
                 let arity_len = type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog).len();
                 let fixed_arg_len = query_spec.projections.len();
                 let open_arg_len = arity_len - fixed_arg_len;
 
-                let range_defs = indices
+                let fixed_args = index.order[..fixed_arg_len]
                     .iter()
-                    .enumerate()
-                    .map(|(i, index)| {
-                        let fixed_args = index.order[..fixed_arg_len]
-                            .iter()
-                            .map(|i| {
-                                FmtFn(move |f| {
-                                    let var = *in_projections.get(i).unwrap();
-                                    let var = display_var(var);
-                                    write!(f, "{var}, ")
-                                })
-                            })
-                            .format("")
-                            .to_string();
-
-                        let open_args_min = (0..open_arg_len).map(|_| "u32::MIN, ").format("");
-                        let open_args_max = (0..open_arg_len).map(|_| "u32::MAX, ").format("");
-                        let getter_fn =
-                            display_index_getter_fn_name(index, *rel, eqlog, identifiers);
-
-                        let row_args = (0..arity_len)
-                            .map(|i| FmtFn(move |f| write!(f, "r{i}, ")))
-                            .format("");
-                        let out_proj_args = (0..arity_len)
-                            .filter(|i| out_projections.contains_key(&i))
-                            .map(|i| {
-                                let j = index.order.iter().position(|&x| x == i).unwrap();
-                                FmtFn(move |f| write!(f, "*r{j}"))
-                            })
-                            .format(", ");
-                        let out_proj_arg_num = out_projections.len();
-
+                    .map(|i| {
                         FmtFn(move |f| {
-                            writedoc! {f, "
-                                    let lower: {row_type} = [{fixed_args}{open_args_min}];
-                                    let upper: {row_type} = [{fixed_args}{open_args_max}];
-                                    let range{i} =
-                                    {getter_fn}(&env.{relation_snake}_table).range(lower..=upper)
-                                    .map(|[{row_args}]| -> [u32; {out_proj_arg_num}] {{
-                                        [{out_proj_args}]
-                                    }});
-                                "}
+                            let var = *in_projections.get(i).unwrap();
+                            let var = display_var(var);
+                            write!(f, "{var}, ")
                         })
                     })
-                    .format("\n");
+                    .format("")
+                    .to_string();
 
-                let range_chains = (0..indices.len())
-                    .map(|i| FmtFn(move |f| write!(f, ".chain(range{i})")))
+                let open_args_min = (0..open_arg_len).map(|_| "u32::MIN, ").format("");
+                let open_args_max = (0..open_arg_len).map(|_| "u32::MAX, ").format("");
+                let getter_fn = display_index_getter_fn_name(index, *rel, eqlog, identifiers);
+
+                let row_args = (0..arity_len)
+                    .map(|i| FmtFn(move |f| write!(f, "r{i}, ")))
                     .format("");
+                let out_proj_args = (0..arity_len)
+                    .filter(|i| out_projections.contains_key(&i))
+                    .map(|i| {
+                        let j = index.order.iter().position(|&x| x == i).unwrap();
+                        FmtFn(move |f| write!(f, "*r{j}"))
+                    })
+                    .format(", ");
+                let out_proj_arg_num = out_projections.len();
 
                 writedoc! {f, "
-                        {range_defs}
-                        let mut it = [].into_iter(){range_chains};
+                        let lower: {row_type} = [{fixed_args}{open_args_min}];
+                        let upper: {row_type} = [{fixed_args}{open_args_max}];
+                        let mut it =
+                        {getter_fn}(&env.{relation_snake}_table).range(lower..=upper)
+                        .map(|[{row_args}]| -> [u32; {out_proj_arg_num}] {{
+                            [{out_proj_args}]
+                        }});
                     "}?;
+
                 write!(f, "#[allow(unused_variables)]\n")?;
                 write!(f, "while let Some([")?;
                 for i in 0..arity_len {
@@ -319,12 +303,7 @@ fn display_if_stmt_header<'a>(
                             for {var} in env.{typ_snake}_old.iter().copied() {{
                         "}?;
                     }
-                    QueryAge::All => {
-                        writedoc! {f, "
-                            #[allow(unused_variables)]
-                            for {var} in env.{typ_snake}_old.iter().chain(env.{typ_snake}_new.iter()).copied() {{
-                        "}?;
-                    }
+                    QueryAge::All => panic!("Should have been desugared into Old/New earlier"),
                 }
             }
         };
