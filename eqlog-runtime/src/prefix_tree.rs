@@ -1,4 +1,4 @@
-use crate::collections::{BTreeMap, BTreeSet};
+use crate::collections::{btree_map, BTreeMap, BTreeSet};
 
 // type definitions
 pub struct PrefixTree0(Option<()>);
@@ -120,85 +120,87 @@ impl PrefixTree9 {
 
 // insert methods.
 impl PrefixTree0 {
-    pub fn insert(&mut self, []: [u32; 0]) {
+    pub fn insert(&mut self, []: [u32; 0]) -> bool {
+        let was_empty = self.0.is_none();
         self.0 = Some(());
+        was_empty
     }
 }
 impl PrefixTree1 {
-    pub fn insert(&mut self, [el0]: [u32; 1]) {
-        self.set.insert(el0);
+    pub fn insert(&mut self, [el0]: [u32; 1]) -> bool {
+        self.set.insert(el0)
     }
 }
 
 impl PrefixTree2 {
-    pub fn insert(&mut self, [el0, el1]: [u32; 2]) {
+    pub fn insert(&mut self, [el0, el1]: [u32; 2]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree1::new)
-            .insert([el1]);
+            .insert([el1])
     }
 }
 
 impl PrefixTree3 {
-    pub fn insert(&mut self, [el0, el1, el2]: [u32; 3]) {
+    pub fn insert(&mut self, [el0, el1, el2]: [u32; 3]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree2::new)
-            .insert([el1, el2]);
+            .insert([el1, el2])
     }
 }
 
 impl PrefixTree4 {
-    pub fn insert(&mut self, [el0, el1, el2, el3]: [u32; 4]) {
+    pub fn insert(&mut self, [el0, el1, el2, el3]: [u32; 4]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree3::new)
-            .insert([el1, el2, el3]);
+            .insert([el1, el2, el3])
     }
 }
 
 impl PrefixTree5 {
-    pub fn insert(&mut self, [el0, el1, el2, el3, el4]: [u32; 5]) {
+    pub fn insert(&mut self, [el0, el1, el2, el3, el4]: [u32; 5]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree4::new)
-            .insert([el1, el2, el3, el4]);
+            .insert([el1, el2, el3, el4])
     }
 }
 
 impl PrefixTree6 {
-    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5]: [u32; 6]) {
+    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5]: [u32; 6]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree5::new)
-            .insert([el1, el2, el3, el4, el5]);
+            .insert([el1, el2, el3, el4, el5])
     }
 }
 
 impl PrefixTree7 {
-    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6]: [u32; 7]) {
+    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6]: [u32; 7]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree6::new)
-            .insert([el1, el2, el3, el4, el5, el6]);
+            .insert([el1, el2, el3, el4, el5, el6])
     }
 }
 
 impl PrefixTree8 {
-    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7]: [u32; 8]) {
+    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7]: [u32; 8]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree7::new)
-            .insert([el1, el2, el3, el4, el5, el6, el7]);
+            .insert([el1, el2, el3, el4, el5, el6, el7])
     }
 }
 
 impl PrefixTree9 {
-    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 9]) {
+    pub fn insert(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 9]) -> bool {
         self.map
             .entry(el0)
             .or_insert_with(PrefixTree8::new)
-            .insert([el1, el2, el3, el4, el5, el6, el7, el8]);
+            .insert([el1, el2, el3, el4, el5, el6, el7, el8])
     }
 }
 
@@ -279,102 +281,143 @@ impl PrefixTree9 {
     }
 }
 
-// remove methods.
 impl PrefixTree0 {
-    pub fn remove(&mut self, []: [u32; 0]) {
+    pub fn remove(&mut self, []: [u32; 0]) -> bool {
+        let was_present = self.0.is_some();
         self.0 = None;
+        was_present
     }
 }
 impl PrefixTree1 {
-    pub fn remove(&mut self, [el0]: [u32; 1]) {
-        self.set.remove(&el0);
+    pub fn remove(&mut self, [el0]: [u32; 1]) -> bool {
+        self.set.remove(&el0)
     }
 }
 
 impl PrefixTree2 {
-    pub fn remove(&mut self, [el0, el1]: [u32; 2]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1]);
-            if tree.set.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1]: [u32; 2]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree3 {
-    pub fn remove(&mut self, [el0, el1, el2]: [u32; 3]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2]: [u32; 3]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree4 {
-    pub fn remove(&mut self, [el0, el1, el2, el3]: [u32; 4]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2, el3]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2, el3]: [u32; 4]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2, el3]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree5 {
-    pub fn remove(&mut self, [el0, el1, el2, el3, el4]: [u32; 5]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2, el3, el4]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2, el3, el4]: [u32; 5]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2, el3, el4]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree6 {
-    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5]: [u32; 6]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2, el3, el4, el5]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5]: [u32; 6]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2, el3, el4, el5]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree7 {
-    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6]: [u32; 7]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2, el3, el4, el5, el6]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6]: [u32; 7]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2, el3, el4, el5, el6]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree8 {
-    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7]: [u32; 8]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2, el3, el4, el5, el6, el7]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7]: [u32; 8]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2, el3, el4, el5, el6, el7]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }
 
 impl PrefixTree9 {
-    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 9]) {
-        if let Some(tree) = self.map.get_mut(&el0) {
-            tree.remove([el1, el2, el3, el4, el5, el6, el7, el8]);
-            if tree.map.is_empty() {
-                self.map.remove(&el0);
+    pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 9]) -> bool {
+        match self.map.entry(el0) {
+            btree_map::Entry::Occupied(mut entry) => {
+                let tree = entry.get_mut();
+                let was_present = tree.remove([el1, el2, el3, el4, el5, el6, el7, el8]);
+                if tree.is_empty() {
+                    entry.remove();
+                }
+                was_present
             }
+            btree_map::Entry::Vacant(_) => false,
         }
     }
 }

@@ -15,7 +15,7 @@ fn display_imports<'a>() -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         writedoc! {f, "
             #[allow(unused)]
-            use eqlog_runtime::collections::BTreeSet;
+            use eqlog_runtime::{{*, collections::*}};
         "}
     })
 }
