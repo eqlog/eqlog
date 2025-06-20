@@ -625,6 +625,17 @@ impl PrefixTree9 {
 }
 
 // get methods
+impl PrefixTree1 {
+    pub fn get(&self, first_el: u32) -> Option<PrefixTree0> {
+        const NON_EMPTY: PrefixTree0 = PrefixTree0(Some(()));
+        if self.set.contains(&first_el) {
+            Some(NON_EMPTY)
+        } else {
+            None
+        }
+    }
+}
+
 impl PrefixTree2 {
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree1> {
         self.map.get(&first_el)

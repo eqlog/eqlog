@@ -1244,7 +1244,6 @@ fn display_index_getter_fn_signature<'a>(
             let diag_str = diag.iter().format_with("", |d, f| f(&format_args!("_{d}")));
             f(&format_args!("_diagonal{diag_str}"))
         });
-        let row_type = display_rel_row_type(rel, eqlog);
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
         let arity_len = arity.len();
         let order = index

@@ -40,7 +40,7 @@ fn display_imports() -> impl Display {
             #[allow(unused)]
             use std::fmt;
             #[allow(unused)]
-            use eqlog_runtime::Unification;
+            use eqlog_runtime::*;
             #[allow(unused)]
             use std::ops::Bound;
             #[allow(unused)]
@@ -477,7 +477,7 @@ fn display_pub_iter_fn<'a>(
                                 let type_camel = display_type(*typ, eqlog, identifiers)
                                     .to_string()
                                     .to_case(UpperCamel);
-                                write!(f, "{type_camel}::from(*arg{i})")
+                                write!(f, "{type_camel}::from(arg{i})")
                             })
                         })
                         .format(",");
