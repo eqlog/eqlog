@@ -484,6 +484,21 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
     let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
 
+    let resolved_rules: Vec<FlatRule> = flat_rules
+        .rules()
+        .iter()
+        .zip(flat_rules.analyses())
+        .map(|(rule, analysis)| {
+            resolve_if_rel_stmts(
+                rule,
+                &analysis.if_stmt_rel_infos,
+                &index_selection,
+                &eqlog,
+                &identifiers,
+            )
+        })
+        .collect();
+
     let theory_name_len = theory_name.len();
     let symbol_prefix = format!("eql_{theory_name_len}_{theory_name}");
 
@@ -491,7 +506,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         &theory_name.to_case(Case::UpperCamel),
         &eqlog,
         &identifiers,
-        flat_rules.rules(),
+        resolved_rules.as_slice(),
         flat_rules.analyses(),
         &index_selection,
         symbol_prefix.as_str(),
@@ -537,8 +552,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             Ok(())
         })?;
 
-    flat_rules
-        .rules()
+    resolved_rules
         .iter()
         .zip(flat_rules.analyses())
         .par_bridge()

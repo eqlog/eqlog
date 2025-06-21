@@ -36,7 +36,7 @@ pub struct FlatIfStmtRelation {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatIfStmtRange {
     pub range_var: FlatRangeVar,
-    pub args: Vec<FlatVar>,
+    pub args: Vec<Option<FlatVar>>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -136,7 +136,7 @@ impl FlatIfStmtRelation {
 impl FlatIfStmtRange {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
         let FlatIfStmtRange { range_var: _, args } = self;
-        args.iter().copied()
+        args.iter().flatten().copied()
     }
 }
 

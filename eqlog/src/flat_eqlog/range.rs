@@ -85,9 +85,9 @@ fn resolve_if_rel_stmts_func<'a>(
                 }));
             });
 
-        let if_stmt_range_vars: Vec<FlatVar> = index.order[fixed_arg_len..]
+        let if_stmt_range_vars: Vec<Option<FlatVar>> = index.order[fixed_arg_len..]
             .iter()
-            .map(|i| *out_projections.get(i).unwrap())
+            .map(|i| out_projections.get(i).copied())
             .collect();
 
         body.push(FlatStmt::If(FlatIfStmt::Range(FlatIfStmtRange {
@@ -106,7 +106,7 @@ fn resolve_if_rel_stmts_func<'a>(
 /// Replace all relation if statements by range definitions and iterations over them.
 pub fn resolve_if_rel_stmts<'a>(
     rule: &'a FlatRule,
-    if_stmt_rel_infos: BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
+    if_stmt_rel_infos: &BTreeMap<ByAddress<&'a FlatIfStmtRelation>, RelationInfo>,
     index_selection: &IndexSelection,
     eqlog: &Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
