@@ -2,10 +2,10 @@ pred absurd();
 pred truth();
 pred undetermined();
 
-rule {
+rule truth_holds {
     then truth();
 }
-rule {
+rule ex_falso_quodlibet {
     if absurd();
     then undetermined();
 }
