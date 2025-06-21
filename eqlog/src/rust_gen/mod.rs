@@ -9,7 +9,6 @@ pub use types::*;
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
-use by_address::ByAddress;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};

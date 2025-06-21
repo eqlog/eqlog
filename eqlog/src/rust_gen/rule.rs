@@ -183,7 +183,6 @@ fn display_if_stmt_header<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         match stmt {
@@ -199,76 +198,8 @@ fn display_if_stmt_header<'a>(
                     if {lhs} == {rhs} {{
                 "}?;
             }
-            FlatIfStmt::Relation(rel_stmt) => {
-                let FlatIfStmtRelation { rel, args: _, age } = rel_stmt;
-                let RelationInfo {
-                    diagonals,
-                    in_projections,
-                    out_projections,
-                    rel: _,
-                    age: _,
-                } = analysis
-                    .if_stmt_rel_infos
-                    .get(&ByAddress(rel_stmt))
-                    .unwrap();
-
-                let query_spec = QuerySpec {
-                    diagonals: diagonals.clone(),
-                    projections: in_projections.keys().copied().collect(),
-                    age: *age,
-                };
-
-                let relation = display_rel(*rel, eqlog, identifiers).to_string();
-                let relation_snake = relation.to_case(Snake);
-
-                let index = index_selection
-                    .get(&relation)
-                    .unwrap()
-                    .get(&query_spec)
-                    .unwrap();
-
-                let getter_fn = display_index_getter_fn_name(index, *rel, eqlog, identifiers);
-
-                let fixed_arg_len = query_spec.projections.len();
-
-                let get_subtrees = index.order[..fixed_arg_len]
-                    .iter()
-                    .map(|i| {
-                        FmtFn(move |f| {
-                            let var = *in_projections.get(i).unwrap();
-                            let var = display_var(var);
-                            writedoc! {f, "
-                                let tree = match tree.get({var}) {{
-                                    Some(tree) => tree,
-                                    None => continue,
-                                }};
-                            "}
-                        })
-                    })
-                    .format("");
-
-                let out_proj_args = index.order[fixed_arg_len..]
-                    .iter()
-                    .map(|i| {
-                        FmtFn(move |f| match out_projections.get(&i) {
-                            Some(var) => {
-                                let var = display_var(*var);
-                                write!(f, "{var}")
-                            }
-                            None => {
-                                write!(f, "_")
-                            }
-                        })
-                    })
-                    .format(", ");
-
-                writedoc! {f, "
-                    let tree = {getter_fn}(&env.{relation_snake}_table);
-                    {get_subtrees}
-
-                    #[allow(unused_variables)]
-                    for [{out_proj_args}] in tree.iter() {{
-                "}?;
+            FlatIfStmt::Relation(_) => {
+                panic!("Should have been resolved into range statements")
             }
             FlatIfStmt::Range(range_stmt) => {
                 let FlatIfStmtRange { range_var, args } = range_stmt;
@@ -447,7 +378,6 @@ fn display_stmts<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let (head, tail) = match stmts {
@@ -459,10 +389,9 @@ fn display_stmts<'a>(
 
         match head {
             FlatStmt::If(if_stmt) => {
-                let if_header =
-                    display_if_stmt_header(if_stmt, analysis, eqlog, identifiers, index_selection);
+                let if_header = display_if_stmt_header(if_stmt, analysis, eqlog, identifiers);
                 let if_footer = "}";
-                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {if_header}
                     {tail}
@@ -473,7 +402,7 @@ fn display_stmts<'a>(
                 defined_var,
                 expression,
             }) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 let expression = display_range_expr(expression, eqlog, identifiers);
                 let defined_var = display_range_var(*defined_var);
 
@@ -484,7 +413,7 @@ fn display_stmts<'a>(
                 "}?;
             }
             FlatStmt::SurjThen(surj_then) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {surj_then}
@@ -492,7 +421,7 @@ fn display_stmts<'a>(
                 "}?;
             }
             FlatStmt::NonSurjThen(non_surj_then) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
                 writedoc! {f, "
                     {non_surj_then}
@@ -503,7 +432,7 @@ fn display_stmts<'a>(
                 let rule_name = analysis.rule_name;
                 let i = func_name.0;
                 let args = args.iter().copied().map(display_var).format(", ");
-                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
+                let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {rule_name}_{i}(env, {args});
                     {tail}
@@ -520,7 +449,6 @@ fn display_rule_func<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let func_name = flat_func.name.0;
@@ -536,13 +464,7 @@ fn display_rule_func<'a>(
             })
             .format(", ");
 
-        let stmts = display_stmts(
-            flat_func.body.as_slice(),
-            analysis,
-            eqlog,
-            identifiers,
-            index_selection,
-        );
+        let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
 
         writedoc! {f, "
             #[allow(unused_variables)]
@@ -618,16 +540,7 @@ pub fn display_rule_lib<'a>(
         let internal_funcs = rule
             .funcs
             .iter()
-            .map(|func| {
-                display_rule_func(
-                    rule.name.as_str(),
-                    func,
-                    analysis,
-                    eqlog,
-                    identifiers,
-                    index_selection,
-                )
-            })
+            .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
             .format("\n");
 
         let exported_rule_func = display_rule_fn(rule.name.as_str(), symbol_prefix);
