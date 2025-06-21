@@ -64,21 +64,31 @@ struct Cli {
         requires_if(BuildType::Component, "build_type")
     )]
     opt_level: String,
+
+    /// Path to the runtime rlib (only used for component build)
+    #[arg(
+        long,
+        required_if_eq("build_type", "component"),
+        requires_if(BuildType::Component, "build_type")
+    )]
+    runtime_rlib_path: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let component_build = match cli.build_type {
-        BuildType::Component => {
-            // We can safely unwrap component_out_dir because it's required when build_type is Component
-            Some(ComponentConfig {
-                component_out_dir: cli.component_out_dir.unwrap(),
-                rustc_path: cli.rustc_path,
-                debug: cli.debug,
-                opt_level: cli.opt_level,
-            })
-        }
+        BuildType::Component => Some(ComponentConfig {
+            component_out_dir: cli
+                .component_out_dir
+                .expect("Clap checks that this is present in component builds"),
+            rustc_path: cli.rustc_path,
+            debug: cli.debug,
+            opt_level: cli.opt_level,
+            runtime_rlib_path: cli
+                .runtime_rlib_path
+                .expect("Clap checks that this is present in component builds"),
+        }),
         BuildType::Module => None,
     };
 

@@ -255,6 +255,7 @@ impl FlatStmt {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatRule {
     pub name: String,
     pub funcs: Vec<FlatFunc>,

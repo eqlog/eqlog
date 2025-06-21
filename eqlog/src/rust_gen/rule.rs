@@ -270,7 +270,30 @@ fn display_if_stmt_header<'a>(
                     for [{out_proj_args}] in tree.iter() {{
                 "}?;
             }
-            FlatIfStmt::Range(_) => todo!(),
+            FlatIfStmt::Range(range_stmt) => {
+                let FlatIfStmtRange { range_var, args } = range_stmt;
+
+                let range_var = display_range_var(*range_var);
+                let args = args
+                    .iter()
+                    .map(|var| {
+                        FmtFn(move |f| match *var {
+                            None => {
+                                write!(f, "_")
+                            }
+                            Some(var) => {
+                                let var = display_var(var);
+                                write!(f, "{var}")
+                            }
+                        })
+                    })
+                    .format(", ");
+
+                writedoc! {f, r#"
+                    #[allow(unused_variables)]
+                    for [{args}] in {range_var}.iter() {{
+                "#}?;
+            }
             FlatIfStmt::Type(type_stmt) => {
                 let FlatIfStmtType { var, age } = type_stmt;
                 let typ = format!(
@@ -389,6 +412,36 @@ fn display_non_surj_then<'a>(
     })
 }
 
+fn display_range_expr<'a>(
+    expr: &'a FlatRangeExpr,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f: &mut Formatter| -> Result {
+        match expr {
+            FlatRangeExpr::Index(index_expr) => {
+                let FlatIndexRangeExpr { rel, index } = index_expr;
+                let getter_fn = display_index_getter_fn_name(index, *rel, eqlog, identifiers);
+                let rel_snake = display_rel(*rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                write!(f, "Some({getter_fn}(&env.{rel_snake}_table))")
+            }
+            FlatRangeExpr::Restriction(restriction_expr) => {
+                let FlatRangeRestrictionExpr {
+                    range_var,
+                    first_projection,
+                } = restriction_expr;
+
+                let range_var = display_range_var(*range_var);
+                let first_projection = display_var(*first_projection);
+
+                write!(f, "{range_var}.get({first_projection})")
+            }
+        }
+    })
+}
+
 fn display_stmts<'a>(
     stmts: &'a [FlatStmt],
     analysis: &'a FlatRuleAnalysis<'a>,
@@ -416,7 +469,20 @@ fn display_stmts<'a>(
                     {if_footer}
                 "}?;
             }
-            FlatStmt::DefineRange(_) => todo!(),
+            FlatStmt::DefineRange(FlatDefineRangeStmt {
+                defined_var,
+                expression,
+            }) => {
+                let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
+                let expression = display_range_expr(expression, eqlog, identifiers);
+                let defined_var = display_range_var(*defined_var);
+
+                writedoc! {f, "
+                    if let Some({defined_var}) = {expression} {{
+                    {tail}
+                    }}
+                "}?;
+            }
             FlatStmt::SurjThen(surj_then) => {
                 let tail = display_stmts(tail, analysis, eqlog, identifiers, index_selection);
                 let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);

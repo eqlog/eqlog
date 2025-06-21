@@ -1387,6 +1387,13 @@ fn display_var(var: FlatVar) -> impl Display {
     })
 }
 
+fn display_range_var(var: FlatRangeVar) -> impl Display {
+    FmtFn(move |f| -> Result {
+        let var = var.0;
+        write!(f, "range{var}")
+    })
+}
+
 fn display_drop_dirt_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
