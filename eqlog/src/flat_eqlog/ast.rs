@@ -2,6 +2,8 @@ use std::{collections::BTreeMap, iter::once};
 
 use eqlog_eqlog::*;
 
+use super::index_selection::IndexSpec;
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatVar(pub usize);
 
@@ -47,24 +49,32 @@ pub struct FlatIfStmtType {
 pub enum FlatIfStmt {
     Equal(FlatStmtEqual),
     Relation(FlatIfStmtRelation),
-    #[allow(dead_code)]
     Range(FlatIfStmtRange),
     Type(FlatIfStmtType),
 }
 
-#[allow(dead_code)]
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub enum FlatRangeSource {
-    FromRel(Rel),
-    FromRange(FlatRangeVar),
+pub struct FlatIndexRangeExpr {
+    pub rel: Rel,
+    pub index: IndexSpec,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatRangeRestrictionExpr {
+    pub range_var: FlatRangeVar,
+    pub first_projection: FlatVar,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum FlatRangeExpr {
+    Index(FlatIndexRangeExpr),
+    Restriction(FlatRangeRestrictionExpr),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatDefineRangeStmt {
     pub defined_var: FlatRangeVar,
-    pub included_lower: Vec<FlatVar>,
-    pub included_upper: Vec<FlatVar>,
-    pub source: FlatRangeSource,
+    pub expression: FlatRangeExpr,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -89,7 +99,6 @@ pub struct FlatNonSurjThenStmt {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatStmt {
     If(FlatIfStmt),
-    #[allow(dead_code)]
     DefineRange(FlatDefineRangeStmt),
     SurjThen(FlatSurjThenStmt),
     NonSurjThen(FlatNonSurjThenStmt),
@@ -159,6 +168,35 @@ impl FlatIfStmt {
     }
 }
 
+impl FlatIndexRangeExpr {
+    pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
+        [].into_iter()
+    }
+}
+
+impl FlatRangeRestrictionExpr {
+    pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
+        let FlatRangeRestrictionExpr {
+            range_var: _,
+            first_projection,
+        } = self;
+        once(*first_projection)
+    }
+}
+
+impl FlatDefineRangeStmt {
+    pub fn iter_vars<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = FlatVar>> {
+        let FlatDefineRangeStmt {
+            defined_var: _,
+            expression,
+        } = self;
+        match expression {
+            FlatRangeExpr::Index(index_expr) => Box::new(index_expr.iter_vars()),
+            FlatRangeExpr::Restriction(restriction_expr) => Box::new(restriction_expr.iter_vars()),
+        }
+    }
+}
+
 impl FlatSurjThenStmtRelation {
     pub fn iter_vars<'a>(&'a self) -> impl 'a + Iterator<Item = FlatVar> {
         let FlatSurjThenStmtRelation { rel: _, args } = self;
@@ -200,12 +238,7 @@ impl FlatStmt {
                 vars.extend(if_stmt.iter_vars());
             }
             FlatStmt::DefineRange(define_range_stmt) => {
-                vars.extend(define_range_stmt.included_lower.iter().copied());
-                vars.extend(define_range_stmt.included_upper.iter().copied());
-                match &define_range_stmt.source {
-                    FlatRangeSource::FromRel(_) => {}
-                    FlatRangeSource::FromRange(_) => {}
-                }
+                vars.extend(define_range_stmt.iter_vars());
             }
             FlatStmt::SurjThen(surj_then_stmt) => {
                 vars.extend(surj_then_stmt.iter_vars());
