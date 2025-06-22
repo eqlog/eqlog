@@ -489,13 +489,15 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .iter()
         .zip(flat_rules.analyses())
         .map(|(rule, analysis)| {
-            resolve_if_rel_stmts(
+            let mut rule = resolve_if_rel_stmts(
                 rule,
                 &analysis.if_stmt_rel_infos,
                 &index_selection,
                 &eqlog,
                 &identifiers,
-            )
+            );
+            bubble_up_range_defs(&mut rule);
+            rule
         })
         .collect();
 

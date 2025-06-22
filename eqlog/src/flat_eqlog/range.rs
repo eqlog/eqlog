@@ -4,6 +4,8 @@ use super::var_info::*;
 use crate::eqlog_util::display_rel;
 use by_address::ByAddress;
 use eqlog_eqlog::*;
+use std::cmp::max;
+use std::collections::btree_map;
 use std::collections::BTreeMap;
 
 fn resolve_if_rel_stmts_func<'a>(
@@ -132,5 +134,89 @@ pub fn resolve_if_rel_stmts<'a>(
         funcs,
         name: rule.name.clone(),
         var_types: rule.var_types.clone(),
+    }
+}
+
+fn bubble_up_range_defs_func(func: &FlatFunc) -> FlatFunc {
+    let mut body: Vec<FlatStmt> = Vec::new();
+
+    let mut range_var_defined_before: BTreeMap<FlatRangeVar, usize> = BTreeMap::new();
+    let mut var_defined_before: BTreeMap<FlatVar, usize> = BTreeMap::new();
+
+    for arg in func.args.iter() {
+        var_defined_before.insert(*arg, 0);
+    }
+
+    for stmt in func.body.iter() {
+        match stmt {
+            FlatStmt::If(if_stmt) => {
+                body.push(stmt.clone());
+
+                for var in if_stmt.iter_vars() {
+                    match var_defined_before.entry(var) {
+                        btree_map::Entry::Occupied(_) => {}
+                        btree_map::Entry::Vacant(entry) => {
+                            entry.insert(body.len());
+                        }
+                    }
+                }
+            }
+            FlatStmt::DefineRange(define_range_stmt) => match &define_range_stmt.expression {
+                FlatRangeExpr::Index(_) => {
+                    body.insert(0, stmt.clone());
+                    for index in range_var_defined_before
+                        .values_mut()
+                        .chain(var_defined_before.values_mut())
+                    {
+                        *index += 1;
+                    }
+                    range_var_defined_before.insert(define_range_stmt.defined_var, 1);
+                }
+                FlatRangeExpr::Restriction(restriction_expr) => {
+                    let FlatRangeRestrictionExpr {
+                        range_var,
+                        first_projection,
+                    } = restriction_expr;
+
+                    let insert_index = max(
+                        *range_var_defined_before.get(&range_var).unwrap(),
+                        *var_defined_before.get(&first_projection).unwrap(),
+                    );
+                    body.insert(insert_index, stmt.clone());
+                    for index in range_var_defined_before
+                        .values_mut()
+                        .chain(var_defined_before.values_mut())
+                    {
+                        if *index >= insert_index {
+                            *index += 1;
+                        }
+                    }
+                    range_var_defined_before
+                        .insert(define_range_stmt.defined_var, insert_index + 1);
+                }
+            },
+            FlatStmt::SurjThen(_) => {
+                body.push(stmt.clone());
+            }
+            FlatStmt::NonSurjThen(non_surj_then_stmt) => {
+                body.push(stmt.clone());
+                var_defined_before.insert(non_surj_then_stmt.result, body.len());
+            }
+            FlatStmt::Call { .. } => {
+                body.push(stmt.clone());
+            }
+        }
+    }
+
+    FlatFunc {
+        args: func.args.clone(),
+        name: func.name.clone(),
+        body,
+    }
+}
+
+pub fn bubble_up_range_defs(rule: &mut FlatRule) {
+    for func in rule.funcs.iter_mut() {
+        *func = bubble_up_range_defs_func(func);
     }
 }
