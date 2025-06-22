@@ -428,13 +428,26 @@ fn display_stmts<'a>(
                     {tail}
                 "}?;
             }
-            FlatStmt::Call { func_name, args } => {
+            FlatStmt::Call {
+                func_name,
+                args,
+                range_args,
+            } => {
                 let rule_name = analysis.rule_name;
                 let i = func_name.0;
-                let args = args.iter().copied().map(display_var).format(", ");
+                let args = args
+                    .iter()
+                    .copied()
+                    .map(|var| FmtFn(move |f| write!(f, "{}, ", display_var(var))))
+                    .format("");
+                let range_args = range_args
+                    .iter()
+                    .copied()
+                    .map(|var| FmtFn(move |f| write!(f, "{}, ", display_range_var(var))))
+                    .format("");
                 let tail = display_stmts(tail, analysis, eqlog, identifiers);
                 writedoc! {f, "
-                    {rule_name}_{i}(env, {args});
+                    {rule_name}_{i}(env, {args} {range_args});
                     {tail}
                 "}?;
             }
@@ -461,6 +474,16 @@ fn display_rule_func<'a>(
             .map(|var| {
                 let var_name = display_var(var);
                 FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: u32") })
+            })
+            .format(", ");
+
+        let range_args = flat_func
+            .range_args
+            .iter()
+            .copied()
+            .map(|var| {
+                let var_name = display_range_var(var);
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: &Range<u32>") })
             })
             .format(", ");
 

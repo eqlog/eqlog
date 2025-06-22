@@ -85,9 +85,14 @@ pub fn resolve_age_all_queries(rule: &mut FlatRule) {
         let new_cont_name = FlatFuncName(funcs.len());
         let old_cont_name = FlatFuncName(funcs.len() + 1);
 
+        assert!(
+            func.range_args.is_empty(),
+            "Range arguments are not supposed to be present in this pass"
+        );
         let query_new_cont = FlatFunc {
             name: new_cont_name,
             args: cont_args.clone(),
+            range_args: Vec::new(),
             body: once(if_new_stmt)
                 .chain(tail_stmts.iter().cloned())
                 .collect(),
@@ -95,6 +100,7 @@ pub fn resolve_age_all_queries(rule: &mut FlatRule) {
         let query_old_cont = FlatFunc {
             name: old_cont_name,
             args: cont_args.clone(),
+            range_args: Vec::new(),
             body: once(if_old_stmt)
                 .chain(tail_stmts.iter().cloned())
                 .collect(),
@@ -108,10 +114,12 @@ pub fn resolve_age_all_queries(rule: &mut FlatRule) {
         func.body.push(FlatStmt::Call {
             func_name: new_cont_name,
             args: cont_args.clone(),
+            range_args: Vec::new(),
         });
         func.body.push(FlatStmt::Call {
             func_name: old_cont_name,
             args: cont_args.clone(),
+            range_args: Vec::new(),
         });
     }
 }

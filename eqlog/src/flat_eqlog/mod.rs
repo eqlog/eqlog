@@ -63,6 +63,7 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
     let flat_func = FlatFunc {
         name: FlatFuncName(0),
         args: Vec::new(),
+        range_args: Vec::new(),
         body: stmts,
     };
     let var_types: BTreeMap<FlatVar, Type> = func_args

@@ -100,6 +100,7 @@ fn resolve_if_rel_stmts_func<'a>(
 
     FlatFunc {
         args: func.args.clone(),
+        range_args: func.range_args.clone(),
         name: func.name.clone(),
         body,
     }
@@ -210,6 +211,7 @@ fn bubble_up_range_defs_func(func: &FlatFunc) -> FlatFunc {
 
     FlatFunc {
         args: func.args.clone(),
+        range_args: func.range_args.clone(),
         name: func.name.clone(),
         body,
     }

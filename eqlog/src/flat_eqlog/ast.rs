@@ -105,6 +105,7 @@ pub enum FlatStmt {
     Call {
         func_name: FlatFuncName,
         args: Vec<FlatVar>,
+        range_args: Vec<FlatRangeVar>,
     },
 }
 
@@ -112,6 +113,7 @@ pub enum FlatStmt {
 pub struct FlatFunc {
     pub name: FlatFuncName,
     pub args: Vec<FlatVar>,
+    pub range_args: Vec<FlatRangeVar>,
     pub body: Vec<FlatStmt>,
 }
 
@@ -246,7 +248,11 @@ impl FlatStmt {
             FlatStmt::NonSurjThen(non_surj_then_stmt) => {
                 vars.extend(non_surj_then_stmt.iter_vars());
             }
-            FlatStmt::Call { func_name: _, args } => {
+            FlatStmt::Call {
+                func_name: _,
+                range_args: _,
+                args,
+            } => {
                 vars.extend(args.iter().copied());
             }
         };

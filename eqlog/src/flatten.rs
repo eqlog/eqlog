@@ -474,9 +474,11 @@ fn flatten_rule(
     funcs.push(FlatFunc {
         name: FlatFuncName(0),
         args: Vec::new(),
+        range_args: Vec::new(),
         body: vec![FlatStmt::Call {
             func_name: FlatFuncName(1),
             args: Vec::new(),
+            range_args: Vec::new(),
         }],
     });
 
@@ -484,6 +486,7 @@ fn flatten_rule(
     funcs.push(FlatFunc {
         name: FlatFuncName(1),
         args: Vec::new(),
+        range_args: Vec::new(),
         body: Vec::new(),
     });
     let mut matching_func_indices: BTreeMap<Structure, usize> =
@@ -511,12 +514,14 @@ fn flatten_rule(
                 let old_if_func = FlatFunc {
                     name: FlatFuncName(funcs.len()),
                     args: old_if_func_args.clone(),
+                    range_args: Vec::new(),
                     body: flatten_if_arbitrary(morphism, &el_vars, eqlog),
                 };
                 funcs.push(old_if_func);
                 funcs[matching_func_index].body.push(FlatStmt::Call {
                     func_name: FlatFuncName(old_if_func_index),
                     args: old_if_func_args,
+                    range_args: Vec::new(),
                 });
                 Some(old_if_func_index)
             } else {
@@ -535,6 +540,7 @@ fn flatten_rule(
                     .map(|(body, func_index)| FlatFunc {
                         name: FlatFuncName(func_index),
                         args: Vec::new(),
+                        range_args: Vec::new(),
                         body,
                     }),
             );
@@ -544,6 +550,7 @@ fn flatten_rule(
                 funcs[0].body.push(FlatStmt::Call {
                     func_name: FlatFuncName(i),
                     args: Vec::new(),
+                    range_args: Vec::new(),
                 });
             }
 
@@ -552,6 +559,7 @@ fn flatten_rule(
             let joined_func = FlatFunc {
                 name: FlatFuncName(joined_func_index),
                 args: cod_flat_vars.clone(),
+                range_args: Vec::new(),
                 body: Vec::new(),
             };
             let joined_func_name = joined_func.name;
@@ -564,6 +572,7 @@ fn flatten_rule(
                 let call = FlatStmt::Call {
                     func_name: FlatFuncName(joined_func_index),
                     args: cod_flat_vars.clone(),
+                    range_args: Vec::new(),
                 };
                 funcs[func_index].body.push(call);
             }
@@ -614,12 +623,14 @@ fn flatten_rule(
             let non_surj_then_func = FlatFunc {
                 name: FlatFuncName(non_surj_then_func_index),
                 args: dom_vars.clone(),
+                range_args: Vec::new(),
                 body: vec![non_surj_then_stmt],
             };
             funcs.push(non_surj_then_func);
             funcs[matching_func_index].body.push(FlatStmt::Call {
                 func_name: FlatFuncName(non_surj_then_func_index),
                 args: dom_vars,
+                range_args: Vec::new(),
             });
 
             // Create a function that matches the codomain of `morphism` with fresh data relative
@@ -638,12 +649,14 @@ fn flatten_rule(
             let fresh_if_func = FlatFunc {
                 name: FlatFuncName(fresh_if_func_index),
                 args: Vec::new(),
+                range_args: Vec::new(),
                 body: fresh_if_block,
             };
             funcs.push(fresh_if_func);
             funcs[0].body.push(FlatStmt::Call {
                 func_name: FlatFuncName(fresh_if_func_index),
                 args: Vec::new(),
+                range_args: Vec::new(),
             });
 
             // Finally, create a single function that's called from both the non-surjective then
@@ -653,6 +666,7 @@ fn flatten_rule(
             let cont_func = FlatFunc {
                 name: FlatFuncName(cont_func_index),
                 args: cod_vars.clone(),
+                range_args: Vec::new(),
                 body: Vec::new(),
             };
             funcs.push(cont_func);
@@ -661,6 +675,7 @@ fn flatten_rule(
                 funcs[func_index].body.push(FlatStmt::Call {
                     func_name: FlatFuncName(cont_func_index),
                     args: cod_vars.clone(),
+                    range_args: Vec::new(),
                 });
             }
 
