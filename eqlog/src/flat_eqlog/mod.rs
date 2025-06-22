@@ -78,6 +78,7 @@ pub fn functionality_v2(func: Func, eqlog: &Eqlog) -> FlatRule {
         funcs: vec![flat_func],
         var_types,
         name,
+        range_var_types: BTreeMap::new(),
     }
 }
 

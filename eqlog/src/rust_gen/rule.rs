@@ -460,6 +460,7 @@ fn display_rule_func<'a>(
     rule_name: &'a str,
     flat_func: &'a FlatFunc,
     analysis: &'a FlatRuleAnalysis<'a>,
+    range_var_types: &'a BTreeMap<FlatRangeVar, FlatRangeType>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -472,26 +473,32 @@ fn display_rule_func<'a>(
             .iter()
             .copied()
             .map(|var| {
-                let var_name = display_var(var);
-                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: u32") })
+                FmtFn(move |f| {
+                    let var_name = display_var(var);
+                    write!(f, "{var_name}: u32, ")
+                })
             })
-            .format(", ");
+            .format("");
 
         let range_args = flat_func
             .range_args
             .iter()
             .copied()
             .map(|var| {
-                let var_name = display_range_var(var);
-                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{var_name}: &Range<u32>") })
+                FmtFn(move |f| {
+                    let var_name = display_range_var(var);
+                    let range_type = *range_var_types.get(&var).unwrap();
+                    let range_type = display_range_type(range_type);
+                    write!(f, "{var_name}: {range_type}, ")
+                })
             })
-            .format(", ");
+            .format("");
 
         let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
 
         writedoc! {f, "
             #[allow(unused_variables)]
-            fn {rule_name}_{func_name}(env: &mut {rule_camel}Env, {var_args}) {{
+            fn {rule_name}_{func_name}(env: &mut {rule_camel}Env, {var_args} {range_args}) {{
             for _ in [()] {{
             {stmts}
             }}
@@ -563,7 +570,16 @@ pub fn display_rule_lib<'a>(
         let internal_funcs = rule
             .funcs
             .iter()
-            .map(|func| display_rule_func(rule.name.as_str(), func, analysis, eqlog, identifiers))
+            .map(|func| {
+                display_rule_func(
+                    rule.name.as_str(),
+                    func,
+                    analysis,
+                    &rule.range_var_types,
+                    eqlog,
+                    identifiers,
+                )
+            })
             .format("\n");
 
         let exported_rule_func = display_rule_fn(rule.name.as_str(), symbol_prefix);

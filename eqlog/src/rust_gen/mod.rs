@@ -1393,6 +1393,13 @@ fn display_range_var(var: FlatRangeVar) -> impl Display {
     })
 }
 
+fn display_range_type(typ: FlatRangeType) -> impl Display {
+    FmtFn(move |f| -> Result {
+        let FlatRangeType { arity_len } = typ;
+        write!(f, "PrefixTree{arity_len}")
+    })
+}
+
 fn display_drop_dirt_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,

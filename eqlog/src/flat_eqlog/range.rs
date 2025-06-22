@@ -1,7 +1,7 @@
 use super::ast::*;
 use super::index_selection::*;
 use super::var_info::*;
-use crate::eqlog_util::display_rel;
+use crate::eqlog_util::{display_rel, type_list_vec};
 use by_address::ByAddress;
 use eqlog_eqlog::*;
 use std::cmp::max;
@@ -106,6 +106,47 @@ fn resolve_if_rel_stmts_func<'a>(
     }
 }
 
+fn make_range_var_type_map(
+    rule: &FlatRule,
+    eqlog: &Eqlog,
+) -> BTreeMap<FlatRangeVar, FlatRangeType> {
+    let mut range_var_types: BTreeMap<FlatRangeVar, FlatRangeType> = BTreeMap::new();
+
+    for func in rule.funcs.iter() {
+        for stmt in func.body.iter() {
+            if let FlatStmt::DefineRange(define_range_stmt) = stmt {
+                let range_type = match &define_range_stmt.expression {
+                    FlatRangeExpr::Index(FlatIndexRangeExpr { rel, index: _ }) => {
+                        let arity_len = type_list_vec(eqlog.arity(*rel).unwrap(), eqlog).len();
+                        FlatRangeType { arity_len }
+                    }
+                    FlatRangeExpr::Restriction(FlatRangeRestrictionExpr {
+                        range_var,
+                        first_projection: _,
+                    }) => {
+                        let super_range_type = range_var_types.get(range_var).unwrap();
+                        assert!(
+                            super_range_type.arity_len > 0,
+                            "Restriction is not allowed on arity 0 range"
+                        );
+                        FlatRangeType {
+                            arity_len: super_range_type.arity_len - 1,
+                        }
+                    }
+                };
+
+                if let Some(prev_range_type) =
+                    range_var_types.insert(define_range_stmt.defined_var, range_type)
+                {
+                    assert_eq!(prev_range_type, range_type, "Conflicting range types");
+                }
+            }
+        }
+    }
+
+    range_var_types
+}
+
 /// Replace all relation if statements by range definitions and iterations over them.
 pub fn resolve_if_rel_stmts<'a>(
     rule: &'a FlatRule,
@@ -131,10 +172,13 @@ pub fn resolve_if_rel_stmts<'a>(
         })
         .collect();
 
+    let range_var_types = make_range_var_type_map(rule, eqlog);
+
     FlatRule {
         funcs,
         name: rule.name.clone(),
         var_types: rule.var_types.clone(),
+        range_var_types,
     }
 }
 

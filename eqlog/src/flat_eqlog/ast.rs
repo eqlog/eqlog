@@ -261,9 +261,15 @@ impl FlatStmt {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatRangeType {
+    pub arity_len: usize,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatRule {
     pub name: String,
     pub funcs: Vec<FlatFunc>,
     pub var_types: BTreeMap<FlatVar, Type>,
+    pub range_var_types: BTreeMap<FlatRangeVar, FlatRangeType>,
 }

@@ -691,6 +691,7 @@ fn flatten_rule(
     FlatRule {
         name,
         funcs,
+        range_var_types: BTreeMap::new(),
         var_types,
     }
 }
