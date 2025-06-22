@@ -625,11 +625,28 @@ impl PrefixTree9 {
 }
 
 // get methods
+impl PrefixTree0 {
+    pub fn empty() -> &'static PrefixTree0 {
+        static EMPTY: PrefixTree0 = PrefixTree0(None);
+        &EMPTY
+    }
+
+    fn non_empty() -> &'static PrefixTree0 {
+        static NON_EMPTY: PrefixTree0 = PrefixTree0(Some(()));
+        &NON_EMPTY
+    }
+}
+
 impl PrefixTree1 {
-    pub fn get(&self, first_el: u32) -> Option<PrefixTree0> {
-        const NON_EMPTY: PrefixTree0 = PrefixTree0(Some(()));
+    pub fn empty() -> &'static PrefixTree1 {
+        static EMPTY: PrefixTree1 = PrefixTree1 {
+            set: BTreeSet::new(),
+        };
+        &EMPTY
+    }
+    pub fn get(&self, first_el: u32) -> Option<&PrefixTree0> {
         if self.set.contains(&first_el) {
-            Some(NON_EMPTY)
+            Some(PrefixTree0::non_empty())
         } else {
             None
         }
@@ -637,48 +654,96 @@ impl PrefixTree1 {
 }
 
 impl PrefixTree2 {
+    pub fn empty() -> &'static PrefixTree2 {
+        static EMPTY: PrefixTree2 = PrefixTree2 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree1> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree3 {
+    pub fn empty() -> &'static PrefixTree3 {
+        static EMPTY: PrefixTree3 = PrefixTree3 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree2> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree4 {
+    pub fn empty() -> &'static PrefixTree4 {
+        static EMPTY: PrefixTree4 = PrefixTree4 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree3> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree5 {
+    pub fn empty() -> &'static PrefixTree5 {
+        static EMPTY: PrefixTree5 = PrefixTree5 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree4> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree6 {
+    pub fn empty() -> &'static PrefixTree6 {
+        static EMPTY: PrefixTree6 = PrefixTree6 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree5> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree7 {
+    pub fn empty() -> &'static PrefixTree7 {
+        static EMPTY: PrefixTree7 = PrefixTree7 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree6> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree8 {
+    pub fn empty() -> &'static PrefixTree8 {
+        static EMPTY: PrefixTree8 = PrefixTree8 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree7> {
         self.map.get(&first_el)
     }
 }
 
 impl PrefixTree9 {
+    pub fn empty() -> &'static PrefixTree9 {
+        static EMPTY: PrefixTree9 = PrefixTree9 {
+            map: BTreeMap::new(),
+        };
+        &EMPTY
+    }
     pub fn get(&self, first_el: u32) -> Option<&PrefixTree8> {
         self.map.get(&first_el)
     }

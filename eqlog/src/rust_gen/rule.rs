@@ -345,6 +345,7 @@ fn display_non_surj_then<'a>(
 
 fn display_range_expr<'a>(
     expr: &'a FlatRangeExpr,
+    range_var_types: &'a BTreeMap<FlatRangeVar, FlatRangeType>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -356,7 +357,7 @@ fn display_range_expr<'a>(
                 let rel_snake = display_rel(*rel, eqlog, identifiers)
                     .to_string()
                     .to_case(Snake);
-                write!(f, "Some({getter_fn}(&env.{rel_snake}_table))")
+                write!(f, "{getter_fn}(&env.{rel_snake}_table)")
             }
             FlatRangeExpr::Restriction(restriction_expr) => {
                 let FlatRangeRestrictionExpr {
@@ -364,10 +365,21 @@ fn display_range_expr<'a>(
                     first_projection,
                 } = restriction_expr;
 
-                let range_var = display_range_var(*range_var);
                 let first_projection = display_var(*first_projection);
+                let super_range_type = range_var_types
+                    .get(range_var)
+                    .expect("Range variable type not found");
+                let sub_range_type = FlatRangeType {
+                    arity_len: super_range_type.arity_len - 1,
+                };
 
-                write!(f, "{range_var}.get({first_projection})")
+                let range_var = display_range_var(*range_var);
+                let range_type = display_range_type(sub_range_type);
+
+                write!(
+                    f,
+                    "{range_var}.get({first_projection}).unwrap_or({range_type}::empty())"
+                )
             }
         }
     })
@@ -376,6 +388,7 @@ fn display_range_expr<'a>(
 fn display_stmts<'a>(
     stmts: &'a [FlatStmt],
     analysis: &'a FlatRuleAnalysis<'a>,
+    range_var_types: &'a BTreeMap<FlatRangeVar, FlatRangeType>,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
@@ -391,7 +404,7 @@ fn display_stmts<'a>(
             FlatStmt::If(if_stmt) => {
                 let if_header = display_if_stmt_header(if_stmt, analysis, eqlog, identifiers);
                 let if_footer = "}";
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, range_var_types, eqlog, identifiers);
                 writedoc! {f, "
                     {if_header}
                     {tail}
@@ -402,18 +415,18 @@ fn display_stmts<'a>(
                 defined_var,
                 expression,
             }) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
-                let expression = display_range_expr(expression, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, range_var_types, eqlog, identifiers);
+                let expression =
+                    display_range_expr(expression, range_var_types, eqlog, identifiers);
                 let defined_var = display_range_var(*defined_var);
 
                 writedoc! {f, "
-                    if let Some({defined_var}) = {expression} {{
+                    let {defined_var} = {expression};
                     {tail}
-                    }}
                 "}?;
             }
             FlatStmt::SurjThen(surj_then) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, range_var_types, eqlog, identifiers);
                 let surj_then = display_surj_then(surj_then, analysis, eqlog, identifiers);
                 writedoc! {f, "
                     {surj_then}
@@ -421,7 +434,7 @@ fn display_stmts<'a>(
                 "}?;
             }
             FlatStmt::NonSurjThen(non_surj_then) => {
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, range_var_types, eqlog, identifiers);
                 let non_surj_then = display_non_surj_then(non_surj_then, eqlog, identifiers);
                 writedoc! {f, "
                     {non_surj_then}
@@ -445,7 +458,7 @@ fn display_stmts<'a>(
                     .copied()
                     .map(|var| FmtFn(move |f| write!(f, "{}, ", display_range_var(var))))
                     .format("");
-                let tail = display_stmts(tail, analysis, eqlog, identifiers);
+                let tail = display_stmts(tail, analysis, range_var_types, eqlog, identifiers);
                 writedoc! {f, "
                     {rule_name}_{i}(env, {args} {range_args});
                     {tail}
@@ -489,12 +502,18 @@ fn display_rule_func<'a>(
                     let var_name = display_range_var(var);
                     let range_type = *range_var_types.get(&var).unwrap();
                     let range_type = display_range_type(range_type);
-                    write!(f, "{var_name}: {range_type}, ")
+                    write!(f, "{var_name}: &{range_type}, ")
                 })
             })
             .format("");
 
-        let stmts = display_stmts(flat_func.body.as_slice(), analysis, eqlog, identifiers);
+        let stmts = display_stmts(
+            flat_func.body.as_slice(),
+            analysis,
+            range_var_types,
+            eqlog,
+            identifiers,
+        );
 
         writedoc! {f, "
             #[allow(unused_variables)]
