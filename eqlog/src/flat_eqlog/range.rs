@@ -6,7 +6,7 @@ use by_address::ByAddress;
 use eqlog_eqlog::*;
 use std::cmp::max;
 use std::collections::btree_map;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 fn resolve_if_rel_stmts_func<'a>(
     func: &'a FlatFunc,
@@ -107,17 +107,17 @@ fn resolve_if_rel_stmts_func<'a>(
 }
 
 fn make_range_var_type_map(
-    funcs: &[FlatFunc],
+    rule: &FlatRule,
     eqlog: &Eqlog,
 ) -> BTreeMap<FlatRangeVar, FlatRangeType> {
     let mut range_var_types: BTreeMap<FlatRangeVar, FlatRangeType> = BTreeMap::new();
 
-    for func in funcs {
+    for func in rule.funcs.iter() {
         for stmt in func.body.iter() {
             if let FlatStmt::DefineRange(define_range_stmt) = stmt {
                 let range_type = match &define_range_stmt.expression {
                     FlatRangeExpr::Index(FlatIndexRangeExpr { rel, index: _ }) => {
-                        let arity_len = type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog).len();
+                        let arity_len = type_list_vec(eqlog.arity(*rel).unwrap(), eqlog).len();
                         FlatRangeType { arity_len }
                     }
                     FlatRangeExpr::Restriction(FlatRangeRestrictionExpr {
@@ -172,7 +172,7 @@ pub fn resolve_if_rel_stmts<'a>(
         })
         .collect();
 
-    let range_var_types = make_range_var_type_map(funcs.as_slice(), eqlog);
+    let range_var_types = make_range_var_type_map(rule, eqlog);
 
     FlatRule {
         funcs,
@@ -182,7 +182,7 @@ pub fn resolve_if_rel_stmts<'a>(
     }
 }
 
-fn bubble_up_range_defs_within_func(func: &FlatFunc) -> FlatFunc {
+fn bubble_up_range_defs_func(func: &FlatFunc) -> FlatFunc {
     let mut body: Vec<FlatStmt> = Vec::new();
 
     let mut range_var_defined_before: BTreeMap<FlatRangeVar, usize> = BTreeMap::new();
@@ -190,10 +190,6 @@ fn bubble_up_range_defs_within_func(func: &FlatFunc) -> FlatFunc {
 
     for arg in func.args.iter() {
         var_defined_before.insert(*arg, 0);
-    }
-
-    for range_arg in func.range_args.iter() {
-        range_var_defined_before.insert(*range_arg, 0);
     }
 
     for stmt in func.body.iter() {
@@ -236,7 +232,7 @@ fn bubble_up_range_defs_within_func(func: &FlatFunc) -> FlatFunc {
                         .values_mut()
                         .chain(var_defined_before.values_mut())
                     {
-                        if *index > insert_index {
+                        if *index >= insert_index {
                             *index += 1;
                         }
                     }
@@ -265,102 +261,8 @@ fn bubble_up_range_defs_within_func(func: &FlatFunc) -> FlatFunc {
     }
 }
 
-fn range_definitions_prefix<'a>(stmts: &'a [FlatStmt]) -> Vec<FlatDefineRangeStmt> {
-    stmts
-        .iter()
-        .map_while(|stmt| {
-            if let FlatStmt::DefineRange(define_range_stmt) = stmt {
-                Some(define_range_stmt.clone())
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn bubble_up_range_defs_to_caller(rule: &mut FlatRule, func_name: FlatFuncName) -> bool {
-    let func = &mut rule.funcs[func_name.0];
-    let range_defs = range_definitions_prefix(func.body.as_slice());
-    if range_defs.is_empty() {
-        return false;
-    }
-
-    func.body = func.body.drain(..).skip(range_defs.len()).collect();
-    func.range_args.extend(
-        range_defs
-            .iter()
-            .map(|define_range_stmt| define_range_stmt.defined_var),
-    );
-
-    // Fix all call-sites of the function:
-    for func in rule.funcs.iter_mut() {
-        let mut already_defined_range_vars: BTreeSet<FlatRangeVar> =
-            func.range_args.iter().cloned().collect();
-        func.body = func
-            .body
-            .drain(..)
-            .flat_map(|stmt| {
-                let (call_args, mut call_range_args) = match &stmt {
-                    FlatStmt::Call {
-                        func_name: name,
-                        args,
-                        range_args,
-                    } if *name == func_name => (args.clone(), range_args.clone()),
-                    FlatStmt::DefineRange(define_range_stmt) => {
-                        already_defined_range_vars.insert(define_range_stmt.defined_var);
-                        return vec![stmt];
-                    }
-                    _ => {
-                        return vec![stmt];
-                    }
-                };
-
-                call_range_args.extend(
-                    range_defs
-                        .iter()
-                        .map(|define_range_stmt| define_range_stmt.defined_var),
-                );
-
-                let stmts: Vec<FlatStmt> = range_defs
-                    .iter()
-                    .filter_map(|define_range_stmt| {
-                        if !already_defined_range_vars.insert(define_range_stmt.defined_var) {
-                            return None; // Already defined, skip
-                        }
-                        Some(FlatStmt::DefineRange(define_range_stmt.clone()))
-                    })
-                    .chain([FlatStmt::Call {
-                        func_name,
-                        args: call_args,
-                        range_args: call_range_args,
-                    }])
-                    .collect();
-                stmts
-            })
-            .collect();
-    }
-
-    true
-}
-
 pub fn bubble_up_range_defs(rule: &mut FlatRule) {
-    let mut did_change = true;
-    while did_change {
-        did_change = false;
-
-        for func in rule.funcs.iter_mut() {
-            let new_func = bubble_up_range_defs_within_func(func);
-            if new_func != *func {
-                *func = new_func;
-                did_change = true;
-            }
-        }
-
-        for i in 1..rule.funcs.len() {
-            let func_name = FlatFuncName(i);
-            if bubble_up_range_defs_to_caller(rule, func_name) {
-                did_change = true;
-            }
-        }
+    for func in rule.funcs.iter_mut() {
+        *func = bubble_up_range_defs_func(func);
     }
 }
