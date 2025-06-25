@@ -4,7 +4,7 @@ use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::grammar_util::*;
-use crate::rust_gen::*;
+//use crate::rust_gen::*;
 use crate::semantics::*;
 use anyhow::anyhow;
 use anyhow::ensure;

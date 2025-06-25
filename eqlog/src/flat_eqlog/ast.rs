@@ -5,6 +5,7 @@ use eqlog_eqlog::*;
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum FlatInRel {
     EqlogRel(Rel),
+    Equality(Type),
     TypeSet(Type),
 }
 
@@ -21,7 +22,7 @@ pub struct FlatVar {
     pub typ: Type,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum QueryAge {
     New,
     Old,

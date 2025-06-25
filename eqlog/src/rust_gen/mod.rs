@@ -1,10 +1,15 @@
+/*
 mod rule;
 mod table;
+*/
 mod types;
 
+/*
 pub use rule::*;
 pub use table::*;
+*/
 pub use types::*;
+/*
 
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
@@ -2187,3 +2192,4 @@ pub fn display_module<'a>(
         Ok(())
     })
 }
+*/
