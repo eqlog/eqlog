@@ -4,7 +4,7 @@ use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::grammar_util::*;
-//use crate::rust_gen::*;
+use crate::rust_gen::*;
 use crate::semantics::*;
 use anyhow::anyhow;
 use anyhow::ensure;
@@ -482,6 +482,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
     let flat_rules = flatten(&eqlog, &identifiers);
 
+    /*
     let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
 
     let resolved_rules: Vec<FlatRule> = flat_rules
@@ -584,6 +585,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
     write_digest(in_file, config, &src_digest)?;
     print_cargo_link_directives(in_file, Some(component_config))?;
+    */
 
     Ok(())
 }

@@ -382,7 +382,7 @@ fn display_pub_function_eval_fn<'a>(
             #[allow(dead_code)]
             pub fn {relation_snake}(&self, {params}) -> {result_type} {{
             {canonicalize}
-                
+
             let result: Option<u32> = {eval_fn}(&self.{relation_snake}_table, {table_eval_args}).into();
 
             {result}
@@ -685,7 +685,7 @@ fn display_new_element_fn_internal<'a>(
 
                 assert!(self.{type_snake}_weights.len() == old_len);
                 self.{type_snake}_weights.push(0);
-                
+
                 {insert_parent}
 
                 {type_camel}::from(el)
@@ -937,7 +937,7 @@ fn display_equate_elements<'a>(
                     }};
 
                 self.{type_snake}_equalities.union_roots_into(child, root);
-                
+
                 self.{type_snake}_old.remove(&child.0);
                 self.{type_snake}_new.remove(&child.0);
                 self.{type_snake}_uprooted.push(child);
