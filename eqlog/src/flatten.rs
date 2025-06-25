@@ -374,5 +374,9 @@ pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> Vec<Flat
             .flat_map(|flat_rule| to_semi_naive(&eliminate_equalities_ifs(&flat_rule))),
     );
 
+    for rule in rules_vec.iter_mut() {
+        sort_premise(rule);
+    }
+
     rules_vec
 }

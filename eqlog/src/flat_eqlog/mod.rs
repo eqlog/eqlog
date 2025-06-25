@@ -1,5 +1,6 @@
 mod ast;
 mod semi_naive;
+mod sort;
 
 use std::{iter::once, sync::Arc};
 
@@ -8,6 +9,7 @@ use eqlog_eqlog::*;
 
 pub use ast::*;
 pub use semi_naive::*;
+pub use sort::*;
 
 pub fn semi_naive_functionality(func: Func, eqlog: &Eqlog) -> FlatRule {
     let domain = type_list_vec(

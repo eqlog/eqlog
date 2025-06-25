@@ -2,7 +2,6 @@ use itertools::Itertools;
 use std::collections::BTreeSet;
 
 use super::ast::*;
-use super::slice_group_by::*;
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 struct IfStmtGoodness {
@@ -108,22 +107,22 @@ fn more_restrained_variables_is_better() {
 }
 
 fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
-    let is_equal = matches!(stmt, FlatIfStmt::Equal(_));
-    let age = match stmt {
-        FlatIfStmt::Equal(_) => QueryAge::All,
-        FlatIfStmt::Relation(FlatIfStmtRelation { age, .. }) => *age,
-        FlatIfStmt::Range(_) => todo!(),
-        FlatIfStmt::Type(FlatIfStmtType { age, .. }) => *age,
+    let is_equal = match stmt.rel {
+        FlatInRel::Equality(_) => true,
+        FlatInRel::EqlogRel(_) | FlatInRel::TypeSet(_) => false,
     };
+    let age = stmt.age;
     let new_variables = stmt
-        .iter_vars()
+        .args
+        .iter()
         .unique()
-        .filter(|var| !fixed_vars.contains(&var))
+        .filter(|var| !fixed_vars.contains(var))
         .count();
     let restrained_variables = stmt
-        .iter_vars()
+        .args
+        .iter()
         .unique()
-        .filter(|var| fixed_vars.contains(&var))
+        .filter(|var| fixed_vars.contains(var))
         .count();
     IfStmtGoodness {
         is_equal,
@@ -142,65 +141,20 @@ fn sort_if_block<'a>(if_stmts: &mut [FlatIfStmt], fixed_vars: &mut BTreeSet<Flat
         let best_index = sorted_until
             + find_best_index(&if_stmts[sorted_until..], fixed_vars)
                 .expect("a non-empty slice of if statements should have a best element");
-        fixed_vars.extend(if_stmts[best_index].iter_vars());
+        fixed_vars.extend(if_stmts[best_index].args.iter().cloned());
         if_stmts.swap(sorted_until, best_index);
     }
 }
 
-fn if_stmt(stmt: &FlatStmt) -> Option<&FlatIfStmt> {
-    match stmt {
-        FlatStmt::If(if_stmt) => Some(if_stmt),
-        FlatStmt::DefineRange(_) => todo!(),
-        FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => None,
-    }
-}
-
-/// Recursively optimize the order of consecutive [FlatIfStmt] occurring in `stmts`.
-///
-/// `fixed_vars` should be the set of variables that are already fixed by prior statements.
-/// This function extends `fixed_vars` by the variables that occur in `stmts`.
-fn sort_if_stmts_rec<'a>(stmts: &mut [FlatStmt], fixed_vars: &mut BTreeSet<FlatVar>) {
-    let stmt_groups = slice_group_by_mut(stmts, |before, after| {
-        if_stmt(before).is_some() == if_stmt(after).is_some()
-    });
-    for stmt_group in stmt_groups {
-        let first_stmt = stmt_group.first().expect("Groups should be non-empty");
-        let is_if_group = if_stmt(&first_stmt).is_some();
-        if is_if_group {
-            let mut if_stmts: Vec<FlatIfStmt> = stmt_group
-                .iter()
-                .map(|stmt| if_stmt(stmt).expect("Stmts in if stmt group should be if stmts"))
-                .cloned()
-                .collect();
-            sort_if_block(if_stmts.as_mut_slice(), fixed_vars);
-            assert_eq!(
-                stmt_group.len(),
-                if_stmts.len(),
-                "Sorting an if block should not change its length"
-            );
-            for (stmt, if_stmt) in stmt_group.iter_mut().zip(if_stmts) {
-                *stmt = FlatStmt::If(if_stmt);
-            }
-        } else {
-            for stmt in stmt_group {
-                match stmt {
-                    FlatStmt::If(_) => {
-                        panic!("An if statement should not occur in a non-if stmt group")
-                    }
-                    FlatStmt::DefineRange(_) => todo!(),
-                    FlatStmt::SurjThen(_) | FlatStmt::NonSurjThen(_) | FlatStmt::Call { .. } => {
-                        fixed_vars.extend(stmt.iter_vars());
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// A pass that optimizes the order of  consecutive [FlatIfStmt] in `rule`.
-pub fn sort_if_stmts<'a>(rule: &mut FlatRule) {
-    for func in rule.funcs.iter_mut() {
-        let mut fixed_vars = func.args.iter().cloned().collect();
-        sort_if_stmts_rec(&mut func.body, &mut fixed_vars);
+/// A pass that optimizes the order of [FlatIfStmt]s in the premise of a [FlatRule].
+pub fn sort_premise<'a>(rule: &mut FlatRule) {
+    let premise = &mut rule.premise;
+    let mut fixed_vars: BTreeSet<FlatVar> = BTreeSet::new();
+    for sorted_until in 0..premise.len() {
+        let best_index = sorted_until
+            + find_best_index(&premise[sorted_until..], &fixed_vars)
+                .expect("a non-empty slice of if statements should have a best element");
+        fixed_vars.extend(premise[best_index].args.iter().cloned());
+        premise.swap(sorted_until, best_index);
     }
 }
