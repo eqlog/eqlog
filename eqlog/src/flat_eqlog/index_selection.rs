@@ -3,10 +3,8 @@ use std::{
     iter::{once, repeat},
 };
 
-use super::var_info::*;
-use super::{ast::*, FlatRuleAnalysis};
+use super::ast::*;
 use crate::eqlog_util::*;
-use by_address::ByAddress;
 use eqlog_eqlog::*;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -18,19 +16,12 @@ pub struct QuerySpec {
 
 impl QuerySpec {
     /// The specs needed to query for all tuples in a relation.
-    pub fn all() -> Vec<Self> {
-        vec![
-            QuerySpec {
-                projections: BTreeSet::new(),
-                diagonals: BTreeSet::new(),
-                age: QueryAge::New,
-            },
-            QuerySpec {
-                projections: BTreeSet::new(),
-                diagonals: BTreeSet::new(),
-                age: QueryAge::Old,
-            },
-        ]
+    pub fn all() -> Self {
+        QuerySpec {
+            projections: BTreeSet::new(),
+            diagonals: BTreeSet::new(),
+            age: QueryAge::All,
+        }
     }
     // TODO: Rename this to all_new.
     /// The [QuerySpec] to query for all dirty tuples in a relation.
@@ -42,43 +33,31 @@ impl QuerySpec {
         }
     }
     /// The [QuerySpec] to query for one specific tuple in a relation.
-    pub fn one(rel: Rel, eqlog: &Eqlog) -> Vec<Self> {
+    pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
         let arity_len =
             type_list_vec(eqlog.flat_arity(rel).expect("arity should be total"), eqlog).len();
-        vec![
-            QuerySpec {
-                projections: (0..arity_len).collect(),
-                diagonals: BTreeSet::new(),
-                age: QueryAge::New,
-            },
-            QuerySpec {
-                projections: (0..arity_len).collect(),
-                diagonals: BTreeSet::new(),
-                age: QueryAge::Old,
-            },
-        ]
+        QuerySpec {
+            projections: (0..arity_len).collect(),
+            diagonals: BTreeSet::new(),
+            age: QueryAge::All,
+        }
     }
     /// The [QuerySpec] for evaluating a function.
-    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Vec<Self> {
+    pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
         let domain = eqlog.flat_domain(func).expect("domain should be total");
         let dom_len = type_list_vec(domain, eqlog).len();
-        vec![
-            QuerySpec {
-                projections: (0..dom_len).collect(),
-                diagonals: BTreeSet::new(),
-                age: QueryAge::New,
-            },
-            QuerySpec {
-                projections: (0..dom_len).collect(),
-                diagonals: BTreeSet::new(),
-                age: QueryAge::Old,
-            },
-        ]
+        QuerySpec {
+            projections: (0..dom_len).collect(),
+            diagonals: BTreeSet::new(),
+            age: QueryAge::All,
+        }
     }
 
     pub fn le_restrictive(&self, rhs: &QuerySpec) -> bool {
         if self.diagonals != rhs.diagonals || self.age != rhs.age {
             false
+            // In case we're querying for a single tuple, we should also consider a QueryAge::New
+            // spec to be less restrictive than a QueryAge::All spec.
         } else {
             self.projections.is_subset(&rhs.projections)
         }
