@@ -100,7 +100,7 @@ pub fn to_semi_naive(flat_rule: &FlatRule) -> Vec<FlatRule> {
                     FlatIfStmt {
                         age,
                         args: stmt.args.clone(),
-                        rel: stmt.rel,
+                        rel: stmt.rel.clone(),
                     }
                 })
                 .collect();

@@ -1,7 +1,8 @@
 mod ast;
+mod diagonals;
+mod index_selection;
 mod semi_naive;
 mod sort;
-mod index_selection;
 
 use std::{iter::once, sync::Arc};
 
@@ -9,9 +10,9 @@ use crate::eqlog_util::*;
 use eqlog_eqlog::*;
 
 pub use ast::*;
+pub use index_selection::*;
 pub use semi_naive::*;
 pub use sort::*;
-pub use index_selection::*;
 
 pub fn semi_naive_functionality(func: Func, eqlog: &Eqlog) -> FlatRule {
     let domain = type_list_vec(
@@ -50,12 +51,12 @@ pub fn semi_naive_functionality(func: Func, eqlog: &Eqlog) -> FlatRule {
 
     let premise = vec![
         FlatIfStmt {
-            rel: func_rel,
+            rel: func_rel.clone(),
             args: rel_args0,
             age: QueryAge::New,
         },
         FlatIfStmt {
-            rel: func_rel,
+            rel: func_rel.clone(),
             args: rel_args1,
             age: QueryAge::All,
         },

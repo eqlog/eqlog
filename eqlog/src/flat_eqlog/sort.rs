@@ -109,7 +109,9 @@ fn more_restrained_variables_is_better() {
 fn if_stmt_goodness(stmt: &FlatIfStmt, fixed_vars: &BTreeSet<FlatVar>) -> IfStmtGoodness {
     let is_equal = match stmt.rel {
         FlatInRel::Equality(_) => true,
-        FlatInRel::EqlogRel(_) | FlatInRel::TypeSet(_) => false,
+        FlatInRel::EqlogRel(_)
+        | FlatInRel::TypeSet(_)
+        | FlatInRel::EqlogRelWithDiagonals { .. } => false,
     };
     let age = stmt.age;
     let new_variables = stmt
