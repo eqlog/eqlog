@@ -6,12 +6,41 @@ use std::{
 use super::ast::*;
 use crate::eqlog_util::*;
 use eqlog_eqlog::*;
+use itertools::Itertools as _;
+use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct QuerySpec {
-    pub projections: BTreeSet<usize>,
-    pub diagonals: BTreeSet<BTreeSet<usize>>,
     pub age: QueryAge,
+    pub projections: BTreeSet<usize>,
+}
+
+fn premise_query_specs<'a>(
+    premise: &'a [FlatIfStmt],
+) -> impl 'a + Iterator<Item = (FlatInRel, QuerySpec)> {
+    let mut fixed_vars: BTreeSet<FlatVar> = BTreeSet::new();
+    premise.into_iter().map(move |stmt| {
+        let FlatIfStmt { rel, args, age } = stmt;
+        let projections: BTreeSet<usize> = stmt
+            .args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, arg)| {
+                if fixed_vars.contains(arg) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        fixed_vars.extend(args.iter().cloned());
+
+        let query_spec = QuerySpec {
+            age: age.clone(),
+            projections,
+        };
+        (rel.clone(), query_spec)
+    })
 }
 
 impl QuerySpec {
@@ -19,62 +48,55 @@ impl QuerySpec {
     pub fn all() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
-            diagonals: BTreeSet::new(),
             age: QueryAge::All,
         }
     }
-    // TODO: Rename this to all_new.
     /// The [QuerySpec] to query for all dirty tuples in a relation.
-    pub fn all_dirty() -> Self {
+    pub fn all_new() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
-            diagonals: BTreeSet::new(),
             age: QueryAge::New,
         }
     }
     /// The [QuerySpec] to query for one specific tuple in a relation.
-    pub fn one(rel: Rel, eqlog: &Eqlog) -> Self {
-        let arity_len =
-            type_list_vec(eqlog.flat_arity(rel).expect("arity should be total"), eqlog).len();
+    pub fn one(rel: FlatInRel, eqlog: &Eqlog) -> Self {
+        let arity = rel.arity(eqlog);
         QuerySpec {
-            projections: (0..arity_len).collect(),
-            diagonals: BTreeSet::new(),
+            projections: (0..arity.len()).collect(),
             age: QueryAge::All,
         }
     }
     /// The [QuerySpec] for evaluating a function.
     pub fn eval_func(func: Func, eqlog: &Eqlog) -> Self {
-        let domain = eqlog.flat_domain(func).expect("domain should be total");
-        let dom_len = type_list_vec(domain, eqlog).len();
+        let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
+        let rel = FlatInRel::EqlogRel(eqlog.func_rel(func).unwrap());
+        let arity = rel.arity(eqlog);
+        assert!(
+            arity.len() > 0,
+            "The codomain of a function is always in the arity"
+        );
+        let dom_len = arity.len() - 1;
         QuerySpec {
-            projections: (0..dom_len).collect(),
-            diagonals: BTreeSet::new(),
+            projections: (0..flat_dom.len()).collect(),
             age: QueryAge::All,
-        }
-    }
-
-    pub fn le_restrictive(&self, rhs: &QuerySpec) -> bool {
-        if self.diagonals != rhs.diagonals || self.age != rhs.age {
-            false
-            // In case we're querying for a single tuple, we should also consider a QueryAge::New
-            // spec to be less restrictive than a QueryAge::All spec.
-        } else {
-            self.projections.is_subset(&rhs.projections)
         }
     }
 }
 
-pub fn query_spec_chains(indices: &BTreeSet<QuerySpec>) -> Vec<Vec<QuerySpec>> {
-    let mut specs: Vec<QuerySpec> = indices.into_iter().cloned().collect();
-    specs.sort_by_key(|index| index.projections.len());
+/// Partitions a list of [QuerySpec] into ascending chains with respect to the set of projections.
+pub fn query_spec_chains(mut specs: Vec<QuerySpec>) -> Vec<Vec<QuerySpec>> {
+    // Strategy: Maintain a list of chains.
+    // Check for each input spec whether it fits into an existing chain or add a new singleton
+    // chain. Because we sort the specs wrt to the number of projections, it suffices to check
+    // chain compatibility with only the last element of a given chain.
+    specs.sort_by_key(|spec| spec.projections.len());
 
     let mut chains: Vec<Vec<QuerySpec>> = Vec::new();
     for spec in specs.into_iter() {
-        // TODO: Don't we have to check that `spec` fits anywhere into a given chain, not just at
-        // the end?
-        let compatible_chain = chains
-            .iter_mut()
-            .find(|chain| chain.last().unwrap().le_restrictive(&spec));
+        let compatible_chain = chains.iter_mut().find(|chain| {
+            let last = chain.last().unwrap();
+            last.projections.is_subset(&spec.projections)
+        });
         match compatible_chain {
             Some(compatible_chain) => compatible_chain.push(spec),
             None => chains.push(vec![spec]),
@@ -91,13 +113,12 @@ pub enum IndexAge {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IndexSpec {
-    pub order: Vec<usize>,
-    pub diagonals: BTreeSet<BTreeSet<usize>>,
+    pub order: Arc<[usize]>,
     pub age: IndexAge,
 }
 
 impl IndexSpec {
-    pub fn from_query_spec_chain(arity_len: usize, chain: &[QuerySpec]) -> Self {
+    fn from_query_spec_chain(arity_len: usize, chain: &[QuerySpec]) -> Vec<Self> {
         let empty_projections = BTreeSet::new();
         let full_projections: BTreeSet<usize> = (0..arity_len).collect();
 
@@ -110,91 +131,80 @@ impl IndexSpec {
 
         let order: Vec<usize> = diffs.flatten().collect();
 
-        let last = chain.last().unwrap();
-        let diagonals = last.diagonals.clone();
-        let age = match last.age {
-            QueryAge::All => panic!("QueryAge::All should have been desugared"),
-            QueryAge::New => IndexAge::New,
-            QueryAge::Old => IndexAge::Old,
-        };
-        IndexSpec {
-            order,
-            diagonals,
-            age,
-        }
+        let ages: BTreeSet<IndexAge> = chain
+            .iter()
+            .flat_map(|query| match query.age {
+                QueryAge::All => vec![IndexAge::Old, IndexAge::New],
+                QueryAge::New => vec![IndexAge::New],
+                QueryAge::Old => vec![IndexAge::Old],
+            })
+            .collect();
+
+        ages.into_iter()
+            .map(|age| IndexSpec {
+                order: order.clone().into(),
+                age,
+            })
+            .collect()
     }
 }
 
 // Maps relation name and query spec to the index of the the relation that can serve the query.
-pub type IndexSelection = BTreeMap<String, BTreeMap<QuerySpec, IndexSpec>>;
+pub type IndexSelection = BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>;
 
-pub fn select_indices(
-    flat_analyses: &[FlatRuleAnalysis],
-    eqlog: &Eqlog,
-    identifiers: &BTreeMap<Ident, String>,
-) -> IndexSelection {
-    let if_stmt_rel_infos: BTreeSet<(&FlatIfStmtRelation, &RelationInfo)> = flat_analyses
-        .iter()
-        .flat_map(|analysis| analysis.if_stmt_rel_infos.iter())
-        .map(|(ByAddress(if_stmt_rel), info)| (*if_stmt_rel, info))
-        .collect();
+pub fn select_indices(rules: &[FlatRule], eqlog: &Eqlog) -> IndexSelection {
+    let mut query_specs: BTreeSet<(FlatInRel, QuerySpec)> = BTreeSet::new();
 
-    // Every relation needs a QuerySpec for all tuples, and a QuerySpec for one specific tuple.
-    // TODO: Can't we do without the QuerySpec for all dirty tuples though?
-    let mut query_specs: BTreeMap<Rel, BTreeSet<QuerySpec>> = eqlog
-        .iter_rel()
-        .map(|rel| {
-            let mut min_spec_set: BTreeSet<QuerySpec> = BTreeSet::new();
-            min_spec_set.extend(QuerySpec::all());
-            min_spec_set.insert(QuerySpec::all_dirty());
-            min_spec_set.extend(QuerySpec::one(rel, eqlog));
-            (rel, min_spec_set)
-        })
-        .collect();
+    query_specs.extend(
+        rules
+            .iter()
+            .flat_map(|rule| premise_query_specs(rule.premise.as_slice())),
+    );
 
-    // Every func needs in addition a QuerySpec for the arguments to the function to generate
-    // the public eval function and for non surjective then statements.
-    for func in eqlog.iter_func() {
+    // Query specs to generate public API functions.
+    // TODO: Should probably generate flat eqlog premises for these and pass like normal rule
+    // premises to this function.
+
+    // The query specs for public relation functions
+    // - The iter_{rel}() method needs a QuerySpec to iterate over all tuples.
+    // - The contains_{rel}() method needs a QuerySpec to check for one specific tuple.
+    query_specs.extend(eqlog.iter_rel().flat_map(|rel| {
+        let rel = FlatInRel::EqlogRel(rel);
+        let iter_all_spec = QuerySpec::all();
+        let check_one_spec = QuerySpec::one(rel.clone(), eqlog);
+        [(rel.clone(), iter_all_spec), (rel.clone(), check_one_spec)]
+    }));
+
+    // The query specs to iterate over element of a given type.
+    query_specs.extend(
+        eqlog
+            .iter_type()
+            .map(|ty| (FlatInRel::TypeSet(ty), QuerySpec::all())),
+    );
+
+    // The query specs for public function evaluation functions.
+    query_specs.extend(eqlog.iter_func().map(|func| {
         let rel = eqlog.func_rel(func).unwrap();
-        query_specs
-            .get_mut(&rel)
-            .unwrap()
-            .extend(QuerySpec::eval_func(func, eqlog));
-    }
-
-    // Every relation if stmt needs a QuerySpec.
-    for (if_stmt_rel, info) in if_stmt_rel_infos.iter() {
-        let FlatIfStmtRelation { rel, args: _, age } = if_stmt_rel;
-        let RelationInfo {
-            diagonals,
-            in_projections,
-            out_projections: _,
-            age: _,
-            rel: _,
-        } = info;
-        let spec = QuerySpec {
-            diagonals: diagonals.clone(),
-            projections: in_projections.keys().copied().collect(),
-            age: *age,
-        };
-        query_specs.get_mut(rel).unwrap().insert(spec);
-    }
+        (FlatInRel::EqlogRel(rel), QuerySpec::eval_func(func, eqlog))
+    }));
 
     query_specs
         .into_iter()
-        .map(|(rel, query_specs)| {
-            let chains = query_spec_chains(&query_specs);
-            let query_index_map: BTreeMap<QuerySpec, IndexSpec> = chains
-                .into_iter()
-                .flat_map(|queries| {
-                    let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-                    let index = IndexSpec::from_query_spec_chain(arity.len(), &queries);
-                    queries.into_iter().zip(repeat(index))
-                })
-                .collect();
+        .chunk_by(|(rel, query_spec)| rel.clone())
+        .into_iter()
+        .flat_map(|(rel, queries)| {
+            let queries: Vec<QuerySpec> = queries.map(|(_rel, query)| query).collect();
+            let query_chains = query_spec_chains(queries);
 
-            let rel = display_rel(rel, eqlog, identifiers).to_string();
-            (rel, query_index_map)
+            let arity = rel.arity(eqlog);
+
+            query_chains.into_iter().flat_map(move |query_chain| {
+                let indices = IndexSpec::from_query_spec_chain(arity.len(), query_chain.as_slice());
+                let rel = rel.clone();
+                query_chain
+                    .into_iter()
+                    .map(move |query| ((rel.clone(), query), indices.clone()))
+            })
         })
         .collect()
 }

@@ -1,4 +1,3 @@
-use crate::eqlog_util::display_rel;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
@@ -481,10 +480,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     assert!(!eqlog.absurd());
 
     let flat_rules = flatten(&eqlog, &identifiers);
+    let index_selection = select_indices(flat_rules.as_slice(), &eqlog);
 
     /*
-    let index_selection = select_indices(flat_rules.analyses(), &eqlog, &identifiers);
-
     let resolved_rules: Vec<FlatRule> = flat_rules
         .rules()
         .iter()

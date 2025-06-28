@@ -18,11 +18,11 @@ pub enum FlatInRel {
 }
 
 impl FlatInRel {
-    pub fn arity(self, eqlog: &Eqlog) -> Vec<Type> {
+    pub fn arity(&self, eqlog: &Eqlog) -> Vec<Type> {
         match self {
-            FlatInRel::EqlogRel(rel) => type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog),
+            FlatInRel::EqlogRel(rel) => type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog),
             FlatInRel::EqlogRelWithDiagonals { rel, equalities } => {
-                let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+                let arity = type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog);
                 assert_eq!(equalities.len(), arity.len());
 
                 arity
@@ -32,9 +32,9 @@ impl FlatInRel {
                     .filter_map(|(i, (typ, j))| if i == j { Some(typ) } else { None })
                     .collect()
             }
-            FlatInRel::Equality(typ) => vec![typ, typ],
+            FlatInRel::Equality(typ) => vec![*typ, *typ],
             FlatInRel::TypeSet(typ) => {
-                vec![typ]
+                vec![*typ]
             }
         }
     }
