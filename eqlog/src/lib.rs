@@ -11,6 +11,7 @@ mod error;
 mod flat_eqlog;
 mod flatten;
 mod fmt_util;
+mod ram;
 mod rust_gen;
 mod source_display;
 
