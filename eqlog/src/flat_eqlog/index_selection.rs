@@ -201,9 +201,22 @@ pub fn select_indices(rules: &[FlatRule], eqlog: &Eqlog) -> IndexSelection {
             query_chains.into_iter().flat_map(move |query_chain| {
                 let indices = IndexSpec::from_query_spec_chain(arity.len(), query_chain.as_slice());
                 let rel = rel.clone();
-                query_chain
-                    .into_iter()
-                    .map(move |query| ((rel.clone(), query), indices.clone()))
+                query_chain.into_iter().map(move |query| {
+                    let indices = match query.age {
+                        QueryAge::All => indices.clone(),
+                        QueryAge::New => indices
+                            .iter()
+                            .filter(|index| index.age == IndexAge::New)
+                            .cloned()
+                            .collect(),
+                        QueryAge::Old => indices
+                            .iter()
+                            .filter(|index| index.age == IndexAge::Old)
+                            .cloned()
+                            .collect(),
+                    };
+                    ((rel.clone(), query), indices)
+                })
             })
         })
         .collect()
