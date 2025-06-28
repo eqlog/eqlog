@@ -18,7 +18,7 @@ pub struct GetIndexExpr {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct RestrictProjectExpr {
+pub struct RestrictExpr {
     pub set: SetVar,
     pub first_column_var: ElVar,
 }
@@ -26,7 +26,7 @@ pub struct RestrictProjectExpr {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum InSetExpr {
     GetIndex(GetIndexExpr),
-    RestrictProject(RestrictProjectExpr),
+    Restrict(RestrictExpr),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -37,9 +37,9 @@ pub struct DefineSetStmt {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IterStmt {
-    pub rel: FlatInRel,
-    pub first_column_var: ElVar,
-    pub other_columns_var: SetVar,
+    pub sets: Vec<SetVar>,
+    pub loop_var_el: ElVar,
+    pub loop_var_set: SetVar,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -57,6 +57,6 @@ pub enum RamStmt {
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct RamRoutine {
-    pub name: Arc<str>,
+    pub name: String,
     pub stmts: Vec<RamStmt>,
 }

@@ -3,8 +3,10 @@ use crate::flat_eqlog::*;
 use crate::flatten::*;
 use crate::grammar::*;
 use crate::grammar_util::*;
+use crate::ram::*;
 use crate::rust_gen::*;
 use crate::semantics::*;
+use crate::to_ram::*;
 use anyhow::anyhow;
 use anyhow::ensure;
 use anyhow::Context as _;
@@ -481,6 +483,11 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
     let flat_rules = flatten(&eqlog, &identifiers);
     let index_selection = select_indices(flat_rules.as_slice(), &eqlog);
+
+    let ram_routines: Vec<RamRoutine> = flat_rules
+        .iter()
+        .map(|rule| to_ram(rule, &index_selection))
+        .collect();
 
     /*
     let resolved_rules: Vec<FlatRule> = flat_rules

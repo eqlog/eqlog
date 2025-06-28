@@ -14,5 +14,6 @@ mod fmt_util;
 mod ram;
 mod rust_gen;
 mod source_display;
+mod to_ram;
 
 pub use crate::build::{process, process_root, ComponentConfig, Config, Error, Result};
