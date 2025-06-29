@@ -60,3 +60,9 @@ pub struct RamRoutine {
     pub name: String,
     pub stmts: Vec<RamStmt>,
 }
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct RamModule {
+    pub name: String,
+    pub routines: Vec<RamRoutine>,
+}

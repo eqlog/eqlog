@@ -152,12 +152,15 @@ impl IndexSpec {
 // Maps relation name and query spec to the index of the the relation that can serve the query.
 pub type IndexSelection = BTreeMap<(FlatInRel, QuerySpec), Vec<IndexSpec>>;
 
-pub fn select_indices(rules: &[FlatRule], eqlog: &Eqlog) -> IndexSelection {
+pub fn select_indices<'a>(
+    rules: impl IntoIterator<Item = &'a FlatRule>,
+    eqlog: &'a Eqlog,
+) -> IndexSelection {
     let mut query_specs: BTreeSet<(FlatInRel, QuerySpec)> = BTreeSet::new();
 
     query_specs.extend(
         rules
-            .iter()
+            .into_iter()
             .flat_map(|rule| premise_query_specs(rule.premise.as_slice())),
     );
 

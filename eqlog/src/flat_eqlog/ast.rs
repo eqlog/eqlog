@@ -79,3 +79,9 @@ pub struct FlatRule {
     pub premise: Vec<FlatIfStmt>,
     pub conclusion: Vec<FlatThenStmt>,
 }
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct FlatRuleGroup {
+    pub name: String,
+    pub rules: Vec<FlatRule>,
+}

@@ -481,12 +481,13 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     })?;
     assert!(!eqlog.absurd());
 
-    let flat_rules = flatten(&eqlog, &identifiers);
-    let index_selection = select_indices(flat_rules.as_slice(), &eqlog);
+    let flat_rule_groups = flatten(&eqlog, &identifiers);
+    let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
+    let index_selection = select_indices(flat_rules_iter, &eqlog);
 
-    let ram_routines: Vec<RamRoutine> = flat_rules
+    let ram_routines: Vec<RamModule> = flat_rule_groups
         .iter()
-        .map(|rule| to_ram(rule, &index_selection))
+        .map(|rule_group| flat_rule_group_to_ram(rule_group, &index_selection))
         .collect();
 
     /*

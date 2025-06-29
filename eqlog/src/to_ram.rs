@@ -3,7 +3,7 @@ use crate::ram::*;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-pub fn to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> RamRoutine {
+fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> RamRoutine {
     let mut stmts: Vec<RamStmt> = Vec::new();
     let mut defined_vars: BTreeMap<FlatVar, ElVar> = BTreeMap::new();
 
@@ -124,5 +124,20 @@ pub fn to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> RamRout
     RamRoutine {
         name: flat_rule.name.clone(),
         stmts,
+    }
+}
+
+pub fn flat_rule_group_to_ram(
+    flat_rule_group: &FlatRuleGroup,
+    index_selection: &IndexSelection,
+) -> RamModule {
+    let routines = flat_rule_group
+        .rules
+        .iter()
+        .map(|flat_rule| flat_rule_to_ram(flat_rule, index_selection))
+        .collect();
+    RamModule {
+        name: flat_rule_group.name.clone(),
+        routines,
     }
 }

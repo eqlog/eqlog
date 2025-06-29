@@ -1,5 +1,6 @@
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
+use convert_case::{Case::Snake, Casing as _};
 use eqlog_eqlog::*;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -293,7 +294,7 @@ fn flatten_rule(
     rule: RuleDeclNode,
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
-) -> Vec<FlatRule> {
+) -> FlatRuleGroup {
     let name = match eqlog.rule_name(rule) {
         Some(ident) => identifiers.get(&ident).unwrap().to_string(),
         None => format!("anonymous_rule_{}", rule.0),
@@ -356,27 +357,41 @@ fn flatten_rule(
         assert!(prev_cod_matching_stmts.is_none());
     }
 
-    rules
+    FlatRuleGroup { name, rules }
 }
 
-pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> Vec<FlatRule> {
-    let mut rules_vec: Vec<FlatRule> = Vec::new();
+pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> Vec<FlatRuleGroup> {
+    let mut groups: Vec<FlatRuleGroup> = Vec::new();
 
-    rules_vec.extend(
-        eqlog
-            .iter_func()
-            .map(|func| semi_naive_functionality(func, &eqlog)),
-    );
-    rules_vec.extend(
+    groups.extend(eqlog.iter_func().map(|func| {
+        let rel = eqlog.func_rel(func).unwrap();
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let rule = semi_naive_functionality(func, &eqlog);
+        FlatRuleGroup {
+            name: format!("functinoality_{rel_snake}"),
+            rules: vec![rule],
+        }
+    }));
+
+    groups.extend(
         eqlog
             .iter_rule_decl_node()
-            .flat_map(|rule| flatten_rule(rule, &eqlog, &identifiers))
-            .flat_map(|flat_rule| to_semi_naive(&eliminate_equalities_ifs(&flat_rule))),
+            .map(|rule| flatten_rule(rule, eqlog, identifiers))
+            .map(|mut group| {
+                group.rules = group
+                    .rules
+                    .iter()
+                    .flat_map(|rule| to_semi_naive(&eliminate_equalities_ifs(rule)))
+                    .map(|mut rule| {
+                        sort_premise(&mut rule);
+                        rule
+                    })
+                    .collect();
+                group
+            }),
     );
 
-    for rule in rules_vec.iter_mut() {
-        sort_premise(rule);
-    }
-
-    rules_vec
+    groups
 }
