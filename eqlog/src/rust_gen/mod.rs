@@ -1,19 +1,17 @@
 /*
 mod rule;
-mod table;
 */
 mod types;
 
 /*
 pub use rule::*;
-pub use table::*;
 */
 pub use types::*;
-/*
 
 use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
+use crate::ram::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::{formatdoc, writedoc};
@@ -22,7 +20,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
 
-use Case::{Snake, UpperCamel};
+use Case::{Snake, UpperCamel, UpperSnake};
+
+impl From<usize> for ElVar {
+    fn from(i: usize) -> Self {
+        ElVar {
+            name: format!("el{i}").into(),
+        }
+    }
+}
 
 fn display_func_snake<'a>(
     func: Func,
@@ -187,13 +193,11 @@ fn display_func_args_struct<'a>(
     })
 }
 
-fn display_sort_fields(sort: &str) -> impl Display + '_ {
+fn display_sort_fields(sort: String) -> impl Display {
     FmtFn(move |f| {
         let sort_snake = sort.to_case(Snake);
         writedoc! {f, "
             {sort_snake}_equalities: Unification<{sort}>,
-            {sort_snake}_old: BTreeSet<u32>,
-            {sort_snake}_new: BTreeSet<u32>,
             {sort_snake}_weights: Vec<usize>,
             {sort_snake}_uprooted: Vec<{sort}>,
         "}
@@ -203,33 +207,32 @@ fn display_sort_fields(sort: &str) -> impl Display + '_ {
 fn display_is_dirty_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rels_dirty = eqlog
+        let sets_dirty = eqlog
             .iter_rel()
-            .map(|rel| {
+            .map(FlatInRel::EqlogRel)
+            .chain(eqlog.iter_type().map(FlatInRel::TypeSet))
+            .map(|rel: FlatInRel| {
                 FmtFn(move |f| {
-                    let rel_snake = display_rel(rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    let has_new_data_fn_name =
-                        display_has_new_data_fn_name(rel, eqlog, identifiers);
-                    writedoc! {f, " || {has_new_data_fn_name}(self.{rel_snake}_table)"}
-                })
-            })
-            .format("");
+                    let query_spec = QuerySpec::all_new();
 
-        let types_dirty = eqlog
-            .iter_type()
-            .map(|typ| {
-                FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    write!(f, " || !self.{type_snake}_new.is_empty()")
+                    // See index_selection.rs for why the expectations hold.
+                    let index = index_selection
+                        .get(&(rel.clone(), query_spec))
+                        .expect("should have indices for all new tuples in every type/relation")
+                        .as_slice();
+                    assert!(
+                        index.len() == 1,
+                        "Expected exactly one index for dirty tuples"
+                    );
+
+                    let field_name = display_index_field_name(&rel, &index[0], eqlog, identifiers);
+                    write!(f, " || !self.{field_name}.is_empty()")
                 })
             })
-            .format("");
+            .format(" || ");
 
         let uprooted_dirty = eqlog
             .iter_type()
@@ -245,7 +248,9 @@ fn display_is_dirty_fn<'a>(
 
         writedoc! {f, "
             fn is_dirty(&self) -> bool {{
-                self.empty_join_is_dirty {rels_dirty} {types_dirty} {uprooted_dirty}
+            self.empty_join_is_dirty
+            {sets_dirty}
+            {uprooted_dirty}
             }}
         "}
     })
@@ -288,7 +293,8 @@ fn display_pub_predicate_holds_fn<'a>(
         let row_args =
             (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}.0")));
 
-        let contains_fn_name = display_contains_fn_name(rel, eqlog, identifiers);
+        //let contains_fn_name = display_contains_fn_name(rel, eqlog, identifiers);
+        let contains_fn_name: String = todo!();
 
         writedoc! {f, "
             /// Returns `true` if `{relation_snake}({rel_args_doc})` holds.
@@ -366,7 +372,8 @@ fn display_pub_function_eval_fn<'a>(
             .format(", ")
             .to_string();
 
-        let eval_fn = display_eval_fn_name(func, eqlog, identifiers);
+        //let eval_fn = display_eval_fn_name(func, eqlog, identifiers);
+        let eval_fn: String = todo!();
 
         let table_eval_args = (0..flat_dom_len)
             .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
@@ -453,21 +460,21 @@ fn display_pub_iter_fn<'a>(
             }
         };
 
-        let index_selection = index_selection
-            .get(&display_rel(rel, eqlog, identifiers).to_string())
-            .unwrap();
-        let indices: Vec<&IndexSpec> = QuerySpec::all()
-            .into_iter()
-            .map(|query_spec| index_selection.get(&query_spec).unwrap())
-            .collect();
-        let indices = indices.as_slice();
+        let flat_in_rel = FlatInRel::EqlogRel(rel);
+        let query_spec = QuerySpec::all();
+        let indices = index_selection
+            .get(&(flat_in_rel.clone(), query_spec))
+            .expect("should have indices for relation")
+            .as_slice();
 
         let index_its = indices
             .into_iter()
             .enumerate()
-            .map(|(i, index)| {
+            .map(move |(i, index)| {
+                let flat_in_rel = flat_in_rel.clone();
                 FmtFn(move |f| {
-                    let getter_fn = display_index_getter_fn_name(index, rel, eqlog, identifiers);
+                    let index_field =
+                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
                     let row_unpack_args = index
                         .order
                         .iter()
@@ -495,7 +502,7 @@ fn display_pub_iter_fn<'a>(
                     });
                     writedoc! {f, "
                         let index_it{i} =
-                        {getter_fn}(&self.{rel_snake}_table)
+                        self.{index_field}
                         .iter()
                         .map(|[{row_unpack_args}]| {{
                         {row}
@@ -543,27 +550,23 @@ fn display_pub_insert_relation<'a>(
             })
             .collect();
 
-        let rel_args: Vec<FlatVar> = (0..arity_types.len()).map(FlatVar).collect();
+        let rel_args: Vec<ElVar> = (0..arity_types.len()).map(ElVar::from).collect();
 
         let rel_fn_args = rel_args
             .iter()
-            .copied()
+            .cloned()
             .zip(arity_camel.iter())
             .map(|(arg, typ_camel)| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let arg = display_var(arg);
-                    write!(f, "mut {arg}: {typ_camel}")
-                })
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "mut {arg}: {typ_camel}") })
             })
             .format(", ");
 
         let canonicalize = rel_args
             .iter()
-            .copied()
+            .cloned()
             .zip(arity_types.iter())
             .map(|(arg, typ)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let arg = display_var(arg);
                     let type_snake = display_type(*typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
@@ -575,13 +578,12 @@ fn display_pub_insert_relation<'a>(
         let weight_static_name = display_weight_static_name(rel, eqlog, identifiers).to_string(); // Convert to String
         let update_weights = rel_args
             .iter()
-            .copied()
+            .cloned()
             .zip(arity_types.iter())
             .enumerate()
             .map(move |(i, (arg, typ))| {
                 let weight_static_name = weight_static_name.clone(); // Clone the String
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let arg = display_var(arg);
                     let type_snake = display_type(*typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
@@ -597,15 +599,18 @@ fn display_pub_insert_relation<'a>(
             let dom_len = arity_types.len() - 1;
             let func_args = rel_args[..dom_len]
                 .iter()
-                .copied()
+                .cloned()
                 .map(display_var)
                 .format(", ");
-            let result = display_var(*rel_args.last().expect("func can't have empty arity"));
+            let result = rel_args
+                .last()
+                .expect("func can't have empty arity")
+                .clone();
             formatdoc! {"
                 /// Makes the equation `{rel_snake}({func_args}) = {result}` hold.
             "}
         } else {
-            let rel_args = rel_args.iter().copied().map(display_var).format(", ");
+            let rel_args = rel_args.iter().cloned().map(display_var).format(", ");
             formatdoc! {"
                 /// Makes `{rel_snake}({rel_args})` hold.
             "}
@@ -613,16 +618,12 @@ fn display_pub_insert_relation<'a>(
 
         let row_args = rel_args
             .iter()
-            .copied()
-            .map(|var| {
-                FmtFn(move |f| {
-                    let var = display_var(var);
-                    write!(f, "{var}.0")
-                })
-            })
+            .cloned()
+            .map(|var| FmtFn(move |f| write!(f, "{var}.0")))
             .format(", ");
 
-        let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
+        //let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
+        let insert_fn_name: String = todo!();
 
         writedoc! {f, "
             {docstring}
@@ -787,9 +788,7 @@ fn display_new_enum_element<'a>(
                     let ctor_func: Func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
                     let ctor_arg_types: Vec<Type> =
                         type_list_vec(eqlog.flat_domain(ctor_func).unwrap(), eqlog);
-                    let ctor_vars = (0..ctor_arg_types.len())
-                        .map(|i| display_var(FlatVar(i)))
-                        .format(", ");
+                    let ctor_vars = (0..ctor_arg_types.len()).map(ElVar::from).format(", ");
                     let func_vars = ctor_vars.clone();
 
                     writedoc! {f, "
@@ -863,12 +862,11 @@ fn display_enum_cases_fn<'a>(
                     let ctor_func: Func = eqlog.semantic_func(ctor_sym_scope, ctor_ident).unwrap();
                     let arg_num = type_list_vec(eqlog.flat_domain(ctor_func).unwrap(), eqlog).len();
 
-                    let ctor_arg_vars = (0..arg_num).map(FlatVar);
-                    let result_var = FlatVar(arg_num);
-                    let tuple_vars = ctor_arg_vars.clone().chain(once(result_var));
+                    let ctor_arg_vars = (0..arg_num).map(ElVar::from);
+                    let result_var = ElVar::from(arg_num);
+                    let tuple_vars = ctor_arg_vars.clone().chain(once(result_var.clone()));
 
-                    let ctor_arg_vars = ctor_arg_vars.map(display_var).format(", ");
-                    let result_var = display_var(result_var);
+                    let ctor_arg_vars = ctor_arg_vars.format(", ");
                     let tuple_vars = tuple_vars.map(display_var).format(", ");
 
                     // TODO: We probably want to use an index insted of a linear search here.
@@ -1045,8 +1043,10 @@ fn display_canonicalize_rel_block<'a>(
             let reduce_weights = adjust_weights("sub");
             let increase_weights = adjust_weights("add");
 
-            let drain_fn_name = display_drain_with_element_fn_name(rel, typ, eqlog, identifiers);
-            let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
+            //let drain_fn_name = display_drain_with_element_fn_name(rel, typ, eqlog, identifiers);
+            //let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
+            let drain_fn_name: String = todo!();
+            let insert_fn_name: String = todo!();
 
             writedoc! {f, "
                 for el in self.{type_snake}_uprooted.iter().copied() {{
@@ -1093,6 +1093,22 @@ fn display_canonicalize_fn<'a>(
                 {clear_uprooted_vecs}
             }}
         "}
+    })
+}
+
+fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
+        write!(f, "[u32; {arity_len}]")
+    })
+}
+
+/// Displays the tuple type of the arguments of a function.
+fn display_func_args_type<'a>(func: Func, eqlog: &'a Eqlog) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let dom_list = eqlog.flat_domain(func).unwrap();
+        let arity_len = type_list_vec(dom_list, eqlog).len();
+        write!(f, "[u32; {arity_len}]")
     })
 }
 
@@ -1304,13 +1320,14 @@ fn display_model_delta_apply_tuples_fn<'a>(
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    let args_destructure =
-                        (0..arity.len()).map(FlatVar).map(display_var).format(", ");
+                    let args_destructure = (0..arity.len())
+                        .map(ElVar::from)
+                        .map(display_var)
+                        .format(", ");
                     let insert_args = (0..arity.len())
                         .map(|i| {
                             FmtFn(move |f| {
-                                let var = FlatVar(i);
-                                let var = display_var(var);
+                                let var = ElVar::from(i);
                                 write!(f, "{var}.into()")
                             })
                         })
@@ -1352,12 +1369,14 @@ fn display_model_delta_apply_def_fn<'a>(
 
                 let domain = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
 
-                let args_destructure = (0..domain.len()).map(FlatVar).map(display_var).format(", ");
+                let args_destructure = (0..domain.len())
+                    .map(ElVar::from)
+                    .map(display_var)
+                    .format(", ");
                 let define_args = (0..domain.len())
                     .map(|i| {
                         FmtFn(move |f| {
-                            let var = FlatVar(i);
-                            let var = display_var(var);
+                            let var = ElVar::from(i);
                             write!(f, "{var}.into()")
                         })
                     })
@@ -1383,26 +1402,16 @@ fn display_model_delta_apply_def_fn<'a>(
     })
 }
 
-fn display_var(var: FlatVar) -> impl Display {
-    FmtFn(move |f: &mut Formatter| -> Result {
-        let var = var.0;
-        write!(f, "tm{var}")?;
-        Ok(())
-    })
+impl Display for ElVar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let ElVar { name } = self;
+        write!(f, "{}", name)
+    }
 }
 
-fn display_range_var(var: FlatRangeVar) -> impl Display {
-    FmtFn(move |f| -> Result {
-        let var = var.0;
-        write!(f, "range{var}")
-    })
-}
-
-fn display_range_type(typ: FlatRangeType) -> impl Display {
-    FmtFn(move |f| -> Result {
-        let FlatRangeType { arity_len } = typ;
-        write!(f, "PrefixTree{arity_len}")
-    })
+// TODO: Remove this legacy function.
+fn display_var(var: ElVar) -> impl Display {
+    var
 }
 
 fn display_drop_dirt_fn<'a>(
@@ -1414,8 +1423,8 @@ fn display_drop_dirt_fn<'a>(
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let move_new_to_old_fn_name =
-                        display_move_new_to_old_fn_name(rel, eqlog, identifiers);
+                    let move_new_to_old_fn_name: String = todo!();
+                    //display_move_new_to_old_fn_name(rel, eqlog, identifiers);
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
@@ -1452,115 +1461,113 @@ fn display_drop_dirt_fn<'a>(
     })
 }
 
-fn display_rule_env_var<'a>(
-    rule: &'a str,
-    analysis: &'a FlatRuleAnalysis<'a>,
+fn display_module_env_var<'a>(
+    ram_module: &'a RamModule,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rule_camel = rule.to_case(UpperCamel);
+        let module_camel = ram_module.name.to_case(UpperCamel);
 
-        let table_fields = analysis
-            .used_rels
+        let ModuleEnvFields {
+            indices: _,
+            in_rels_modulo_diagonals,
+            out_rels,
+        } = ModuleEnvFields::from_module(ram_module);
+
+        let in_set_fields = in_rels_modulo_diagonals
             .iter()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let rel_snake = display_rel(*rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    write!(f, "{rel_snake}_table: self.{rel_snake}_table,")
+                    match rel {
+                        FlatInRel::EqlogRel(rel) => {
+                            let rel_snake = display_rel(*rel, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
+                            write!(f, "{rel_snake}_table: self.{rel_snake}_table,")
+                        },
+                        FlatInRel::EqlogRelWithDiagonals { .. } => {
+                            panic!("in_rels_modulo_diagonals should not contain EqlogRelWithDiagonals")
+                        },
+                        FlatInRel::TypeSet(typ) => {
+                            let type_snake = display_type(*typ, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
+                            writedoc! {f, "
+                                {type_snake}_new: &self.{type_snake}_new,
+                                {type_snake}_old: &self.{type_snake}_old,
+                            "}
+                        },
+                        FlatInRel::Equality(typ) => {
+                            panic!("Equality in relations should have been transformed the equality pass on flat eqlog")
+                        },
+                    }
                 })
             })
             .format("\n");
 
-        let type_set_fields = analysis
-            .used_types
-            .iter()
-            .map(|typ| {
-                FmtFn(move |f| {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    writedoc! {f, "
-                        {type_snake}_new: &self.{type_snake}_new,
-                        {type_snake}_old: &self.{type_snake}_old,
-                    "}
-                })
-            })
-            .format("\n");
-
-        let new_rel_fields = analysis
-            .used_rels
+        let out_set_fields = out_rels
             .iter()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let rel_snake = display_rel(*rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
+                    match rel {
+                        FlatOutRel::EqlogRel(rel) => {
+                            let rel_snake = display_rel(*rel, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
+                            writedoc! {f, "
+                                new_{rel_snake}: &mut delta.new_{rel_snake},
+                            "}?;
+                        }
+                        FlatOutRel::Equality(typ) => {
+                            let type_snake = display_type(*typ, eqlog, identifiers)
+                                .to_string()
+                                .to_case(Snake);
 
-                    writedoc! {f, "
-                        new_{rel_snake}: &mut delta.new_{rel_snake},
-                    "}?;
+                            writedoc! {f, "
+                                new_{type_snake}_equalities: &mut delta.new_{type_snake}_equalities,
+                            "}?;
+                        }
+                        FlatOutRel::FuncDomain(func) => {
+                            let rel_snake =
+                                display_rel(eqlog.func_rel(*func).unwrap(), eqlog, identifiers)
+                                    .to_string()
+                                    .to_case(Snake);
 
-                    if let RelCase::FuncRel(func) = eqlog.rel_case(*rel) {
-                        if eqlog.function_can_be_made_defined(func) {
                             writedoc! {f, "
                                 new_{rel_snake}_def: &mut delta.new_{rel_snake}_def,
                             "}?;
                         }
                     }
-
                     Ok(())
                 })
             })
             .format("\n");
 
-        let new_type_equalities_fields = analysis
-            .used_types
-            .iter()
-            .map(|typ| {
-                FmtFn(move |f| {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-
-                    writedoc! {f, "
-                        new_{type_snake}_equalities: &mut delta.new_{type_snake}_equalities,
-                    "}
-                })
-            })
-            .format("\n");
-
         writedoc! {f, "
-            let mut env = {rule_camel}Env {{
-                {table_fields}
-                {type_set_fields}
-                {new_rel_fields}
-                {new_type_equalities_fields}
+            let mut env = {module_camel}Env {{
+                {in_set_fields}
+                {out_set_fields}
             }};
         "}
     })
 }
 
 fn display_close_until_fn<'a>(
-    rules: &'a [FlatRule],
-    analyses: &'a [FlatRuleAnalysis],
+    ram_modules: &'a [RamModule],
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let rules = rules
+        let module_calls = ram_modules
             .iter()
-            .zip(analyses.iter())
-            .map(|(rule, analysis)| {
+            .map(|ram_module| {
                 FmtFn(move |f: &mut Formatter| -> Result {
-                    let name = rule.name.as_str();
-                    let rule_fn_name = display_rule_fn_name(name);
-                    let env_var = display_rule_env_var(name, analysis, eqlog, identifiers);
+                    let name = ram_module.name.as_str();
+                    let env_var = display_module_env_var(ram_module, eqlog, identifiers);
                     writedoc! {f, r#"
                         {env_var}
-                        {rule_fn_name}(&mut env);
+                        {name}(&mut env);
                     "#}
                 })
             })
@@ -1583,7 +1590,7 @@ fn display_close_until_fn<'a>(
 
                 while self.is_dirty() {{
                     loop {{
-            {rules}
+            {module_calls}
 
                         self.drop_dirt();
                         delta.apply_surjective(self);
@@ -1646,10 +1653,7 @@ fn display_new_fn<'a>(
             let rel_snake = display_rel(rel, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
-            //let rel_camel = rel_snake.to_case(UpperCamel);
-            let new_fn_name = display_table_new_fn_name(rel, eqlog, identifiers);
-            //writeln!(f, "{rel_snake}: {rel_camel}TableOld::new(),").unwrap();
-            writeln!(f, "{rel_snake}_table: {new_fn_name}(),").unwrap();
+            todo!();
         }
         writeln!(f, "empty_join_is_dirty: true,").unwrap();
         writeln!(f, "}}").unwrap();
@@ -1673,18 +1677,17 @@ fn display_define_fn<'a>(
             format!("{}", display_type(codomain, eqlog, identifiers)).to_case(UpperCamel);
         let codomain_snake = codomain_camel.to_case(Snake);
 
-        let func_arg_vars: Vec<FlatVar> = (0..domain.len()).map(FlatVar).collect();
-        let result_var = FlatVar(domain.len());
+        let func_arg_vars: Vec<ElVar> = (0..domain.len()).map(ElVar::from).collect();
+        let result_var = ElVar::from(domain.len());
 
         let fn_args = func_arg_vars
             .iter()
-            .copied()
+            .cloned()
             .zip(domain.iter().copied())
             .map(|(var, var_typ)| {
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let type_camel = format!("{}", display_type(var_typ, eqlog, identifiers))
                         .to_case(UpperCamel);
-                    let var = display_var(var);
                     write!(f, "{var}: {type_camel}")
                 })
             })
@@ -1692,17 +1695,16 @@ fn display_define_fn<'a>(
 
         let args = func_arg_vars
             .iter()
-            .copied()
+            .cloned()
             .map(display_var)
             .format(", ")
             .to_string();
         let rel_args = func_arg_vars
             .iter()
-            .copied()
-            .chain(once(result_var))
+            .cloned()
+            .chain(once(result_var.clone()))
             .map(display_var)
             .format(", ");
-        let result_var = display_var(result_var);
 
         let codomain_parent_func = eqlog.parent_model_func(codomain);
         let parent_arg = FmtFn(move |f| {
@@ -1710,7 +1712,7 @@ fn display_define_fn<'a>(
                 return Ok(());
             }
 
-            let parent_var = display_var(FlatVar(0));
+            let parent_var = ElVar::from(0);
             write!(f, "{parent_var}")
         });
 
@@ -1734,37 +1736,106 @@ fn display_define_fn<'a>(
     })
 }
 
-fn display_theory_drop_impl<'a>(
-    theory_type_name: &'a str,
+impl Display for IndexAge {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            IndexAge::New => write!(f, "new"),
+            IndexAge::Old => write!(f, "old"),
+        }
+    }
+}
+
+fn display_index_field_name<'a>(
+    rel: &'a FlatInRel,
+    index: &'a IndexSpec,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let order = index.order.iter().format("_");
+        let age = index.age;
+        match rel {
+            FlatInRel::EqlogRel(rel) => {
+                let rel_snake = display_rel(*rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                write!(f, "{rel_snake}_{age}_order_{order}")
+            }
+            FlatInRel::EqlogRelWithDiagonals { rel, equalities } => {
+                let rel_snake = display_rel(*rel, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                let equalities = equalities.iter().format("_");
+                write!(f, "{rel_snake}_{age}_eqs_{equalities}_order_{order}")
+            }
+            FlatInRel::TypeSet(typ) => {
+                let type_snake = display_type(*typ, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                write!(f, "{type_snake}_{age}_order_0")
+            }
+            FlatInRel::Equality(_) => {
+                panic!("Equality in relations should have been transformed the equality pass on flat eqlog")
+            }
+        }
+    })
+}
+
+fn display_index_type<'a>(
+    rel: &'a FlatInRel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let drop_tables = eqlog
-            .iter_rel()
-            .map(|rel| {
-                FmtFn(move |f| {
-                    let rel_snake = display_rel(rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    let drop_fn_name = display_table_drop_fn_name(rel, eqlog, identifiers);
-                    write!(
-                        f,
-                        "{drop_fn_name}(NonNull::new_unchecked(self.{rel_snake}_table as *mut _));"
-                    )
-                })
-            })
-            .format("\n");
+        let arity_len = rel.arity(eqlog).len();
+        write!(f, "PrefixTree{arity_len}")
+    })
+}
 
-        writedoc! {f, "
-            impl Drop for {theory_type_name} {{
-            fn drop(&mut self) {{
-            #[allow(unused_unsafe)]
-            unsafe {{
-            {drop_tables}
-            }}
-            }}
-            }}"}
+fn display_weight_field_name<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        write!(f, "{rel_snake}_weights")
+    })
+}
+
+fn display_weight_static_name<'a>(
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let rel_screaming_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperSnake);
+        write!(f, "{rel_screaming_snake}_WEIGHT")
+    })
+}
+
+fn display_weight_static<'a>(
+    rel: Rel,
+    indices: &'a BTreeSet<&IndexSpec>,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let static_name = display_weight_static_name(rel, eqlog, identifiers);
+        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let tuple_weight = arity.len();
+        let el_lookup_weight = tuple_weight;
+        let indices_weight = indices.len() * tuple_weight;
+        let weight = el_lookup_weight + indices_weight;
+        writedoc! {f, r#"
+            #[unsafe(export_name = "{symbol_prefix}_{static_name}")]
+            pub static {static_name}: usize = {weight};
+        "#}
     })
 }
 
@@ -1772,38 +1843,43 @@ fn display_theory_struct<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        writeln!(f, "/// A model of the `{name}` theory.").unwrap();
-        writeln!(f, "pub struct {} {{", name).unwrap();
-        for typ in eqlog.iter_type() {
-            let type_camel = display_type(typ, eqlog, identifiers)
-                .to_string()
-                .to_case(UpperCamel);
-            let sort_fields = display_sort_fields(type_camel.as_str());
-            write!(f, "{}", sort_fields).unwrap();
-            writeln!(f, "").unwrap();
-        }
+        let index_fields = index_set(index_selection)
+            .into_iter()
+            .map(|(rel, index)| {
+                FmtFn(move |f| {
+                    let index_name = display_index_field_name(&rel, &index, eqlog, identifiers);
+                    let index_type = display_index_type(&rel, eqlog, identifiers);
+                    write!(f, "{index_name}: {index_type},")
+                })
+            })
+            .format("\n");
 
-        for rel in eqlog.iter_rel() {
-            let rel_snake = display_rel(rel, eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
-            let rel_camel = rel_snake.to_case(UpperCamel);
-            writeln!(f, "{rel_snake}_table: &'static mut {rel_camel}Table,").unwrap();
-        }
+        let type_fields = eqlog
+            .iter_type()
+            .map(|typ| {
+                let typ = display_type(typ, eqlog, identifiers).to_string();
+                display_sort_fields(typ)
+            })
+            .format("\n");
 
-        writeln!(f, "empty_join_is_dirty: bool,").unwrap();
-        writeln!(f, "}}").unwrap();
-        write!(f, "type Model = {name};").unwrap();
-        Ok(())
+        writedoc! {f, "
+            /// A model of the `{name}` theory.
+            pub struct {name} {{
+                {index_fields}
+                {type_fields}
+                empty_join_is_dirty: bool,
+            }}
+            type Model = {name};
+        "}
     })
 }
 
 fn display_theory_impl<'a>(
     name: &'a str,
-    rules: &'a [FlatRule],
-    analyses: &'a [FlatRuleAnalysis],
+    ram_modules: &'a [RamModule],
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     index_selection: &'a IndexSelection,
@@ -1818,7 +1894,7 @@ fn display_theory_impl<'a>(
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn).unwrap();
 
-        let close_until_fn = display_close_until_fn(rules, analyses, eqlog, identifiers);
+        let close_until_fn = display_close_until_fn(ram_modules, eqlog, identifiers);
         write!(f, "{}", close_until_fn).unwrap();
 
         for typ in eqlog.iter_type() {
@@ -1922,7 +1998,7 @@ fn display_theory_impl<'a>(
         let canonicalize_fn = display_canonicalize_fn(eqlog, identifiers);
         write!(f, "{canonicalize_fn}\n").unwrap();
 
-        let is_dirty_fn = display_is_dirty_fn(eqlog, identifiers);
+        let is_dirty_fn = display_is_dirty_fn(eqlog, identifiers, index_selection);
         write!(f, "{}", is_dirty_fn).unwrap();
 
         writeln!(f, "").unwrap();
@@ -1935,161 +2011,31 @@ fn display_theory_impl<'a>(
     })
 }
 
-pub fn display_table_struct_decls<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    eqlog
-        .iter_rel()
-        .map(move |rel| display_table_struct_decl(rel, eqlog, identifiers))
-        .format("\n")
-}
-
-pub fn display_table_extern_decls<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
-    index_selection: &'a IndexSelection,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let rel_tables_fns = eqlog
-            .iter_rel()
-            .map(move |rel| {
-                FmtFn(move |f| {
-                    let rel_name = display_rel(rel, eqlog, identifiers).to_string();
-                    let indices = index_selection.get(&rel_name).unwrap();
-                    let types: BTreeSet<Type> =
-                        type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
-                            .into_iter()
-                            .collect();
-
-                    let new_fn_decl =
-                        display_table_new_fn_decl(rel, eqlog, identifiers, symbol_prefix);
-                    writeln!(f, "{new_fn_decl}")?;
-
-                    let drop_fn_decl =
-                        display_table_drop_fn_decl(rel, eqlog, identifiers, symbol_prefix);
-                    writeln!(f, "{drop_fn_decl}")?;
-
-                    let contains_fn_decl =
-                        display_contains_fn_decl(rel, eqlog, identifiers, symbol_prefix);
-                    writeln!(f, "{contains_fn_decl}")?;
-
-                    match eqlog.rel_case(rel) {
-                        RelCase::FuncRel(func) => {
-                            let eval_fn_decl =
-                                display_eval_fn_decl(func, eqlog, identifiers, symbol_prefix);
-                            writeln!(f, "{eval_fn_decl}")?;
-                        }
-                        RelCase::PredRel(_) => {}
-                    }
-
-                    let insert_fn_decl =
-                        display_insert_fn_decl(rel, eqlog, identifiers, symbol_prefix);
-                    writeln!(f, "{insert_fn_decl}")?;
-
-                    for typ in types {
-                        let drain_fn_decl = display_drain_with_element_fn_decl(
-                            rel,
-                            typ,
-                            eqlog,
-                            identifiers,
-                            symbol_prefix,
-                        );
-                        writeln!(f, "{drain_fn_decl}")?;
-                    }
-
-                    let move_new_to_old_fn_decl =
-                        display_move_new_to_old_fn_decl(rel, eqlog, identifiers, symbol_prefix);
-                    writeln!(f, "{move_new_to_old_fn_decl}")?;
-
-                    let has_new_data_fn_decl =
-                        display_has_new_data_fn_decl(rel, eqlog, identifiers, symbol_prefix);
-                    writeln!(f, "{has_new_data_fn_decl}")?;
-
-                    let index_specs: BTreeSet<&IndexSpec> = indices.values().collect();
-                    for index in index_specs {
-                        let index_getter_fn_decl = display_index_getter_decl(
-                            index,
-                            rel,
-                            eqlog,
-                            identifiers,
-                            symbol_prefix,
-                        );
-                        writeln!(f, "{index_getter_fn_decl}")?;
-                    }
-
-                    let weight_static_decl =
-                        display_weight_static_decl(rel, eqlog, identifiers, symbol_prefix);
-                    write!(f, "{weight_static_decl}")
-                })
-            })
-            .format("\n");
-
-        writedoc! {f, r#"
-            #[allow(unused, clashing_extern_declarations)]
-            unsafe extern "Rust" {{
-            {rel_tables_fns}
-            }}
-        "#}
-    })
-}
-
-fn display_table_modules<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-    index_selection: &'a IndexSelection,
-    symbol_prefix: &'a str,
-) -> impl 'a + Display {
-    eqlog
-        .iter_rel()
-        .map(move |rel| {
-            FmtFn(move |f| {
-                let rel_string = display_rel(rel, eqlog, identifiers).to_string();
-                let rel_snake = rel_string.to_case(Snake);
-
-                let index_selection = index_selection.get(&rel_string).unwrap();
-
-                let lib =
-                    display_table_lib(rel, index_selection, eqlog, identifiers, symbol_prefix);
-
-                writedoc! {f, "
-                mod {rel_snake} {{
-                    {lib}
-                }}
-            "}
-            })
-        })
-        .format("\n")
-}
-
 fn display_rule_modules<'a>(
-    rules: &'a [FlatRule],
-    analyses: &'a [FlatRuleAnalysis],
+    ram_modules: &'a [RamModule],
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
-    rules
+    ram_modules
         .iter()
-        .zip(analyses)
-        .map(move |(rule, analysis)| {
+        .map(move |ram_module| {
             FmtFn(move |f| {
-                let lib = display_rule_lib(
-                    rule,
-                    analysis,
-                    index_selection,
-                    eqlog,
-                    identifiers,
-                    symbol_prefix,
-                );
-                let rule_snake = rule.name.to_case(Snake);
+                //let lib = display_rule_lib(
+                //    ram_module,
+                //    index_selection,
+                //    eqlog,
+                //    identifiers,
+                //    symbol_prefix,
+                //);
+                let lib: String = todo!();
+                let ram_module_name = ram_module.name.as_str();
                 writedoc! {f, "
-                mod {rule_snake} {{
-                    {lib}
-                }}
-            "}
+                    mod {ram_module_name} {{
+                        {lib}
+                    }}
+                "}
             })
         })
         .format("\n")
@@ -2099,8 +2045,7 @@ pub fn display_module<'a>(
     name: &'a str,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-    rules: &'a [FlatRule],
-    analyses: &'a [FlatRuleAnalysis],
+    ram_modules: &'a [RamModule],
     index_selection: &'a IndexSelection,
     symbol_prefix: &'a str,
     build_type: BuildType,
@@ -2113,6 +2058,8 @@ pub fn display_module<'a>(
         match build_type {
             BuildType::Component => {}
             BuildType::Module => {
+                todo!()
+                /*
                 display_table_modules(eqlog, identifiers, index_selection, symbol_prefix).fmt(f)?;
                 display_rule_modules(
                     rules,
@@ -2123,25 +2070,21 @@ pub fn display_module<'a>(
                     symbol_prefix,
                 )
                 .fmt(f)?;
+                */
             }
         }
 
-        writeln!(f, "{}", display_table_struct_decls(eqlog, identifiers))?;
-        writeln!(
-            f,
-            "{}",
-            display_table_extern_decls(eqlog, identifiers, symbol_prefix, index_selection)
-        )?;
-
-        let rule_env_structs = analyses
+        let rule_env_structs = ram_modules
             .iter()
-            .map(|analysis| display_rule_env_struct(analysis, eqlog, identifiers))
+            //display_rule_env_struct(ram_module, eqlog, identifiers))
+            .map(|ram_module| -> String { todo!() })
             .format("\n");
         writeln!(f, "{rule_env_structs}")?;
 
-        let rule_eval_fns = rules
+        let rule_eval_fns = ram_modules
             .iter()
-            .map(|rule| display_rule_fn_decl(rule.name.as_str(), symbol_prefix))
+            //.map(|ram_module| display_module_main_fn_decl(ram_module.name.as_str(), symbol_prefix))
+            .map(|ram_module| -> String { todo!() })
             .format("\n");
         writedoc! {f, r#"
             #[allow(clashing_extern_declarations)]
@@ -2175,7 +2118,7 @@ pub fn display_module<'a>(
         let model_delta_struct = display_model_delta_struct(eqlog, identifiers);
         write!(f, "{}", model_delta_struct)?;
 
-        let theory_struct = display_theory_struct(name, eqlog, identifiers);
+        let theory_struct = display_theory_struct(name, eqlog, identifiers, index_selection);
         write!(f, "{}", theory_struct)?;
 
         let model_delta_impl = display_model_delta_impl(eqlog, identifiers);
@@ -2183,13 +2126,9 @@ pub fn display_module<'a>(
         write!(f, "\n")?;
 
         let theory_impl =
-            display_theory_impl(name, rules, analyses, eqlog, identifiers, index_selection);
+            display_theory_impl(name, ram_modules, eqlog, identifiers, index_selection);
         write!(f, "{}", theory_impl)?;
-
-        let drop_impl = display_theory_drop_impl(name, eqlog, identifiers);
-        write!(f, "{}", drop_impl)?;
 
         Ok(())
     })
 }
-*/

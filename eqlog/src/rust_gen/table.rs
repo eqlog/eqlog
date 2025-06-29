@@ -10,21 +10,6 @@ use std::fmt::{self, Display, Formatter};
 
 use Case::{Snake, UpperCamel, UpperSnake};
 
-pub fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
-        write!(f, "[u32; {arity_len}]")
-    })
-}
-
-/// Displays the tuple type of the arguments of a function.
-pub fn display_func_args_type<'a>(func: Func, eqlog: &'a Eqlog) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let dom_list = eqlog.flat_domain(func).unwrap();
-        let arity_len = type_list_vec(dom_list, eqlog).len();
-        write!(f, "[u32; {arity_len}]")
-    })
-}
 
 #[derive(Copy, Clone)]
 struct OrderName<'a>(&'a [usize]);
@@ -1091,19 +1076,6 @@ pub fn display_eval_fn_decl<'a>(
             #[link_name = \"{symbol_prefix}_{fn_name}\"]
             safe {signature};
         "}
-    })
-}
-
-pub fn display_has_new_data_fn_name<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        write!(f, "{rel_snake}_has_new_data")
     })
 }
 

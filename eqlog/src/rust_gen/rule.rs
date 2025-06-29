@@ -25,6 +25,8 @@ pub fn display_rule_env_struct<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
+    todo!()
+    /*
     FmtFn(move |f: &mut Formatter| -> Result {
         let rule_name_camel = analysis.rule_name.to_case(UpperCamel);
 
@@ -108,6 +110,7 @@ pub fn display_rule_env_struct<'a>(
             }}
         "}
     })
+    */
 }
 
 fn display_table_fn_decls<'a>(
@@ -521,7 +524,7 @@ fn display_rule_fn_signature<'a>(rule_name: &'a str) -> impl 'a + Display {
     })
 }
 
-pub fn display_rule_fn_decl<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
+pub fn display_module_main_fn_decl<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
     FmtFn(move |f| {
         let fn_name = display_rule_fn_name(rule_name);
         let signature = display_rule_fn_signature(rule_name);
