@@ -260,6 +260,7 @@ fn display_pub_predicate_holds_fn<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let relation_snake = display_rel(rel, eqlog, identifiers)
@@ -290,19 +291,36 @@ fn display_pub_predicate_holds_fn<'a>(
 
         let rel_args_doc =
             (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}")));
-        let row_args =
-            (0..arity_types.len()).format_with(", ", |i, f| f(&format_args!("arg{i}.0")));
 
-        //let contains_fn_name = display_contains_fn_name(rel, eqlog, identifiers);
-        let contains_fn_name: String = todo!();
+        let rel = FlatInRel::EqlogRel(rel);
+        let query = QuerySpec::one(rel.clone(), eqlog);
+        let indices = index_selection
+            .get(&(rel.clone(), query))
+            .expect("should have indices for relation")
+            .as_slice();
+        let rel = &rel;
+
+        let checks = indices
+            .into_iter()
+            .map(|index_spec| {
+                let index = display_index_field_name(rel, &index_spec, eqlog, identifiers);
+                let IndexSpec { order, age: _ } = index_spec;
+                let row_args = order
+                    .iter()
+                    .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
+                    .format(", ");
+                FmtFn(move |f| write!(f, "|| self.{index}_table.contains([{row_args}])"))
+            })
+            .format("\n");
 
         writedoc! {f, "
             /// Returns `true` if `{relation_snake}({rel_args_doc})` holds.
             #[allow(dead_code)]
             pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
-                {canonicalize}
-                let row = [{row_args}];
-                {contains_fn_name}(self.{relation_snake}_table, row)
+            {canonicalize}
+
+            true
+            {checks}
             }}
         "}
     })
@@ -1981,7 +1999,8 @@ fn display_theory_impl<'a>(
                 .collect();
             let arity: Vec<&str> = arity.iter().map(|s| s.as_str()).collect();
 
-            let predicate_holds_fn = display_pub_predicate_holds_fn(rel, eqlog, identifiers);
+            let predicate_holds_fn =
+                display_pub_predicate_holds_fn(rel, eqlog, identifiers, index_selection);
             write!(f, "{}", predicate_holds_fn).unwrap();
 
             if !arity.is_empty() {
