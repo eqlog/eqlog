@@ -19,6 +19,7 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
+use std::sync::Arc;
 
 use Case::{Snake, UpperCamel, UpperSnake};
 
@@ -571,6 +572,7 @@ fn display_pub_insert_relation<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
     is_function: bool,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
@@ -590,6 +592,7 @@ fn display_pub_insert_relation<'a>(
             .collect();
 
         let rel_args: Vec<ElVar> = (0..arity_types.len()).map(ElVar::from).collect();
+        let rel_args = rel_args.as_slice();
 
         let rel_fn_args = rel_args
             .iter()
@@ -614,14 +617,14 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
-        let weight_static_name = display_weight_static_name(rel, eqlog, identifiers).to_string(); // Convert to String
+        let weight_static_name = display_weight_static_name(rel, eqlog, identifiers).to_string();
         let update_weights = rel_args
             .iter()
             .cloned()
             .zip(arity_types.iter())
             .enumerate()
             .map(move |(i, (arg, typ))| {
-                let weight_static_name = weight_static_name.clone(); // Clone the String
+                let weight_static_name = weight_static_name.clone();
                 FmtFn(move |f: &mut Formatter| -> Result {
                     let type_snake = display_type(*typ, eqlog, identifiers)
                         .to_string()
@@ -655,24 +658,105 @@ fn display_pub_insert_relation<'a>(
             "}
         };
 
-        let row_args = rel_args
-            .iter()
-            .cloned()
-            .map(|var| FmtFn(move |f| write!(f, "{var}.0")))
-            .format(", ");
+        let index_inserts = index_set(index_selection)
+            .into_iter()
+            .filter_map(|(r0, index)| -> Option<(IndexSpec, Option<Arc<[usize]>>)> {
+                let equalities: Option<Arc<[usize]>> = match r0 {
+                    FlatInRel::EqlogRel(r0) => {
+                        if r0 != rel {
+                            return None;
+                        }
+                        None
+                    }
+                    FlatInRel::EqlogRelWithDiagonals {
+                        rel: r0,
+                        equalities,
+                    } => {
+                        if r0 != rel {
+                            return None;
+                        }
+                        Some(equalities)
+                    }
+                    FlatInRel::TypeSet(_) => {
+                        return None;
+                    }
+                    FlatInRel::Equality(_) => {
+                        return None;
+                    }
+                };
+                Some((index, equalities))
+            })
+            .map(|(index, equalities)| {
+                FmtFn(move |f| {
+                    let flat_in_rel = FlatInRel::EqlogRel(rel.clone());
+                    let index_name =
+                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                    if let Some(equalities) = &equalities {
+                        let checks = equalities
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .filter(|(i, j)| i != j)
+                            .map(move |(i, j)| {
+                                FmtFn(move |f| {
+                                    let argi = rel_args[i].clone();
+                                    let argj = rel_args[j].clone();
+                                    write!(f, "{argi} == {argj}")
+                                })
+                            })
+                            .format(" || ");
+                        let relevant_args: Vec<ElVar> = equalities
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .filter_map(|(i, j)| {
+                                if i == j {
+                                    Some(rel_args[i].clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let args = index
+                            .order
+                            .iter()
+                            .map(|i| relevant_args[*i].clone())
+                            .format(", ");
 
-        //let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
-        let insert_fn_name: String = todo!();
+                        writedoc! {f, "
+                            if {checks} {{
+                            self.{index_name}.insert([{args}]);
+                            }}
+                        "}
+                    } else {
+                        let args = index
+                            .order
+                            .iter()
+                            .map(|i| rel_args[*i].clone())
+                            .format(", ");
+                        writedoc! {f, "
+                            self.{index_name}.insert([{args}]);
+                        "}
+                    }
+                })
+            })
+            .format("\n");
+
+        let contains_args = rel_args.iter().format(", ");
 
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
-                let row = [{row_args}];
-                if {insert_fn_name}(self.{rel_snake}_table, row) {{
-                    {update_weights}
+
+                if self.{rel_snake}({contains_args}) {{
+                    return;
                 }}
+
+                {index_inserts}
+
+                {update_weights}
             }}
         "}
     })
@@ -1998,7 +2082,8 @@ fn display_theory_impl<'a>(
             let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
             write!(f, "{}", iter_fn).unwrap();
 
-            let insert_relation = display_pub_insert_relation(rel, eqlog, identifiers, true);
+            let insert_relation =
+                display_pub_insert_relation(rel, eqlog, identifiers, index_selection, true);
             write!(f, "{}", insert_relation).unwrap();
 
             writeln!(f, "").unwrap();
@@ -2029,7 +2114,8 @@ fn display_theory_impl<'a>(
                 write!(f, "{}", iter_fn).unwrap();
             }
 
-            let insert_relation = display_pub_insert_relation(rel, eqlog, identifiers, false);
+            let insert_relation =
+                display_pub_insert_relation(rel, eqlog, identifiers, index_selection, false);
             write!(f, "{}", insert_relation).unwrap();
 
             writeln!(f, "").unwrap();
