@@ -330,6 +330,7 @@ fn display_pub_function_eval_fn<'a>(
     func: Func,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel = eqlog.func_rel(func).unwrap();
@@ -390,12 +391,30 @@ fn display_pub_function_eval_fn<'a>(
             .format(", ")
             .to_string();
 
-        //let eval_fn = display_eval_fn_name(func, eqlog, identifiers);
-        let eval_fn: String = todo!();
+        let query_spec = QuerySpec::eval_func(func, eqlog);
+        let flat_in_rel = FlatInRel::EqlogRel(rel);
 
-        let table_eval_args = (0..flat_dom_len)
-            .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
-            .format(", ");
+        let indices = index_selection
+            .get(&(flat_in_rel.clone(), query_spec))
+            .unwrap();
+
+        let flat_in_rel = &flat_in_rel;
+
+        let or_else_gets = indices
+            .into_iter()
+            .map(move |index| {
+                FmtFn(move |f| {
+                    let field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                    let args = index
+                        .order
+                        .iter()
+                        .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
+                        .format(", ");
+                    write!(f, ".or_else(move || self.{field}.get([{args}]))")
+                })
+            })
+            .format("\n");
+
         let result = if eqlog.is_total_func(func) {
             "result.unwrap().into()"
         } else {
@@ -408,7 +427,9 @@ fn display_pub_function_eval_fn<'a>(
             pub fn {relation_snake}(&self, {params}) -> {result_type} {{
             {canonicalize}
 
-            let result: Option<u32> = {eval_fn}(&self.{relation_snake}_table, {table_eval_args}).into();
+            let result: Option<u32> =
+            None
+            {or_else_gets}
 
             {result}
             }}
@@ -1971,7 +1992,7 @@ fn display_theory_impl<'a>(
 
         for func in eqlog.iter_func() {
             let rel = eqlog.func_rel(func).unwrap();
-            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers);
+            let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers, index_selection);
             write!(f, "{eval_fn}").unwrap();
 
             let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
