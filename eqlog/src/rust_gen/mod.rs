@@ -568,6 +568,95 @@ fn display_pub_iter_fn<'a>(
     })
 }
 
+/// Displays a block of code that inserts the variable row into the indices for a Rel.
+fn display_insert_row_block<'a>(
+    args: &'a [ElVar],
+    age: IndexAge,
+    rel: Rel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
+) -> impl 'a + Display {
+    index_set(index_selection)
+        .into_iter()
+        .filter_map(
+            move |(r0, index)| -> Option<(IndexSpec, Option<Arc<[usize]>>)> {
+                if index.age != age {
+                    return None;
+                }
+
+                let equalities: Option<Arc<[usize]>> = match r0 {
+                    FlatInRel::EqlogRel(r0) => {
+                        if r0 != rel {
+                            return None;
+                        }
+                        None
+                    }
+                    FlatInRel::EqlogRelWithDiagonals {
+                        rel: r0,
+                        equalities,
+                    } => {
+                        if r0 != rel {
+                            return None;
+                        }
+                        Some(equalities)
+                    }
+                    FlatInRel::TypeSet(_) => {
+                        return None;
+                    }
+                    FlatInRel::Equality(_) => {
+                        return None;
+                    }
+                };
+                Some((index, equalities))
+            },
+        )
+        .map(move |(index, equalities)| {
+            FmtFn(move |f| {
+                let flat_in_rel = FlatInRel::EqlogRel(rel.clone());
+                let index_name = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                if let Some(equalities) = &equalities {
+                    let checks = equalities
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .filter(|(i, j)| i != j)
+                        .map(move |(i, j)| {
+                            FmtFn(move |f| {
+                                let argi = args[i].clone();
+                                let argj = args[j].clone();
+                                write!(f, "{argi} == {argj}")
+                            })
+                        })
+                        .format(" || ");
+                    let relevant_args: Vec<ElVar> = equalities
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .filter_map(|(i, j)| if i == j { Some(args[i].clone()) } else { None })
+                        .collect();
+                    let args = index
+                        .order
+                        .iter()
+                        .map(|i| relevant_args[*i].clone())
+                        .format(", ");
+
+                    writedoc! {f, "
+                            if {checks} {{
+                            self.{index_name}.insert([{args}]);
+                            }}
+                        "}
+                } else {
+                    let args = index.order.iter().map(|i| args[*i].clone()).format(", ");
+                    writedoc! {f, "
+                            self.{index_name}.insert([{args}]);
+                        "}
+                }
+            })
+        })
+        .format("\n")
+}
+
 fn display_pub_insert_relation<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -658,89 +747,14 @@ fn display_pub_insert_relation<'a>(
             "}
         };
 
-        let index_inserts = index_set(index_selection)
-            .into_iter()
-            .filter_map(|(r0, index)| -> Option<(IndexSpec, Option<Arc<[usize]>>)> {
-                let equalities: Option<Arc<[usize]>> = match r0 {
-                    FlatInRel::EqlogRel(r0) => {
-                        if r0 != rel {
-                            return None;
-                        }
-                        None
-                    }
-                    FlatInRel::EqlogRelWithDiagonals {
-                        rel: r0,
-                        equalities,
-                    } => {
-                        if r0 != rel {
-                            return None;
-                        }
-                        Some(equalities)
-                    }
-                    FlatInRel::TypeSet(_) => {
-                        return None;
-                    }
-                    FlatInRel::Equality(_) => {
-                        return None;
-                    }
-                };
-                Some((index, equalities))
-            })
-            .map(|(index, equalities)| {
-                FmtFn(move |f| {
-                    let flat_in_rel = FlatInRel::EqlogRel(rel.clone());
-                    let index_name =
-                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-                    if let Some(equalities) = &equalities {
-                        let checks = equalities
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .filter(|(i, j)| i != j)
-                            .map(move |(i, j)| {
-                                FmtFn(move |f| {
-                                    let argi = rel_args[i].clone();
-                                    let argj = rel_args[j].clone();
-                                    write!(f, "{argi} == {argj}")
-                                })
-                            })
-                            .format(" || ");
-                        let relevant_args: Vec<ElVar> = equalities
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .filter_map(|(i, j)| {
-                                if i == j {
-                                    Some(rel_args[i].clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        let args = index
-                            .order
-                            .iter()
-                            .map(|i| relevant_args[*i].clone())
-                            .format(", ");
-
-                        writedoc! {f, "
-                            if {checks} {{
-                            self.{index_name}.insert([{args}]);
-                            }}
-                        "}
-                    } else {
-                        let args = index
-                            .order
-                            .iter()
-                            .map(|i| rel_args[*i].clone())
-                            .format(", ");
-                        writedoc! {f, "
-                            self.{index_name}.insert([{args}]);
-                        "}
-                    }
-                })
-            })
-            .format("\n");
+        let index_inserts = display_insert_row_block(
+            rel_args,
+            IndexAge::New,
+            rel,
+            eqlog,
+            identifiers,
+            index_selection,
+        );
 
         let contains_args = rel_args.iter().format(", ");
 
@@ -1656,26 +1670,92 @@ fn display_var(var: ElVar) -> impl Display {
     var
 }
 
-fn display_drop_dirt_fn<'a>(
+fn display_move_new_to_old_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let relations = eqlog
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let move_new_to_old_fn_name: String = todo!();
-                    //display_move_new_to_old_fn_name(rel, eqlog, identifiers);
+                    let flat_rel = FlatInRel::EqlogRel(rel);
+                    let query_new = QuerySpec::all_new();
+                    let indices_new = index_selection
+                        .get(&(flat_rel.clone(), query_new))
+                        .expect("should have indices for all new relations");
+                    assert!(
+                        indices_new.len() == 1,
+                        "should have just one index for all new tuples"
+                    );
+                    let primary_index_new = &indices_new[0];
+
+                    let args: Vec<ElVar> =
+                        (0..flat_rel.arity(eqlog).len()).map(ElVar::from).collect();
+                    let primary_new_args = primary_index_new
+                        .order
+                        .iter()
+                        .map(|i| args[*i].clone())
+                        .format(", ");
+
+                    let primary_new_index =
+                        display_index_field_name(&flat_rel, &primary_index_new, eqlog, identifiers);
+
+                    let old_inserts = display_insert_row_block(
+                        args.as_slice(),
+                        IndexAge::Old,
+                        rel,
+                        eqlog,
+                        identifiers,
+                        index_selection,
+                    );
+
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
+
+                    let new_clears = index_set(index_selection)
+                        .into_iter()
+                        .filter(|(flat_in_rel, index)| {
+                            match index.age {
+                                IndexAge::Old => {
+                                    return false;
+                                }
+                                IndexAge::New => {}
+                            }
+
+                            match flat_in_rel {
+                                FlatInRel::EqlogRel(rel0) => *rel0 == rel,
+                                FlatInRel::EqlogRelWithDiagonals { rel: rel0, .. } => *rel0 == rel,
+                                FlatInRel::TypeSet(_) => false,
+                                FlatInRel::Equality(_) => false,
+                            }
+                        })
+                        .map(move |(flat_in_rel, index)| {
+                            FmtFn(move |f| {
+                                let field_name = display_index_field_name(
+                                    &flat_in_rel,
+                                    &index,
+                                    eqlog,
+                                    identifiers,
+                                );
+                                write!(f, "self.{field_name}.clear();")
+                            })
+                        })
+                        .format("\n");
+
                     writedoc! {f, "
-                        {move_new_to_old_fn_name}(self.{rel_snake}_table);
+                        let new_{rel_snake} = std::mem::take(&mut self.{primary_new_index});
+                        for [{primary_new_args}] in new_{rel_snake} {{
+                        {old_inserts}
+                        }}
+                        {new_clears}
                     "}
                 })
             })
             .format("\n");
+
         let types = eqlog
             .iter_type()
             .map(|typ| {
@@ -1683,16 +1763,34 @@ fn display_drop_dirt_fn<'a>(
                     let type_snake = display_type(typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    write!(
-                        f,
-                        "self.{type_snake}_old.append(&mut self.{type_snake}_new);"
-                    )
+                    let flat_rel = FlatInRel::TypeSet(typ);
+
+                    let index_new = IndexSpec {
+                        age: IndexAge::New,
+                        order: vec![0].into(),
+                    };
+                    let index_old = IndexSpec {
+                        age: IndexAge::Old,
+                        order: index_new.order.clone(),
+                    };
+
+                    let new_index =
+                        display_index_field_name(&flat_rel, &index_new, eqlog, identifiers);
+                    let old_index =
+                        display_index_field_name(&flat_rel, &index_old, eqlog, identifiers);
+
+                    writedoc! {f, "
+                        for r in self.{new_index} {{
+                        self.{old_index}.insert(r);
+                        }}
+                        self.{new_index}.clear();
+                    "}
                 })
             })
             .format("\n");
 
         writedoc! {f, "
-            fn drop_dirt(&mut self) {{
+            fn move_new_to_old(&mut self) {{
             self.empty_join_is_dirty = false;
 
             {relations}
@@ -1834,7 +1932,7 @@ fn display_close_until_fn<'a>(
                     loop {{
             {module_calls}
 
-                        self.drop_dirt();
+                        self.move_new_to_old();
                         delta.apply_surjective(self);
                         self.canonicalize();
 
@@ -2286,8 +2384,8 @@ fn display_theory_impl<'a>(
 
         writeln!(f, "").unwrap();
 
-        let drop_dirt_fn = display_drop_dirt_fn(eqlog, identifiers);
-        write!(f, "{}", drop_dirt_fn).unwrap();
+        let move_new_to_old_fn = display_move_new_to_old_fn(eqlog, identifiers, index_selection);
+        write!(f, "{move_new_to_old_fn}");
 
         write!(f, "}}").unwrap();
         Ok(())
