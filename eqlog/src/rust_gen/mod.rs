@@ -1116,6 +1116,7 @@ fn display_canonicalize_rel_block<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_snake = display_rel(rel, eqlog, identifiers)
@@ -1128,20 +1129,6 @@ fn display_canonicalize_rel_block<'a>(
             let type_snake = display_type(typ, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
-
-            let canonicalize_row = arity
-                .iter()
-                .copied()
-                .enumerate()
-                .map(|(i, type_i)| {
-                    FmtFn(move |f| {
-                        let type_i_snake = display_type(type_i, eqlog, identifiers)
-                            .to_string()
-                            .to_case(Snake);
-                        write!(f, "row[{i}] = self.root_{type_i_snake}(row[{i}].into()).0;")
-                    })
-                })
-                .format("\n");
 
             let adjust_weights = |op: &'static str| {
                 arity
@@ -1156,7 +1143,7 @@ fn display_canonicalize_rel_block<'a>(
                             let weight_static_name =
                                 display_weight_static_name(rel, eqlog, identifiers);
                             writedoc! {f, "
-                                let weight{i} = &mut self.{type_i_snake}_weights[row[{i}] as usize];
+                                let weight{i} = &mut self.{type_i_snake}_weights[row[{i}]];
                                 *weight{i} = weight{i}.saturating_{op}({weight_static_name});
                             "}
                         })
@@ -1166,21 +1153,152 @@ fn display_canonicalize_rel_block<'a>(
             let reduce_weights = adjust_weights("sub");
             let increase_weights = adjust_weights("add");
 
-            //let drain_fn_name = display_drain_with_element_fn_name(rel, typ, eqlog, identifiers);
-            //let insert_fn_name = display_insert_fn_name(rel, eqlog, identifiers);
-            let drain_fn_name: String = todo!();
-            let insert_fn_name: String = todo!();
+            let element_index_field =
+                display_element_index_field_name(rel, typ, eqlog, identifiers);
+
+            let mut new_indices: BTreeSet<(Option<Arc<[usize]>>, IndexSpec)> = BTreeSet::new();
+            let mut old_indices: BTreeSet<(Option<Arc<[usize]>>, IndexSpec)> = BTreeSet::new();
+
+            for (r0, index) in index_set(index_selection) {
+                let equalities = match r0 {
+                    FlatInRel::EqlogRel(rel0) => {
+                        if rel0 != rel {
+                            continue;
+                        }
+                        None
+                    }
+                    FlatInRel::EqlogRelWithDiagonals {
+                        rel: rel0,
+                        equalities,
+                    } => {
+                        if rel0 != rel {
+                            continue;
+                        }
+                        Some(equalities)
+                    }
+                    FlatInRel::TypeSet(_) => continue,
+                    FlatInRel::Equality(_) => continue,
+                };
+
+                match index.age {
+                    IndexAge::New => {
+                        new_indices.insert((equalities, index));
+                    }
+                    IndexAge::Old => {
+                        old_indices.insert((equalities, index));
+                    }
+                }
+            }
+
+            let primary_new_index = new_indices
+                .iter()
+                .find_map(|(equalities, index)| match equalities {
+                    None => Some(index),
+                    Some(_) => None,
+                })
+                .expect("should have primary new index");
+            let primary_old_index = old_indices
+                .iter()
+                .find_map(|(equalities, index)| match equalities {
+                    None => Some(index),
+                    Some(_) => None,
+                })
+                .expect("should have primary new index");
+
+            let remove_from_new_indices = new_indices
+                .iter()
+                .filter(|(_, index)| index != primary_new_index)
+                .map(|(equalities, index)| {
+                    FmtFn(move |f| {
+                        let row = FmtFn(move |f| match equalities {
+                            None => {
+                                write!(f, "row")
+                            }
+                            Some(equalities) => {
+                                let args = equalities
+                                    .iter()
+                                    .copied()
+                                    .enumerate()
+                                    .filter(|(i, j)| i == j)
+                                    .map(move |(i, _)| FmtFn(move |f| write!(f, "row[{i}]")))
+                                    .format(", ");
+                                write!(f, "[{args}]")
+                            }
+                        });
+                        let flat_in_rel = FlatInRel::EqlogRel(rel);
+                        let field_name =
+                            display_index_field_name(&flat_in_rel, index, eqlog, identifiers);
+
+                        writedoc! {f, "
+                            self.{field_name}.remove({row});
+                        "}
+                    })
+                })
+                .format("\n");
+
+            // TODO: This is basically a copy of "remove_from_new_indices", but for old indices.
+            // Consider refactoring this.
+            let remove_from_old_indices = old_indices
+                .iter()
+                .filter(|(_, index)| index != primary_old_index)
+                .map(|(equalities, index)| {
+                    FmtFn(move |f| {
+                        let row = FmtFn(move |f| match equalities {
+                            None => {
+                                write!(f, "row")
+                            }
+                            Some(equalities) => {
+                                let args = equalities
+                                    .iter()
+                                    .copied()
+                                    .enumerate()
+                                    .filter(|(i, j)| i == j)
+                                    .map(move |(i, _)| FmtFn(move |f| write!(f, "row[{i}]")))
+                                    .format(", ");
+                                write!(f, "[{args}]")
+                            }
+                        });
+                        let flat_in_rel = FlatInRel::EqlogRel(rel);
+                        let field_name =
+                            display_index_field_name(&flat_in_rel, index, eqlog, identifiers);
+
+                        writedoc! {f, "
+                            self.{field_name}.remove({row});
+                        "}
+                    })
+                })
+                .format("\n");
+
+            let flat_in_rel = FlatInRel::EqlogRel(rel);
+            let primary_new_index =
+                display_index_field_name(&flat_in_rel, primary_new_index, eqlog, identifiers);
+            let primary_old_index =
+                display_index_field_name(&flat_in_rel, primary_old_index, eqlog, identifiers);
 
             writedoc! {f, "
                 for el in self.{type_snake}_uprooted.iter().copied() {{
-                    let rows = {drain_fn_name}(self.{rel_snake}_table, el.0);
-                    for mut row in rows {{
-                        {reduce_weights}
-                        {canonicalize_row}
-                        if {insert_fn_name}(self.{rel_snake}_table, row) {{
-                            {increase_weights}
-                        }}
-                    }}
+                let mut rows = self.{element_index_field}.remove(&el).unwrap_or_default();
+
+                for row in rows {{
+                let was_in_indices =
+                if self.{primary_new_index}.remove(&row) {{
+                {remove_from_new_indices}
+                true
+                }} else if self.{primary_old_index}.remove(&row) {{
+                {remove_from_old_indices}
+                true
+                }} else {{
+                false
+                }}
+
+                if !was_in_indices {{
+                continue;
+                }}
+
+                {reduce_weights}
+                self.insert_{rel_snake}(row)
+                }}
+
                 }}
             "}?;
         }
@@ -1191,11 +1309,12 @@ fn display_canonicalize_rel_block<'a>(
 fn display_canonicalize_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let rel_blocks = eqlog
             .iter_rel()
-            .map(|rel| display_canonicalize_rel_block(rel, eqlog, identifiers))
+            .map(|rel| display_canonicalize_rel_block(rel, eqlog, identifiers, index_selection))
             .format("\n");
 
         let clear_uprooted_vecs = eqlog
@@ -1904,6 +2023,23 @@ fn display_index_field_name<'a>(
     })
 }
 
+fn display_element_index_field_name<'a>(
+    rel: Rel,
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let rel_snake = display_rel(rel, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let type_snake = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        write!(f, "{rel_snake}_{type_snake}_element_index")
+    })
+}
+
 fn display_index_type<'a>(
     rel: &'a FlatInRel,
     eqlog: &'a Eqlog,
@@ -1979,6 +2115,26 @@ fn display_theory_struct<'a>(
                 })
             })
             .format("\n");
+        let element_index_fields = eqlog
+            .iter_rel()
+            .map(|rel| {
+                let arity: Vec<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+                    .into_iter()
+                    .collect();
+                let arity_len = arity.len();
+                let arity_set: BTreeSet<Type> = arity.iter().copied().collect();
+                arity_set
+                    .into_iter()
+                    .map(move |typ| {
+                        FmtFn(move |f| {
+                            let field_name =
+                                display_element_index_field_name(rel, typ, eqlog, identifiers);
+                            write!(f, "{field_name}: BTreeMap<u32, [u32; {arity_len}]>,")
+                        })
+                    })
+                    .format("\n")
+            })
+            .format("\n");
 
         let type_fields = eqlog
             .iter_type()
@@ -1992,6 +2148,7 @@ fn display_theory_struct<'a>(
             /// A model of the `{name}` theory.
             pub struct {name} {{
                 {index_fields}
+                {element_index_fields}
                 {type_fields}
                 empty_join_is_dirty: bool,
             }}
@@ -2121,7 +2278,7 @@ fn display_theory_impl<'a>(
             writeln!(f, "").unwrap();
         }
 
-        let canonicalize_fn = display_canonicalize_fn(eqlog, identifiers);
+        let canonicalize_fn = display_canonicalize_fn(eqlog, identifiers, index_selection);
         write!(f, "{canonicalize_fn}\n").unwrap();
 
         let is_dirty_fn = display_is_dirty_fn(eqlog, identifiers, index_selection);
@@ -2186,7 +2343,6 @@ pub fn display_module<'a>(
             BuildType::Module => {
                 todo!()
                 /*
-                display_table_modules(eqlog, identifiers, index_selection, symbol_prefix).fmt(f)?;
                 display_rule_modules(
                     rules,
                     analyses,
