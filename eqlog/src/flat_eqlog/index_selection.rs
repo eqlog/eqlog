@@ -51,7 +51,14 @@ impl QuerySpec {
             age: QueryAge::All,
         }
     }
-    /// The [QuerySpec] to query for all dirty tuples in a relation.
+    /// The specs needed to query for all old tuples in a relation.
+    pub fn all_old() -> Self {
+        QuerySpec {
+            projections: BTreeSet::new(),
+            age: QueryAge::Old,
+        }
+    }
+    /// The [QuerySpec] to query for all new tuples in a relation.
     pub fn all_new() -> Self {
         QuerySpec {
             projections: BTreeSet::new(),
@@ -184,9 +191,11 @@ pub fn select_indices<'a>(
     // - The contains_{rel}() method needs a QuerySpec to check for one specific tuple.
     query_specs.extend(eqlog.iter_rel().flat_map(|rel| {
         let rel = FlatInRel::EqlogRel(rel);
+        let new_spec = QuerySpec::all_new();
+        let old_spec = QuerySpec::all_old();
         let iter_all_spec = QuerySpec::all();
         let check_one_spec = QuerySpec::one(rel.clone(), eqlog);
-        [(rel.clone(), iter_all_spec), (rel.clone(), check_one_spec)]
+        [(rel.clone(), new_spec),(rel.clone(), old_spec),  (rel.clone(), iter_all_spec), (rel.clone(), check_one_spec), ]
     }));
 
     // The query specs to iterate over element of a given type.

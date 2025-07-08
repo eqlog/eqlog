@@ -1973,6 +1973,7 @@ fn display_close_fn() -> impl Display {
 fn display_new_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         writeln!(f, "/// Creates an empty model.").unwrap();
@@ -1985,15 +1986,12 @@ fn display_new_fn<'a>(
                 .to_case(Snake);
             writeln!(f, "{type_snake}_equalities: Unification::new(),").unwrap();
             writeln!(f, "{type_snake}_weights: Vec::new(),").unwrap();
-            writeln!(f, "{type_snake}_new: BTreeSet::new(),").unwrap();
-            writeln!(f, "{type_snake}_old: BTreeSet::new(),").unwrap();
             writeln!(f, "{type_snake}_uprooted: Vec::new(),").unwrap();
         }
-        for rel in eqlog.iter_rel() {
-            let rel_snake = display_rel(rel, eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
-            todo!();
+        for (flat_rel, index) in index_set(index_selection) {
+            let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
+            let index_type = display_index_type(&flat_rel, eqlog, identifiers);
+            writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
         }
         writeln!(f, "empty_join_is_dirty: true,").unwrap();
         writeln!(f, "}}").unwrap();
@@ -2265,7 +2263,7 @@ fn display_theory_impl<'a>(
     FmtFn(move |f| {
         writeln!(f, "impl {} {{", name).unwrap();
 
-        let new_fn = display_new_fn(eqlog, identifiers);
+        let new_fn = display_new_fn(eqlog, identifiers, index_selection);
         write!(f, "{}", new_fn).unwrap();
         writeln!(f, "").unwrap();
 
@@ -2410,7 +2408,8 @@ fn display_rule_modules<'a>(
                 //    identifiers,
                 //    symbol_prefix,
                 //);
-                let lib: String = todo!();
+                //let lib: String = todo!();
+                let lib: &'static str = "";
                 let ram_module_name = ram_module.name.as_str();
                 writedoc! {f, "
                     mod {ram_module_name} {{
@@ -2439,7 +2438,7 @@ pub fn display_module<'a>(
         match build_type {
             BuildType::Component => {}
             BuildType::Module => {
-                todo!()
+                //todo!()
                 /*
                 display_rule_modules(
                     rules,
@@ -2454,24 +2453,24 @@ pub fn display_module<'a>(
             }
         }
 
-        let rule_env_structs = ram_modules
-            .iter()
-            //display_rule_env_struct(ram_module, eqlog, identifiers))
-            .map(|ram_module| -> String { todo!() })
-            .format("\n");
-        writeln!(f, "{rule_env_structs}")?;
+        //let rule_env_structs = ram_modules
+        //    .iter()
+        //    //display_rule_env_struct(ram_module, eqlog, identifiers))
+        //    .map(|ram_module| -> String { todo!() })
+        //    .format("\n");
+        //writeln!(f, "{rule_env_structs}")?;
 
-        let rule_eval_fns = ram_modules
-            .iter()
-            //.map(|ram_module| display_module_main_fn_decl(ram_module.name.as_str(), symbol_prefix))
-            .map(|ram_module| -> String { todo!() })
-            .format("\n");
-        writedoc! {f, r#"
-            #[allow(clashing_extern_declarations)]
-            unsafe extern "Rust" {{
-                {rule_eval_fns}
-            }}
-        "#}?;
+        //let rule_eval_fns = ram_modules
+        //    .iter()
+        //    //.map(|ram_module| display_module_main_fn_decl(ram_module.name.as_str(), symbol_prefix))
+        //    .map(|ram_module| -> String { todo!() })
+        //    .format("\n");
+        //writedoc! {f, r#"
+        //    #[allow(clashing_extern_declarations)]
+        //    unsafe extern "Rust" {{
+        //        {rule_eval_fns}
+        //    }}
+        //"#}?;
 
         for typ in eqlog.iter_type() {
             let type_camel = display_type(typ, eqlog, identifiers)

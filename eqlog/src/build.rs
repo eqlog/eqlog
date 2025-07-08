@@ -485,27 +485,9 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let flat_rules_iter = flat_rule_groups.iter().flat_map(|group| group.rules.iter());
     let index_selection = select_indices(flat_rules_iter, &eqlog);
 
-    let ram_routines: Vec<RamModule> = flat_rule_groups
+    let ram_modules: Vec<RamModule> = flat_rule_groups
         .iter()
         .map(|rule_group| flat_rule_group_to_ram(rule_group, &index_selection))
-        .collect();
-
-    /*
-    let resolved_rules: Vec<FlatRule> = flat_rules
-        .rules()
-        .iter()
-        .zip(flat_rules.analyses())
-        .map(|(rule, analysis)| {
-            let mut rule = resolve_if_rel_stmts(
-                rule,
-                &analysis.if_stmt_rel_infos,
-                &index_selection,
-                &eqlog,
-                &identifiers,
-            );
-            bubble_up_range_defs(&mut rule);
-            rule
-        })
         .collect();
 
     let theory_name_len = theory_name.len();
@@ -515,8 +497,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         &theory_name.to_case(Case::UpperCamel),
         &eqlog,
         &identifiers,
-        resolved_rules.as_slice(),
-        flat_rules.analyses(),
+        ram_modules.as_slice(),
         &index_selection,
         symbol_prefix.as_str(),
         build_type,
@@ -524,6 +505,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     .to_string();
     fs::write(&module_out_path, module_contents.as_str())?;
 
+    /*
     let component_config = match config.component_build.as_ref() {
         None => {
             write_digest(in_file, config, &src_digest)?;
@@ -693,10 +675,10 @@ impl Config {
                 .windows(needle.len())
                 .any(|window| window == needle.as_bytes())
             {
-                ensure!(
-                    runtime_rlib_path.is_none(),
-                    "Found multiple eqlog runtime rlib files in deps directory, consider runing `cargo clean` to remove them"
-                );
+                //ensure!(
+                //    runtime_rlib_path.is_none(),
+                //    "Found multiple eqlog runtime rlib files in deps directory, consider running `cargo clean` to remove them"
+                //);
 
                 runtime_rlib_path = Some(path);
             }
