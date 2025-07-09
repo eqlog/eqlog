@@ -20,99 +20,102 @@ fn display_imports<'a>() -> impl 'a + Display {
     })
 }
 
-pub fn display_rule_env_struct<'a>(
-    analysis: &'a FlatRuleAnalysis<'a>,
+pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let name_camel = &ram_module.name.to_case(UpperCamel);
+        write!(f, "{name_camel}Env")
+    })
+}
+
+pub fn display_module_env_struct<'a>(
+    ram_module: &'a RamModule,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    todo!()
-    /*
     FmtFn(move |f: &mut Formatter| -> Result {
-        let rule_name_camel = analysis.rule_name.to_case(UpperCamel);
-
-        let table_fields = analysis
-            .used_rels
+        let in_rels: BTreeSet<(FlatInRel, IndexSpec)> = ram_module
+            .routines
             .iter()
+            .flat_map(|routine| {
+                routine
+                    .stmts
+                    .iter()
+                    .filter_map(|stmt| -> Option<(FlatInRel, IndexSpec)> {
+                        let define_set_stmt = match stmt {
+                            RamStmt::DefineSet(define_set_stmt) => define_set_stmt,
+                            RamStmt::Iter(_) | RamStmt::Insert(_) => {
+                                return None;
+                            }
+                        };
+
+                        let GetIndexExpr { rel, index_spec } = match &define_set_stmt.expr {
+                            InSetExpr::GetIndex(get_index_expr) => get_index_expr,
+                            InSetExpr::Restrict(restrict_expr) => {
+                                return None;
+                            }
+                        };
+
+                        Some((rel.clone(), index_spec.clone()))
+                    })
+            })
+            .collect();
+        let in_rels = in_rels
+            .into_iter()
+            .map(|(rel, index_spec)| {
+                FmtFn(move |f| {
+                    let name = display_index_field_name(&rel, &index_spec, eqlog, identifiers);
+                    let typ = display_index_type(&rel, eqlog, identifiers);
+
+                    write!(f, "{name}: &'a {typ},")
+                })
+            })
+            .format("\n");
+
+        let out_rels: BTreeSet<FlatOutRel> = ram_module
+            .routines
+            .iter()
+            .flat_map(|routine| {
+                routine
+                    .stmts
+                    .iter()
+                    .filter_map(|stmt| -> Option<FlatOutRel> {
+                        let InsertStmt { rel, args: _ } = match stmt {
+                            RamStmt::DefineSet(_) | RamStmt::Iter(_) => {
+                                return None;
+                            }
+                            RamStmt::Insert(insert_stmt) => insert_stmt,
+                        };
+
+                        Some(rel.clone())
+                    })
+            })
+            .collect();
+        let out_rels = out_rels
+            .into_iter()
             .map(|rel| {
-                FmtFn(move |f: &mut Formatter| {
-                    let rel_snake = display_rel(*rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    let rel_camel = rel_snake.to_case(UpperCamel);
-                    write!(f, "{rel_snake}_table: &'a {rel_camel}Table,")
+                FmtFn(move |f| {
+                    let name = display_out_set_field_name(&rel, eqlog, identifiers);
+                    let typ = display_out_set_type(&rel, eqlog);
+
+                    write!(f, "{name}: {typ},")
                 })
             })
             .format("\n");
 
-        let type_set_fields = analysis
-            .used_types
-            .iter()
-            .map(|typ| {
-                FmtFn(move |f: &mut Formatter| {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    writedoc! {f, "
-                    {type_snake}_new: &'a BTreeSet<u32>,
-                    {type_snake}_old: &'a BTreeSet<u32>,
-                "}
-                })
-            })
-            .format("\n");
-
-        let new_rel_fields = analysis
-            .used_rels
-            .iter()
-            .map(|rel| {
-                FmtFn(move |f: &mut Formatter| {
-                    let rel_snake = display_rel(*rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    let row_type = display_rel_row_type(*rel, eqlog);
-                    writedoc! {f, "
-                        new_{rel_snake}: &'a mut Vec<{row_type}>,
-                    "}?;
-                    if let RelCase::FuncRel(func) = eqlog.rel_case(*rel) {
-                        if eqlog.function_can_be_made_defined(func) {
-                            let args_type = display_func_args_type(func, eqlog);
-                            writedoc! {f, "
-                                new_{rel_snake}_def: &'a mut Vec<{args_type}>,
-                            "}?;
-                        }
-                    }
-                    Ok(())
-                })
-            })
-            .format("\n");
-
-        let new_type_equalities_fields = analysis
-            .used_types
-            .iter()
-            .map(|typ| {
-                FmtFn(move |f: &mut Formatter| {
-                    let type_snake = display_type(*typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    writedoc! {f, "
-                        new_{type_snake}_equalities: &'a mut Vec<(u32, u32)>,
-                    "}
-                })
-            })
-            .format("\n");
+        let name = display_module_env_struct_name(ram_module);
 
         writedoc! {f, "
             #[allow(unused)]
-            pub struct {rule_name_camel}Env<'a> {{
-                {table_fields}
-                {type_set_fields}
-                {new_rel_fields}
-                {new_type_equalities_fields}
+            pub struct {name}<'a> {{
+            {in_rels}
+
+            {out_rels}
             }}
         "}
     })
-    */
 }
 
+/*
 fn display_table_fn_decls<'a>(
     analysis: &'a FlatRuleAnalysis<'a>,
     eqlog: &'a Eqlog,
@@ -597,3 +600,4 @@ pub fn display_rule_lib<'a>(
         "#}
     })
 }
+*/

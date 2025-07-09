@@ -47,6 +47,18 @@ pub enum FlatOutRel {
     FuncDomain(Func),
 }
 
+impl FlatOutRel {
+    pub fn arity(&self, eqlog: &Eqlog) -> Vec<Type> {
+        match self {
+            FlatOutRel::EqlogRel(rel) => type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog),
+            FlatOutRel::Equality(typ) => {
+                vec![*typ, *typ]
+            }
+            FlatOutRel::FuncDomain(func) => type_list_vec(eqlog.flat_domain(*func).unwrap(), eqlog),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct FlatVar {
     pub name: Arc<str>,

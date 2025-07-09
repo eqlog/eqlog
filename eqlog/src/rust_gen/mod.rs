@@ -1,11 +1,7 @@
-/*
 mod rule;
-*/
 mod types;
 
-/*
 pub use rule::*;
-*/
 pub use types::*;
 
 use crate::eqlog_util::*;
@@ -1369,6 +1365,41 @@ fn display_func_args_type<'a>(func: Func, eqlog: &'a Eqlog) -> impl 'a + Display
     })
 }
 
+fn display_out_set_field_name<'a>(
+    rel: &'a FlatOutRel,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| match rel {
+        FlatOutRel::EqlogRel(rel) => {
+            let rel_snake = display_rel(*rel, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            write!(f, "new_{rel_snake}")
+        }
+        FlatOutRel::Equality(typ) => {
+            let type_snake = display_type(*typ, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            write!(f, "new_{type_snake}_equalities")
+        }
+        FlatOutRel::FuncDomain(func) => {
+            let rel = eqlog.func_rel(*func).unwrap();
+            let rel_snake = display_rel(rel, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            write!(f, "new_{rel_snake}_def")
+        }
+    })
+}
+
+fn display_out_set_type<'a>(rel: &'a FlatOutRel, eqlog: &'a Eqlog) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let arity_len = rel.arity(eqlog).len();
+        write!(f, "Vec<[u32; {arity_len}]>")
+    })
+}
+
 fn display_model_delta_struct<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -2454,12 +2485,11 @@ pub fn display_module<'a>(
             }
         }
 
-        //let rule_env_structs = ram_modules
-        //    .iter()
-        //    //display_rule_env_struct(ram_module, eqlog, identifiers))
-        //    .map(|ram_module| -> String { todo!() })
-        //    .format("\n");
-        //writeln!(f, "{rule_env_structs}")?;
+        let module_env_structs = ram_modules
+            .iter()
+            .map(|ram_module| display_module_env_struct(ram_module, eqlog, identifiers))
+            .format("\n");
+        writeln!(f, "{module_env_structs}")?;
 
         //let rule_eval_fns = ram_modules
         //    .iter()
