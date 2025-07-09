@@ -1116,16 +1116,44 @@ fn display_are_equal_fn(sort: &str) -> impl Display + '_ {
     })
 }
 
-fn display_iter_sort_fn(sort: &str) -> impl Display + '_ {
+fn display_iter_type_fn<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
+) -> impl 'a + Display {
     FmtFn(move |f| {
-        let sort_snake = sort.to_case(Snake);
-        let sort_camel = sort.to_case(UpperCamel);
+        let type_snake = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        let type_camel = type_snake.to_case(UpperCamel);
+        let rel = FlatInRel::TypeSet(typ);
+        let query = QuerySpec::all();
+        let indices = index_selection.get(&(rel.clone(), query)).unwrap();
+
+        let index_chain_iter = indices
+            .into_iter()
+            .map(move |index| {
+                assert_eq!(index.order.len(), 1);
+
+                let rel = rel.clone();
+                FmtFn(move |f| {
+                    let index_field = display_index_field_name(&rel, index, eqlog, identifiers);
+                    writedoc! {f, "
+                        .chain(self.{index_field}.iter())
+                    "}
+                })
+            })
+            .format("\n");
+
         writedoc! {f, "
-            /// Returns and iterator over elements of sort `{sort}`.
+            /// Returns and iterator over elements of type `{type_camel}`.
             /// The iterator yields canonical representatives only.
             #[allow(dead_code)]
-            pub fn iter_{sort_snake}(&self) -> impl '_ + Iterator<Item={sort}> {{
-                self.{sort_snake}_new.iter().chain(self.{sort_snake}_old.iter()).copied().map({sort_camel}::from)
+            pub fn iter_{type_snake}(&self) -> impl '_ + Iterator<Item={type_camel}> {{
+            [].into_iter()
+            {index_chain_iter}
+            .map(|[el]| {type_camel}::from(el))
             }}
         "}
     })
@@ -2215,21 +2243,62 @@ fn display_weight_static_name<'a>(
 
 fn display_weight_static<'a>(
     rel: Rel,
-    indices: &'a BTreeSet<&IndexSpec>,
+    index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let static_name = display_weight_static_name(rel, eqlog, identifiers);
-        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-        let tuple_weight = arity.len();
-        let el_lookup_weight = tuple_weight;
-        let indices_weight = indices.len() * tuple_weight;
-        let weight = el_lookup_weight + indices_weight;
+
+        let el_lookup_weight = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
+
+        let relevant_indices: BTreeSet<(FlatInRel, IndexSpec)> = index_selection
+            .iter()
+            .filter_map(|((flat_in_rel, query_spec), index_specs)| {
+                match flat_in_rel {
+                    FlatInRel::EqlogRel(rel0) => {
+                        if *rel0 != rel {
+                            return None;
+                        }
+                    }
+                    FlatInRel::EqlogRelWithDiagonals {
+                        rel: rel0,
+                        equalities,
+                    } => {
+                        if *rel0 != rel {
+                            return None;
+                        }
+                    }
+                    FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => {
+                        return None;
+                    }
+                }
+
+                Some((flat_in_rel, index_specs))
+            })
+            .flat_map(|(flat_in_rel, index_specs)| {
+                index_specs.iter().filter_map(|index_spec| {
+                    match index_spec.age {
+                        IndexAge::New => {
+                            return None;
+                        }
+                        IndexAge::Old => {}
+                    }
+
+                    Some((flat_in_rel.clone(), index_spec.clone()))
+                })
+            })
+            .collect();
+
+        let index_weight: usize = relevant_indices
+            .iter()
+            .map(|(_flat_in_rel, index)| index.order.len())
+            .sum();
+        let weight = el_lookup_weight + index_weight;
+
         writedoc! {f, r#"
-            #[unsafe(export_name = "{symbol_prefix}_{static_name}")]
-            pub static {static_name}: usize = {weight};
+            const {static_name}: usize = {weight};
         "#}
     })
 }
@@ -2318,7 +2387,7 @@ fn display_theory_impl<'a>(
                 .to_string()
                 .to_case(UpperCamel);
 
-            let iter_sort_fn = display_iter_sort_fn(type_name.as_str());
+            let iter_sort_fn = display_iter_type_fn(typ, eqlog, identifiers, index_selection);
             write!(f, "{}", iter_sort_fn).unwrap();
 
             let root_fn = display_root_fn(type_name.as_str());
@@ -2499,17 +2568,22 @@ pub fn display_module<'a>(
             .format("\n");
         writeln!(f, "{module_env_structs}")?;
 
-        //let rule_eval_fns = ram_modules
-        //    .iter()
-        //    //.map(|ram_module| display_module_main_fn_decl(ram_module.name.as_str(), symbol_prefix))
-        //    .map(|ram_module| -> String { todo!() })
-        //    .format("\n");
-        //writedoc! {f, r#"
-        //    #[allow(clashing_extern_declarations)]
-        //    unsafe extern "Rust" {{
-        //        {rule_eval_fns}
-        //    }}
-        //"#}?;
+        let rule_eval_fns = ram_modules
+            .iter()
+            .map(|ram_module| display_module_main_fn_decl(ram_module, symbol_prefix))
+            .format("\n");
+        writedoc! {f, r#"
+            #[allow(clashing_extern_declarations)]
+            unsafe extern "Rust" {{
+                {rule_eval_fns}
+            }}
+        "#}?;
+
+        for rel in eqlog.iter_rel() {
+            let weight_static =
+                display_weight_static(rel, index_selection, eqlog, identifiers, symbol_prefix);
+            write!(f, "{weight_static}")?;
+        }
 
         for typ in eqlog.iter_type() {
             let type_camel = display_type(typ, eqlog, identifiers)

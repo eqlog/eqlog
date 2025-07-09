@@ -107,6 +107,8 @@ pub fn display_module_env_struct<'a>(
         writedoc! {f, "
             #[allow(unused)]
             pub struct {name}<'a> {{
+            phantom: std::marker::PhantomData<&'a ()>,
+
             {in_rels}
 
             {out_rels}
