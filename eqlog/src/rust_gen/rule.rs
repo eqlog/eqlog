@@ -527,17 +527,6 @@ fn display_rule_fn_signature<'a>(rule_name: &'a str) -> impl 'a + Display {
     })
 }
 
-pub fn display_module_main_fn_decl<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_rule_fn_name(rule_name);
-        let signature = display_rule_fn_signature(rule_name);
-        writedoc! {f, r#"
-            #[link_name = "{symbol_prefix}_{fn_name}"]
-            safe {signature};
-        "#}
-    })
-}
-
 fn display_rule_fn<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + Display {
     FmtFn(move |f| {
         let fn_name = display_rule_fn_name(rule_name);
@@ -551,10 +540,53 @@ fn display_rule_fn<'a>(rule_name: &'a str, symbol_prefix: &'a str) -> impl 'a + 
         "#}
     })
 }
+*/
 
-pub fn display_rule_lib<'a>(
-    rule: &'a FlatRule,
-    analysis: &'a FlatRuleAnalysis<'a>,
+pub fn display_module_main_fn_name<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
+    ram_module.name.to_case(Snake)
+}
+
+fn display_module_main_fn_signature<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_module_main_fn_name(ram_module);
+        let env_name = display_module_env_struct_name(ram_module);
+
+        write!(f, "fn {fn_name}(env: {env_name})")
+    })
+}
+
+pub fn display_module_main_fn_decl<'a>(
+    ram_module: &'a RamModule,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_module_main_fn_name(ram_module);
+        let signature = display_module_main_fn_signature(ram_module);
+        writedoc! {f, r#"
+            #[link_name = "{symbol_prefix}_{fn_name}"]
+            safe {signature};
+        "#}
+    })
+}
+
+fn display_module_main_fn<'a>(
+    ram_module: &'a RamModule,
+    symbol_prefix: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let fn_name = display_module_main_fn_name(ram_module);
+        let signature = display_module_main_fn_signature(ram_module);
+        writedoc! {f, r#"
+            #[link_name = "{symbol_prefix}_{fn_name}"]
+            {signature} {{
+            todo!()
+            }}
+        "#}
+    })
+}
+
+pub fn display_ram_module<'a>(
+    ram_module: &'a RamModule,
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
@@ -562,42 +594,15 @@ pub fn display_rule_lib<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
         let imports = display_imports();
-        let env_struct = display_rule_env_struct(analysis, eqlog, identifiers);
-        let table_struct_decls = analysis
-            .used_rels
-            .iter()
-            .copied()
-            .map(|rel| display_table_struct_decl(rel, eqlog, identifiers))
-            .format("\n");
+        let env_struct = display_module_env_struct(ram_module, eqlog, identifiers);
+        let main_fn = display_module_main_fn(ram_module, symbol_prefix);
 
-        let table_fn_decls =
-            display_table_fn_decls(analysis, eqlog, identifiers, index_selection, symbol_prefix);
-
-        let internal_funcs = rule
-            .funcs
-            .iter()
-            .map(|func| {
-                display_rule_func(
-                    rule.name.as_str(),
-                    func,
-                    analysis,
-                    &rule.range_var_types,
-                    eqlog,
-                    identifiers,
-                )
-            })
-            .format("\n");
-
-        let exported_rule_func = display_rule_fn(rule.name.as_str(), symbol_prefix);
+        //let exported_rule_func = display_module_main_fn(ram_module, symbol_prefix);
 
         writedoc! {f, r#"
             {imports}
-            {table_struct_decls}
-            {table_fn_decls}
             {env_struct}
-            {internal_funcs}
-            {exported_rule_func}
+            {main_fn}
         "#}
     })
 }
-*/
