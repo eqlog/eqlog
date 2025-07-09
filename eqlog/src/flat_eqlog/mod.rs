@@ -10,6 +10,7 @@ use crate::eqlog_util::*;
 use eqlog_eqlog::*;
 
 pub use ast::*;
+pub use diagonals::*;
 pub use index_selection::*;
 pub use semi_naive::*;
 pub use sort::*;

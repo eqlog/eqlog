@@ -370,7 +370,7 @@ pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> Vec<Flat
             .to_case(Snake);
         let rule = semi_naive_functionality(func, &eqlog);
         FlatRuleGroup {
-            name: format!("functinoality_{rel_snake}"),
+            name: format!("functionality_{rel_snake}"),
             rules: vec![rule],
         }
     }));
@@ -385,6 +385,7 @@ pub fn flatten(eqlog: &Eqlog, identifiers: &BTreeMap<Ident, String>) -> Vec<Flat
                     .iter()
                     .flat_map(|rule| to_semi_naive(&eliminate_equalities_ifs(rule)))
                     .map(|mut rule| {
+                        use_rels_with_diagonals(&mut rule);
                         sort_premise(&mut rule);
                         rule
                     })

@@ -195,15 +195,22 @@ pub fn select_indices<'a>(
         let old_spec = QuerySpec::all_old();
         let iter_all_spec = QuerySpec::all();
         let check_one_spec = QuerySpec::one(rel.clone(), eqlog);
-        [(rel.clone(), new_spec),(rel.clone(), old_spec),  (rel.clone(), iter_all_spec), (rel.clone(), check_one_spec), ]
+        [
+            (rel.clone(), new_spec),
+            (rel.clone(), old_spec),
+            (rel.clone(), iter_all_spec),
+            (rel.clone(), check_one_spec),
+        ]
     }));
 
     // The query specs to iterate over element of a given type.
-    query_specs.extend(
-        eqlog
-            .iter_type()
-            .map(|ty| (FlatInRel::TypeSet(ty), QuerySpec::all())),
-    );
+    query_specs.extend(eqlog.iter_type().flat_map(|ty| {
+        let rel = FlatInRel::TypeSet(ty);
+        [
+            (rel.clone(), QuerySpec::all()),
+            (rel.clone(), QuerySpec::all_new()),
+        ]
+    }));
 
     // The query specs for public function evaluation functions.
     query_specs.extend(eqlog.iter_func().map(|func| {

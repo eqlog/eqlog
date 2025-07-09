@@ -53,7 +53,7 @@ fn transform_stmt(stmt: &FlatIfStmt) -> FlatIfStmt {
     }
 }
 
-fn use_rels_with_diagonals(flat_rule: &mut FlatRule) {
+pub fn use_rels_with_diagonals(flat_rule: &mut FlatRule) {
     for stmt in flat_rule.premise.iter_mut() {
         *stmt = transform_stmt(stmt);
     }

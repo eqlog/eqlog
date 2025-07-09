@@ -30,6 +30,10 @@ pub fn eliminate_equalities_ifs(flat_rule: &FlatRule) -> FlatRule {
             );
             let lhs = var_index[&stmt.args[0]];
             let rhs = var_index[&stmt.args[1]];
+
+            let lhs = unification.root(lhs);
+            let rhs = unification.root(rhs);
+
             unification.union_roots_into(lhs, rhs);
         }
     }

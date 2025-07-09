@@ -8,6 +8,12 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
     let mut defined_vars: BTreeMap<FlatVar, ElVar> = BTreeMap::new();
 
     for (stmt_index, flat_stmt) in flat_rule.premise.iter().enumerate() {
+        let arg_set: BTreeSet<FlatVar> = flat_stmt.args.iter().cloned().collect();
+        assert_eq!(
+            arg_set.len(),
+            flat_stmt.args.len(),
+            "Diagonals should have been transformed in an earlier pass"
+        );
         let fixed_args: BTreeMap<usize, ElVar> = flat_stmt
             .args
             .iter()
