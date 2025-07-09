@@ -397,17 +397,25 @@ fn display_pub_function_eval_fn<'a>(
 
         let flat_in_rel = &flat_in_rel;
 
-        let or_else_gets = indices
+        let or_else_get_from = indices
             .into_iter()
             .map(move |index| {
                 FmtFn(move |f| {
                     let field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-                    let args = index
-                        .order
+                    assert_eq!(*index.order.last().unwrap(), flat_dom_len);
+
+                    let gets = index.order[0..index.order.len() - 1]
                         .iter()
-                        .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
-                        .format(", ");
-                    write!(f, ".or_else(move || self.{field}.get([{args}]))")
+                        .map(|i| FmtFn(move |f| write!(f, "let set = set.get(arg{i}.0)?;")))
+                        .format("\n");
+                    writedoc! {f, "
+                        .or_else(move || -> Option<u32> {{
+                            let set = &self.{field};
+                            {gets}
+                            let [result] = set.iter().next()?;
+                            Some(result)
+                        }})
+                    "}
                 })
             })
             .format("\n");
@@ -426,7 +434,7 @@ fn display_pub_function_eval_fn<'a>(
 
             let result: Option<u32> =
             None
-            {or_else_gets}
+            {or_else_get_from}
             ;
 
             {result}
