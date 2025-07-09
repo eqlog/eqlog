@@ -431,6 +431,7 @@ fn display_pub_function_eval_fn<'a>(
             let result: Option<u32> =
             None
             {or_else_gets}
+            ;
 
             {result}
             }}
@@ -1303,7 +1304,7 @@ fn display_canonicalize_rel_block<'a>(
                 true
                 }} else {{
                 false
-                }}
+                }};
 
                 if !was_in_indices {{
                 continue;
