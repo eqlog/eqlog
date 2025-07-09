@@ -1461,7 +1461,7 @@ fn display_model_delta_struct<'a>(
                     let type_snake = display_type(typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    write!(f, "new_{type_snake}_equalities: Vec<(u32, u32)>,")
+                    write!(f, "new_{type_snake}_equalities: Vec<[u32; 2]>,")
                 })
             })
             .format("\n");
@@ -1614,7 +1614,7 @@ fn display_model_delta_apply_equalities_fn<'a>(
                         format!("{}", display_type(typ, eqlog, identifiers)).to_case(Snake);
 
                     writedoc! {f, "
-                        for (lhs, rhs) in self.new_{type_snake}_equalities.drain(..) {{
+                        for [lhs, rhs] in self.new_{type_snake}_equalities.drain(..) {{
                             model.equate_{type_snake}(lhs.into(), rhs.into());
                         }}
                     "}
@@ -1875,85 +1875,31 @@ fn display_module_env_var<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let module_camel = ram_module.name.to_case(UpperCamel);
-
-        let ModuleEnvFields {
-            indices: _,
-            in_rels_modulo_diagonals,
-            out_rels,
-        } = ModuleEnvFields::from_module(ram_module);
-
-        let in_set_fields = in_rels_modulo_diagonals
-            .iter()
-            .map(|rel| {
+        let env_struct_name = display_module_env_struct_name(ram_module);
+        let in_set_fields = module_env_in_rels(ram_module)
+            .into_iter()
+            .map(|(flat_in_rel, index)| {
                 FmtFn(move |f| {
-                    match rel {
-                        FlatInRel::EqlogRel(rel) => {
-                            let rel_snake = display_rel(*rel, eqlog, identifiers)
-                                .to_string()
-                                .to_case(Snake);
-                            write!(f, "{rel_snake}_table: self.{rel_snake}_table,")
-                        },
-                        FlatInRel::EqlogRelWithDiagonals { .. } => {
-                            panic!("in_rels_modulo_diagonals should not contain EqlogRelWithDiagonals")
-                        },
-                        FlatInRel::TypeSet(typ) => {
-                            let type_snake = display_type(*typ, eqlog, identifiers)
-                                .to_string()
-                                .to_case(Snake);
-                            writedoc! {f, "
-                                {type_snake}_new: &self.{type_snake}_new,
-                                {type_snake}_old: &self.{type_snake}_old,
-                            "}
-                        },
-                        FlatInRel::Equality(typ) => {
-                            panic!("Equality in relations should have been transformed the equality pass on flat eqlog")
-                        },
-                    }
+                    let field_name =
+                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                    write!(f, "{field_name}: &self.{field_name},")
                 })
             })
             .format("\n");
 
-        let out_set_fields = out_rels
-            .iter()
-            .map(|rel| {
+        let out_set_fields = module_env_out_rels(ram_module)
+            .into_iter()
+            .map(|flat_out_rel| {
                 FmtFn(move |f| {
-                    match rel {
-                        FlatOutRel::EqlogRel(rel) => {
-                            let rel_snake = display_rel(*rel, eqlog, identifiers)
-                                .to_string()
-                                .to_case(Snake);
-                            writedoc! {f, "
-                                new_{rel_snake}: &mut delta.new_{rel_snake},
-                            "}?;
-                        }
-                        FlatOutRel::Equality(typ) => {
-                            let type_snake = display_type(*typ, eqlog, identifiers)
-                                .to_string()
-                                .to_case(Snake);
-
-                            writedoc! {f, "
-                                new_{type_snake}_equalities: &mut delta.new_{type_snake}_equalities,
-                            "}?;
-                        }
-                        FlatOutRel::FuncDomain(func) => {
-                            let rel_snake =
-                                display_rel(eqlog.func_rel(*func).unwrap(), eqlog, identifiers)
-                                    .to_string()
-                                    .to_case(Snake);
-
-                            writedoc! {f, "
-                                new_{rel_snake}_def: &mut delta.new_{rel_snake}_def,
-                            "}?;
-                        }
-                    }
-                    Ok(())
+                    let field_name = display_out_set_field_name(&flat_out_rel, eqlog, identifiers);
+                    write!(f, "{field_name}: &mut delta.{field_name},")
                 })
             })
             .format("\n");
 
         writedoc! {f, "
-            let mut env = {module_camel}Env {{
+            let mut env = {env_struct_name} {{
+                phantom: std::marker::PhantomData,
                 {in_set_fields}
                 {out_set_fields}
             }};
@@ -1975,7 +1921,7 @@ fn display_close_until_fn<'a>(
                     let env_var = display_module_env_var(ram_module, eqlog, identifiers);
                     writedoc! {f, r#"
                         {env_var}
-                        {name}(&mut env);
+                        {name}(env);
                     "#}
                 })
             })
@@ -2060,6 +2006,15 @@ fn display_new_fn<'a>(
             let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
             let index_type = display_index_type(&flat_rel, eqlog, identifiers);
             writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
+        }
+        for rel in eqlog.iter_rel() {
+            let type_set: BTreeSet<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+                .into_iter()
+                .collect();
+            for typ in type_set {
+                let field_name = display_element_index_field_name(rel, typ, eqlog, identifiers);
+                writeln!(f, "{field_name}: BTreeMap::new(),").unwrap();
+            }
         }
         writeln!(f, "empty_join_is_dirty: true,").unwrap();
         writeln!(f, "}}").unwrap();

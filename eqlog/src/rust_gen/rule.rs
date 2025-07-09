@@ -27,39 +27,64 @@ pub fn display_module_env_struct_name<'a>(ram_module: &'a RamModule) -> impl 'a 
     })
 }
 
+pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexSpec)> {
+    ram_module
+        .routines
+        .iter()
+        .flat_map(|routine| {
+            routine
+                .stmts
+                .iter()
+                .filter_map(|stmt| -> Option<(FlatInRel, IndexSpec)> {
+                    let define_set_stmt = match stmt {
+                        RamStmt::DefineSet(define_set_stmt) => define_set_stmt,
+                        RamStmt::Iter(_) | RamStmt::Insert(_) => {
+                            return None;
+                        }
+                    };
+
+                    let GetIndexExpr { rel, index_spec } = match &define_set_stmt.expr {
+                        InSetExpr::GetIndex(get_index_expr) => get_index_expr,
+                        InSetExpr::Restrict(restrict_expr) => {
+                            return None;
+                        }
+                    };
+
+                    Some((rel.clone(), index_spec.clone()))
+                })
+        })
+        .collect()
+}
+
+pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
+    ram_module
+        .routines
+        .iter()
+        .flat_map(|routine| {
+            routine
+                .stmts
+                .iter()
+                .filter_map(|stmt| -> Option<FlatOutRel> {
+                    let InsertStmt { rel, args: _ } = match stmt {
+                        RamStmt::DefineSet(_) | RamStmt::Iter(_) => {
+                            return None;
+                        }
+                        RamStmt::Insert(insert_stmt) => insert_stmt,
+                    };
+
+                    Some(rel.clone())
+                })
+        })
+        .collect()
+}
+
 pub fn display_module_env_struct<'a>(
     ram_module: &'a RamModule,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f: &mut Formatter| -> Result {
-        let in_rels: BTreeSet<(FlatInRel, IndexSpec)> = ram_module
-            .routines
-            .iter()
-            .flat_map(|routine| {
-                routine
-                    .stmts
-                    .iter()
-                    .filter_map(|stmt| -> Option<(FlatInRel, IndexSpec)> {
-                        let define_set_stmt = match stmt {
-                            RamStmt::DefineSet(define_set_stmt) => define_set_stmt,
-                            RamStmt::Iter(_) | RamStmt::Insert(_) => {
-                                return None;
-                            }
-                        };
-
-                        let GetIndexExpr { rel, index_spec } = match &define_set_stmt.expr {
-                            InSetExpr::GetIndex(get_index_expr) => get_index_expr,
-                            InSetExpr::Restrict(restrict_expr) => {
-                                return None;
-                            }
-                        };
-
-                        Some((rel.clone(), index_spec.clone()))
-                    })
-            })
-            .collect();
-        let in_rels = in_rels
+        let in_rels = module_env_in_rels(ram_module)
             .into_iter()
             .map(|(rel, index_spec)| {
                 FmtFn(move |f| {
@@ -71,33 +96,14 @@ pub fn display_module_env_struct<'a>(
             })
             .format("\n");
 
-        let out_rels: BTreeSet<FlatOutRel> = ram_module
-            .routines
-            .iter()
-            .flat_map(|routine| {
-                routine
-                    .stmts
-                    .iter()
-                    .filter_map(|stmt| -> Option<FlatOutRel> {
-                        let InsertStmt { rel, args: _ } = match stmt {
-                            RamStmt::DefineSet(_) | RamStmt::Iter(_) => {
-                                return None;
-                            }
-                            RamStmt::Insert(insert_stmt) => insert_stmt,
-                        };
-
-                        Some(rel.clone())
-                    })
-            })
-            .collect();
-        let out_rels = out_rels
+        let out_rels = module_env_out_rels(ram_module)
             .into_iter()
             .map(|rel| {
                 FmtFn(move |f| {
                     let name = display_out_set_field_name(&rel, eqlog, identifiers);
                     let typ = display_out_set_type(&rel, eqlog);
 
-                    write!(f, "{name}: {typ},")
+                    write!(f, "{name}: &'a mut {typ},")
                 })
             })
             .format("\n");
