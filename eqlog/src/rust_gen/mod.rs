@@ -226,10 +226,10 @@ fn display_is_dirty_fn<'a>(
                     );
 
                     let field_name = display_index_field_name(&rel, &index[0], eqlog, identifiers);
-                    write!(f, " || !self.{field_name}.is_empty()")
+                    write!(f, "|| !self.{field_name}.is_empty()")
                 })
             })
-            .format(" || ");
+            .format("\n");
 
         let uprooted_dirty = eqlog
             .iter_type()
@@ -238,10 +238,10 @@ fn display_is_dirty_fn<'a>(
                     let type_snake = display_type(typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    write!(f, " || !self.{type_snake}_uprooted.is_empty()")
+                    write!(f, "|| !self.{type_snake}_uprooted.is_empty()")
                 })
             })
-            .format("");
+            .format("\n");
 
         writedoc! {f, "
             fn is_dirty(&self) -> bool {{
@@ -306,7 +306,7 @@ fn display_pub_predicate_holds_fn<'a>(
                     .iter()
                     .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
                     .format(", ");
-                FmtFn(move |f| write!(f, "|| self.{index}_table.contains([{row_args}])"))
+                FmtFn(move |f| write!(f, "|| self.{index}.contains([{row_args}])"))
             })
             .format("\n");
 
@@ -584,43 +584,24 @@ fn display_insert_row_block<'a>(
 ) -> impl 'a + Display {
     index_set(index_selection)
         .into_iter()
-        .filter_map(
-            move |(r0, index)| -> Option<(IndexSpec, Option<Arc<[usize]>>)> {
-                if index.age != age {
-                    return None;
-                }
+        .filter(move |(flat_in_rel, index)| {
+            if index.age != age {
+                return false;
+            }
 
-                let equalities: Option<Arc<[usize]>> = match r0 {
-                    FlatInRel::EqlogRel(r0) => {
-                        if r0 != rel {
-                            return None;
-                        }
-                        None
-                    }
-                    FlatInRel::EqlogRelWithDiagonals {
-                        rel: r0,
-                        equalities,
-                    } => {
-                        if r0 != rel {
-                            return None;
-                        }
-                        Some(equalities)
-                    }
-                    FlatInRel::TypeSet(_) => {
-                        return None;
-                    }
-                    FlatInRel::Equality(_) => {
-                        return None;
-                    }
-                };
-                Some((index, equalities))
-            },
-        )
-        .map(move |(index, equalities)| {
+            match flat_in_rel {
+                FlatInRel::EqlogRel(r0) => *r0 == rel,
+                FlatInRel::EqlogRelWithDiagonals {
+                    rel: r0,
+                    equalities,
+                } => *r0 == rel,
+                FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => false,
+            }
+        })
+        .map(move |(flat_in_rel, index)| {
             FmtFn(move |f| {
-                let flat_in_rel = FlatInRel::EqlogRel(rel.clone());
                 let index_name = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-                if let Some(equalities) = &equalities {
+                if let FlatInRel::EqlogRelWithDiagonals { rel: _, equalities } = &flat_in_rel {
                     let checks = equalities
                         .iter()
                         .copied()
@@ -647,15 +628,15 @@ fn display_insert_row_block<'a>(
                         .format(", ");
 
                     writedoc! {f, "
-                            if {checks} {{
-                            self.{index_name}.insert([{args}]);
-                            }}
-                        "}
+                        if {checks} {{
+                        self.{index_name}.insert([{args}]);
+                        }}
+                    "}
                 } else {
                     let args = index.order.iter().map(|i| args[*i].clone()).format(", ");
                     writedoc! {f, "
-                            self.{index_name}.insert([{args}]);
-                        "}
+                        self.{index_name}.insert([{args}]);
+                    "}
                 }
             })
         })
@@ -693,7 +674,7 @@ fn display_pub_insert_relation<'a>(
             .cloned()
             .zip(arity_camel.iter())
             .map(|(arg, typ_camel)| {
-                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "mut {arg}: {typ_camel}") })
+                FmtFn(move |f: &mut Formatter| -> Result { write!(f, "{arg}: {typ_camel}") })
             })
             .format(", ");
 
@@ -706,7 +687,7 @@ fn display_pub_insert_relation<'a>(
                     let type_snake = display_type(*typ, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
-                    write!(f, "{arg} = self.root_{type_snake}({arg});")
+                    write!(f, "let {arg}: u32 = self.root_{type_snake}({arg}).0;")
                 })
             })
             .format("\n");
@@ -724,7 +705,7 @@ fn display_pub_insert_relation<'a>(
                         .to_string()
                         .to_case(Snake);
                     writedoc! {f, "
-                        let weight{i} = &mut self.{type_snake}_weights[{arg}.0 as usize];
+                        let weight{i}: &mut usize = &mut self.{type_snake}_weights[usize::try_from({arg}).unwrap()];
                         *weight{i} = weight{i}.saturating_add({weight_static_name});
                     "}
                 })
@@ -763,15 +744,37 @@ fn display_pub_insert_relation<'a>(
 
         let contains_args = rel_args.iter().format(", ");
 
+        let rel = FlatInRel::EqlogRel(rel);
+        let contains_query = QuerySpec::one(rel.clone(), eqlog);
+        let contains_indices = index_selection
+            .get(&(rel.clone(), contains_query))
+            .expect("should have indices for relation")
+            .as_slice();
+
+        let rel = &rel;
+        let contains_checks = contains_indices
+            .into_iter()
+            .map(|index_spec| {
+                let index = display_index_field_name(rel, &index_spec, eqlog, identifiers);
+                let IndexSpec { order, age: _ } = index_spec;
+                let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
+                FmtFn(move |f| {
+                    writedoc! {f, "
+                        if self.{index}.contains([{row_args}]) {{
+                        return;
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
+
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
             pub fn insert_{rel_snake}(&mut self, {rel_fn_args}) {{
                 {canonicalize}
 
-                if self.{rel_snake}({contains_args}) {{
-                    return;
-                }}
+                {contains_checks}
 
                 {index_inserts}
 
@@ -816,6 +819,15 @@ fn display_new_element_fn_internal<'a>(
             write!(f, "self.insert_{type_snake}_parent(el.into(), parent);")
         });
 
+        let new_index = IndexSpec {
+            order: vec![0].into(),
+            age: IndexAge::New,
+        };
+
+        let type_set_rel = FlatInRel::TypeSet(typ);
+        let new_index_field =
+            display_index_field_name(&type_set_rel, &new_index, eqlog, identifiers);
+
         writedoc! {f, "
             /// Adjoins a new element of type [{type_camel}].
             #[allow(dead_code)]
@@ -824,7 +836,7 @@ fn display_new_element_fn_internal<'a>(
                 self.{type_snake}_equalities.increase_size_to(old_len + 1);
                 let el = u32::try_from(old_len).unwrap();
 
-                self.{type_snake}_new.insert(el);
+                self.{new_index_field}.insert([el]);
 
                 assert!(self.{type_snake}_weights.len() == old_len);
                 self.{type_snake}_weights.push(0);
@@ -1057,6 +1069,20 @@ fn display_equate_elements<'a>(
     FmtFn(move |f| {
         let type_camel = format!("{}", display_type(typ, eqlog, identifiers)).to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
+
+        let type_set_rel = FlatInRel::TypeSet(typ);
+        let index_new = IndexSpec {
+            order: vec![0].into(),
+            age: IndexAge::New,
+        };
+        let index_old = IndexSpec {
+            order: vec![0].into(),
+            age: IndexAge::Old,
+        };
+
+        let index_new = display_index_field_name(&type_set_rel, &index_new, eqlog, identifiers);
+        let index_old = display_index_field_name(&type_set_rel, &index_old, eqlog, identifiers);
+
         writedoc! {f, "
             /// Enforces the equality `lhs = rhs`.
             #[allow(dead_code)]
@@ -1078,8 +1104,8 @@ fn display_equate_elements<'a>(
 
                 self.{type_snake}_equalities.union_roots_into(child, root);
 
-                self.{type_snake}_old.remove(&child.0);
-                self.{type_snake}_new.remove(&child.0);
+                self.{index_new}.remove([child.0]);
+                self.{index_old}.remove([child.0]);
                 self.{type_snake}_uprooted.push(child);
             }}
         "}
@@ -1159,6 +1185,48 @@ fn display_iter_type_fn<'a>(
     })
 }
 
+fn display_remove_from_index_expr<'a>(
+    rel: FlatInRel,
+    index: IndexSpec,
+    row_args: &'a [ElVar],
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let equalities = match &rel {
+            FlatInRel::EqlogRel(rel) => None,
+            FlatInRel::EqlogRelWithDiagonals { rel, equalities } => Some(equalities),
+            FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
+        };
+
+        let row_args: Vec<ElVar> = match equalities {
+            Some(equalities) => row_args
+                .iter()
+                .cloned()
+                .enumerate()
+                .filter_map(|(i, row_arg)| {
+                    if equalities[i] == i {
+                        Some(row_arg)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            None => row_args.to_vec(),
+        };
+
+        let permuted_row_args = index
+            .order
+            .iter()
+            .map(|i| row_args[*i].clone())
+            .format(", ");
+
+        let field_name = display_index_field_name(&rel, &index, eqlog, identifiers);
+
+        write!(f, "self.{field_name}.remove([{permuted_row_args}])")
+    })
+}
+
 fn display_canonicalize_rel_block<'a>(
     rel: Rel,
     eqlog: &'a Eqlog,
@@ -1171,185 +1239,188 @@ fn display_canonicalize_rel_block<'a>(
             .to_case(Snake);
 
         let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-        let tys: BTreeSet<_> = arity.iter().copied().collect();
-        for typ in tys {
-            let type_snake = display_type(typ, eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
+        let arity_len = arity.len();
+        let types: BTreeSet<_> = arity.iter().copied().collect();
+        let row_args: Vec<ElVar> = (0..arity.len()).map(ElVar::from).collect();
+        let row_args = row_args.as_slice();
 
-            let adjust_weights = |op: &'static str| {
-                arity
-                    .iter()
-                    .copied()
-                    .enumerate()
-                    .map(move |(i, type_i)| {
-                        FmtFn(move |f| {
-                            let type_i_snake = display_type(type_i, eqlog, identifiers)
-                                .to_string()
-                                .to_case(Snake);
-                            let weight_static_name =
-                                display_weight_static_name(rel, eqlog, identifiers);
-                            writedoc! {f, "
-                                let weight{i} = &mut self.{type_i_snake}_weights[row[{i}]];
-                                *weight{i} = weight{i}.saturating_{op}({weight_static_name});
-                            "}
-                        })
+        let fill_non_canonical_rows_vec = types
+            .into_iter()
+            .map(|typ| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    let element_index_field =
+                        display_element_index_field_name(rel, typ, eqlog, identifiers);
+
+                    writedoc! {f, "
+                        for el in self.{type_snake}_uprooted.iter().copied() {{
+                        if let Some(rows) = self.{element_index_field}.remove(&el.0) {{
+                        non_canonical_rows.push(rows);
+                        }}
+                        }}
+                    "}
+                })
+            })
+            .format("\n");
+
+        let reduce_weights =
+            arity
+                .iter()
+                .copied()
+                .enumerate()
+                .map(move |(i, type_i)| {
+                    FmtFn(move |f| {
+                        let type_i_snake = display_type(type_i, eqlog, identifiers)
+                            .to_string()
+                            .to_case(Snake);
+                        let weight_static_name =
+                            display_weight_static_name(rel, eqlog, identifiers);
+                        let el = row_args[i].clone();
+                        writedoc! {f, "
+                            let weight{i}: &mut usize = &mut self.{type_i_snake}_weights[usize::try_from({el}).unwrap()];
+                            *weight{i} = weight{i}.saturating_sub({weight_static_name});
+                        "}
                     })
-                    .format("\n")
+                })
+                .format("\n");
+
+        let primary_new_indices = index_selection
+            .get(&(FlatInRel::EqlogRel(rel), QuerySpec::all_new()))
+            .unwrap();
+        assert_eq!(primary_new_indices.len(), 1);
+        let primary_new_index: IndexSpec = primary_new_indices[0].clone();
+
+        let primary_old_indices = index_selection
+            .get(&(FlatInRel::EqlogRel(rel), QuerySpec::all_old()))
+            .unwrap();
+        assert_eq!(primary_old_indices.len(), 1);
+        let primary_old_index: IndexSpec = primary_old_indices[0].clone();
+
+        let mut secondary_new_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
+        let mut secondary_old_indices: BTreeSet<(FlatInRel, IndexSpec)> = BTreeSet::new();
+        for ((r0, _query_spec), indices) in index_selection {
+            match r0 {
+                FlatInRel::EqlogRel(rel0) => {
+                    if *rel0 != rel {
+                        continue;
+                    }
+                }
+                FlatInRel::EqlogRelWithDiagonals {
+                    rel: rel0,
+                    equalities: _,
+                } => {
+                    if *rel0 != rel {
+                        continue;
+                    }
+                }
+                FlatInRel::TypeSet(_) | FlatInRel::Equality(_) => continue,
             };
-            let reduce_weights = adjust_weights("sub");
-            let increase_weights = adjust_weights("add");
 
-            let element_index_field =
-                display_element_index_field_name(rel, typ, eqlog, identifiers);
-
-            let mut new_indices: BTreeSet<(Option<Arc<[usize]>>, IndexSpec)> = BTreeSet::new();
-            let mut old_indices: BTreeSet<(Option<Arc<[usize]>>, IndexSpec)> = BTreeSet::new();
-
-            for (r0, index) in index_set(index_selection) {
-                let equalities = match r0 {
-                    FlatInRel::EqlogRel(rel0) => {
-                        if rel0 != rel {
-                            continue;
-                        }
-                        None
+            for index in indices {
+                if r0 == &FlatInRel::EqlogRel(rel) {
+                    if *index == primary_new_index || *index == primary_old_index {
+                        continue;
                     }
-                    FlatInRel::EqlogRelWithDiagonals {
-                        rel: rel0,
-                        equalities,
-                    } => {
-                        if rel0 != rel {
-                            continue;
-                        }
-                        Some(equalities)
-                    }
-                    FlatInRel::TypeSet(_) => continue,
-                    FlatInRel::Equality(_) => continue,
-                };
+                }
 
                 match index.age {
                     IndexAge::New => {
-                        new_indices.insert((equalities, index));
+                        secondary_new_indices.insert((r0.clone(), index.clone()));
                     }
                     IndexAge::Old => {
-                        old_indices.insert((equalities, index));
+                        secondary_old_indices.insert((r0.clone(), index.clone()));
                     }
                 }
             }
-
-            let primary_new_index = new_indices
-                .iter()
-                .find_map(|(equalities, index)| match equalities {
-                    None => Some(index),
-                    Some(_) => None,
-                })
-                .expect("should have primary new index");
-            let primary_old_index = old_indices
-                .iter()
-                .find_map(|(equalities, index)| match equalities {
-                    None => Some(index),
-                    Some(_) => None,
-                })
-                .expect("should have primary new index");
-
-            let remove_from_new_indices = new_indices
-                .iter()
-                .filter(|(_, index)| index != primary_new_index)
-                .map(|(equalities, index)| {
-                    FmtFn(move |f| {
-                        let row = FmtFn(move |f| match equalities {
-                            None => {
-                                write!(f, "row")
-                            }
-                            Some(equalities) => {
-                                let args = equalities
-                                    .iter()
-                                    .copied()
-                                    .enumerate()
-                                    .filter(|(i, j)| i == j)
-                                    .map(move |(i, _)| FmtFn(move |f| write!(f, "row[{i}]")))
-                                    .format(", ");
-                                write!(f, "[{args}]")
-                            }
-                        });
-                        let flat_in_rel = FlatInRel::EqlogRel(rel);
-                        let field_name =
-                            display_index_field_name(&flat_in_rel, index, eqlog, identifiers);
-
-                        writedoc! {f, "
-                            self.{field_name}.remove({row});
-                        "}
-                    })
-                })
-                .format("\n");
-
-            // TODO: This is basically a copy of "remove_from_new_indices", but for old indices.
-            // Consider refactoring this.
-            let remove_from_old_indices = old_indices
-                .iter()
-                .filter(|(_, index)| index != primary_old_index)
-                .map(|(equalities, index)| {
-                    FmtFn(move |f| {
-                        let row = FmtFn(move |f| match equalities {
-                            None => {
-                                write!(f, "row")
-                            }
-                            Some(equalities) => {
-                                let args = equalities
-                                    .iter()
-                                    .copied()
-                                    .enumerate()
-                                    .filter(|(i, j)| i == j)
-                                    .map(move |(i, _)| FmtFn(move |f| write!(f, "row[{i}]")))
-                                    .format(", ");
-                                write!(f, "[{args}]")
-                            }
-                        });
-                        let flat_in_rel = FlatInRel::EqlogRel(rel);
-                        let field_name =
-                            display_index_field_name(&flat_in_rel, index, eqlog, identifiers);
-
-                        writedoc! {f, "
-                            self.{field_name}.remove({row});
-                        "}
-                    })
-                })
-                .format("\n");
-
-            let flat_in_rel = FlatInRel::EqlogRel(rel);
-            let primary_new_index =
-                display_index_field_name(&flat_in_rel, primary_new_index, eqlog, identifiers);
-            let primary_old_index =
-                display_index_field_name(&flat_in_rel, primary_old_index, eqlog, identifiers);
-
-            writedoc! {f, "
-                for el in self.{type_snake}_uprooted.iter().copied() {{
-                let mut rows = self.{element_index_field}.remove(&el).unwrap_or_default();
-
-                for row in rows {{
-                let was_in_indices =
-                if self.{primary_new_index}.remove(&row) {{
-                {remove_from_new_indices}
-                true
-                }} else if self.{primary_old_index}.remove(&row) {{
-                {remove_from_old_indices}
-                true
-                }} else {{
-                false
-                }};
-
-                if !was_in_indices {{
-                continue;
-                }}
-
-                {reduce_weights}
-                self.insert_{rel_snake}(row)
-                }}
-
-                }}
-            "}?;
         }
-        Ok(())
+
+        let remove_from_secondary_new_indices = secondary_new_indices
+            .into_iter()
+            .map(move |(r, index)| {
+                FmtFn(move |f| {
+                    let remove_from_index_expr = display_remove_from_index_expr(
+                        r.clone(),
+                        index.clone(),
+                        row_args,
+                        eqlog,
+                        identifiers,
+                    );
+                    write!(f, "{remove_from_index_expr};")
+                })
+            })
+            .format("\n");
+        let remove_from_secondary_old_indices = secondary_old_indices
+            .into_iter()
+            .map(move |(r, index)| {
+                FmtFn(move |f| {
+                    let remove_from_index_expr = display_remove_from_index_expr(
+                        r.clone(),
+                        index.clone(),
+                        row_args,
+                        eqlog,
+                        identifiers,
+                    );
+                    write!(f, "{remove_from_index_expr};")
+                })
+            })
+            .format("\n");
+
+        let remove_from_primary_new_index = display_remove_from_index_expr(
+            FlatInRel::EqlogRel(rel),
+            primary_new_index,
+            row_args,
+            eqlog,
+            identifiers,
+        );
+        let remove_from_primary_old_index = display_remove_from_index_expr(
+            FlatInRel::EqlogRel(rel),
+            primary_old_index,
+            row_args,
+            eqlog,
+            identifiers,
+        );
+
+        let insert_row_args = row_args
+            .iter()
+            .zip(arity.iter())
+            .map(|(arg, typ)| {
+                FmtFn(move |f| {
+                    let type_snake = display_type(*typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(UpperCamel);
+                    write!(f, "{type_snake}({arg})")
+                })
+            })
+            .format(",");
+
+        let row_args = row_args.iter().format(", ");
+
+        writedoc! {f, "
+            let mut non_canonical_rows: Vec<Vec<[u32; {arity_len}]>> = Vec::new();
+            {fill_non_canonical_rows_vec}
+
+            for [{row_args}] in non_canonical_rows.into_iter().flatten() {{
+            let was_in_indices = if {remove_from_primary_new_index} {{
+            {remove_from_secondary_new_indices}
+            true
+            }} else if {remove_from_primary_old_index} {{
+            {remove_from_secondary_old_indices}
+            true
+            }} else {{
+            false
+            }};
+
+            if !was_in_indices {{
+            continue;
+            }}
+
+            {reduce_weights}
+
+            self.insert_{rel_snake}({insert_row_args});
+            }}
+        "}
     })
 }
 
@@ -1814,8 +1885,7 @@ fn display_move_new_to_old_fn<'a>(
                         .format("\n");
 
                     writedoc! {f, "
-                        let new_{rel_snake} = std::mem::take(&mut self.{primary_new_index});
-                        for [{primary_new_args}] in new_{rel_snake} {{
+                        for [{primary_new_args}] in self.{primary_new_index}.iter() {{
                         {old_inserts}
                         }}
                         {new_clears}
@@ -1848,7 +1918,7 @@ fn display_move_new_to_old_fn<'a>(
                         display_index_field_name(&flat_rel, &index_old, eqlog, identifiers);
 
                     writedoc! {f, "
-                        for r in self.{new_index} {{
+                        for r in self.{new_index}.iter() {{
                         self.{old_index}.insert(r);
                         }}
                         self.{new_index}.clear();
@@ -2289,7 +2359,7 @@ fn display_theory_struct<'a>(
                         FmtFn(move |f| {
                             let field_name =
                                 display_element_index_field_name(rel, typ, eqlog, identifiers);
-                            write!(f, "{field_name}: BTreeMap<u32, [u32; {arity_len}]>,")
+                            write!(f, "{field_name}: BTreeMap<u32, Vec<[u32; {arity_len}]>>,")
                         })
                     })
                     .format("\n")
