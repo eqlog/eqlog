@@ -553,25 +553,16 @@ pub fn display_module_main_fn_name<'a>(ram_module: &'a RamModule) -> impl 'a + D
     ram_module.name.to_case(Snake)
 }
 
-fn display_module_main_fn_signature<'a>(ram_module: &'a RamModule) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let fn_name = display_module_main_fn_name(ram_module);
-        let env_name = display_module_env_struct_name(ram_module);
-
-        write!(f, "fn {fn_name}(env: {env_name})")
-    })
-}
-
 pub fn display_module_main_fn_decl<'a>(
     ram_module: &'a RamModule,
     symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let fn_name = display_module_main_fn_name(ram_module);
-        let signature = display_module_main_fn_signature(ram_module);
+        let env_name = display_module_env_struct_name(ram_module);
         writedoc! {f, r#"
             #[link_name = "{symbol_prefix}_{fn_name}"]
-            safe {signature};
+            safe fn {fn_name}(env: {env_name});
         "#}
     })
 }
@@ -582,10 +573,10 @@ fn display_module_main_fn<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let fn_name = display_module_main_fn_name(ram_module);
-        let signature = display_module_main_fn_signature(ram_module);
+        let env_name = display_module_env_struct_name(ram_module);
         writedoc! {f, r#"
-            #[link_name = "{symbol_prefix}_{fn_name}"]
-            pub {signature} {{
+            #[unsafe(no_mangle)]
+            pub fn {symbol_prefix}_{fn_name}(env: {env_name}) {{
             todo!()
             }}
         "#}
