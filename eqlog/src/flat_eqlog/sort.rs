@@ -138,16 +138,6 @@ fn find_best_index(stmts: &[FlatIfStmt], fixed_vars: &BTreeSet<FlatVar>) -> Opti
     (0..stmts.len()).max_by_key(|i| if_stmt_goodness(&stmts[*i], fixed_vars))
 }
 
-fn sort_if_block<'a>(if_stmts: &mut [FlatIfStmt], fixed_vars: &mut BTreeSet<FlatVar>) {
-    for sorted_until in 0..if_stmts.len() {
-        let best_index = sorted_until
-            + find_best_index(&if_stmts[sorted_until..], fixed_vars)
-                .expect("a non-empty slice of if statements should have a best element");
-        fixed_vars.extend(if_stmts[best_index].args.iter().cloned());
-        if_stmts.swap(sorted_until, best_index);
-    }
-}
-
 /// A pass that optimizes the order of [FlatIfStmt]s in the premise of a [FlatRule].
 pub fn sort_premise<'a>(rule: &mut FlatRule) {
     let premise = &mut rule.premise;

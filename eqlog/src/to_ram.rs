@@ -43,7 +43,7 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
         let mut set_names: Vec<Arc<str>> = indices
             .iter()
             .enumerate()
-            .map(|(index_index, index)| format!("set_stmt{stmt_index}_index{index_index}").into())
+            .map(|(index_index, _index)| format!("set_stmt{stmt_index}_index{index_index}").into())
             .collect();
 
         // Get the full indices and define variables for them.
@@ -105,6 +105,7 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
                     name: next_set_name.clone(),
                 },
             };
+            stmts.push(RamStmt::Iter(iter_stmt));
             set_names = vec![next_set_name];
         }
     }

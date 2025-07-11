@@ -82,7 +82,6 @@ impl QuerySpec {
             arity.len() > 0,
             "The codomain of a function is always in the arity"
         );
-        let dom_len = arity.len() - 1;
         QuerySpec {
             projections: (0..flat_dom.len()).collect(),
             age: QueryAge::All,
@@ -220,7 +219,7 @@ pub fn select_indices<'a>(
 
     query_specs
         .into_iter()
-        .chunk_by(|(rel, query_spec)| rel.clone())
+        .chunk_by(|(rel, _query_spec)| rel.clone())
         .into_iter()
         .flat_map(|(rel, queries)| {
             let queries: Vec<QuerySpec> = queries.map(|(_rel, query)| query).collect();

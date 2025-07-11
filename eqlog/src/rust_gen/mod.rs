@@ -592,7 +592,7 @@ fn display_insert_row_block<'a>(
                 FlatInRel::EqlogRel(r0) => *r0 == rel,
                 FlatInRel::EqlogRelWithDiagonals {
                     rel: r0,
-                    equalities,
+                    equalities: _,
                 } => *r0 == rel,
                 FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => false,
             }
@@ -740,8 +740,6 @@ fn display_pub_insert_relation<'a>(
             identifiers,
             index_selection,
         );
-
-        let contains_args = rel_args.iter().format(", ");
 
         let rel = FlatInRel::EqlogRel(rel);
         let contains_query = QuerySpec::one(rel.clone(), eqlog);
@@ -1193,8 +1191,8 @@ fn display_remove_from_index_expr<'a>(
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let equalities = match &rel {
-            FlatInRel::EqlogRel(rel) => None,
-            FlatInRel::EqlogRelWithDiagonals { rel, equalities } => Some(equalities),
+            FlatInRel::EqlogRel(_) => None,
+            FlatInRel::EqlogRelWithDiagonals { rel: _, equalities } => Some(equalities),
             FlatInRel::Equality(_) | FlatInRel::TypeSet(_) => None,
         };
 
@@ -1850,10 +1848,6 @@ fn display_move_new_to_old_fn<'a>(
                         index_selection,
                     );
 
-                    let rel_snake = display_rel(rel, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-
                     let new_clears = index_set(index_selection)
                         .into_iter()
                         .filter(|(flat_in_rel, index)| {
@@ -1898,9 +1892,6 @@ fn display_move_new_to_old_fn<'a>(
             .iter_type()
             .map(|typ| {
                 FmtFn(move |f| {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
                     let flat_rel = FlatInRel::TypeSet(typ);
 
                     let index_new = IndexSpec {
@@ -2074,7 +2065,7 @@ fn display_new_fn<'a>(
         }
         for (flat_rel, index) in index_set(index_selection) {
             let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
-            let index_type = display_index_type(&flat_rel, eqlog, identifiers);
+            let index_type = display_index_type(&flat_rel, eqlog);
             writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
         }
         for rel in eqlog.iter_rel() {
@@ -2229,27 +2220,10 @@ fn display_element_index_field_name<'a>(
     })
 }
 
-fn display_index_type<'a>(
-    rel: &'a FlatInRel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
+fn display_index_type<'a>(rel: &'a FlatInRel, eqlog: &'a Eqlog) -> impl Display + 'a {
     FmtFn(move |f| {
         let arity_len = rel.arity(eqlog).len();
         write!(f, "PrefixTree{arity_len}")
-    })
-}
-
-fn display_weight_field_name<'a>(
-    rel: Rel,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        write!(f, "{rel_snake}_weights")
     })
 }
 
@@ -2271,7 +2245,6 @@ fn display_weight_static<'a>(
     index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-    symbol_prefix: &'a str,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let static_name = display_weight_static_name(rel, eqlog, identifiers);
@@ -2280,7 +2253,7 @@ fn display_weight_static<'a>(
 
         let relevant_indices: BTreeSet<(FlatInRel, IndexSpec)> = index_selection
             .iter()
-            .filter_map(|((flat_in_rel, query_spec), index_specs)| {
+            .filter_map(|((flat_in_rel, _query_spec), index_specs)| {
                 match flat_in_rel {
                     FlatInRel::EqlogRel(rel0) => {
                         if *rel0 != rel {
@@ -2289,7 +2262,7 @@ fn display_weight_static<'a>(
                     }
                     FlatInRel::EqlogRelWithDiagonals {
                         rel: rel0,
-                        equalities,
+                        equalities: _,
                     } => {
                         if *rel0 != rel {
                             return None;
@@ -2323,6 +2296,7 @@ fn display_weight_static<'a>(
         let weight = el_lookup_weight + index_weight;
 
         writedoc! {f, r#"
+            #[allow(unused)]
             const {static_name}: usize = {weight};
         "#}
     })
@@ -2340,7 +2314,7 @@ fn display_theory_struct<'a>(
             .map(|(rel, index)| {
                 FmtFn(move |f| {
                     let index_name = display_index_field_name(&rel, &index, eqlog, identifiers);
-                    let index_type = display_index_type(&rel, eqlog, identifiers);
+                    let index_type = display_index_type(&rel, eqlog);
                     write!(f, "{index_name}: {index_type},")
                 })
             })
@@ -2395,17 +2369,17 @@ fn display_theory_impl<'a>(
     index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        writeln!(f, "impl {} {{", name).unwrap();
+        writeln!(f, "impl {} {{", name)?;
 
         let new_fn = display_new_fn(eqlog, identifiers, index_selection);
-        write!(f, "{}", new_fn).unwrap();
-        writeln!(f, "").unwrap();
+        write!(f, "{}", new_fn)?;
+        writeln!(f, "")?;
 
         let close_fn = display_close_fn();
-        write!(f, "{}", close_fn).unwrap();
+        write!(f, "{}", close_fn)?;
 
         let close_until_fn = display_close_until_fn(ram_modules, eqlog, identifiers);
-        write!(f, "{}", close_until_fn).unwrap();
+        write!(f, "{}", close_until_fn)?;
 
         for typ in eqlog.iter_type() {
             let type_name = display_type(typ, eqlog, identifiers)
@@ -2413,29 +2387,29 @@ fn display_theory_impl<'a>(
                 .to_case(UpperCamel);
 
             let iter_sort_fn = display_iter_type_fn(typ, eqlog, identifiers, index_selection);
-            write!(f, "{}", iter_sort_fn).unwrap();
+            write!(f, "{}", iter_sort_fn)?;
 
             let root_fn = display_root_fn(type_name.as_str());
-            write!(f, "{}", root_fn).unwrap();
+            write!(f, "{}", root_fn)?;
 
             let are_equal_fn = display_are_equal_fn(type_name.as_str());
-            write!(f, "{}", are_equal_fn).unwrap();
+            write!(f, "{}", are_equal_fn)?;
 
-            writeln!(f, "").unwrap();
+            writeln!(f, "")?;
         }
 
         for typ in eqlog.iter_type() {
             let new_element_fn_internal = display_new_element_fn_internal(typ, eqlog, identifiers);
-            writeln!(f, "{new_element_fn_internal}").unwrap();
+            writeln!(f, "{new_element_fn_internal}")?;
 
             let equate_elements = display_equate_elements(typ, eqlog, identifiers);
-            write!(f, "{}", equate_elements).unwrap();
+            write!(f, "{}", equate_elements)?;
         }
 
         for typ in eqlog.iter_type() {
             if eqlog.is_normal_type(typ) || eqlog.is_model_type(typ) {
                 let new_el_fn = display_new_element_fn(typ, eqlog, identifiers);
-                writeln!(f, "{new_el_fn}").unwrap();
+                writeln!(f, "{new_el_fn}")?;
             } else if eqlog.is_enum_type(typ) {
                 let type_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
                 let enum_node = eqlog
@@ -2454,8 +2428,7 @@ fn display_theory_impl<'a>(
                 writedoc! {f, "
                     {new_enum_el_fn}
                     {enum_cases_fn}
-                "}
-                .unwrap();
+                "}?;
             } else {
                 unreachable!("Unhandled type kind");
             }
@@ -2464,22 +2437,22 @@ fn display_theory_impl<'a>(
         for func in eqlog.iter_func() {
             let rel = eqlog.func_rel(func).unwrap();
             let eval_fn = display_pub_function_eval_fn(func, eqlog, identifiers, index_selection);
-            write!(f, "{eval_fn}").unwrap();
+            write!(f, "{eval_fn}")?;
 
             let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
-            write!(f, "{}", iter_fn).unwrap();
+            write!(f, "{}", iter_fn)?;
 
             let insert_relation =
                 display_pub_insert_relation(rel, eqlog, identifiers, index_selection, true);
-            write!(f, "{}", insert_relation).unwrap();
+            write!(f, "{}", insert_relation)?;
 
-            writeln!(f, "").unwrap();
+            writeln!(f, "")?;
         }
 
         for func in eqlog.iter_func() {
             if eqlog.function_can_be_made_defined(func) {
                 let define_fn = display_define_fn(func, eqlog, identifiers);
-                write!(f, "{}", define_fn).unwrap();
+                write!(f, "{}", define_fn)?;
             }
         }
 
@@ -2494,32 +2467,32 @@ fn display_theory_impl<'a>(
 
             let predicate_holds_fn =
                 display_pub_predicate_holds_fn(rel, eqlog, identifiers, index_selection);
-            write!(f, "{}", predicate_holds_fn).unwrap();
+            write!(f, "{}", predicate_holds_fn)?;
 
             if !arity.is_empty() {
                 let iter_fn = display_pub_iter_fn(rel, eqlog, identifiers, index_selection);
-                write!(f, "{}", iter_fn).unwrap();
+                write!(f, "{}", iter_fn)?;
             }
 
             let insert_relation =
                 display_pub_insert_relation(rel, eqlog, identifiers, index_selection, false);
-            write!(f, "{}", insert_relation).unwrap();
+            write!(f, "{}", insert_relation)?;
 
-            writeln!(f, "").unwrap();
+            writeln!(f, "")?;
         }
 
         let canonicalize_fn = display_canonicalize_fn(eqlog, identifiers, index_selection);
-        write!(f, "{canonicalize_fn}\n").unwrap();
+        write!(f, "{canonicalize_fn}\n")?;
 
         let is_dirty_fn = display_is_dirty_fn(eqlog, identifiers, index_selection);
-        write!(f, "{}", is_dirty_fn).unwrap();
+        write!(f, "{}", is_dirty_fn)?;
 
-        writeln!(f, "").unwrap();
+        writeln!(f, "")?;
 
         let move_new_to_old_fn = display_move_new_to_old_fn(eqlog, identifiers, index_selection);
-        write!(f, "{move_new_to_old_fn}");
+        write!(f, "{move_new_to_old_fn}")?;
 
-        write!(f, "}}").unwrap();
+        write!(f, "}}")?;
         Ok(())
     })
 }
@@ -2535,15 +2508,13 @@ fn display_rule_modules<'a>(
         .iter()
         .map(move |ram_module| {
             FmtFn(move |f| {
-                //let lib = display_rule_lib(
-                //    ram_module,
-                //    index_selection,
-                //    eqlog,
-                //    identifiers,
-                //    symbol_prefix,
-                //);
-                //let lib: String = todo!();
-                let lib: &'static str = "";
+                let lib = display_ram_module(
+                    ram_module,
+                    index_selection,
+                    eqlog,
+                    identifiers,
+                    symbol_prefix,
+                );
                 let ram_module_name = ram_module.name.as_str();
                 writedoc! {f, "
                     mod {ram_module_name} {{
@@ -2572,18 +2543,14 @@ pub fn display_module<'a>(
         match build_type {
             BuildType::Component => {}
             BuildType::Module => {
-                //todo!()
-                /*
                 display_rule_modules(
-                    rules,
-                    analyses,
+                    ram_modules,
                     index_selection,
                     eqlog,
                     identifiers,
                     symbol_prefix,
                 )
                 .fmt(f)?;
-                */
             }
         }
 
@@ -2604,8 +2571,7 @@ pub fn display_module<'a>(
         "#}?;
 
         for rel in eqlog.iter_rel() {
-            let weight_static =
-                display_weight_static(rel, index_selection, eqlog, identifiers, symbol_prefix);
+            let weight_static = display_weight_static(rel, index_selection, eqlog, identifiers);
             write!(f, "{weight_static}")?;
         }
 

@@ -44,7 +44,7 @@ pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexS
 
                     let GetIndexExpr { rel, index_spec } = match &define_set_stmt.expr {
                         InSetExpr::GetIndex(get_index_expr) => get_index_expr,
-                        InSetExpr::Restrict(restrict_expr) => {
+                        InSetExpr::Restrict(_) => {
                             return None;
                         }
                     };
@@ -88,7 +88,7 @@ pub fn display_module_env_struct<'a>(
             .map(|(rel, index_spec)| {
                 FmtFn(move |f| {
                     let name = display_index_field_name(&rel, &index_spec, eqlog, identifiers);
-                    let typ = display_index_type(&rel, eqlog, identifiers);
+                    let typ = display_index_type(&rel, eqlog);
 
                     write!(f, "{name}: &'a {typ},")
                 })
