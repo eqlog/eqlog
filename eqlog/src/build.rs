@@ -505,7 +505,6 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     .to_string();
     fs::write(&module_out_path, module_contents.as_str())?;
 
-    /*
     let component_config = match config.component_build.as_ref() {
         None => {
             write_digest(in_file, config, &src_digest)?;
@@ -518,43 +517,16 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     fs::create_dir_all(component_out_dir.as_path())
         .with_context(|| format!("Creating component out dir {}", component_out_dir.display()))?;
 
-    eqlog
-        .iter_rel()
-        .par_bridge()
-        .try_for_each(|rel| -> Result<()> {
-            let rel_name = display_rel(rel, &eqlog, &identifiers).to_string();
-            let rel_snake = rel_name.to_case(Case::Snake);
-            let table_out_file_name = format!("{symbol_prefix}_{rel_snake}.rs",);
-            let table_out_file = component_out_dir.join(table_out_file_name);
-
-            let indices = index_selection
-                .get(&rel_name)
-                .expect("Index selection should be present for all relations");
-            let table_lib =
-                display_table_lib(rel, &indices, &eqlog, &identifiers, symbol_prefix.as_str())
-                    .to_string();
-
-            compile_component_rlib(
-                table_out_file.as_path(),
-                component_out_dir.as_path(),
-                component_config,
-                &table_lib,
-            )?;
-            Ok(())
-        })?;
-
-    resolved_rules
+    ram_modules
         .iter()
-        .zip(flat_rules.analyses())
         .par_bridge()
-        .try_for_each(|(rule, analysis)| -> Result<()> {
-            let rule_name_snake = rule.name.to_case(Case::Snake);
-            let rule_out_file_name = format!("{symbol_prefix}_{rule_name_snake}.rs");
+        .try_for_each(|ram_module| -> Result<()> {
+            let module_name = &ram_module.name;
+            let rule_out_file_name = format!("{symbol_prefix}_{module_name}.rs");
             let rule_out_file = component_out_dir.join(rule_out_file_name);
 
-            let rule_lib = display_rule_lib(
-                rule,
-                analysis,
+            let rule_lib = display_ram_module(
+                ram_module,
                 &index_selection,
                 &eqlog,
                 &identifiers,
@@ -573,7 +545,6 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
 
     write_digest(in_file, config, &src_digest)?;
     print_cargo_link_directives(in_file, Some(component_config))?;
-    */
 
     Ok(())
 }

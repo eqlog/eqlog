@@ -1,4 +1,3 @@
-use crate::eqlog_util::*;
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
 use crate::rust_gen::*;
@@ -586,7 +585,7 @@ fn display_module_main_fn<'a>(
         let signature = display_module_main_fn_signature(ram_module);
         writedoc! {f, r#"
             #[link_name = "{symbol_prefix}_{fn_name}"]
-            {signature} {{
+            pub {signature} {{
             todo!()
             }}
         "#}
@@ -595,7 +594,7 @@ fn display_module_main_fn<'a>(
 
 pub fn display_ram_module<'a>(
     ram_module: &'a RamModule,
-    index_selection: &'a IndexSelection,
+    _index_selection: &'a IndexSelection,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     symbol_prefix: &'a str,
@@ -604,8 +603,6 @@ pub fn display_ram_module<'a>(
         let imports = display_imports();
         let env_struct = display_module_env_struct(ram_module, eqlog, identifiers);
         let main_fn = display_module_main_fn(ram_module, symbol_prefix);
-
-        //let exported_rule_func = display_module_main_fn(ram_module, symbol_prefix);
 
         writedoc! {f, r#"
             {imports}

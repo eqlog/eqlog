@@ -1,6 +1,6 @@
 use crate::flat_eqlog::*;
 use crate::ram::*;
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> RamRoutine {

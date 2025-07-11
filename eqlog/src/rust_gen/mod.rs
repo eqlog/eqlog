@@ -15,7 +15,6 @@ use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter, Result};
 use std::iter::once;
-use std::sync::Arc;
 
 use Case::{Snake, UpperCamel, UpperSnake};
 
@@ -1398,6 +1397,7 @@ fn display_canonicalize_rel_block<'a>(
         let row_args = row_args.iter().format(", ");
 
         writedoc! {f, "
+            #[allow(unused_mut)]
             let mut non_canonical_rows: Vec<Vec<[u32; {arity_len}]>> = Vec::new();
             {fill_non_canonical_rows_vec}
 
@@ -1968,7 +1968,7 @@ fn display_module_env_var<'a>(
             .format("\n");
 
         writedoc! {f, "
-            let mut env = {env_struct_name} {{
+            let env = {env_struct_name} {{
                 phantom: std::marker::PhantomData,
                 {in_set_fields}
                 {out_set_fields}
@@ -2598,7 +2598,6 @@ pub fn display_module<'a>(
             .map(|ram_module| display_module_main_fn_decl(ram_module, symbol_prefix))
             .format("\n");
         writedoc! {f, r#"
-            #[allow(clashing_extern_declarations)]
             unsafe extern "Rust" {{
                 {rule_eval_fns}
             }}

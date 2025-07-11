@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    iter::{once, repeat},
+    iter::once,
 };
 
 use super::ast::*;
