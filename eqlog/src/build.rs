@@ -646,10 +646,10 @@ impl Config {
                 .windows(needle.len())
                 .any(|window| window == needle.as_bytes())
             {
-                //ensure!(
-                //    runtime_rlib_path.is_none(),
-                //    "Found multiple eqlog runtime rlib files in deps directory, consider running `cargo clean` to remove them"
-                //);
+                ensure!(
+                    runtime_rlib_path.is_none(),
+                    "Found multiple eqlog runtime rlib files in deps directory, consider running `cargo clean` to remove them"
+                );
 
                 runtime_rlib_path = Some(path);
             }

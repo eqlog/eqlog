@@ -1,5 +1,5 @@
 use super::ast::*;
-use eqlog_runtime::Unification;
+use crate::unification::Unification;
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap};
 
