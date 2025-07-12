@@ -1,42 +1,42 @@
 use crate::collections::{btree_map, BTreeMap, BTreeSet};
 
 // type definitions
-pub struct PrefixTree0(Option<()>);
+pub struct PrefixTree0(pub Option<()>);
 
 pub struct PrefixTree1 {
-    set: BTreeSet<u32>,
+    pub set: BTreeSet<u32>,
 }
 
 pub struct PrefixTree2 {
-    map: BTreeMap<u32, PrefixTree1>,
+    pub map: BTreeMap<u32, PrefixTree1>,
 }
 
 pub struct PrefixTree3 {
-    map: BTreeMap<u32, PrefixTree2>,
+    pub map: BTreeMap<u32, PrefixTree2>,
 }
 
 pub struct PrefixTree4 {
-    map: BTreeMap<u32, PrefixTree3>,
+    pub map: BTreeMap<u32, PrefixTree3>,
 }
 
 pub struct PrefixTree5 {
-    map: BTreeMap<u32, PrefixTree4>,
+    pub map: BTreeMap<u32, PrefixTree4>,
 }
 
 pub struct PrefixTree6 {
-    map: BTreeMap<u32, PrefixTree5>,
+    pub map: BTreeMap<u32, PrefixTree5>,
 }
 
 pub struct PrefixTree7 {
-    map: BTreeMap<u32, PrefixTree6>,
+    pub map: BTreeMap<u32, PrefixTree6>,
 }
 
 pub struct PrefixTree8 {
-    map: BTreeMap<u32, PrefixTree7>,
+    pub map: BTreeMap<u32, PrefixTree7>,
 }
 
 pub struct PrefixTree9 {
-    map: BTreeMap<u32, PrefixTree8>,
+    pub map: BTreeMap<u32, PrefixTree8>,
 }
 
 // new methods
@@ -541,6 +541,61 @@ impl PrefixTree8 {
 impl PrefixTree9 {
     pub fn clear(&mut self) {
         self.map.clear();
+    }
+}
+
+// TODO: Those aren't actually used at the moment.
+// iter_restrictions methods
+impl PrefixTree1 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, PrefixTree0)> + '_ {
+        self.set.iter().map(|&x| (x, PrefixTree0(Some(()))))
+    }
+}
+impl PrefixTree2 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree1)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree3 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree2)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree4 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree3)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree5 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree4)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree6 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree5)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree7 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree6)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree8 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree7)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree9 {
+    pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, &PrefixTree8)> + '_ {
+        self.map.iter().map(|(&k, v)| (k, v))
     }
 }
 

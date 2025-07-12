@@ -4,6 +4,7 @@ use std::sync::Arc;
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct SetVar {
     pub name: Arc<str>,
+    pub arity: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

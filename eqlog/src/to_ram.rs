@@ -39,6 +39,7 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
             );
         }
         let order = &indices[0].order;
+        let mut arity = order.len();
 
         let mut set_names: Vec<Arc<str>> = indices
             .iter()
@@ -52,6 +53,7 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
             stmts.push(RamStmt::DefineSet(DefineSetStmt {
                 defined_var: SetVar {
                     name: set_name.clone(),
+                    arity,
                 },
                 expr: InSetExpr::GetIndex(GetIndexExpr {
                     rel,
@@ -70,6 +72,7 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
                 let expr = InSetExpr::Restrict(RestrictExpr {
                     set: SetVar {
                         name: set_name.clone(),
+                        arity,
                     },
                     first_column_var: var.clone(),
                 });
@@ -77,10 +80,13 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
                 stmts.push(RamStmt::DefineSet(DefineSetStmt {
                     defined_var: SetVar {
                         name: set_name.clone(),
+                        arity: arity - 1,
                     },
                     expr,
                 }));
             }
+
+            arity -= 1;
         }
 
         // Iterate over the sets to retrieve the other columns.
@@ -98,13 +104,18 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
             let iter_stmt = IterStmt {
                 sets: set_names
                     .iter()
-                    .map(|name| SetVar { name: name.clone() })
+                    .map(|name| SetVar {
+                        name: name.clone(),
+                        arity,
+                    })
                     .collect(),
                 loop_var_el: ram_var,
                 loop_var_set: SetVar {
                     name: next_set_name.clone(),
+                    arity: arity - 1,
                 },
             };
+            arity -= 1;
             stmts.push(RamStmt::Iter(iter_stmt));
             set_names = vec![next_set_name];
         }

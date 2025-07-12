@@ -122,17 +122,111 @@ pub fn display_module_env_struct<'a>(
     })
 }
 
-fn display_stmt_pre<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
-    FmtFn(move |f| todo!())
+impl Display for SetVar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        self.name.fmt(f)
+    }
+}
+
+fn display_in_set_expr<'a>(
+    expr: &'a InSetExpr,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| match expr {
+        InSetExpr::GetIndex(GetIndexExpr { rel, index_spec }) => {
+            let index_field = display_index_field_name(rel, index_spec, eqlog, identifiers);
+            write!(f, "env.{index_field}")
+        }
+        InSetExpr::Restrict(RestrictExpr {
+            set,
+            first_column_var,
+        }) => {
+            // It's OK to use `continue` here because we never generate this expression outside of
+            // a loop: Note that the only way to define an ElVar is via an IterStmt.
+            writedoc! {f, "
+                match {set}.get({first_column_var}) {{
+                Some(restriction) => restriction,
+                None => {{ continue; }},
+                }}
+            "}
+        }
+    })
+}
+
+fn display_iter_restrictions_expr<'a>(set: SetVar) -> impl 'a + Display {
+    let arity: usize = set.arity;
+    FmtFn(move |f| match arity {
+        0 => panic!("Restriction is not defined on arity 0 sets"),
+        1 => write!(f, "{set}.set.iter().map(|&x| (x, PrefixTree0(Some(()))))"),
+        _ => write!(f, "{set}.map.iter().map(|(&k, v)| (k, v))"),
+    })
+}
+
+fn display_stmt_pre<'a>(
+    ram_stmt: &'a RamStmt,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        match ram_stmt {
+            RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
+                let expr = display_in_set_expr(expr, eqlog, identifiers);
+                writedoc! {f, "
+                    let {defined_var} =
+                    {expr}
+                    ;
+                "}
+            }
+            RamStmt::Iter(IterStmt {
+                sets,
+                loop_var_el,
+                loop_var_set,
+            }) => {
+                assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
+                let set_head = display_iter_restrictions_expr(sets[0].clone());
+                let set_tail = sets[1..]
+                    .iter()
+                    .map(|set| {
+                        FmtFn(move |f| {
+                            write!(f, ".chain({})", display_iter_restrictions_expr(set.clone()))
+                        })
+                    })
+                    .format("");
+                writedoc! {f, "
+                    #[allow(unused_variables)]
+                    for ({loop_var_el}, {loop_var_set}) in {set_head}{set_tail} {{
+                "}
+            }
+            RamStmt::Insert(InsertStmt { rel, args }) => {
+                let rel_field = display_out_set_field_name(rel, eqlog, identifiers);
+                let args = args.iter().format(", ");
+                // TODO: Check that this row doesn't exist already in indices.
+                writedoc! {f, "
+                    env.{rel_field}.push([{args}]);
+                "}
+            }
+        }
+    })
 }
 
 fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
-    FmtFn(move |f| todo!())
+    FmtFn(move |f| match ram_stmt {
+        RamStmt::DefineSet(DefineSetStmt { .. }) => Ok(()),
+        RamStmt::Iter(IterStmt { .. }) => {
+            writedoc! {f, "
+                    }}
+                "}
+        }
+        RamStmt::Insert(InsertStmt { .. }) => Ok(()),
+    })
 }
 
 fn display_routine<'a>(
     ram_routine: &'a RamRoutine,
     ram_module: &'a RamModule,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
         let name = &ram_routine.name;
@@ -141,7 +235,7 @@ fn display_routine<'a>(
         let stmts_pre = ram_routine
             .stmts
             .iter()
-            .map(|stmt| display_stmt_pre(stmt))
+            .map(|stmt| display_stmt_pre(stmt, eqlog, identifiers))
             .format("\n");
         let stmts_post = ram_routine
             .stmts
@@ -151,7 +245,7 @@ fn display_routine<'a>(
             .format("\n");
 
         writedoc! {f, "
-            fn {name}(env: {env_type}) {{
+            fn {name}(env: &mut {env_type}) {{
             {stmts_pre}
             {stmts_post}
             }}
@@ -190,13 +284,13 @@ fn display_module_main_fn<'a>(
             .map(|routine| {
                 FmtFn(move |f| {
                     let name = &routine.name;
-                    write!(f, "{name}(env);")
+                    write!(f, "{name}(&mut env);")
                 })
             })
             .format("\n");
         writedoc! {f, r#"
             #[unsafe(no_mangle)]
-            pub fn {symbol_prefix}_{fn_name}(env: {env_name}) {{
+            pub fn {symbol_prefix}_{fn_name}(mut env: {env_name}) {{
             {calls}
             }}
         "#}
@@ -217,7 +311,7 @@ pub fn display_ram_module<'a>(
         let routines = ram_module
             .routines
             .iter()
-            .map(|routine| display_routine(routine, ram_module))
+            .map(|routine| display_routine(routine, ram_module, eqlog, identifiers))
             .format("\n");
 
         writedoc! {f, r#"

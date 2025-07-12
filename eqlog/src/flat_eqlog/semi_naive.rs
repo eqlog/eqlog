@@ -88,6 +88,8 @@ pub fn to_semi_naive(flat_rule: &FlatRule) -> Vec<FlatRule> {
         "to_semi_naive requires all premise statements to have QueryAge::All"
     );
 
+    let original_name = flat_rule.name.as_str();
+
     (0..flat_rule.premise.len())
         .map(|i| {
             let premise = flat_rule
@@ -112,7 +114,7 @@ pub fn to_semi_naive(flat_rule: &FlatRule) -> Vec<FlatRule> {
             FlatRule {
                 premise,
                 conclusion: flat_rule.conclusion.clone(),
-                name: flat_rule.name.clone(),
+                name: format!("{original_name}_{}", i),
             }
         })
         .collect()
