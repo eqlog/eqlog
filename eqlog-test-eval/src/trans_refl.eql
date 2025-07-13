@@ -1,11 +1,11 @@
 type V;
 pred edge(V, V);
 
-rule {
+rule reflexivity {
     if x: V;
     then edge(x, x);
 }
-rule {
+rule transitivity {
     if edge(x, y);
     if edge(y, z);
     then edge(x, z);

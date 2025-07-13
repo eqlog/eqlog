@@ -58,5 +58,6 @@ fn test_arrow_arrow() {
     m.insert_edge(b, c);
     m.close();
     assert_eq!(m.iter_v().count(), 3);
+    assert!(m.edge(a, c));
     assert_eq!(m.iter_edge().count(), 6);
 }
