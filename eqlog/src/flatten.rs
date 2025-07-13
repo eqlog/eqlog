@@ -17,6 +17,7 @@ use std::sync::Arc;
 fn assign_el_vars(
     morphisms: impl IntoIterator<Item = Morphism>,
     eqlog: &Eqlog,
+    identifiers: &BTreeMap<Ident, String>,
 ) -> BTreeMap<El, FlatVar> {
     let mut el_vars: BTreeMap<El, FlatVar> = BTreeMap::new();
     let mut available_vars = 0..;
@@ -39,7 +40,29 @@ fn assign_el_vars(
                     ElementTypeCase::AmbientType(typ) => typ,
                     ElementTypeCase::InstantiatedType(_, typ) => typ,
                 };
-                let name: Arc<str> = format!("el{}", available_vars.next().unwrap()).into();
+                let base_name: &str = eqlog
+                    .iter_semantic_el()
+                    .find_map(|(tm, _, el0)| -> Option<TermNode> {
+                        if eqlog.are_equal_el(el0, el) {
+                            Some(tm)
+                        } else {
+                            None
+                        }
+                    })
+                    .and_then(|tm| -> Option<&str> {
+                        let virt_ident = eqlog.iter_var_term_node().find_map(|(tm0, ident)| {
+                            if eqlog.are_equal_term_node(tm0, tm) {
+                                Some(ident)
+                            } else {
+                                None
+                            }
+                        })?;
+                        let ident = eqlog.virt_real_ident(virt_ident)?;
+                        Some(identifiers.get(&ident).unwrap().as_str())
+                    })
+                    .unwrap_or("el");
+                let name: Arc<str> =
+                    format!("{base_name}{}", available_vars.next().unwrap()).into();
                 FlatVar { name, typ }
             });
         }
@@ -300,7 +323,11 @@ fn flatten_rule(
         None => format!("anonymous_rule_{}", rule.0),
     };
 
-    let el_vars = assign_el_vars(iter_rule_morphisms(rule, eqlog).flatten(), eqlog);
+    let el_vars = assign_el_vars(
+        iter_rule_morphisms(rule, eqlog).flatten(),
+        eqlog,
+        identifiers,
+    );
 
     let mut rules: Vec<FlatRule> = Vec::new();
     let mut matching_stmts: BTreeMap<Structure, Vec<FlatIfStmt>> = BTreeMap::new();
