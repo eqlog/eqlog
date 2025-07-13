@@ -154,15 +154,6 @@ fn display_in_set_expr<'a>(
     })
 }
 
-fn display_iter_restrictions_expr<'a>(set: SetVar) -> impl 'a + Display {
-    let arity: usize = set.arity;
-    FmtFn(move |f| match arity {
-        0 => panic!("Restriction is not defined on arity 0 sets"),
-        1 => write!(f, "{set}.set.iter().map(|&x| (x, PrefixTree0(Some(()))))"),
-        _ => write!(f, "{set}.map.iter().map(|(&k, v)| (k, v))"),
-    })
-}
-
 fn display_stmt_pre<'a>(
     ram_stmt: &'a RamStmt,
     eqlog: &'a Eqlog,
@@ -184,18 +175,19 @@ fn display_stmt_pre<'a>(
                 loop_var_set,
             }) => {
                 assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
-                let set_head = display_iter_restrictions_expr(sets[0].clone());
-                let set_tail = sets[1..]
+                let set_head = sets[0].clone();
+                let set_tail_chain_iters = sets[1..]
                     .iter()
-                    .map(|set| {
-                        FmtFn(move |f| {
-                            write!(f, ".chain({})", display_iter_restrictions_expr(set.clone()))
-                        })
-                    })
-                    .format("");
+                    .map(|set| FmtFn(move |f| write!(f, ".chain({set}.iter_restrictions())")))
+                    .format("\n");
                 writedoc! {f, "
                     #[allow(unused_variables)]
-                    for ({loop_var_el}, {loop_var_set}) in {set_head}{set_tail} {{
+                    for
+                    ({loop_var_el}, {loop_var_set})
+                    in
+                    {set_head}.iter_restrictions()
+                    {set_tail_chain_iters}
+                    {{
                 "}
             }
             RamStmt::Insert(InsertStmt { rel, args }) => {

@@ -544,7 +544,6 @@ impl PrefixTree9 {
     }
 }
 
-// TODO: Those aren't actually used at the moment.
 // iter_restrictions methods
 impl PrefixTree1 {
     pub fn iter_restrictions(&self) -> impl Iterator<Item = (u32, PrefixTree0)> + '_ {
