@@ -37,7 +37,7 @@ pub fn module_env_in_rels(ram_module: &RamModule) -> BTreeSet<(FlatInRel, IndexS
                 .filter_map(|stmt| -> Option<(FlatInRel, IndexSpec)> {
                     let define_set_stmt = match stmt {
                         RamStmt::DefineSet(define_set_stmt) => define_set_stmt,
-                        RamStmt::Iter(_) | RamStmt::Insert(_) => {
+                        RamStmt::Iter(_) | RamStmt::Insert(_) | RamStmt::GuardInhabited(_) => {
                             return None;
                         }
                     };
@@ -65,7 +65,7 @@ pub fn module_env_out_rels(ram_module: &RamModule) -> BTreeSet<FlatOutRel> {
                 .iter()
                 .filter_map(|stmt| -> Option<FlatOutRel> {
                     let InsertStmt { rel, args: _ } = match stmt {
-                        RamStmt::DefineSet(_) | RamStmt::Iter(_) => {
+                        RamStmt::DefineSet(_) | RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
                             return None;
                         }
                         RamStmt::Insert(insert_stmt) => insert_stmt,
@@ -206,19 +206,32 @@ fn display_stmt_pre<'a>(
                     env.{rel_field}.push([{args}]);
                 "}
             }
+            RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
+                let checks = sets
+                    .iter()
+                    .map(|set| {
+                        FmtFn(move |f| {
+                            let set_name = &set.name;
+                            write!(f, "|| !{set_name}.is_empty()")
+                        })
+                    })
+                    .format("");
+                writedoc! {f, "
+                    if false {checks} {{
+                "}
+            }
         }
     })
 }
 
 fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
     FmtFn(move |f| match ram_stmt {
-        RamStmt::DefineSet(DefineSetStmt { .. }) => Ok(()),
-        RamStmt::Iter(IterStmt { .. }) => {
+        RamStmt::DefineSet(_) | RamStmt::Insert(_) => Ok(()),
+        RamStmt::Iter(_) | RamStmt::GuardInhabited(_) => {
             writedoc! {f, "
                     }}
                 "}
         }
-        RamStmt::Insert(InsertStmt { .. }) => Ok(()),
     })
 }
 

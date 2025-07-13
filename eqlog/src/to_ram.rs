@@ -89,19 +89,10 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
             arity -= 1;
         }
 
-        // Iterate over the sets to retrieve the other columns.
-        for column in order[fixed_args.len()..].iter() {
-            let flat_var = &flat_stmt.args[*column];
-            let ram_var = ElVar {
-                name: flat_var.name.clone(),
-            };
-            let prev_ram_var = defined_vars.insert(flat_var.clone(), ram_var.clone());
-            // This should've been taken care of in the diagonal pass on flat eqlog.
-            assert!(prev_ram_var.is_none(), "Free variable must not occur twice");
-
-            let next_set_name: Arc<str> = format!("{}_r{column}", set_names[0]).into();
-
-            let iter_stmt = IterStmt {
+        if fixed_args.len() == order.len() {
+            // We don't need to retrieve any new variables, but we still have to check that the set
+            // is not empty.
+            stmts.push(RamStmt::GuardInhabited(GuardInhabitedStmt {
                 sets: set_names
                     .iter()
                     .map(|name| SetVar {
@@ -109,15 +100,38 @@ fn flat_rule_to_ram(flat_rule: &FlatRule, index_selection: &IndexSelection) -> R
                         arity,
                     })
                     .collect(),
-                loop_var_el: ram_var,
-                loop_var_set: SetVar {
-                    name: next_set_name.clone(),
-                    arity: arity - 1,
-                },
-            };
-            arity -= 1;
-            stmts.push(RamStmt::Iter(iter_stmt));
-            set_names = vec![next_set_name];
+            }));
+        } else {
+            // Iterate over the sets to retrieve the other columns.
+            for column in order[fixed_args.len()..].iter() {
+                let flat_var = &flat_stmt.args[*column];
+                let ram_var = ElVar {
+                    name: flat_var.name.clone(),
+                };
+                let prev_ram_var = defined_vars.insert(flat_var.clone(), ram_var.clone());
+                // This should've been taken care of in the diagonal pass on flat eqlog.
+                assert!(prev_ram_var.is_none(), "Free variable must not occur twice");
+
+                let next_set_name: Arc<str> = format!("{}_r{column}", set_names[0]).into();
+
+                let iter_stmt = IterStmt {
+                    sets: set_names
+                        .iter()
+                        .map(|name| SetVar {
+                            name: name.clone(),
+                            arity,
+                        })
+                        .collect(),
+                    loop_var_el: ram_var,
+                    loop_var_set: SetVar {
+                        name: next_set_name.clone(),
+                        arity: arity - 1,
+                    },
+                };
+                arity -= 1;
+                stmts.push(RamStmt::Iter(iter_stmt));
+                set_names = vec![next_set_name];
+            }
         }
     }
 

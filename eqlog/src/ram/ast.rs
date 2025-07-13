@@ -50,10 +50,16 @@ pub struct InsertStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct GuardInhabitedStmt {
+    pub sets: Vec<SetVar>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub enum RamStmt {
     DefineSet(DefineSetStmt),
     Iter(IterStmt),
     Insert(InsertStmt),
+    GuardInhabited(GuardInhabitedStmt),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

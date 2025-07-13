@@ -315,7 +315,7 @@ fn display_pub_predicate_holds_fn<'a>(
             pub fn {relation_snake}(&self{rel_fn_args}) -> bool {{
             {canonicalize}
 
-            true
+            false
             {checks}
             }}
         "}

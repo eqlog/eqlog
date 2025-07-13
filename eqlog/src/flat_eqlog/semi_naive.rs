@@ -88,6 +88,12 @@ pub fn to_semi_naive(flat_rule: &FlatRule) -> Vec<FlatRule> {
         "to_semi_naive requires all premise statements to have QueryAge::All"
     );
 
+    if flat_rule.premise.is_empty() {
+        // TODO: We need a way to execute a conclusion only once, which would be suitable here.
+        // For now, we execute rules with empty premises in every iteration of the close loop.
+        return vec![flat_rule.clone()];
+    }
+
     let original_name = flat_rule.name.as_str();
 
     (0..flat_rule.premise.len())
