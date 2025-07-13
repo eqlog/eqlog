@@ -142,14 +142,8 @@ fn display_in_set_expr<'a>(
             set,
             first_column_var,
         }) => {
-            // It's OK to use `continue` here because we never generate this expression outside of
-            // a loop: Note that the only way to define an ElVar is via an IterStmt.
-            writedoc! {f, "
-                match {set}.get({first_column_var}) {{
-                Some(restriction) => restriction,
-                None => {{ continue; }},
-                }}
-            "}
+            let result_arity = set.arity - 1;
+            write!(f, "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())")
         }
     })
 }

@@ -118,6 +118,90 @@ impl PrefixTree9 {
     }
 }
 
+// empty() methods
+impl PrefixTree0 {
+    fn non_empty() -> &'static Self {
+        static NON_EMPTY: PrefixTree0 = PrefixTree0(Some(()));
+        return &NON_EMPTY;
+    }
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree0 = PrefixTree0(None);
+        return &EMPTY;
+    }
+}
+impl PrefixTree1 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree1 = PrefixTree1 {
+            set: BTreeSet::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree2 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree2 = PrefixTree2 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree3 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree3 = PrefixTree3 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree4 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree4 = PrefixTree4 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree5 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree5 = PrefixTree5 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree6 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree6 = PrefixTree6 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree7 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree7 = PrefixTree7 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree8 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree8 = PrefixTree8 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+impl PrefixTree9 {
+    pub fn empty() -> &'static Self {
+        static EMPTY: PrefixTree9 = PrefixTree9 {
+            map: BTreeMap::new(),
+        };
+        return &EMPTY;
+    }
+}
+
 // insert methods.
 impl PrefixTree0 {
     pub fn insert(&mut self, []: [u32; 0]) -> bool {
@@ -680,10 +764,9 @@ impl PrefixTree9 {
 
 // get methods
 impl PrefixTree1 {
-    pub fn get(&self, first_el: u32) -> Option<PrefixTree0> {
-        const NON_EMPTY: PrefixTree0 = PrefixTree0(Some(()));
+    pub fn get(&self, first_el: u32) -> Option<&PrefixTree0> {
         if self.set.contains(&first_el) {
-            Some(NON_EMPTY)
+            Some(PrefixTree0::non_empty())
         } else {
             None
         }
