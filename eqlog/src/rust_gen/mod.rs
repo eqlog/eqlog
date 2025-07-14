@@ -771,15 +771,16 @@ fn display_pub_insert_relation<'a>(
         }
 
         let el_index_inserts = type_positions
-            .into_iter()
+            .iter()
             .map(move |(typ, positions)| {
-                positions
-                    .into_iter()
-                    .map(move |pos| {
+                (0..positions.len())
+                    .map(move |pos_index| {
                         FmtFn(move |f| {
+                            let pos = positions[pos_index];
                             let pos_arg = rel_args[pos].clone();
-                            let checks = (0..pos)
-                                .map(move |prev_pos| {
+                            let checks = (0..pos_index)
+                                .map(move |prev_pos_index| {
+                                    let prev_pos = positions[prev_pos_index];
                                     let prev_pos_arg = rel_args[prev_pos].clone();
                                     let pos_arg = pos_arg.clone();
                                     FmtFn(move |f| write!(f, "&& {pos_arg} != {prev_pos_arg}"))
@@ -789,7 +790,7 @@ fn display_pub_insert_relation<'a>(
                             let pos_arg = rel_args[pos].clone();
                             let rel_args = rel_args.iter().format(", ");
                             let el_index_field =
-                                display_element_index_field_name(rel, typ, eqlog, identifiers)
+                                display_element_index_field_name(rel, *typ, eqlog, identifiers)
                                     .to_string();
                             writedoc! {f, "
                             if true {checks} {{
