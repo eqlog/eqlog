@@ -741,18 +741,18 @@ fn display_pub_insert_relation<'a>(
             index_selection,
         );
 
-        let rel = FlatInRel::EqlogRel(rel);
-        let contains_query = QuerySpec::one(rel.clone(), eqlog);
+        let flat_rel = FlatInRel::EqlogRel(rel);
+        let contains_query = QuerySpec::one(flat_rel.clone(), eqlog);
         let contains_indices = index_selection
-            .get(&(rel.clone(), contains_query))
+            .get(&(flat_rel.clone(), contains_query))
             .expect("should have indices for relation")
             .as_slice();
 
-        let rel = &rel;
+        let flat_rel = &flat_rel;
         let contains_checks = contains_indices
             .into_iter()
             .map(|index_spec| {
-                let index = display_index_field_name(rel, &index_spec, eqlog, identifiers);
+                let index = display_index_field_name(flat_rel, &index_spec, eqlog, identifiers);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
                 FmtFn(move |f| {
@@ -765,6 +765,43 @@ fn display_pub_insert_relation<'a>(
             })
             .format("\n");
 
+        let mut type_positions: BTreeMap<Type, Vec<usize>> = BTreeMap::new();
+        for (i, typ) in arity_types.iter().copied().enumerate() {
+            type_positions.entry(typ).or_default().push(i);
+        }
+
+        let el_index_inserts = type_positions
+            .into_iter()
+            .map(move |(typ, positions)| {
+                positions
+                    .into_iter()
+                    .map(move |pos| {
+                        FmtFn(move |f| {
+                            let pos_arg = rel_args[pos].clone();
+                            let checks = (0..pos)
+                                .map(move |prev_pos| {
+                                    let prev_pos_arg = rel_args[prev_pos].clone();
+                                    let pos_arg = pos_arg.clone();
+                                    FmtFn(move |f| write!(f, "&& {pos_arg} != {prev_pos_arg}"))
+                                })
+                                .format(" ");
+
+                            let pos_arg = rel_args[pos].clone();
+                            let rel_args = rel_args.iter().format(", ");
+                            let el_index_field =
+                                display_element_index_field_name(rel, typ, eqlog, identifiers)
+                                    .to_string();
+                            writedoc! {f, "
+                            if true {checks} {{
+                            self.{el_index_field}.entry({pos_arg}).or_default().push([{rel_args}]);
+                            }}
+                        "}
+                        })
+                    })
+                    .format("\n")
+            })
+            .format("\n");
+
         writedoc! {f, "
             {docstring}
             #[allow(dead_code)]
@@ -774,6 +811,8 @@ fn display_pub_insert_relation<'a>(
                 {contains_checks}
 
                 {index_inserts}
+
+                {el_index_inserts}
 
                 {update_weights}
             }}
