@@ -1,3 +1,4 @@
+mod flat_eqlog;
 mod rule;
 mod types;
 

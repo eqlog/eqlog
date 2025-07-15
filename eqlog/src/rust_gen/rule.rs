@@ -1,5 +1,6 @@
 use crate::flat_eqlog::*;
 use crate::fmt_util::*;
+use crate::rust_gen::flat_eqlog::display_flat_rule;
 use crate::rust_gen::*;
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
@@ -222,28 +223,37 @@ fn display_stmt_post<'a>(ram_stmt: &'a RamStmt) -> impl 'a + Display {
 }
 
 fn display_routine<'a>(
-    ram_routine: &'a RamRoutine,
+    RamRoutine {
+        name,
+        flat_rule,
+        stmts,
+    }: &'a RamRoutine,
     ram_module: &'a RamModule,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let name = &ram_routine.name;
+        let name = name;
         let env_type = display_module_env_struct_name(ram_module);
 
-        let stmts_pre = ram_routine
-            .stmts
+        let stmts_pre = stmts
             .iter()
             .map(|stmt| display_stmt_pre(stmt, eqlog, identifiers))
             .format("\n");
-        let stmts_post = ram_routine
-            .stmts
+        let stmts_post = stmts
             .iter()
             .rev()
             .map(|stmt| display_stmt_post(stmt))
             .format("\n");
 
+        let flat_rule = display_flat_rule(flat_rule, eqlog, identifiers).to_string();
+        let flat_rule_comment = flat_rule
+            .lines()
+            .map(|line| FmtFn(move |f| write!(f, "// {line}")))
+            .format("\n");
+
         writedoc! {f, "
+            {flat_rule_comment}
             fn {name}(env: &mut {env_type}) {{
             {stmts_pre}
             {stmts_post}
