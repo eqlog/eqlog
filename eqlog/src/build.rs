@@ -486,7 +486,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     let index_selection = select_indices(flat_rules_iter, &eqlog);
 
     let ram_modules: Vec<RamModule> = flat_rule_groups
-        .iter()
+        .into_iter()
         .map(|rule_group| flat_rule_group_to_ram(rule_group, &index_selection))
         .collect();
 

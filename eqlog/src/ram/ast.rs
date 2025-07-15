@@ -1,4 +1,4 @@
-use crate::flat_eqlog::{FlatInRel, FlatOutRel, IndexSpec};
+use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRule, IndexSpec};
 use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -65,6 +65,7 @@ pub enum RamStmt {
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct RamRoutine {
     pub name: String,
+    pub flat_rule: FlatRule,
     pub stmts: Vec<RamStmt>,
 }
 
