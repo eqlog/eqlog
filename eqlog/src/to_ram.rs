@@ -54,6 +54,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                 defined_var: SetVar {
                     name: set_name.clone(),
                     arity,
+                    strictness: Strictness::Strict,
                 },
                 expr: InSetExpr::GetIndex(GetIndexExpr {
                     rel,
@@ -73,6 +74,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     set: SetVar {
                         name: set_name.clone(),
                         arity,
+                        strictness: Strictness::Strict,
                     },
                     first_column_var: var.clone(),
                 });
@@ -81,6 +83,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     defined_var: SetVar {
                         name: set_name.clone(),
                         arity: arity - 1,
+                        strictness: Strictness::Strict,
                     },
                     expr,
                 }));
@@ -98,6 +101,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     .map(|name| SetVar {
                         name: name.clone(),
                         arity,
+                        strictness: Strictness::Strict,
                     })
                     .collect(),
             }));
@@ -120,12 +124,14 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                         .map(|name| SetVar {
                             name: name.clone(),
                             arity,
+                            strictness: Strictness::Strict,
                         })
                         .collect(),
                     loop_var_el: ram_var,
                     loop_var_set: SetVar {
                         name: next_set_name.clone(),
                         arity: arity - 1,
+                        strictness: Strictness::Strict,
                     },
                 };
                 arity -= 1;

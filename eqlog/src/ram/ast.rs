@@ -1,10 +1,17 @@
 use crate::flat_eqlog::{FlatInRel, FlatOutRel, FlatRule, IndexSpec};
 use std::sync::Arc;
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub enum Strictness {
+    Lazy,
+    Strict,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct SetVar {
     pub name: Arc<str>,
     pub arity: usize,
+    pub strictness: Strictness,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
@@ -34,6 +41,11 @@ pub enum InSetExpr {
 pub struct DefineSetStmt {
     pub defined_var: SetVar,
     pub expr: InSetExpr,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct DeclareLazySetStmt {
+    pub sets: Vec<SetVar>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

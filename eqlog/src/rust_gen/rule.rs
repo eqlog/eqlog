@@ -169,6 +169,17 @@ fn display_stmt_pre<'a>(
                 loop_var_el,
                 loop_var_set,
             }) => {
+                let SetVar {
+                    name: _,
+                    arity: _,
+                    strictness,
+                } = loop_var_set;
+                match strictness {
+                    Strictness::Lazy => {
+                        panic!("Loop set variables for iter statements must be strict")
+                    }
+                    Strictness::Strict => {}
+                }
                 assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
                 let set_head = sets[0].clone();
                 let set_tail_chain_iters = sets[1..]
