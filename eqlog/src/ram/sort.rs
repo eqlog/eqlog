@@ -99,15 +99,7 @@ fn ram_stmt_cost(stmt: &RamStmt) -> usize {
 }
 
 pub fn sort_ram_stmts(stmts: &[RamStmt]) -> Vec<RamStmt> {
-    println!("stmts:");
-    for (i, stmt) in stmts.iter().enumerate() {
-        println!("{i}. {stmt:?}");
-    }
-
     let mut dependencies = collect_stmt_dependencies(stmts);
-    for (i, dependencies) in dependencies.iter().enumerate() {
-        println!("{i} depends on: {dependencies:?}");
-    }
 
     let mut reverse_dependencies = vec![Vec::new(); stmts.len()];
     for i in 0..stmts.len() {
@@ -146,11 +138,6 @@ pub fn sort_ram_stmts(stmts: &[RamStmt]) -> Vec<RamStmt> {
             reverse_dependencies[i].clear();
         }
         open_stmts = new_open_stmts;
-    }
-
-    println!("New order:");
-    for (i, stmt) in result_stmts.iter().enumerate() {
-        println!("{i}. {stmt:?}");
     }
 
     result_stmts
