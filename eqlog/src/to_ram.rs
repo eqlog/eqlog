@@ -175,7 +175,7 @@ pub fn flat_rule_group_to_ram(
         .into_iter()
         .map(|flat_rule| {
             let mut routine = flat_rule_to_ram(flat_rule, index_selection);
-            println!("Sorting routine: {}", routine.name);
+            make_ram_lazy(routine.stmts.as_mut_slice());
             routine.stmts = sort_ram_stmts(routine.stmts.as_slice());
             routine
         })

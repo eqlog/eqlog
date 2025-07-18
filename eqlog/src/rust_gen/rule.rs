@@ -16,6 +16,7 @@ fn display_imports<'a>() -> impl 'a + Display {
         writedoc! {f, "
             #[allow(unused)]
             use eqlog_runtime::{{*, collections::*}};
+            use std::cell::LazyCell;
         "}
     })
 }
@@ -165,7 +166,6 @@ fn display_stmt_pre<'a>(
                             LazyCell::new(|| {{
                             {expr}
                             }});
-                            ;
                         "}
                     }
                     Strictness::Strict => {
