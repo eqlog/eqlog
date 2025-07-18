@@ -1,14 +1,17 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use crate::ram::*;
 
 use super::RamStmt;
 
-fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<Vec<usize>> {
+fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
     let mut set_var_def_sites: BTreeMap<Arc<str>, usize> = BTreeMap::new();
     let mut el_var_def_sites: BTreeMap<Arc<str>, usize> = BTreeMap::new();
 
-    let mut dependencies: Vec<Vec<usize>> = vec![Vec::new(); stmts.len()];
+    let mut dependencies: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); stmts.len()];
 
     for (i, stmt) in stmts.iter().enumerate() {
         let dependencies = &mut dependencies[i];
@@ -29,12 +32,12 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<Vec<usize>> {
                         let set_def_site = *set_var_def_sites
                             .get(&set.name)
                             .expect("Variable must be defined before use");
-                        dependencies.push(set_def_site);
+                        dependencies.insert(set_def_site);
 
                         let el_def_site = *el_var_def_sites
                             .get(&first_column_var.name)
                             .expect("Variable must be defined before use");
-                        dependencies.push(el_def_site);
+                        dependencies.insert(el_def_site);
                     }
                 }
             }
@@ -47,18 +50,23 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<Vec<usize>> {
                     let set_def_site = *set_var_def_sites
                         .get(&set.name)
                         .expect("Variable must be defined before use");
-                    dependencies.push(set_def_site);
+                    dependencies.insert(set_def_site);
                 }
 
                 el_var_def_sites.insert(loop_var_el.name.clone(), i);
                 set_var_def_sites.insert(loop_var_set.name.clone(), i);
             }
-            RamStmt::Insert(InsertStmt { rel: _, args }) => {
-                for arg in args {
-                    let arg_def_site = *el_var_def_sites
-                        .get(&arg.name)
-                        .expect("Variable must be defined before use");
-                    dependencies.push(arg_def_site);
+            RamStmt::Insert(InsertStmt { rel: _, args: _ }) => {
+                for (j, prev_stmt) in stmts[..i].iter().enumerate() {
+                    let depends_on_j = match prev_stmt {
+                        RamStmt::DefineSet(_) => true,
+                        RamStmt::Iter(_) => true,
+                        RamStmt::Insert(_) => false,
+                        RamStmt::GuardInhabited(_) => true,
+                    };
+                    if depends_on_j {
+                        dependencies.insert(j);
+                    }
                 }
             }
             RamStmt::GuardInhabited(GuardInhabitedStmt { sets }) => {
@@ -66,7 +74,7 @@ fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<Vec<usize>> {
                     let set_def_site = *set_var_def_sites
                         .get(&set.name)
                         .expect("Variable must be defined before use");
-                    dependencies.push(set_def_site);
+                    dependencies.insert(set_def_site);
                 }
             }
         }
@@ -91,7 +99,16 @@ fn ram_stmt_cost(stmt: &RamStmt) -> usize {
 }
 
 pub fn sort_ram_stmts(stmts: &[RamStmt]) -> Vec<RamStmt> {
+    println!("stmts:");
+    for (i, stmt) in stmts.iter().enumerate() {
+        println!("{i}. {stmt:?}");
+    }
+
     let mut dependencies = collect_stmt_dependencies(stmts);
+    for (i, dependencies) in dependencies.iter().enumerate() {
+        println!("{i} depends on: {dependencies:?}");
+    }
+
     let mut reverse_dependencies = vec![Vec::new(); stmts.len()];
     for i in 0..stmts.len() {
         for j in dependencies[i].iter().copied() {
@@ -129,6 +146,11 @@ pub fn sort_ram_stmts(stmts: &[RamStmt]) -> Vec<RamStmt> {
             reverse_dependencies[i].clear();
         }
         open_stmts = new_open_stmts;
+    }
+
+    println!("New order:");
+    for (i, stmt) in result_stmts.iter().enumerate() {
+        println!("{i}. {stmt:?}");
     }
 
     result_stmts
