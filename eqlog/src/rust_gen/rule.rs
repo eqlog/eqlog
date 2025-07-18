@@ -158,11 +158,24 @@ fn display_stmt_pre<'a>(
         match ram_stmt {
             RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
                 let expr = display_in_set_expr(expr, eqlog, identifiers);
-                writedoc! {f, "
-                    let {defined_var} =
-                    {expr}
-                    ;
-                "}
+                match defined_var.strictness {
+                    Strictness::Lazy => {
+                        writedoc! {f, "
+                            let {defined_var} =
+                            LazyCell::new(|| {{
+                            {expr}
+                            }});
+                            ;
+                        "}
+                    }
+                    Strictness::Strict => {
+                        writedoc! {f, "
+                            let {defined_var} =
+                            {expr}
+                            ;
+                        "}
+                    }
+                }
             }
             RamStmt::Iter(IterStmt {
                 sets,

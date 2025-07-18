@@ -173,7 +173,12 @@ pub fn flat_rule_group_to_ram(
     let routines = flat_rule_group
         .rules
         .into_iter()
-        .map(|flat_rule| flat_rule_to_ram(flat_rule, index_selection))
+        .map(|flat_rule| {
+            let mut routine = flat_rule_to_ram(flat_rule, index_selection);
+            // TODO: Panics at the moment.
+            //routine.stmts = sort_ram_stmts(routine.stmts.as_slice());
+            routine
+        })
         .collect();
     RamModule {
         name: flat_rule_group.name.clone(),

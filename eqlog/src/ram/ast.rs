@@ -44,11 +44,6 @@ pub struct DefineSetStmt {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct DeclareLazySetStmt {
-    pub sets: Vec<SetVar>,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct IterStmt {
     pub sets: Vec<SetVar>,
     pub loop_var_el: ElVar,
