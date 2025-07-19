@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use super::ast::*;
 
 pub fn make_ram_lazy(ram_stmts: &mut [RamStmt]) {
-    let mut lazy_vars: BTreeSet<Arc<str>> = BTreeSet::new();
+    let mut lazy_vars: BTreeSet<SetVarName> = BTreeSet::new();
 
     for stmt in ram_stmts.iter_mut() {
         match stmt {

@@ -41,10 +41,14 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
         let order = &indices[0].order;
         let mut arity = order.len();
 
-        let mut set_names: Vec<Arc<str>> = indices
+        let mut set_names: Vec<SetVarName> = indices
             .iter()
-            .enumerate()
-            .map(|(index_index, _index)| format!("set_stmt{stmt_index}_index{index_index}").into())
+            .map(|index| SetVarName {
+                stmt_index,
+                rel: flat_stmt.rel.clone(),
+                index: index.clone(),
+                restricted: 0,
+            })
             .collect();
 
         // Get the full indices and define variables for them.
@@ -78,7 +82,7 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                     },
                     first_column_var: var.clone(),
                 });
-                *set_name = format!("{set_name}_r{column}").into();
+                set_name.restricted += 1;
                 stmts.push(RamStmt::DefineSet(DefineSetStmt {
                     defined_var: SetVar {
                         name: set_name.clone(),
@@ -116,7 +120,10 @@ fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> Ra
                 // This should've been taken care of in the diagonal pass on flat eqlog.
                 assert!(prev_ram_var.is_none(), "Free variable must not occur twice");
 
-                let next_set_name: Arc<str> = format!("{}_r{column}", set_names[0]).into();
+                let next_set_name = SetVarName {
+                    restricted: set_names[0].restricted + 1,
+                    ..set_names[0].clone()
+                };
 
                 let iter_stmt = IterStmt {
                     sets: set_names

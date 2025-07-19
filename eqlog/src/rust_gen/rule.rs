@@ -124,10 +124,21 @@ pub fn display_module_env_struct<'a>(
     })
 }
 
-impl Display for SetVar {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.name.fmt(f)
-    }
+fn display_set_var<'a>(
+    set_var: &'a SetVar,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let SetVarName {
+            stmt_index,
+            rel,
+            index,
+            restricted,
+        } = set_var.name.clone();
+        let field_name = display_index_field_name(&rel, &index, eqlog, identifiers);
+        write!(f, "set{stmt_index}_{field_name}_r{restricted}")
+    })
 }
 
 fn display_in_set_expr<'a>(
@@ -145,6 +156,7 @@ fn display_in_set_expr<'a>(
             first_column_var,
         }) => {
             let result_arity = set.arity - 1;
+            let set = display_set_var(set, eqlog, identifiers);
             write!(f, "{set}.get({first_column_var}).unwrap_or_else(|| PrefixTree{result_arity}::empty())")
         }
     })
@@ -159,7 +171,9 @@ fn display_stmt_pre<'a>(
         match ram_stmt {
             RamStmt::DefineSet(DefineSetStmt { defined_var, expr }) => {
                 let expr = display_in_set_expr(expr, eqlog, identifiers);
-                match defined_var.strictness {
+                let strictness = defined_var.strictness;
+                let defined_var = display_set_var(defined_var, eqlog, identifiers);
+                match strictness {
                     Strictness::Lazy => {
                         writedoc! {f, "
                             let {defined_var} =
@@ -194,11 +208,17 @@ fn display_stmt_pre<'a>(
                     Strictness::Strict => {}
                 }
                 assert!(sets.len() >= 1, "Expected at least one set in IterStmt");
-                let set_head = sets[0].clone();
+                let set_head = display_set_var(&sets[0], eqlog, identifiers);
                 let set_tail_chain_iters = sets[1..]
                     .iter()
-                    .map(|set| FmtFn(move |f| write!(f, ".chain({set}.iter_restrictions())")))
+                    .map(|set| {
+                        FmtFn(move |f| {
+                            let set = display_set_var(set, eqlog, identifiers);
+                            write!(f, ".chain({set}.iter_restrictions())")
+                        })
+                    })
                     .format("\n");
+                let loop_var_set = display_set_var(loop_var_set, eqlog, identifiers);
                 writedoc! {f, "
                     #[allow(unused_variables)]
                     for
@@ -222,8 +242,8 @@ fn display_stmt_pre<'a>(
                     .iter()
                     .map(|set| {
                         FmtFn(move |f| {
-                            let set_name = &set.name;
-                            write!(f, "|| !{set_name}.is_empty()")
+                            let set = display_set_var(set, eqlog, identifiers);
+                            write!(f, "|| !{set}.is_empty()")
                         })
                     })
                     .format("");

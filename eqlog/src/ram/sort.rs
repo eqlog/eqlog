@@ -8,7 +8,7 @@ use crate::ram::*;
 use super::RamStmt;
 
 fn collect_stmt_dependencies(stmts: &[RamStmt]) -> Vec<BTreeSet<usize>> {
-    let mut set_var_def_sites: BTreeMap<Arc<str>, usize> = BTreeMap::new();
+    let mut set_var_def_sites: BTreeMap<SetVarName, usize> = BTreeMap::new();
     let mut el_var_def_sites: BTreeMap<Arc<str>, usize> = BTreeMap::new();
 
     let mut dependencies: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); stmts.len()];

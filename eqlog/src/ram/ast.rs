@@ -8,8 +8,16 @@ pub enum Strictness {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct SetVarName {
+    pub stmt_index: usize,
+    pub rel: FlatInRel,
+    pub index: IndexSpec,
+    pub restricted: usize,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct SetVar {
-    pub name: Arc<str>,
+    pub name: SetVarName,
     pub arity: usize,
     pub strictness: Strictness,
 }
