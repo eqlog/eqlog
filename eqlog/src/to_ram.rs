@@ -1,7 +1,6 @@
 use crate::flat_eqlog::*;
 use crate::ram::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 fn flat_rule_to_ram(flat_rule: FlatRule, index_selection: &IndexSelection) -> RamRoutine {
     let mut stmts: Vec<RamStmt> = Vec::new();
