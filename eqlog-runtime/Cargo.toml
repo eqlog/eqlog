@@ -7,3 +7,4 @@ license.workspace = true
 description.workspace = true
 repository.workspace = true
 readme.workspace = true
+links = "eqlog-runtime-0.8"

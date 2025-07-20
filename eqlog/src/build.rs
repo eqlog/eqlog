@@ -567,6 +567,61 @@ pub struct Config {
     pub component_build: Option<ComponentConfig>,
 }
 
+fn find_eqlog_runtime_rlib_path() -> Result<PathBuf> {
+    let out_dir_str = env::var_os("OUT_DIR").context(indoc! {"
+        Error: Failed to read OUT_DIR environment variable
+
+        process_root should only be called from build.rs via cargo.
+    "})?;
+    let out_dir: PathBuf = fs::canonicalize(PathBuf::from(out_dir_str))?;
+
+    let tag = env::var("DEP_EQLOG_RUNTIME_0.8_OUT_DIR").unwrap();
+
+    // Search for the eqlog runtime rlib in the target directory. It's somewhere under
+    // $PROFILE/deps.
+    let profile = env::var("PROFILE").context("Reading PROFILE environment variable")?;
+    let profile_target_dir = out_dir
+        .ancestors()
+        .find(|p| {
+            p.file_name()
+                .map_or(false, |name| name == OsStr::new(profile.as_str()))
+        })
+        .ok_or_else(|| anyhow!("Could not find profile directory in OUT_DIR"))?;
+    let deps_dir = profile_target_dir.join("deps");
+
+    let mut runtime_rlib_path: Option<PathBuf> = None;
+    for entry in fs::read_dir(&deps_dir).context("Reading deps dir")? {
+        let entry = entry.context("Reading deps dir entry")?;
+        let path = entry.path();
+        let is_candidate = path.extension() == Some(OsStr::new("rlib"))
+            && path.file_name().map_or(false, |name| {
+                name.to_string_lossy().starts_with("libeqlog_runtime")
+            });
+        if !is_candidate {
+            continue;
+        }
+
+        let content = fs::read(&path).context("Reading potential eqlog runtime rlib file")?;
+
+        if content
+            .windows(tag.len())
+            .any(|window| window == tag.as_bytes())
+        {
+            ensure!(
+                runtime_rlib_path.is_none(),
+                "Found multiple eqlog runtime rlib files in deps directory, consider running `cargo clean` to remove them"
+            );
+
+            runtime_rlib_path = Some(path);
+        }
+    }
+
+    let runtime_rlib_path = runtime_rlib_path
+        .ok_or_else(|| anyhow!("Failed to find eqlog runtime rlib in target directory"))?;
+
+    Ok(runtime_rlib_path)
+}
+
 impl Config {
     fn build_type(&self) -> BuildType {
         match &self.component_build {
@@ -615,48 +670,7 @@ impl Config {
 
         let opt_level = env::var("OPT_LEVEL").context("Reading OPT_LEVEL env var")?;
 
-        // Search for the eqlog runtime rlib in the target directory. It's somewhere under
-        // $PROFILE/deps.
-        let profile = env::var("PROFILE").context("Reading PROFILE environment variable")?;
-        let profile_target_dir = out_dir
-            .ancestors()
-            .find(|p| {
-                p.file_name()
-                    .map_or(false, |name| name == OsStr::new(profile.as_str()))
-            })
-            .ok_or_else(|| anyhow!("Could not find profile directory in OUT_DIR"))?;
-        let deps_dir = profile_target_dir.join("deps");
-
-        let mut runtime_rlib_path: Option<PathBuf> = None;
-        for entry in fs::read_dir(&deps_dir).context("Reading deps dir")? {
-            let entry = entry.context("Reading deps dir entry")?;
-            let path = entry.path();
-            let is_candidate = path.extension() == Some(OsStr::new("rlib"))
-                && path.file_name().map_or(false, |name| {
-                    name.to_string_lossy().starts_with("libeqlog_runtime")
-                });
-            if !is_candidate {
-                continue;
-            }
-
-            let content = fs::read(&path).context("Reading potential eqlog runtime rlib file")?;
-            let needle = "EQLOG_RUNTIME_LIBRARY_TAG";
-
-            if content
-                .windows(needle.len())
-                .any(|window| window == needle.as_bytes())
-            {
-                ensure!(
-                    runtime_rlib_path.is_none(),
-                    "Found multiple eqlog runtime rlib files in deps directory, consider running `cargo clean` to remove them"
-                );
-
-                runtime_rlib_path = Some(path);
-            }
-        }
-
-        let runtime_rlib_path = runtime_rlib_path
-            .ok_or_else(|| anyhow!("Failed to find eqlog runtime rlib in target directory"))?;
+        let runtime_rlib_path = find_eqlog_runtime_rlib_path()?;
 
         Ok(Config {
             in_dir,

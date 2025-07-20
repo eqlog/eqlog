@@ -192,8 +192,16 @@ use std::vec;
 // macros and for the build script of the runtime crate. We're only interested in the actual
 // runtime crate from this crate though. To find this file, the build script scans the .rlib file
 // for the value of the TAG variable below.
+//
+// We also can't use a fixed tag value here because I think eqlog-runtime is built twice depending
+// on whether it's a dependency for the build script or the crate itself. To single it down, we use
+// the OUT_DIR variable as part of the tag. The OUT_DIR variable is also available in the buidl
+// script of eqlog-runtime, which emits its value as link metadata value, see the cargo "link"
+// feature. This metadata value is then available in the build scripts of crates that dependend on
+// eqlog-runtime. The eqlog compiler crate can thus read it and scan potential eqlog-runtime rlib
+// for whether they contain this tag.
 #[used]
-static TAG: &'static str = "EQLOG_RUNTIME_LIBRARY_TAG";
+static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
 mod prefix_tree;
 mod unification;
