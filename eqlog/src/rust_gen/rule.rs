@@ -16,6 +16,7 @@ fn display_imports<'a>() -> impl 'a + Display {
         writedoc! {f, "
             #[allow(unused)]
             use eqlog_runtime::{{*, collections::*}};
+            #[allow(unused)]
             use std::cell::LazyCell;
         "}
     })
