@@ -62,6 +62,7 @@ pred cons_term_list_node(node: TermListNode, head: TermNode, tail: TermListNode)
 type TypeExprNode;
 pred ambient_type_expr(node: TypeExprNode, ty_ident: Ident);
 pred member_type_expr(node: TypeExprNode, tm: TermNode, ty_ident: Ident);
+pred hom_type_expr(node: TypeExprNode, dom: TermNode, cod: TermNode);
 
 type OptTermNode;
 pred none_term_node(OptTermNode);

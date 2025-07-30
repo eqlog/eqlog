@@ -90,6 +90,11 @@ TypeExpr: TypeExprNode = {
         eqlog.insert_member_type_expr(node, tm, ty_ident);
         node
     },
+    <l: @L> "Hom" "(" <dom: Term> "," <cod: Term> ")" <r: @R> => {
+        let node = eqlog.new_type_expr_node();
+        eqlog.insert_hom_type_expr(node, dom, cod);
+        node
+    }
 }
 
 ArgList: TermListNode = {

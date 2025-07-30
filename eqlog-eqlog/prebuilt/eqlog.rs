@@ -1,4 +1,4 @@
-// src-digest: 620D4D6CD97F1A11E65E36540DA5410C208AF6157ED09CAD141B55B8EB2DCFC9
+// src-digest: 670909EDB674F844CE73D6D736FA6EA2174B8200E2FDD7A4791494ADA461032D
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -4191,6 +4191,193 @@ impl fmt::Display for MemberTypeExprTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("member_type_expr"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct HomTypeExpr(pub TypeExprNode, pub TermNode, pub TermNode);
+#[derive(Clone, Hash, Debug)]
+struct HomTypeExprTable {
+    index_new_0_1_2: BTreeSet<(u32, u32, u32, )>,
+    index_old_0_1_2: BTreeSet<(u32, u32, u32, )>,
+    element_index_term_node: BTreeMap<TermNode, Vec<HomTypeExpr>>,
+    element_index_type_expr_node: BTreeMap<TypeExprNode, Vec<HomTypeExpr>>,
+}
+impl HomTypeExprTable {
+#[allow(unused)]
+const WEIGHT: usize = 9;
+fn new() -> Self {
+    Self {
+        index_new_0_1_2: BTreeSet::new(),
+        index_old_0_1_2: BTreeSet::new(),
+    element_index_term_node: BTreeMap::new(),
+    element_index_type_expr_node: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: HomTypeExpr) -> bool {
+if self.index_old_0_1_2.contains(&Self::permute_0_1_2(t)) {
+return false;
+}
+if !self.index_new_0_1_2.insert(Self::permute_0_1_2(t)) {
+return false;
+}
+
+
+
+            match self.element_index_type_expr_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type_expr_node.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_term_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_term_node.insert(t.1, vec![t]); },
+            };
+        
+
+            match self.element_index_term_node.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_term_node.insert(t.2, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: HomTypeExpr) -> bool {
+    self.index_new_0_1_2.contains(&Self::permute_0_1_2(t))
+ || self.index_old_0_1_2.contains(&Self::permute_0_1_2(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1_2.extend(
+    self.index_new_0_1_2
+    .iter().copied()
+    .map(|t| Self::permute_0_1_2(Self::permute_inverse_0_1_2(t)))
+);
+
+self.index_new_0_1_2.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1_2.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1_2(t: HomTypeExpr) -> (u32, u32, u32, ) {
+    (t.0.into(), t.1.into(), t.2.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1_2(t: (u32, u32, u32, )) -> HomTypeExpr {
+    HomTypeExpr(TypeExprNode::from(t.0), TermNode::from(t.1), TermNode::from(t.2))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = HomTypeExpr> {
+
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = HomTypeExpr> {
+
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1_2(&self, arg0: TypeExprNode, arg1: TermNode, arg2: TermNode) -> impl '_ + Iterator<Item = HomTypeExpr> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+    let arg2 = arg2.0;
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<HomTypeExpr> {
+    let mut ts = match self.element_index_term_node.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type_expr_node(&mut self, tm: TypeExprNode) -> Vec<HomTypeExpr> {
+    let mut ts = match self.element_index_type_expr_node.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for HomTypeExprTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("hom_type_expr"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -24562,6 +24749,479 @@ impl fmt::Display for VirtRealIdentTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct Dom(pub Morphism, pub Structure);
+#[derive(Clone, Hash, Debug)]
+struct DomTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_morphism: BTreeMap<Morphism, Vec<Dom>>,
+    element_index_structure: BTreeMap<Structure, Vec<Dom>>,
+}
+impl DomTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_morphism: BTreeMap::new(),
+    element_index_structure: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: Dom) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_morphism.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_structure.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_structure.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: Dom) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: Dom) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> Dom {
+    Dom(Morphism::from(t.0), Structure::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: Dom) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> Dom {
+    Dom(Morphism::from(t.1), Structure::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = Dom> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = Dom> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Dom> {
+    let mut ts = match self.element_index_morphism.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Dom> {
+    let mut ts = match self.element_index_structure.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for DomTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("dom"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct Cod(pub Morphism, pub Structure);
+#[derive(Clone, Hash, Debug)]
+struct CodTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_morphism: BTreeMap<Morphism, Vec<Cod>>,
+    element_index_structure: BTreeMap<Structure, Vec<Cod>>,
+}
+impl CodTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_morphism: BTreeMap::new(),
+    element_index_structure: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: Cod) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_morphism.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_structure.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_structure.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: Cod) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: Cod) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> Cod {
+    Cod(Morphism::from(t.0), Structure::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: Cod) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> Cod {
+    Cod(Morphism::from(t.1), Structure::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = Cod> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = Cod> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Cod> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Cod> {
+    let mut ts = match self.element_index_morphism.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Cod> {
+    let mut ts = match self.element_index_structure.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for CodTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("cod"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct Var(pub Structure, pub ElName, pub El);
 #[derive(Clone, Hash, Debug)]
 struct VarTable {
@@ -40432,479 +41092,6 @@ impl fmt::Display for ArityTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Dom(pub Morphism, pub Structure);
-#[derive(Clone, Hash, Debug)]
-struct DomTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_morphism: BTreeMap<Morphism, Vec<Dom>>,
-    element_index_structure: BTreeMap<Structure, Vec<Dom>>,
-}
-impl DomTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_morphism: BTreeMap::new(),
-    element_index_structure: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: Dom) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_morphism.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_morphism.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_structure.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_structure.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: Dom) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: Dom) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> Dom {
-    Dom(Morphism::from(t.0), Structure::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: Dom) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> Dom {
-    Dom(Morphism::from(t.1), Structure::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = Dom> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = Dom> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Dom> {
-    let mut ts = match self.element_index_morphism.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Dom> {
-    let mut ts = match self.element_index_structure.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for DomTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("dom"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Cod(pub Morphism, pub Structure);
-#[derive(Clone, Hash, Debug)]
-struct CodTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_morphism: BTreeMap<Morphism, Vec<Cod>>,
-    element_index_structure: BTreeMap<Structure, Vec<Cod>>,
-}
-impl CodTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_morphism: BTreeMap::new(),
-    element_index_structure: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: Cod) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_morphism.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_morphism.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_structure.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_structure.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: Cod) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: Cod) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> Cod {
-    Cod(Morphism::from(t.0), Structure::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: Cod) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> Cod {
-    Cod(Morphism::from(t.1), Structure::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = Cod> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = Cod> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Cod> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Cod> {
-    let mut ts = match self.element_index_morphism.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Cod> {
-    let mut ts = match self.element_index_structure.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for CodTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("cod"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct FlatArity(pub Rel, pub TypeList);
 #[derive(Clone, Hash, Debug)]
 struct FlatArityTable {
@@ -52718,6 +52905,12 @@ struct RealVirtIdentArgs(pub Ident);
 struct VirtRealIdentArgs(pub VirtIdent);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct DomArgs(pub Morphism);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct CodArgs(pub Morphism);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct VarArgs(pub Structure, pub ElName);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -52925,12 +53118,6 @@ struct RelNameArgs(pub Rel);
 struct ArityArgs(pub Rel);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DomArgs(pub Morphism);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CodArgs(pub Morphism);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct FlatArityArgs(pub Rel);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -53098,6 +53285,7 @@ struct ModelDelta {
     new_cons_term_list_node: Vec<ConsTermListNode>,
     new_ambient_type_expr: Vec<AmbientTypeExpr>,
     new_member_type_expr: Vec<MemberTypeExpr>,
+    new_hom_type_expr: Vec<HomTypeExpr>,
     new_none_term_node: Vec<NoneTermNode>,
     new_some_term_node: Vec<SomeTermNode>,
     new_var_term_node: Vec<VarTermNode>,
@@ -53195,6 +53383,8 @@ struct ModelDelta {
     new_match_stmt_contains_ctor: Vec<MatchStmtContainsCtor>,
     new_real_virt_ident: Vec<RealVirtIdent>,
     new_virt_real_ident: Vec<VirtRealIdent>,
+    new_dom: Vec<Dom>,
+    new_cod: Vec<Cod>,
     new_var: Vec<Var>,
     new_rule_name: Vec<RuleName>,
     new_module_name: Vec<ModuleName>,
@@ -53264,8 +53454,6 @@ struct ModelDelta {
     new_pred_rel: Vec<PredRel>,
     new_rel_name: Vec<RelName>,
     new_arity: Vec<Arity>,
-    new_dom: Vec<Dom>,
-    new_cod: Vec<Cod>,
     new_flat_arity: Vec<FlatArity>,
     new_module_symbol_scope: Vec<ModuleSymbolScope>,
     new_nil_el_list: Vec<NilElList>,
@@ -53362,6 +53550,8 @@ struct ModelDelta {
     new_nat_equalities: Vec<(Nat, Nat)>,
 new_real_virt_ident_def: Vec<RealVirtIdentArgs>,
 new_virt_real_ident_def: Vec<VirtRealIdentArgs>,
+new_dom_def: Vec<DomArgs>,
+new_cod_def: Vec<CodArgs>,
 new_var_def: Vec<VarArgs>,
 new_rule_name_def: Vec<RuleNameArgs>,
 new_module_name_def: Vec<ModuleNameArgs>,
@@ -53426,8 +53616,6 @@ new_semantic_func_def: Vec<SemanticFuncArgs>,
 new_ctor_symbol_scope_def: Vec<CtorSymbolScopeArgs>,
 new_pred_rel_def: Vec<PredRelArgs>,
 new_rel_name_def: Vec<RelNameArgs>,
-new_dom_def: Vec<DomArgs>,
-new_cod_def: Vec<CodArgs>,
 new_module_symbol_scope_def: Vec<ModuleSymbolScopeArgs>,
 new_nil_el_list_def: Vec<NilElListArgs>,
 new_cons_el_list_def: Vec<ConsElListArgs>,
@@ -53743,7 +53931,7 @@ nat_new: BTreeSet<Nat>,
 nat_weights: Vec<usize>,
 nat_uprooted: Vec<Nat>,
 
-  absurd: AbsurdTable,  type_decl: TypeDeclTable,  arg_decl_node_name: ArgDeclNodeNameTable,  arg_decl_node_type: ArgDeclNodeTypeTable,  nil_arg_decl_list_node: NilArgDeclListNodeTable,  cons_arg_decl_list_node: ConsArgDeclListNodeTable,  pred_decl: PredDeclTable,  func_decl: FuncDeclTable,  ctor_decl: CtorDeclTable,  nil_ctor_decl_list_node: NilCtorDeclListNodeTable,  cons_ctor_decl_list_node: ConsCtorDeclListNodeTable,  enum_decl: EnumDeclTable,  nil_term_list_node: NilTermListNodeTable,  cons_term_list_node: ConsTermListNodeTable,  ambient_type_expr: AmbientTypeExprTable,  member_type_expr: MemberTypeExprTable,  none_term_node: NoneTermNodeTable,  some_term_node: SomeTermNodeTable,  var_term_node: VarTermNodeTable,  wildcard_term_node: WildcardTermNodeTable,  app_term_node: AppTermNodeTable,  match_case: MatchCaseTable,  nil_match_case_list_node: NilMatchCaseListNodeTable,  cons_match_case_list_node: ConsMatchCaseListNodeTable,  equal_if_atom_node: EqualIfAtomNodeTable,  defined_if_atom_node: DefinedIfAtomNodeTable,  pred_if_atom_node: PredIfAtomNodeTable,  var_if_atom_node: VarIfAtomNodeTable,  equal_then_atom_node: EqualThenAtomNodeTable,  defined_then_atom_node: DefinedThenAtomNodeTable,  pred_then_atom_node: PredThenAtomNodeTable,  if_stmt_node: IfStmtNodeTable,  then_stmt_node: ThenStmtNodeTable,  branch_stmt_node: BranchStmtNodeTable,  match_stmt_node: MatchStmtNodeTable,  nil_stmt_list_node: NilStmtListNodeTable,  cons_stmt_list_node: ConsStmtListNodeTable,  nil_stmt_block_list_node: NilStmtBlockListNodeTable,  cons_stmt_block_list_node: ConsStmtBlockListNodeTable,  rule_decl: RuleDeclTable,  model_decl: ModelDeclTable,  decl_node_type: DeclNodeTypeTable,  decl_node_pred: DeclNodePredTable,  decl_node_func: DeclNodeFuncTable,  decl_node_rule: DeclNodeRuleTable,  decl_node_enum: DeclNodeEnumTable,  decl_node_model: DeclNodeModelTable,  nil_decl_list_node: NilDeclListNodeTable,  cons_decl_list_node: ConsDeclListNodeTable,  decls_module_node: DeclsModuleNodeTable,  var_in_scope: VarInScopeTable,  scope_extension: ScopeExtensionTable,  scope_single_child: ScopeSingleChildTable,  scope_extension_siblings: ScopeExtensionSiblingsTable,  is_normal_type: IsNormalTypeTable,  is_enum_type: IsEnumTypeTable,  is_model_type: IsModelTypeTable,  is_total_func: IsTotalFuncTable,  rel_app: RelAppTable,  el_type: ElTypeTable,  el_types: ElTypesTable,  constrained_el: ConstrainedElTable,  constrained_els: ConstrainedElsTable,  in_ker: InKerTable,  el_in_img: ElInImgTable,  rel_tuple_in_img: RelTupleInImgTable,  symbol_scope_extension: SymbolScopeExtensionTable,  symbol_scope_ancestor: SymbolScopeAncestorTable,  element_member_symbol_scope: ElementMemberSymbolScopeTable,  defined_symbol: DefinedSymbolTable,  accessible_symbol: AccessibleSymbolTable,  should_be_symbol: ShouldBeSymbolTable,  should_be_symbol_2: ShouldBeSymbol2Table,  should_be_symbol_3: ShouldBeSymbol3Table,  pred_arg_num_should_match: PredArgNumShouldMatchTable,  func_arg_num_should_match: FuncArgNumShouldMatchTable,  cfg_edge: CfgEdgeTable,  cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,  cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,  cfg_edge_fork: CfgEdgeForkTable,  cfg_edge_join: CfgEdgeJoinTable,  before_stmt_structure: BeforeStmtStructureTable,  stmt_morphism: StmtMorphismTable,  if_morphism: IfMorphismTable,  surj_then_morphism: SurjThenMorphismTable,  non_surj_then_morphism: NonSurjThenMorphismTable,  noop_morphism: NoopMorphismTable,  stmt_structure: StmtStructureTable,  if_atom_structure: IfAtomStructureTable,  then_atom_structure: ThenAtomStructureTable,  term_structure: TermStructureTable,  terms_structure: TermsStructureTable,  opt_term_structure: OptTermStructureTable,  type_expr_structure: TypeExprStructureTable,  term_should_be_epic_ok: TermShouldBeEpicOkTable,  terms_should_be_epic_ok: TermsShouldBeEpicOkTable,  el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,  el_is_surjective_ok: ElIsSurjectiveOkTable,  should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,  is_given_by_ctor: IsGivenByCtorTable,  function_can_be_made_defined: FunctionCanBeMadeDefinedTable,  case_pattern_is_variable: CasePatternIsVariableTable,  case_pattern_is_wildcard: CasePatternIsWildcardTable,  is_pattern_ctor_arg: IsPatternCtorArgTable,  are_pattern_ctor_args: ArePatternCtorArgsTable,  pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,  pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,  cases_contain_ctor: CasesContainCtorTable,  match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,  match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,  match_stmt_contains_ctor: MatchStmtContainsCtorTable,  real_virt_ident: RealVirtIdentTable,  virt_real_ident: VirtRealIdentTable,  var: VarTable,  rule_name: RuleNameTable,  module_name: ModuleNameTable,  type_decl_node_loc: TypeDeclNodeLocTable,  arg_decl_node_loc: ArgDeclNodeLocTable,  arg_decl_list_node_loc: ArgDeclListNodeLocTable,  pred_decl_node_loc: PredDeclNodeLocTable,  func_decl_node_loc: FuncDeclNodeLocTable,  ctor_decl_node_loc: CtorDeclNodeLocTable,  enum_decl_node_loc: EnumDeclNodeLocTable,  model_decl_node_loc: ModelDeclNodeLocTable,  term_node_loc: TermNodeLocTable,  term_list_node_loc: TermListNodeLocTable,  match_case_node_loc: MatchCaseNodeLocTable,  opt_term_node_loc: OptTermNodeLocTable,  if_atom_node_loc: IfAtomNodeLocTable,  then_atom_node_loc: ThenAtomNodeLocTable,  stmt_node_loc: StmtNodeLocTable,  stmt_list_node_loc: StmtListNodeLocTable,  rule_decl_node_loc: RuleDeclNodeLocTable,  decl_node_loc: DeclNodeLocTable,  decl_list_node_loc: DeclListNodeLocTable,  module_node_loc: ModuleNodeLocTable,  rule_descendant_rule: RuleDescendantRuleTable,  rule_descendant_term: RuleDescendantTermTable,  rule_descendant_term_list: RuleDescendantTermListTable,  rule_descendant_opt_term: RuleDescendantOptTermTable,  rule_descendant_if_atom: RuleDescendantIfAtomTable,  rule_descendant_then_atom: RuleDescendantThenAtomTable,  rule_descendant_match_case: RuleDescendantMatchCaseTable,  rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,  rule_descendant_stmt: RuleDescendantStmtTable,  rule_descendant_stmt_list: RuleDescendantStmtListTable,  rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,  rule_descendant_type_expr: RuleDescendantTypeExprTable,  entry_scope: EntryScopeTable,  exit_scope: ExitScopeTable,  ctor_enum: CtorEnumTable,  ctors_enum: CtorsEnumTable,  cases_discriminee: CasesDiscrimineeTable,  case_discriminee: CaseDiscrimineeTable,  desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,  desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,  desugared_case_block: DesugaredCaseBlockTable,  desugared_case_block_list: DesugaredCaseBlockListTable,  nil_type_list: NilTypeListTable,  cons_type_list: ConsTypeListTable,  snoc_type_list: SnocTypeListTable,  semantic_type: SemanticTypeTable,  decl_symbol_scope: DeclSymbolScopeTable,  type_name: TypeNameTable,  virtual_symbol_scope: VirtualSymbolScopeTable,  parent_model_func: ParentModelFuncTable,  type_definition_symbol_scope: TypeDefinitionSymbolScopeTable,  symbol_scope_model: SymbolScopeModelTable,  codomain: CodomainTable,  func_rel: FuncRelTable,  rel_definition_symbol_scope: RelDefinitionSymbolScopeTable,  domain: DomainTable,  flat_domain: FlatDomainTable,  semantic_arg_types: SemanticArgTypesTable,  arg_symbol_scope: ArgSymbolScopeTable,  semantic_pred: SemanticPredTable,  pred_arity: PredArityTable,  semantic_func: SemanticFuncTable,  ctor_symbol_scope: CtorSymbolScopeTable,  pred_rel: PredRelTable,  rel_name: RelNameTable,  arity: ArityTable,  dom: DomTable,  cod: CodTable,  flat_arity: FlatArityTable,  module_symbol_scope: ModuleSymbolScopeTable,  nil_el_list: NilElListTable,  cons_el_list: ConsElListTable,  snoc_el_list: SnocElListTable,  el_structure: ElStructureTable,  els_structure: ElsStructureTable,  ambient_type: AmbientTypeTable,  instantiated_type: InstantiatedTypeTable,  underlying_type: UnderlyingTypeTable,  nil_element_type_list: NilElementTypeListTable,  cons_element_type_list: ConsElementTypeListTable,  snoc_element_type_list: SnocElementTypeListTable,  ambient_el_type_list: AmbientElTypeListTable,  func_app: FuncAppTable,  map_el: MapElTable,  map_els: MapElsTable,  ambient_model_el: AmbientModelElTable,  type_symbol: TypeSymbolTable,  pred_symbol: PredSymbolTable,  func_symbol: FuncSymbolTable,  rule_symbol: RuleSymbolTable,  enum_symbol: EnumSymbolTable,  ctor_symbol: CtorSymbolTable,  model_symbol: ModelSymbolTable,  symbol_scope_parent: SymbolScopeParentTable,  decls_symbol_scope: DeclsSymbolScopeTable,  args_symbol_scope: ArgsSymbolScopeTable,  ctors_symbol_scope: CtorsSymbolScopeTable,  model_member_symbol_scope: ModelMemberSymbolScopeTable,  symbol_scope_name: SymbolScopeNameTable,  scope_symbols: ScopeSymbolsTable,  semantic_el: SemanticElTable,  zero: ZeroTable,  succ: SuccTable,  type_list_len: TypeListLenTable,  term_list_len: TermListLenTable,  before_rule_structure: BeforeRuleStructureTable,  ambient_model_el_structure: AmbientModelElStructureTable,  ambient_model_el_morphism: AmbientModelElMorphismTable,  if_atom_morphism: IfAtomMorphismTable,  then_atom_morphism: ThenAtomMorphismTable,  branch_stmt_morphism: BranchStmtMorphismTable,  match_stmt_morphism: MatchStmtMorphismTable,  semantic_name: SemanticNameTable,  semantic_els: SemanticElsTable,  wildcard_name: WildcardNameTable,  rel_app_parent_model_el: RelAppParentModelElTable,  match_case_pattern_ctor: MatchCasePatternCtorTable,  cases_determined_enum: CasesDeterminedEnumTable,empty_join_is_dirty: bool,
+  absurd: AbsurdTable,  type_decl: TypeDeclTable,  arg_decl_node_name: ArgDeclNodeNameTable,  arg_decl_node_type: ArgDeclNodeTypeTable,  nil_arg_decl_list_node: NilArgDeclListNodeTable,  cons_arg_decl_list_node: ConsArgDeclListNodeTable,  pred_decl: PredDeclTable,  func_decl: FuncDeclTable,  ctor_decl: CtorDeclTable,  nil_ctor_decl_list_node: NilCtorDeclListNodeTable,  cons_ctor_decl_list_node: ConsCtorDeclListNodeTable,  enum_decl: EnumDeclTable,  nil_term_list_node: NilTermListNodeTable,  cons_term_list_node: ConsTermListNodeTable,  ambient_type_expr: AmbientTypeExprTable,  member_type_expr: MemberTypeExprTable,  hom_type_expr: HomTypeExprTable,  none_term_node: NoneTermNodeTable,  some_term_node: SomeTermNodeTable,  var_term_node: VarTermNodeTable,  wildcard_term_node: WildcardTermNodeTable,  app_term_node: AppTermNodeTable,  match_case: MatchCaseTable,  nil_match_case_list_node: NilMatchCaseListNodeTable,  cons_match_case_list_node: ConsMatchCaseListNodeTable,  equal_if_atom_node: EqualIfAtomNodeTable,  defined_if_atom_node: DefinedIfAtomNodeTable,  pred_if_atom_node: PredIfAtomNodeTable,  var_if_atom_node: VarIfAtomNodeTable,  equal_then_atom_node: EqualThenAtomNodeTable,  defined_then_atom_node: DefinedThenAtomNodeTable,  pred_then_atom_node: PredThenAtomNodeTable,  if_stmt_node: IfStmtNodeTable,  then_stmt_node: ThenStmtNodeTable,  branch_stmt_node: BranchStmtNodeTable,  match_stmt_node: MatchStmtNodeTable,  nil_stmt_list_node: NilStmtListNodeTable,  cons_stmt_list_node: ConsStmtListNodeTable,  nil_stmt_block_list_node: NilStmtBlockListNodeTable,  cons_stmt_block_list_node: ConsStmtBlockListNodeTable,  rule_decl: RuleDeclTable,  model_decl: ModelDeclTable,  decl_node_type: DeclNodeTypeTable,  decl_node_pred: DeclNodePredTable,  decl_node_func: DeclNodeFuncTable,  decl_node_rule: DeclNodeRuleTable,  decl_node_enum: DeclNodeEnumTable,  decl_node_model: DeclNodeModelTable,  nil_decl_list_node: NilDeclListNodeTable,  cons_decl_list_node: ConsDeclListNodeTable,  decls_module_node: DeclsModuleNodeTable,  var_in_scope: VarInScopeTable,  scope_extension: ScopeExtensionTable,  scope_single_child: ScopeSingleChildTable,  scope_extension_siblings: ScopeExtensionSiblingsTable,  is_normal_type: IsNormalTypeTable,  is_enum_type: IsEnumTypeTable,  is_model_type: IsModelTypeTable,  is_total_func: IsTotalFuncTable,  rel_app: RelAppTable,  el_type: ElTypeTable,  el_types: ElTypesTable,  constrained_el: ConstrainedElTable,  constrained_els: ConstrainedElsTable,  in_ker: InKerTable,  el_in_img: ElInImgTable,  rel_tuple_in_img: RelTupleInImgTable,  symbol_scope_extension: SymbolScopeExtensionTable,  symbol_scope_ancestor: SymbolScopeAncestorTable,  element_member_symbol_scope: ElementMemberSymbolScopeTable,  defined_symbol: DefinedSymbolTable,  accessible_symbol: AccessibleSymbolTable,  should_be_symbol: ShouldBeSymbolTable,  should_be_symbol_2: ShouldBeSymbol2Table,  should_be_symbol_3: ShouldBeSymbol3Table,  pred_arg_num_should_match: PredArgNumShouldMatchTable,  func_arg_num_should_match: FuncArgNumShouldMatchTable,  cfg_edge: CfgEdgeTable,  cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,  cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,  cfg_edge_fork: CfgEdgeForkTable,  cfg_edge_join: CfgEdgeJoinTable,  before_stmt_structure: BeforeStmtStructureTable,  stmt_morphism: StmtMorphismTable,  if_morphism: IfMorphismTable,  surj_then_morphism: SurjThenMorphismTable,  non_surj_then_morphism: NonSurjThenMorphismTable,  noop_morphism: NoopMorphismTable,  stmt_structure: StmtStructureTable,  if_atom_structure: IfAtomStructureTable,  then_atom_structure: ThenAtomStructureTable,  term_structure: TermStructureTable,  terms_structure: TermsStructureTable,  opt_term_structure: OptTermStructureTable,  type_expr_structure: TypeExprStructureTable,  term_should_be_epic_ok: TermShouldBeEpicOkTable,  terms_should_be_epic_ok: TermsShouldBeEpicOkTable,  el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,  el_is_surjective_ok: ElIsSurjectiveOkTable,  should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,  is_given_by_ctor: IsGivenByCtorTable,  function_can_be_made_defined: FunctionCanBeMadeDefinedTable,  case_pattern_is_variable: CasePatternIsVariableTable,  case_pattern_is_wildcard: CasePatternIsWildcardTable,  is_pattern_ctor_arg: IsPatternCtorArgTable,  are_pattern_ctor_args: ArePatternCtorArgsTable,  pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,  pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,  cases_contain_ctor: CasesContainCtorTable,  match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,  match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,  match_stmt_contains_ctor: MatchStmtContainsCtorTable,  real_virt_ident: RealVirtIdentTable,  virt_real_ident: VirtRealIdentTable,  dom: DomTable,  cod: CodTable,  var: VarTable,  rule_name: RuleNameTable,  module_name: ModuleNameTable,  type_decl_node_loc: TypeDeclNodeLocTable,  arg_decl_node_loc: ArgDeclNodeLocTable,  arg_decl_list_node_loc: ArgDeclListNodeLocTable,  pred_decl_node_loc: PredDeclNodeLocTable,  func_decl_node_loc: FuncDeclNodeLocTable,  ctor_decl_node_loc: CtorDeclNodeLocTable,  enum_decl_node_loc: EnumDeclNodeLocTable,  model_decl_node_loc: ModelDeclNodeLocTable,  term_node_loc: TermNodeLocTable,  term_list_node_loc: TermListNodeLocTable,  match_case_node_loc: MatchCaseNodeLocTable,  opt_term_node_loc: OptTermNodeLocTable,  if_atom_node_loc: IfAtomNodeLocTable,  then_atom_node_loc: ThenAtomNodeLocTable,  stmt_node_loc: StmtNodeLocTable,  stmt_list_node_loc: StmtListNodeLocTable,  rule_decl_node_loc: RuleDeclNodeLocTable,  decl_node_loc: DeclNodeLocTable,  decl_list_node_loc: DeclListNodeLocTable,  module_node_loc: ModuleNodeLocTable,  rule_descendant_rule: RuleDescendantRuleTable,  rule_descendant_term: RuleDescendantTermTable,  rule_descendant_term_list: RuleDescendantTermListTable,  rule_descendant_opt_term: RuleDescendantOptTermTable,  rule_descendant_if_atom: RuleDescendantIfAtomTable,  rule_descendant_then_atom: RuleDescendantThenAtomTable,  rule_descendant_match_case: RuleDescendantMatchCaseTable,  rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,  rule_descendant_stmt: RuleDescendantStmtTable,  rule_descendant_stmt_list: RuleDescendantStmtListTable,  rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,  rule_descendant_type_expr: RuleDescendantTypeExprTable,  entry_scope: EntryScopeTable,  exit_scope: ExitScopeTable,  ctor_enum: CtorEnumTable,  ctors_enum: CtorsEnumTable,  cases_discriminee: CasesDiscrimineeTable,  case_discriminee: CaseDiscrimineeTable,  desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,  desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,  desugared_case_block: DesugaredCaseBlockTable,  desugared_case_block_list: DesugaredCaseBlockListTable,  nil_type_list: NilTypeListTable,  cons_type_list: ConsTypeListTable,  snoc_type_list: SnocTypeListTable,  semantic_type: SemanticTypeTable,  decl_symbol_scope: DeclSymbolScopeTable,  type_name: TypeNameTable,  virtual_symbol_scope: VirtualSymbolScopeTable,  parent_model_func: ParentModelFuncTable,  type_definition_symbol_scope: TypeDefinitionSymbolScopeTable,  symbol_scope_model: SymbolScopeModelTable,  codomain: CodomainTable,  func_rel: FuncRelTable,  rel_definition_symbol_scope: RelDefinitionSymbolScopeTable,  domain: DomainTable,  flat_domain: FlatDomainTable,  semantic_arg_types: SemanticArgTypesTable,  arg_symbol_scope: ArgSymbolScopeTable,  semantic_pred: SemanticPredTable,  pred_arity: PredArityTable,  semantic_func: SemanticFuncTable,  ctor_symbol_scope: CtorSymbolScopeTable,  pred_rel: PredRelTable,  rel_name: RelNameTable,  arity: ArityTable,  flat_arity: FlatArityTable,  module_symbol_scope: ModuleSymbolScopeTable,  nil_el_list: NilElListTable,  cons_el_list: ConsElListTable,  snoc_el_list: SnocElListTable,  el_structure: ElStructureTable,  els_structure: ElsStructureTable,  ambient_type: AmbientTypeTable,  instantiated_type: InstantiatedTypeTable,  underlying_type: UnderlyingTypeTable,  nil_element_type_list: NilElementTypeListTable,  cons_element_type_list: ConsElementTypeListTable,  snoc_element_type_list: SnocElementTypeListTable,  ambient_el_type_list: AmbientElTypeListTable,  func_app: FuncAppTable,  map_el: MapElTable,  map_els: MapElsTable,  ambient_model_el: AmbientModelElTable,  type_symbol: TypeSymbolTable,  pred_symbol: PredSymbolTable,  func_symbol: FuncSymbolTable,  rule_symbol: RuleSymbolTable,  enum_symbol: EnumSymbolTable,  ctor_symbol: CtorSymbolTable,  model_symbol: ModelSymbolTable,  symbol_scope_parent: SymbolScopeParentTable,  decls_symbol_scope: DeclsSymbolScopeTable,  args_symbol_scope: ArgsSymbolScopeTable,  ctors_symbol_scope: CtorsSymbolScopeTable,  model_member_symbol_scope: ModelMemberSymbolScopeTable,  symbol_scope_name: SymbolScopeNameTable,  scope_symbols: ScopeSymbolsTable,  semantic_el: SemanticElTable,  zero: ZeroTable,  succ: SuccTable,  type_list_len: TypeListLenTable,  term_list_len: TermListLenTable,  before_rule_structure: BeforeRuleStructureTable,  ambient_model_el_structure: AmbientModelElStructureTable,  ambient_model_el_morphism: AmbientModelElMorphismTable,  if_atom_morphism: IfAtomMorphismTable,  then_atom_morphism: ThenAtomMorphismTable,  branch_stmt_morphism: BranchStmtMorphismTable,  match_stmt_morphism: MatchStmtMorphismTable,  semantic_name: SemanticNameTable,  semantic_els: SemanticElsTable,  wildcard_name: WildcardNameTable,  rel_app_parent_model_el: RelAppParentModelElTable,  match_case_pattern_ctor: MatchCasePatternCtorTable,  cases_determined_enum: CasesDeterminedEnumTable,empty_join_is_dirty: bool,
 }
 type Model = Eqlog;impl ModelDelta {
 fn new() -> ModelDelta {
@@ -53764,6 +53952,7 @@ fn new() -> ModelDelta {
     new_cons_term_list_node: Vec::new(),
     new_ambient_type_expr: Vec::new(),
     new_member_type_expr: Vec::new(),
+    new_hom_type_expr: Vec::new(),
     new_none_term_node: Vec::new(),
     new_some_term_node: Vec::new(),
     new_var_term_node: Vec::new(),
@@ -53861,6 +54050,8 @@ fn new() -> ModelDelta {
     new_match_stmt_contains_ctor: Vec::new(),
     new_real_virt_ident: Vec::new(),
     new_virt_real_ident: Vec::new(),
+    new_dom: Vec::new(),
+    new_cod: Vec::new(),
     new_var: Vec::new(),
     new_rule_name: Vec::new(),
     new_module_name: Vec::new(),
@@ -53930,8 +54121,6 @@ fn new() -> ModelDelta {
     new_pred_rel: Vec::new(),
     new_rel_name: Vec::new(),
     new_arity: Vec::new(),
-    new_dom: Vec::new(),
-    new_cod: Vec::new(),
     new_flat_arity: Vec::new(),
     new_module_symbol_scope: Vec::new(),
     new_nil_el_list: Vec::new(),
@@ -54029,6 +54218,10 @@ fn new() -> ModelDelta {
 new_real_virt_ident_def: Vec::new(),
 
 new_virt_real_ident_def: Vec::new(),
+
+new_dom_def: Vec::new(),
+
+new_cod_def: Vec::new(),
 
 new_var_def: Vec::new(),
 
@@ -54157,10 +54350,6 @@ new_ctor_symbol_scope_def: Vec::new(),
 new_pred_rel_def: Vec::new(),
 
 new_rel_name_def: Vec::new(),
-
-new_dom_def: Vec::new(),
-
-new_cod_def: Vec::new(),
 
 new_module_symbol_scope_def: Vec::new(),
 
@@ -54505,6 +54694,10 @@ for AmbientTypeExpr(tm0, tm1) in self.new_ambient_type_expr.drain(..) {
 
 for MemberTypeExpr(tm0, tm1, tm2) in self.new_member_type_expr.drain(..) {
     model.insert_member_type_expr(tm0, tm1, tm2);
+}
+
+for HomTypeExpr(tm0, tm1, tm2) in self.new_hom_type_expr.drain(..) {
+    model.insert_hom_type_expr(tm0, tm1, tm2);
 }
 
 for NoneTermNode(tm0) in self.new_none_term_node.drain(..) {
@@ -54895,6 +55088,14 @@ for VirtRealIdent(tm0, tm1) in self.new_virt_real_ident.drain(..) {
     model.insert_virt_real_ident(tm0, tm1);
 }
 
+for Dom(tm0, tm1) in self.new_dom.drain(..) {
+    model.insert_dom(tm0, tm1);
+}
+
+for Cod(tm0, tm1) in self.new_cod.drain(..) {
+    model.insert_cod(tm0, tm1);
+}
+
 for Var(tm0, tm1, tm2) in self.new_var.drain(..) {
     model.insert_var(tm0, tm1, tm2);
 }
@@ -55171,14 +55372,6 @@ for Arity(tm0, tm1) in self.new_arity.drain(..) {
     model.insert_arity(tm0, tm1);
 }
 
-for Dom(tm0, tm1) in self.new_dom.drain(..) {
-    model.insert_dom(tm0, tm1);
-}
-
-for Cod(tm0, tm1) in self.new_cod.drain(..) {
-    model.insert_cod(tm0, tm1);
-}
-
 for FlatArity(tm0, tm1) in self.new_flat_arity.drain(..) {
     model.insert_flat_arity(tm0, tm1);
 }
@@ -55388,6 +55581,14 @@ fn apply_func_defs(&mut self, model: &mut Model) {
 
 for VirtRealIdentArgs(tm0) in self.new_virt_real_ident_def.drain(..) {
     model.define_virt_real_ident(tm0);
+}
+
+for DomArgs(tm0) in self.new_dom_def.drain(..) {
+    model.define_dom(tm0);
+}
+
+for CodArgs(tm0) in self.new_cod_def.drain(..) {
+    model.define_cod(tm0);
 }
 
 for VarArgs(tm0, tm1) in self.new_var_def.drain(..) {
@@ -55644,14 +55845,6 @@ for PredRelArgs(tm0) in self.new_pred_rel_def.drain(..) {
 
 for RelNameArgs(tm0) in self.new_rel_name_def.drain(..) {
     model.define_rel_name(tm0);
-}
-
-for DomArgs(tm0) in self.new_dom_def.drain(..) {
-    model.define_dom(tm0);
-}
-
-for CodArgs(tm0) in self.new_cod_def.drain(..) {
-    model.define_cod(tm0);
 }
 
 for ModuleSymbolScopeArgs(tm0) in self.new_module_symbol_scope_def.drain(..) {
@@ -56066,7 +56259,7 @@ nat_weights: Vec::new(),
 nat_new: BTreeSet::new(),
 nat_old: BTreeSet::new(),
 nat_uprooted: Vec::new(),
-absurd: AbsurdTable::new(),type_decl: TypeDeclTable::new(),arg_decl_node_name: ArgDeclNodeNameTable::new(),arg_decl_node_type: ArgDeclNodeTypeTable::new(),nil_arg_decl_list_node: NilArgDeclListNodeTable::new(),cons_arg_decl_list_node: ConsArgDeclListNodeTable::new(),pred_decl: PredDeclTable::new(),func_decl: FuncDeclTable::new(),ctor_decl: CtorDeclTable::new(),nil_ctor_decl_list_node: NilCtorDeclListNodeTable::new(),cons_ctor_decl_list_node: ConsCtorDeclListNodeTable::new(),enum_decl: EnumDeclTable::new(),nil_term_list_node: NilTermListNodeTable::new(),cons_term_list_node: ConsTermListNodeTable::new(),ambient_type_expr: AmbientTypeExprTable::new(),member_type_expr: MemberTypeExprTable::new(),none_term_node: NoneTermNodeTable::new(),some_term_node: SomeTermNodeTable::new(),var_term_node: VarTermNodeTable::new(),wildcard_term_node: WildcardTermNodeTable::new(),app_term_node: AppTermNodeTable::new(),match_case: MatchCaseTable::new(),nil_match_case_list_node: NilMatchCaseListNodeTable::new(),cons_match_case_list_node: ConsMatchCaseListNodeTable::new(),equal_if_atom_node: EqualIfAtomNodeTable::new(),defined_if_atom_node: DefinedIfAtomNodeTable::new(),pred_if_atom_node: PredIfAtomNodeTable::new(),var_if_atom_node: VarIfAtomNodeTable::new(),equal_then_atom_node: EqualThenAtomNodeTable::new(),defined_then_atom_node: DefinedThenAtomNodeTable::new(),pred_then_atom_node: PredThenAtomNodeTable::new(),if_stmt_node: IfStmtNodeTable::new(),then_stmt_node: ThenStmtNodeTable::new(),branch_stmt_node: BranchStmtNodeTable::new(),match_stmt_node: MatchStmtNodeTable::new(),nil_stmt_list_node: NilStmtListNodeTable::new(),cons_stmt_list_node: ConsStmtListNodeTable::new(),nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),rule_decl: RuleDeclTable::new(),model_decl: ModelDeclTable::new(),decl_node_type: DeclNodeTypeTable::new(),decl_node_pred: DeclNodePredTable::new(),decl_node_func: DeclNodeFuncTable::new(),decl_node_rule: DeclNodeRuleTable::new(),decl_node_enum: DeclNodeEnumTable::new(),decl_node_model: DeclNodeModelTable::new(),nil_decl_list_node: NilDeclListNodeTable::new(),cons_decl_list_node: ConsDeclListNodeTable::new(),decls_module_node: DeclsModuleNodeTable::new(),var_in_scope: VarInScopeTable::new(),scope_extension: ScopeExtensionTable::new(),scope_single_child: ScopeSingleChildTable::new(),scope_extension_siblings: ScopeExtensionSiblingsTable::new(),is_normal_type: IsNormalTypeTable::new(),is_enum_type: IsEnumTypeTable::new(),is_model_type: IsModelTypeTable::new(),is_total_func: IsTotalFuncTable::new(),rel_app: RelAppTable::new(),el_type: ElTypeTable::new(),el_types: ElTypesTable::new(),constrained_el: ConstrainedElTable::new(),constrained_els: ConstrainedElsTable::new(),in_ker: InKerTable::new(),el_in_img: ElInImgTable::new(),rel_tuple_in_img: RelTupleInImgTable::new(),symbol_scope_extension: SymbolScopeExtensionTable::new(),symbol_scope_ancestor: SymbolScopeAncestorTable::new(),element_member_symbol_scope: ElementMemberSymbolScopeTable::new(),defined_symbol: DefinedSymbolTable::new(),accessible_symbol: AccessibleSymbolTable::new(),should_be_symbol: ShouldBeSymbolTable::new(),should_be_symbol_2: ShouldBeSymbol2Table::new(),should_be_symbol_3: ShouldBeSymbol3Table::new(),pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),cfg_edge: CfgEdgeTable::new(),cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),cfg_edge_fork: CfgEdgeForkTable::new(),cfg_edge_join: CfgEdgeJoinTable::new(),before_stmt_structure: BeforeStmtStructureTable::new(),stmt_morphism: StmtMorphismTable::new(),if_morphism: IfMorphismTable::new(),surj_then_morphism: SurjThenMorphismTable::new(),non_surj_then_morphism: NonSurjThenMorphismTable::new(),noop_morphism: NoopMorphismTable::new(),stmt_structure: StmtStructureTable::new(),if_atom_structure: IfAtomStructureTable::new(),then_atom_structure: ThenAtomStructureTable::new(),term_structure: TermStructureTable::new(),terms_structure: TermsStructureTable::new(),opt_term_structure: OptTermStructureTable::new(),type_expr_structure: TypeExprStructureTable::new(),term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),el_is_surjective_ok: ElIsSurjectiveOkTable::new(),should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),is_given_by_ctor: IsGivenByCtorTable::new(),function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),case_pattern_is_variable: CasePatternIsVariableTable::new(),case_pattern_is_wildcard: CasePatternIsWildcardTable::new(),is_pattern_ctor_arg: IsPatternCtorArgTable::new(),are_pattern_ctor_args: ArePatternCtorArgsTable::new(),pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),cases_contain_ctor: CasesContainCtorTable::new(),match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),real_virt_ident: RealVirtIdentTable::new(),virt_real_ident: VirtRealIdentTable::new(),var: VarTable::new(),rule_name: RuleNameTable::new(),module_name: ModuleNameTable::new(),type_decl_node_loc: TypeDeclNodeLocTable::new(),arg_decl_node_loc: ArgDeclNodeLocTable::new(),arg_decl_list_node_loc: ArgDeclListNodeLocTable::new(),pred_decl_node_loc: PredDeclNodeLocTable::new(),func_decl_node_loc: FuncDeclNodeLocTable::new(),ctor_decl_node_loc: CtorDeclNodeLocTable::new(),enum_decl_node_loc: EnumDeclNodeLocTable::new(),model_decl_node_loc: ModelDeclNodeLocTable::new(),term_node_loc: TermNodeLocTable::new(),term_list_node_loc: TermListNodeLocTable::new(),match_case_node_loc: MatchCaseNodeLocTable::new(),opt_term_node_loc: OptTermNodeLocTable::new(),if_atom_node_loc: IfAtomNodeLocTable::new(),then_atom_node_loc: ThenAtomNodeLocTable::new(),stmt_node_loc: StmtNodeLocTable::new(),stmt_list_node_loc: StmtListNodeLocTable::new(),rule_decl_node_loc: RuleDeclNodeLocTable::new(),decl_node_loc: DeclNodeLocTable::new(),decl_list_node_loc: DeclListNodeLocTable::new(),module_node_loc: ModuleNodeLocTable::new(),rule_descendant_rule: RuleDescendantRuleTable::new(),rule_descendant_term: RuleDescendantTermTable::new(),rule_descendant_term_list: RuleDescendantTermListTable::new(),rule_descendant_opt_term: RuleDescendantOptTermTable::new(),rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),rule_descendant_stmt: RuleDescendantStmtTable::new(),rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),rule_descendant_type_expr: RuleDescendantTypeExprTable::new(),entry_scope: EntryScopeTable::new(),exit_scope: ExitScopeTable::new(),ctor_enum: CtorEnumTable::new(),ctors_enum: CtorsEnumTable::new(),cases_discriminee: CasesDiscrimineeTable::new(),case_discriminee: CaseDiscrimineeTable::new(),desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),desugared_case_block: DesugaredCaseBlockTable::new(),desugared_case_block_list: DesugaredCaseBlockListTable::new(),nil_type_list: NilTypeListTable::new(),cons_type_list: ConsTypeListTable::new(),snoc_type_list: SnocTypeListTable::new(),semantic_type: SemanticTypeTable::new(),decl_symbol_scope: DeclSymbolScopeTable::new(),type_name: TypeNameTable::new(),virtual_symbol_scope: VirtualSymbolScopeTable::new(),parent_model_func: ParentModelFuncTable::new(),type_definition_symbol_scope: TypeDefinitionSymbolScopeTable::new(),symbol_scope_model: SymbolScopeModelTable::new(),codomain: CodomainTable::new(),func_rel: FuncRelTable::new(),rel_definition_symbol_scope: RelDefinitionSymbolScopeTable::new(),domain: DomainTable::new(),flat_domain: FlatDomainTable::new(),semantic_arg_types: SemanticArgTypesTable::new(),arg_symbol_scope: ArgSymbolScopeTable::new(),semantic_pred: SemanticPredTable::new(),pred_arity: PredArityTable::new(),semantic_func: SemanticFuncTable::new(),ctor_symbol_scope: CtorSymbolScopeTable::new(),pred_rel: PredRelTable::new(),rel_name: RelNameTable::new(),arity: ArityTable::new(),dom: DomTable::new(),cod: CodTable::new(),flat_arity: FlatArityTable::new(),module_symbol_scope: ModuleSymbolScopeTable::new(),nil_el_list: NilElListTable::new(),cons_el_list: ConsElListTable::new(),snoc_el_list: SnocElListTable::new(),el_structure: ElStructureTable::new(),els_structure: ElsStructureTable::new(),ambient_type: AmbientTypeTable::new(),instantiated_type: InstantiatedTypeTable::new(),underlying_type: UnderlyingTypeTable::new(),nil_element_type_list: NilElementTypeListTable::new(),cons_element_type_list: ConsElementTypeListTable::new(),snoc_element_type_list: SnocElementTypeListTable::new(),ambient_el_type_list: AmbientElTypeListTable::new(),func_app: FuncAppTable::new(),map_el: MapElTable::new(),map_els: MapElsTable::new(),ambient_model_el: AmbientModelElTable::new(),type_symbol: TypeSymbolTable::new(),pred_symbol: PredSymbolTable::new(),func_symbol: FuncSymbolTable::new(),rule_symbol: RuleSymbolTable::new(),enum_symbol: EnumSymbolTable::new(),ctor_symbol: CtorSymbolTable::new(),model_symbol: ModelSymbolTable::new(),symbol_scope_parent: SymbolScopeParentTable::new(),decls_symbol_scope: DeclsSymbolScopeTable::new(),args_symbol_scope: ArgsSymbolScopeTable::new(),ctors_symbol_scope: CtorsSymbolScopeTable::new(),model_member_symbol_scope: ModelMemberSymbolScopeTable::new(),symbol_scope_name: SymbolScopeNameTable::new(),scope_symbols: ScopeSymbolsTable::new(),semantic_el: SemanticElTable::new(),zero: ZeroTable::new(),succ: SuccTable::new(),type_list_len: TypeListLenTable::new(),term_list_len: TermListLenTable::new(),before_rule_structure: BeforeRuleStructureTable::new(),ambient_model_el_structure: AmbientModelElStructureTable::new(),ambient_model_el_morphism: AmbientModelElMorphismTable::new(),if_atom_morphism: IfAtomMorphismTable::new(),then_atom_morphism: ThenAtomMorphismTable::new(),branch_stmt_morphism: BranchStmtMorphismTable::new(),match_stmt_morphism: MatchStmtMorphismTable::new(),semantic_name: SemanticNameTable::new(),semantic_els: SemanticElsTable::new(),wildcard_name: WildcardNameTable::new(),rel_app_parent_model_el: RelAppParentModelElTable::new(),match_case_pattern_ctor: MatchCasePatternCtorTable::new(),cases_determined_enum: CasesDeterminedEnumTable::new(),empty_join_is_dirty: true,
+absurd: AbsurdTable::new(),type_decl: TypeDeclTable::new(),arg_decl_node_name: ArgDeclNodeNameTable::new(),arg_decl_node_type: ArgDeclNodeTypeTable::new(),nil_arg_decl_list_node: NilArgDeclListNodeTable::new(),cons_arg_decl_list_node: ConsArgDeclListNodeTable::new(),pred_decl: PredDeclTable::new(),func_decl: FuncDeclTable::new(),ctor_decl: CtorDeclTable::new(),nil_ctor_decl_list_node: NilCtorDeclListNodeTable::new(),cons_ctor_decl_list_node: ConsCtorDeclListNodeTable::new(),enum_decl: EnumDeclTable::new(),nil_term_list_node: NilTermListNodeTable::new(),cons_term_list_node: ConsTermListNodeTable::new(),ambient_type_expr: AmbientTypeExprTable::new(),member_type_expr: MemberTypeExprTable::new(),hom_type_expr: HomTypeExprTable::new(),none_term_node: NoneTermNodeTable::new(),some_term_node: SomeTermNodeTable::new(),var_term_node: VarTermNodeTable::new(),wildcard_term_node: WildcardTermNodeTable::new(),app_term_node: AppTermNodeTable::new(),match_case: MatchCaseTable::new(),nil_match_case_list_node: NilMatchCaseListNodeTable::new(),cons_match_case_list_node: ConsMatchCaseListNodeTable::new(),equal_if_atom_node: EqualIfAtomNodeTable::new(),defined_if_atom_node: DefinedIfAtomNodeTable::new(),pred_if_atom_node: PredIfAtomNodeTable::new(),var_if_atom_node: VarIfAtomNodeTable::new(),equal_then_atom_node: EqualThenAtomNodeTable::new(),defined_then_atom_node: DefinedThenAtomNodeTable::new(),pred_then_atom_node: PredThenAtomNodeTable::new(),if_stmt_node: IfStmtNodeTable::new(),then_stmt_node: ThenStmtNodeTable::new(),branch_stmt_node: BranchStmtNodeTable::new(),match_stmt_node: MatchStmtNodeTable::new(),nil_stmt_list_node: NilStmtListNodeTable::new(),cons_stmt_list_node: ConsStmtListNodeTable::new(),nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),rule_decl: RuleDeclTable::new(),model_decl: ModelDeclTable::new(),decl_node_type: DeclNodeTypeTable::new(),decl_node_pred: DeclNodePredTable::new(),decl_node_func: DeclNodeFuncTable::new(),decl_node_rule: DeclNodeRuleTable::new(),decl_node_enum: DeclNodeEnumTable::new(),decl_node_model: DeclNodeModelTable::new(),nil_decl_list_node: NilDeclListNodeTable::new(),cons_decl_list_node: ConsDeclListNodeTable::new(),decls_module_node: DeclsModuleNodeTable::new(),var_in_scope: VarInScopeTable::new(),scope_extension: ScopeExtensionTable::new(),scope_single_child: ScopeSingleChildTable::new(),scope_extension_siblings: ScopeExtensionSiblingsTable::new(),is_normal_type: IsNormalTypeTable::new(),is_enum_type: IsEnumTypeTable::new(),is_model_type: IsModelTypeTable::new(),is_total_func: IsTotalFuncTable::new(),rel_app: RelAppTable::new(),el_type: ElTypeTable::new(),el_types: ElTypesTable::new(),constrained_el: ConstrainedElTable::new(),constrained_els: ConstrainedElsTable::new(),in_ker: InKerTable::new(),el_in_img: ElInImgTable::new(),rel_tuple_in_img: RelTupleInImgTable::new(),symbol_scope_extension: SymbolScopeExtensionTable::new(),symbol_scope_ancestor: SymbolScopeAncestorTable::new(),element_member_symbol_scope: ElementMemberSymbolScopeTable::new(),defined_symbol: DefinedSymbolTable::new(),accessible_symbol: AccessibleSymbolTable::new(),should_be_symbol: ShouldBeSymbolTable::new(),should_be_symbol_2: ShouldBeSymbol2Table::new(),should_be_symbol_3: ShouldBeSymbol3Table::new(),pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),cfg_edge: CfgEdgeTable::new(),cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),cfg_edge_fork: CfgEdgeForkTable::new(),cfg_edge_join: CfgEdgeJoinTable::new(),before_stmt_structure: BeforeStmtStructureTable::new(),stmt_morphism: StmtMorphismTable::new(),if_morphism: IfMorphismTable::new(),surj_then_morphism: SurjThenMorphismTable::new(),non_surj_then_morphism: NonSurjThenMorphismTable::new(),noop_morphism: NoopMorphismTable::new(),stmt_structure: StmtStructureTable::new(),if_atom_structure: IfAtomStructureTable::new(),then_atom_structure: ThenAtomStructureTable::new(),term_structure: TermStructureTable::new(),terms_structure: TermsStructureTable::new(),opt_term_structure: OptTermStructureTable::new(),type_expr_structure: TypeExprStructureTable::new(),term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),el_is_surjective_ok: ElIsSurjectiveOkTable::new(),should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),is_given_by_ctor: IsGivenByCtorTable::new(),function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),case_pattern_is_variable: CasePatternIsVariableTable::new(),case_pattern_is_wildcard: CasePatternIsWildcardTable::new(),is_pattern_ctor_arg: IsPatternCtorArgTable::new(),are_pattern_ctor_args: ArePatternCtorArgsTable::new(),pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),cases_contain_ctor: CasesContainCtorTable::new(),match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),real_virt_ident: RealVirtIdentTable::new(),virt_real_ident: VirtRealIdentTable::new(),dom: DomTable::new(),cod: CodTable::new(),var: VarTable::new(),rule_name: RuleNameTable::new(),module_name: ModuleNameTable::new(),type_decl_node_loc: TypeDeclNodeLocTable::new(),arg_decl_node_loc: ArgDeclNodeLocTable::new(),arg_decl_list_node_loc: ArgDeclListNodeLocTable::new(),pred_decl_node_loc: PredDeclNodeLocTable::new(),func_decl_node_loc: FuncDeclNodeLocTable::new(),ctor_decl_node_loc: CtorDeclNodeLocTable::new(),enum_decl_node_loc: EnumDeclNodeLocTable::new(),model_decl_node_loc: ModelDeclNodeLocTable::new(),term_node_loc: TermNodeLocTable::new(),term_list_node_loc: TermListNodeLocTable::new(),match_case_node_loc: MatchCaseNodeLocTable::new(),opt_term_node_loc: OptTermNodeLocTable::new(),if_atom_node_loc: IfAtomNodeLocTable::new(),then_atom_node_loc: ThenAtomNodeLocTable::new(),stmt_node_loc: StmtNodeLocTable::new(),stmt_list_node_loc: StmtListNodeLocTable::new(),rule_decl_node_loc: RuleDeclNodeLocTable::new(),decl_node_loc: DeclNodeLocTable::new(),decl_list_node_loc: DeclListNodeLocTable::new(),module_node_loc: ModuleNodeLocTable::new(),rule_descendant_rule: RuleDescendantRuleTable::new(),rule_descendant_term: RuleDescendantTermTable::new(),rule_descendant_term_list: RuleDescendantTermListTable::new(),rule_descendant_opt_term: RuleDescendantOptTermTable::new(),rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),rule_descendant_stmt: RuleDescendantStmtTable::new(),rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),rule_descendant_type_expr: RuleDescendantTypeExprTable::new(),entry_scope: EntryScopeTable::new(),exit_scope: ExitScopeTable::new(),ctor_enum: CtorEnumTable::new(),ctors_enum: CtorsEnumTable::new(),cases_discriminee: CasesDiscrimineeTable::new(),case_discriminee: CaseDiscrimineeTable::new(),desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),desugared_case_block: DesugaredCaseBlockTable::new(),desugared_case_block_list: DesugaredCaseBlockListTable::new(),nil_type_list: NilTypeListTable::new(),cons_type_list: ConsTypeListTable::new(),snoc_type_list: SnocTypeListTable::new(),semantic_type: SemanticTypeTable::new(),decl_symbol_scope: DeclSymbolScopeTable::new(),type_name: TypeNameTable::new(),virtual_symbol_scope: VirtualSymbolScopeTable::new(),parent_model_func: ParentModelFuncTable::new(),type_definition_symbol_scope: TypeDefinitionSymbolScopeTable::new(),symbol_scope_model: SymbolScopeModelTable::new(),codomain: CodomainTable::new(),func_rel: FuncRelTable::new(),rel_definition_symbol_scope: RelDefinitionSymbolScopeTable::new(),domain: DomainTable::new(),flat_domain: FlatDomainTable::new(),semantic_arg_types: SemanticArgTypesTable::new(),arg_symbol_scope: ArgSymbolScopeTable::new(),semantic_pred: SemanticPredTable::new(),pred_arity: PredArityTable::new(),semantic_func: SemanticFuncTable::new(),ctor_symbol_scope: CtorSymbolScopeTable::new(),pred_rel: PredRelTable::new(),rel_name: RelNameTable::new(),arity: ArityTable::new(),flat_arity: FlatArityTable::new(),module_symbol_scope: ModuleSymbolScopeTable::new(),nil_el_list: NilElListTable::new(),cons_el_list: ConsElListTable::new(),snoc_el_list: SnocElListTable::new(),el_structure: ElStructureTable::new(),els_structure: ElsStructureTable::new(),ambient_type: AmbientTypeTable::new(),instantiated_type: InstantiatedTypeTable::new(),underlying_type: UnderlyingTypeTable::new(),nil_element_type_list: NilElementTypeListTable::new(),cons_element_type_list: ConsElementTypeListTable::new(),snoc_element_type_list: SnocElementTypeListTable::new(),ambient_el_type_list: AmbientElTypeListTable::new(),func_app: FuncAppTable::new(),map_el: MapElTable::new(),map_els: MapElsTable::new(),ambient_model_el: AmbientModelElTable::new(),type_symbol: TypeSymbolTable::new(),pred_symbol: PredSymbolTable::new(),func_symbol: FuncSymbolTable::new(),rule_symbol: RuleSymbolTable::new(),enum_symbol: EnumSymbolTable::new(),ctor_symbol: CtorSymbolTable::new(),model_symbol: ModelSymbolTable::new(),symbol_scope_parent: SymbolScopeParentTable::new(),decls_symbol_scope: DeclsSymbolScopeTable::new(),args_symbol_scope: ArgsSymbolScopeTable::new(),ctors_symbol_scope: CtorsSymbolScopeTable::new(),model_member_symbol_scope: ModelMemberSymbolScopeTable::new(),symbol_scope_name: SymbolScopeNameTable::new(),scope_symbols: ScopeSymbolsTable::new(),semantic_el: SemanticElTable::new(),zero: ZeroTable::new(),succ: SuccTable::new(),type_list_len: TypeListLenTable::new(),term_list_len: TermListLenTable::new(),before_rule_structure: BeforeRuleStructureTable::new(),ambient_model_el_structure: AmbientModelElStructureTable::new(),ambient_model_el_morphism: AmbientModelElMorphismTable::new(),if_atom_morphism: IfAtomMorphismTable::new(),then_atom_morphism: ThenAtomMorphismTable::new(),branch_stmt_morphism: BranchStmtMorphismTable::new(),match_stmt_morphism: MatchStmtMorphismTable::new(),semantic_name: SemanticNameTable::new(),semantic_els: SemanticElsTable::new(),wildcard_name: WildcardNameTable::new(),rel_app_parent_model_el: RelAppParentModelElTable::new(),match_case_pattern_ctor: MatchCasePatternCtorTable::new(),cases_determined_enum: CasesDeterminedEnumTable::new(),empty_join_is_dirty: true,
 }
 }
 
@@ -59684,6 +59877,64 @@ let weight1 = &mut self.ident_weights[tm1.0 as usize];
     }
 }
 
+/// Evaluates `dom(arg0)`.
+#[allow(dead_code)]
+pub fn dom(&self, mut arg0: Morphism) -> Option<Structure> {
+    arg0 = self.root_morphism(arg0);
+    self.dom.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `dom` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_dom(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
+    self.dom.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `dom(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_dom(&mut self, mut tm0: Morphism, mut tm1: Structure) {
+    tm0 = self.morphism_equalities.root(tm0);
+tm1 = self.structure_equalities.root(tm1);
+    if self.dom.insert(Dom(tm0, tm1)) {
+        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(DomTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `cod(arg0)`.
+#[allow(dead_code)]
+pub fn cod(&self, mut arg0: Morphism) -> Option<Structure> {
+    arg0 = self.root_morphism(arg0);
+    self.cod.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `cod` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_cod(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
+    self.cod.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `cod(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_cod(&mut self, mut tm0: Morphism, mut tm1: Structure) {
+    tm0 = self.morphism_equalities.root(tm0);
+tm1 = self.structure_equalities.root(tm1);
+    if self.cod.insert(Cod(tm0, tm1)) {
+        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(CodTable::WEIGHT);
+
+    }
+}
+
 /// Evaluates `var(arg0, arg1)`.
 #[allow(dead_code)]
 pub fn var(&self, mut arg0: Structure, mut arg1: ElName) -> Option<El> {
@@ -61703,64 +61954,6 @@ tm1 = self.type_list_equalities.root(tm1);
 
 let weight1 = &mut self.type_list_weights[tm1.0 as usize];
 *weight1 = weight1.saturating_add(ArityTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `dom(arg0)`.
-#[allow(dead_code)]
-pub fn dom(&self, mut arg0: Morphism) -> Option<Structure> {
-    arg0 = self.root_morphism(arg0);
-    self.dom.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `dom` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_dom(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
-    self.dom.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `dom(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_dom(&mut self, mut tm0: Morphism, mut tm1: Structure) {
-    tm0 = self.morphism_equalities.root(tm0);
-tm1 = self.structure_equalities.root(tm1);
-    if self.dom.insert(Dom(tm0, tm1)) {
-        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(DomTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `cod(arg0)`.
-#[allow(dead_code)]
-pub fn cod(&self, mut arg0: Morphism) -> Option<Structure> {
-    arg0 = self.root_morphism(arg0);
-    self.cod.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `cod` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_cod(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
-    self.cod.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `cod(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_cod(&mut self, mut tm0: Morphism, mut tm1: Structure) {
-    tm0 = self.morphism_equalities.root(tm0);
-tm1 = self.structure_equalities.root(tm1);
-    if self.cod.insert(Cod(tm0, tm1)) {
-        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(CodTable::WEIGHT);
 
     }
 }
@@ -65109,6 +65302,40 @@ let weight1 = &mut self.term_node_weights[tm1.0 as usize];
 
 let weight2 = &mut self.ident_weights[tm2.0 as usize];
 *weight2 = weight2.saturating_add(MemberTypeExprTable::WEIGHT);
+
+    }
+}
+
+/// Returns `true` if `hom_type_expr(arg0, arg1, arg2)` holds.
+#[allow(dead_code)]
+pub fn hom_type_expr(&self, mut arg0: TypeExprNode, mut arg1: TermNode, mut arg2: TermNode) -> bool {
+    arg0 = self.root_type_expr_node(arg0);
+arg1 = self.root_term_node(arg1);
+arg2 = self.root_term_node(arg2);
+    self.hom_type_expr.contains(HomTypeExpr(arg0, arg1, arg2))
+}
+/// Returns an iterator over tuples of elements satisfying the `hom_type_expr` predicate.
+
+#[allow(dead_code)]
+pub fn iter_hom_type_expr(&self) -> impl '_ + Iterator<Item=(TypeExprNode, TermNode, TermNode)> {
+    self.hom_type_expr.iter_all().map(|t| (t.0, t.1, t.2))
+}
+/// Makes `hom_type_expr(tm0, tm1, tm2)` hold.
+
+#[allow(dead_code)]
+pub fn insert_hom_type_expr(&mut self, mut tm0: TypeExprNode, mut tm1: TermNode, mut tm2: TermNode) {
+    tm0 = self.type_expr_node_equalities.root(tm0);
+tm1 = self.term_node_equalities.root(tm1);
+tm2 = self.term_node_equalities.root(tm2);
+    if self.hom_type_expr.insert(HomTypeExpr(tm0, tm1, tm2)) {
+        let weight0 = &mut self.type_expr_node_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(HomTypeExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(HomTypeExprTable::WEIGHT);
+
+let weight2 = &mut self.term_node_weights[tm2.0 as usize];
+*weight2 = weight2.saturating_add(HomTypeExprTable::WEIGHT);
 
     }
 }
@@ -68729,6 +68956,63 @@ let weight1 = &mut self.term_node_weights[t.1.0 as usize];
 
 let weight2 = &mut self.ident_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_add(MemberTypeExprTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.term_node_uprooted.iter().copied() {
+    let ts = self.hom_type_expr.drain_with_element_term_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(HomTypeExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(HomTypeExprTable::WEIGHT);
+
+let weight2 = &mut self.term_node_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_sub(HomTypeExprTable::WEIGHT);
+
+        t.0 = self.root_type_expr_node(t.0);
+t.1 = self.root_term_node(t.1);
+t.2 = self.root_term_node(t.2);
+        if self.hom_type_expr.insert(t) {
+            let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(HomTypeExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(HomTypeExprTable::WEIGHT);
+
+let weight2 = &mut self.term_node_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_add(HomTypeExprTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.type_expr_node_uprooted.iter().copied() {
+    let ts = self.hom_type_expr.drain_with_element_type_expr_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(HomTypeExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(HomTypeExprTable::WEIGHT);
+
+let weight2 = &mut self.term_node_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_sub(HomTypeExprTable::WEIGHT);
+
+        t.0 = self.root_type_expr_node(t.0);
+t.1 = self.root_term_node(t.1);
+t.2 = self.root_term_node(t.2);
+        if self.hom_type_expr.insert(t) {
+            let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(HomTypeExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(HomTypeExprTable::WEIGHT);
+
+let weight2 = &mut self.term_node_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_add(HomTypeExprTable::WEIGHT);
 
         }
     }
@@ -73150,6 +73434,92 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
     }
 }
 
+for el in self.morphism_uprooted.iter().copied() {
+    let ts = self.dom.drain_with_element_morphism(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.dom.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(DomTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.structure_uprooted.iter().copied() {
+    let ts = self.dom.drain_with_element_structure(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.dom.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(DomTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.morphism_uprooted.iter().copied() {
+    let ts = self.cod.drain_with_element_morphism(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.cod.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(CodTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.structure_uprooted.iter().copied() {
+    let ts = self.cod.drain_with_element_structure(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.cod.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(CodTable::WEIGHT);
+
+        }
+    }
+}
+
 for el in self.el_uprooted.iter().copied() {
     let ts = self.var.drain_with_element_el(el);
     for mut t in ts {
@@ -76257,92 +76627,6 @@ let weight1 = &mut self.type_list_weights[t.1.0 as usize];
     }
 }
 
-for el in self.morphism_uprooted.iter().copied() {
-    let ts = self.dom.drain_with_element_morphism(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.dom.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(DomTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.structure_uprooted.iter().copied() {
-    let ts = self.dom.drain_with_element_structure(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.dom.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(DomTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.morphism_uprooted.iter().copied() {
-    let ts = self.cod.drain_with_element_morphism(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.cod.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(CodTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.structure_uprooted.iter().copied() {
-    let ts = self.cod.drain_with_element_structure(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.cod.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(CodTable::WEIGHT);
-
-        }
-    }
-}
-
 for el in self.rel_uprooted.iter().copied() {
     let ts = self.flat_arity.drain_with_element_rel(el);
     for mut t in ts {
@@ -78792,7 +79076,7 @@ self.element_type_list_uprooted.clear();
 self.symbol_kind_uprooted.clear();
 }
 fn is_dirty(&self) -> bool {
-    self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.ambient_type_expr.is_dirty() || self.member_type_expr.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.is_total_func.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.symbol_scope_ancestor.is_dirty() || self.element_member_symbol_scope.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.should_be_symbol_3.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.type_expr_structure.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.rule_descendant_type_expr.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.type_name.is_dirty() || self.virtual_symbol_scope.is_dirty() || self.parent_model_func.is_dirty() || self.type_definition_symbol_scope.is_dirty() || self.symbol_scope_model.is_dirty() || self.codomain.is_dirty() || self.func_rel.is_dirty() || self.rel_definition_symbol_scope.is_dirty() || self.domain.is_dirty() || self.flat_domain.is_dirty() || self.semantic_arg_types.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_pred.is_dirty() || self.pred_arity.is_dirty() || self.semantic_func.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.flat_arity.is_dirty() || self.module_symbol_scope.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.ambient_type.is_dirty() || self.instantiated_type.is_dirty() || self.underlying_type.is_dirty() || self.nil_element_type_list.is_dirty() || self.cons_element_type_list.is_dirty() || self.snoc_element_type_list.is_dirty() || self.ambient_el_type_list.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.ambient_model_el.is_dirty() || self.type_symbol.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.model_symbol.is_dirty() || self.symbol_scope_parent.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.semantic_el.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.ambient_model_el_structure.is_dirty() || self.ambient_model_el_morphism.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.rel_app_parent_model_el.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.type_expr_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.func_new.is_empty() || !self.pred_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.element_type_new.is_empty() || !self.element_type_list_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.type_expr_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.element_type_uprooted.is_empty() || !self.element_type_list_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
+    self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.ambient_type_expr.is_dirty() || self.member_type_expr.is_dirty() || self.hom_type_expr.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.is_total_func.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.symbol_scope_ancestor.is_dirty() || self.element_member_symbol_scope.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.should_be_symbol_3.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.type_expr_structure.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.rule_descendant_type_expr.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.type_name.is_dirty() || self.virtual_symbol_scope.is_dirty() || self.parent_model_func.is_dirty() || self.type_definition_symbol_scope.is_dirty() || self.symbol_scope_model.is_dirty() || self.codomain.is_dirty() || self.func_rel.is_dirty() || self.rel_definition_symbol_scope.is_dirty() || self.domain.is_dirty() || self.flat_domain.is_dirty() || self.semantic_arg_types.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_pred.is_dirty() || self.pred_arity.is_dirty() || self.semantic_func.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.flat_arity.is_dirty() || self.module_symbol_scope.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.ambient_type.is_dirty() || self.instantiated_type.is_dirty() || self.underlying_type.is_dirty() || self.nil_element_type_list.is_dirty() || self.cons_element_type_list.is_dirty() || self.snoc_element_type_list.is_dirty() || self.ambient_el_type_list.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.ambient_model_el.is_dirty() || self.type_symbol.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.model_symbol.is_dirty() || self.symbol_scope_parent.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.semantic_el.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.ambient_model_el_structure.is_dirty() || self.ambient_model_el_morphism.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.rel_app_parent_model_el.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.type_expr_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.func_new.is_empty() || !self.pred_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.element_type_new.is_empty() || !self.element_type_list_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.type_expr_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.element_type_uprooted.is_empty() || !self.element_type_list_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
 }
 
 #[allow(unused_variables)]
@@ -122931,6 +123215,7 @@ self.nil_term_list_node.drop_dirt();
 self.cons_term_list_node.drop_dirt();
 self.ambient_type_expr.drop_dirt();
 self.member_type_expr.drop_dirt();
+self.hom_type_expr.drop_dirt();
 self.none_term_node.drop_dirt();
 self.some_term_node.drop_dirt();
 self.var_term_node.drop_dirt();
@@ -123028,6 +123313,8 @@ self.match_stmt_should_contain_ctor.drop_dirt();
 self.match_stmt_contains_ctor.drop_dirt();
 self.real_virt_ident.drop_dirt();
 self.virt_real_ident.drop_dirt();
+self.dom.drop_dirt();
+self.cod.drop_dirt();
 self.var.drop_dirt();
 self.rule_name.drop_dirt();
 self.module_name.drop_dirt();
@@ -123097,8 +123384,6 @@ self.ctor_symbol_scope.drop_dirt();
 self.pred_rel.drop_dirt();
 self.rel_name.drop_dirt();
 self.arity.drop_dirt();
-self.dom.drop_dirt();
-self.cod.drop_dirt();
 self.flat_arity.drop_dirt();
 self.module_symbol_scope.drop_dirt();
 self.nil_el_list.drop_dirt();
@@ -123551,7 +123836,7 @@ impl fmt::Display for Eqlog {
         .header_intersection('┬')
 )
 .fmt(f)?;
-        self.absurd.fmt(f)?;self.type_decl.fmt(f)?;self.arg_decl_node_name.fmt(f)?;self.arg_decl_node_type.fmt(f)?;self.nil_arg_decl_list_node.fmt(f)?;self.cons_arg_decl_list_node.fmt(f)?;self.pred_decl.fmt(f)?;self.func_decl.fmt(f)?;self.ctor_decl.fmt(f)?;self.nil_ctor_decl_list_node.fmt(f)?;self.cons_ctor_decl_list_node.fmt(f)?;self.enum_decl.fmt(f)?;self.nil_term_list_node.fmt(f)?;self.cons_term_list_node.fmt(f)?;self.ambient_type_expr.fmt(f)?;self.member_type_expr.fmt(f)?;self.none_term_node.fmt(f)?;self.some_term_node.fmt(f)?;self.var_term_node.fmt(f)?;self.wildcard_term_node.fmt(f)?;self.app_term_node.fmt(f)?;self.match_case.fmt(f)?;self.nil_match_case_list_node.fmt(f)?;self.cons_match_case_list_node.fmt(f)?;self.equal_if_atom_node.fmt(f)?;self.defined_if_atom_node.fmt(f)?;self.pred_if_atom_node.fmt(f)?;self.var_if_atom_node.fmt(f)?;self.equal_then_atom_node.fmt(f)?;self.defined_then_atom_node.fmt(f)?;self.pred_then_atom_node.fmt(f)?;self.if_stmt_node.fmt(f)?;self.then_stmt_node.fmt(f)?;self.branch_stmt_node.fmt(f)?;self.match_stmt_node.fmt(f)?;self.nil_stmt_list_node.fmt(f)?;self.cons_stmt_list_node.fmt(f)?;self.nil_stmt_block_list_node.fmt(f)?;self.cons_stmt_block_list_node.fmt(f)?;self.rule_decl.fmt(f)?;self.model_decl.fmt(f)?;self.decl_node_type.fmt(f)?;self.decl_node_pred.fmt(f)?;self.decl_node_func.fmt(f)?;self.decl_node_rule.fmt(f)?;self.decl_node_enum.fmt(f)?;self.decl_node_model.fmt(f)?;self.nil_decl_list_node.fmt(f)?;self.cons_decl_list_node.fmt(f)?;self.decls_module_node.fmt(f)?;self.var_in_scope.fmt(f)?;self.scope_extension.fmt(f)?;self.scope_single_child.fmt(f)?;self.scope_extension_siblings.fmt(f)?;self.is_normal_type.fmt(f)?;self.is_enum_type.fmt(f)?;self.is_model_type.fmt(f)?;self.is_total_func.fmt(f)?;self.rel_app.fmt(f)?;self.el_type.fmt(f)?;self.el_types.fmt(f)?;self.constrained_el.fmt(f)?;self.constrained_els.fmt(f)?;self.in_ker.fmt(f)?;self.el_in_img.fmt(f)?;self.rel_tuple_in_img.fmt(f)?;self.symbol_scope_extension.fmt(f)?;self.symbol_scope_ancestor.fmt(f)?;self.element_member_symbol_scope.fmt(f)?;self.defined_symbol.fmt(f)?;self.accessible_symbol.fmt(f)?;self.should_be_symbol.fmt(f)?;self.should_be_symbol_2.fmt(f)?;self.should_be_symbol_3.fmt(f)?;self.pred_arg_num_should_match.fmt(f)?;self.func_arg_num_should_match.fmt(f)?;self.cfg_edge.fmt(f)?;self.cfg_edge_stmts_stmt.fmt(f)?;self.cfg_edge_stmt_stmts.fmt(f)?;self.cfg_edge_fork.fmt(f)?;self.cfg_edge_join.fmt(f)?;self.before_stmt_structure.fmt(f)?;self.stmt_morphism.fmt(f)?;self.if_morphism.fmt(f)?;self.surj_then_morphism.fmt(f)?;self.non_surj_then_morphism.fmt(f)?;self.noop_morphism.fmt(f)?;self.stmt_structure.fmt(f)?;self.if_atom_structure.fmt(f)?;self.then_atom_structure.fmt(f)?;self.term_structure.fmt(f)?;self.terms_structure.fmt(f)?;self.opt_term_structure.fmt(f)?;self.type_expr_structure.fmt(f)?;self.term_should_be_epic_ok.fmt(f)?;self.terms_should_be_epic_ok.fmt(f)?;self.el_should_be_surjective_ok.fmt(f)?;self.el_is_surjective_ok.fmt(f)?;self.should_be_obtained_by_ctor.fmt(f)?;self.is_given_by_ctor.fmt(f)?;self.function_can_be_made_defined.fmt(f)?;self.case_pattern_is_variable.fmt(f)?;self.case_pattern_is_wildcard.fmt(f)?;self.is_pattern_ctor_arg.fmt(f)?;self.are_pattern_ctor_args.fmt(f)?;self.pattern_ctor_arg_is_app.fmt(f)?;self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;self.cases_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor_of_enum.fmt(f)?;self.match_stmt_should_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor.fmt(f)?;self.real_virt_ident.fmt(f)?;self.virt_real_ident.fmt(f)?;self.var.fmt(f)?;self.rule_name.fmt(f)?;self.module_name.fmt(f)?;self.type_decl_node_loc.fmt(f)?;self.arg_decl_node_loc.fmt(f)?;self.arg_decl_list_node_loc.fmt(f)?;self.pred_decl_node_loc.fmt(f)?;self.func_decl_node_loc.fmt(f)?;self.ctor_decl_node_loc.fmt(f)?;self.enum_decl_node_loc.fmt(f)?;self.model_decl_node_loc.fmt(f)?;self.term_node_loc.fmt(f)?;self.term_list_node_loc.fmt(f)?;self.match_case_node_loc.fmt(f)?;self.opt_term_node_loc.fmt(f)?;self.if_atom_node_loc.fmt(f)?;self.then_atom_node_loc.fmt(f)?;self.stmt_node_loc.fmt(f)?;self.stmt_list_node_loc.fmt(f)?;self.rule_decl_node_loc.fmt(f)?;self.decl_node_loc.fmt(f)?;self.decl_list_node_loc.fmt(f)?;self.module_node_loc.fmt(f)?;self.rule_descendant_rule.fmt(f)?;self.rule_descendant_term.fmt(f)?;self.rule_descendant_term_list.fmt(f)?;self.rule_descendant_opt_term.fmt(f)?;self.rule_descendant_if_atom.fmt(f)?;self.rule_descendant_then_atom.fmt(f)?;self.rule_descendant_match_case.fmt(f)?;self.rule_descendant_match_case_list.fmt(f)?;self.rule_descendant_stmt.fmt(f)?;self.rule_descendant_stmt_list.fmt(f)?;self.rule_descendant_stmt_block_list.fmt(f)?;self.rule_descendant_type_expr.fmt(f)?;self.entry_scope.fmt(f)?;self.exit_scope.fmt(f)?;self.ctor_enum.fmt(f)?;self.ctors_enum.fmt(f)?;self.cases_discriminee.fmt(f)?;self.case_discriminee.fmt(f)?;self.desugared_case_equality_atom.fmt(f)?;self.desugared_case_equality_stmt.fmt(f)?;self.desugared_case_block.fmt(f)?;self.desugared_case_block_list.fmt(f)?;self.nil_type_list.fmt(f)?;self.cons_type_list.fmt(f)?;self.snoc_type_list.fmt(f)?;self.semantic_type.fmt(f)?;self.decl_symbol_scope.fmt(f)?;self.type_name.fmt(f)?;self.virtual_symbol_scope.fmt(f)?;self.parent_model_func.fmt(f)?;self.type_definition_symbol_scope.fmt(f)?;self.symbol_scope_model.fmt(f)?;self.codomain.fmt(f)?;self.func_rel.fmt(f)?;self.rel_definition_symbol_scope.fmt(f)?;self.domain.fmt(f)?;self.flat_domain.fmt(f)?;self.semantic_arg_types.fmt(f)?;self.arg_symbol_scope.fmt(f)?;self.semantic_pred.fmt(f)?;self.pred_arity.fmt(f)?;self.semantic_func.fmt(f)?;self.ctor_symbol_scope.fmt(f)?;self.pred_rel.fmt(f)?;self.rel_name.fmt(f)?;self.arity.fmt(f)?;self.dom.fmt(f)?;self.cod.fmt(f)?;self.flat_arity.fmt(f)?;self.module_symbol_scope.fmt(f)?;self.nil_el_list.fmt(f)?;self.cons_el_list.fmt(f)?;self.snoc_el_list.fmt(f)?;self.el_structure.fmt(f)?;self.els_structure.fmt(f)?;self.ambient_type.fmt(f)?;self.instantiated_type.fmt(f)?;self.underlying_type.fmt(f)?;self.nil_element_type_list.fmt(f)?;self.cons_element_type_list.fmt(f)?;self.snoc_element_type_list.fmt(f)?;self.ambient_el_type_list.fmt(f)?;self.func_app.fmt(f)?;self.map_el.fmt(f)?;self.map_els.fmt(f)?;self.ambient_model_el.fmt(f)?;self.type_symbol.fmt(f)?;self.pred_symbol.fmt(f)?;self.func_symbol.fmt(f)?;self.rule_symbol.fmt(f)?;self.enum_symbol.fmt(f)?;self.ctor_symbol.fmt(f)?;self.model_symbol.fmt(f)?;self.symbol_scope_parent.fmt(f)?;self.decls_symbol_scope.fmt(f)?;self.args_symbol_scope.fmt(f)?;self.ctors_symbol_scope.fmt(f)?;self.model_member_symbol_scope.fmt(f)?;self.symbol_scope_name.fmt(f)?;self.scope_symbols.fmt(f)?;self.semantic_el.fmt(f)?;self.zero.fmt(f)?;self.succ.fmt(f)?;self.type_list_len.fmt(f)?;self.term_list_len.fmt(f)?;self.before_rule_structure.fmt(f)?;self.ambient_model_el_structure.fmt(f)?;self.ambient_model_el_morphism.fmt(f)?;self.if_atom_morphism.fmt(f)?;self.then_atom_morphism.fmt(f)?;self.branch_stmt_morphism.fmt(f)?;self.match_stmt_morphism.fmt(f)?;self.semantic_name.fmt(f)?;self.semantic_els.fmt(f)?;self.wildcard_name.fmt(f)?;self.rel_app_parent_model_el.fmt(f)?;self.match_case_pattern_ctor.fmt(f)?;self.cases_determined_enum.fmt(f)?;
+        self.absurd.fmt(f)?;self.type_decl.fmt(f)?;self.arg_decl_node_name.fmt(f)?;self.arg_decl_node_type.fmt(f)?;self.nil_arg_decl_list_node.fmt(f)?;self.cons_arg_decl_list_node.fmt(f)?;self.pred_decl.fmt(f)?;self.func_decl.fmt(f)?;self.ctor_decl.fmt(f)?;self.nil_ctor_decl_list_node.fmt(f)?;self.cons_ctor_decl_list_node.fmt(f)?;self.enum_decl.fmt(f)?;self.nil_term_list_node.fmt(f)?;self.cons_term_list_node.fmt(f)?;self.ambient_type_expr.fmt(f)?;self.member_type_expr.fmt(f)?;self.hom_type_expr.fmt(f)?;self.none_term_node.fmt(f)?;self.some_term_node.fmt(f)?;self.var_term_node.fmt(f)?;self.wildcard_term_node.fmt(f)?;self.app_term_node.fmt(f)?;self.match_case.fmt(f)?;self.nil_match_case_list_node.fmt(f)?;self.cons_match_case_list_node.fmt(f)?;self.equal_if_atom_node.fmt(f)?;self.defined_if_atom_node.fmt(f)?;self.pred_if_atom_node.fmt(f)?;self.var_if_atom_node.fmt(f)?;self.equal_then_atom_node.fmt(f)?;self.defined_then_atom_node.fmt(f)?;self.pred_then_atom_node.fmt(f)?;self.if_stmt_node.fmt(f)?;self.then_stmt_node.fmt(f)?;self.branch_stmt_node.fmt(f)?;self.match_stmt_node.fmt(f)?;self.nil_stmt_list_node.fmt(f)?;self.cons_stmt_list_node.fmt(f)?;self.nil_stmt_block_list_node.fmt(f)?;self.cons_stmt_block_list_node.fmt(f)?;self.rule_decl.fmt(f)?;self.model_decl.fmt(f)?;self.decl_node_type.fmt(f)?;self.decl_node_pred.fmt(f)?;self.decl_node_func.fmt(f)?;self.decl_node_rule.fmt(f)?;self.decl_node_enum.fmt(f)?;self.decl_node_model.fmt(f)?;self.nil_decl_list_node.fmt(f)?;self.cons_decl_list_node.fmt(f)?;self.decls_module_node.fmt(f)?;self.var_in_scope.fmt(f)?;self.scope_extension.fmt(f)?;self.scope_single_child.fmt(f)?;self.scope_extension_siblings.fmt(f)?;self.is_normal_type.fmt(f)?;self.is_enum_type.fmt(f)?;self.is_model_type.fmt(f)?;self.is_total_func.fmt(f)?;self.rel_app.fmt(f)?;self.el_type.fmt(f)?;self.el_types.fmt(f)?;self.constrained_el.fmt(f)?;self.constrained_els.fmt(f)?;self.in_ker.fmt(f)?;self.el_in_img.fmt(f)?;self.rel_tuple_in_img.fmt(f)?;self.symbol_scope_extension.fmt(f)?;self.symbol_scope_ancestor.fmt(f)?;self.element_member_symbol_scope.fmt(f)?;self.defined_symbol.fmt(f)?;self.accessible_symbol.fmt(f)?;self.should_be_symbol.fmt(f)?;self.should_be_symbol_2.fmt(f)?;self.should_be_symbol_3.fmt(f)?;self.pred_arg_num_should_match.fmt(f)?;self.func_arg_num_should_match.fmt(f)?;self.cfg_edge.fmt(f)?;self.cfg_edge_stmts_stmt.fmt(f)?;self.cfg_edge_stmt_stmts.fmt(f)?;self.cfg_edge_fork.fmt(f)?;self.cfg_edge_join.fmt(f)?;self.before_stmt_structure.fmt(f)?;self.stmt_morphism.fmt(f)?;self.if_morphism.fmt(f)?;self.surj_then_morphism.fmt(f)?;self.non_surj_then_morphism.fmt(f)?;self.noop_morphism.fmt(f)?;self.stmt_structure.fmt(f)?;self.if_atom_structure.fmt(f)?;self.then_atom_structure.fmt(f)?;self.term_structure.fmt(f)?;self.terms_structure.fmt(f)?;self.opt_term_structure.fmt(f)?;self.type_expr_structure.fmt(f)?;self.term_should_be_epic_ok.fmt(f)?;self.terms_should_be_epic_ok.fmt(f)?;self.el_should_be_surjective_ok.fmt(f)?;self.el_is_surjective_ok.fmt(f)?;self.should_be_obtained_by_ctor.fmt(f)?;self.is_given_by_ctor.fmt(f)?;self.function_can_be_made_defined.fmt(f)?;self.case_pattern_is_variable.fmt(f)?;self.case_pattern_is_wildcard.fmt(f)?;self.is_pattern_ctor_arg.fmt(f)?;self.are_pattern_ctor_args.fmt(f)?;self.pattern_ctor_arg_is_app.fmt(f)?;self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;self.cases_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor_of_enum.fmt(f)?;self.match_stmt_should_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor.fmt(f)?;self.real_virt_ident.fmt(f)?;self.virt_real_ident.fmt(f)?;self.dom.fmt(f)?;self.cod.fmt(f)?;self.var.fmt(f)?;self.rule_name.fmt(f)?;self.module_name.fmt(f)?;self.type_decl_node_loc.fmt(f)?;self.arg_decl_node_loc.fmt(f)?;self.arg_decl_list_node_loc.fmt(f)?;self.pred_decl_node_loc.fmt(f)?;self.func_decl_node_loc.fmt(f)?;self.ctor_decl_node_loc.fmt(f)?;self.enum_decl_node_loc.fmt(f)?;self.model_decl_node_loc.fmt(f)?;self.term_node_loc.fmt(f)?;self.term_list_node_loc.fmt(f)?;self.match_case_node_loc.fmt(f)?;self.opt_term_node_loc.fmt(f)?;self.if_atom_node_loc.fmt(f)?;self.then_atom_node_loc.fmt(f)?;self.stmt_node_loc.fmt(f)?;self.stmt_list_node_loc.fmt(f)?;self.rule_decl_node_loc.fmt(f)?;self.decl_node_loc.fmt(f)?;self.decl_list_node_loc.fmt(f)?;self.module_node_loc.fmt(f)?;self.rule_descendant_rule.fmt(f)?;self.rule_descendant_term.fmt(f)?;self.rule_descendant_term_list.fmt(f)?;self.rule_descendant_opt_term.fmt(f)?;self.rule_descendant_if_atom.fmt(f)?;self.rule_descendant_then_atom.fmt(f)?;self.rule_descendant_match_case.fmt(f)?;self.rule_descendant_match_case_list.fmt(f)?;self.rule_descendant_stmt.fmt(f)?;self.rule_descendant_stmt_list.fmt(f)?;self.rule_descendant_stmt_block_list.fmt(f)?;self.rule_descendant_type_expr.fmt(f)?;self.entry_scope.fmt(f)?;self.exit_scope.fmt(f)?;self.ctor_enum.fmt(f)?;self.ctors_enum.fmt(f)?;self.cases_discriminee.fmt(f)?;self.case_discriminee.fmt(f)?;self.desugared_case_equality_atom.fmt(f)?;self.desugared_case_equality_stmt.fmt(f)?;self.desugared_case_block.fmt(f)?;self.desugared_case_block_list.fmt(f)?;self.nil_type_list.fmt(f)?;self.cons_type_list.fmt(f)?;self.snoc_type_list.fmt(f)?;self.semantic_type.fmt(f)?;self.decl_symbol_scope.fmt(f)?;self.type_name.fmt(f)?;self.virtual_symbol_scope.fmt(f)?;self.parent_model_func.fmt(f)?;self.type_definition_symbol_scope.fmt(f)?;self.symbol_scope_model.fmt(f)?;self.codomain.fmt(f)?;self.func_rel.fmt(f)?;self.rel_definition_symbol_scope.fmt(f)?;self.domain.fmt(f)?;self.flat_domain.fmt(f)?;self.semantic_arg_types.fmt(f)?;self.arg_symbol_scope.fmt(f)?;self.semantic_pred.fmt(f)?;self.pred_arity.fmt(f)?;self.semantic_func.fmt(f)?;self.ctor_symbol_scope.fmt(f)?;self.pred_rel.fmt(f)?;self.rel_name.fmt(f)?;self.arity.fmt(f)?;self.flat_arity.fmt(f)?;self.module_symbol_scope.fmt(f)?;self.nil_el_list.fmt(f)?;self.cons_el_list.fmt(f)?;self.snoc_el_list.fmt(f)?;self.el_structure.fmt(f)?;self.els_structure.fmt(f)?;self.ambient_type.fmt(f)?;self.instantiated_type.fmt(f)?;self.underlying_type.fmt(f)?;self.nil_element_type_list.fmt(f)?;self.cons_element_type_list.fmt(f)?;self.snoc_element_type_list.fmt(f)?;self.ambient_el_type_list.fmt(f)?;self.func_app.fmt(f)?;self.map_el.fmt(f)?;self.map_els.fmt(f)?;self.ambient_model_el.fmt(f)?;self.type_symbol.fmt(f)?;self.pred_symbol.fmt(f)?;self.func_symbol.fmt(f)?;self.rule_symbol.fmt(f)?;self.enum_symbol.fmt(f)?;self.ctor_symbol.fmt(f)?;self.model_symbol.fmt(f)?;self.symbol_scope_parent.fmt(f)?;self.decls_symbol_scope.fmt(f)?;self.args_symbol_scope.fmt(f)?;self.ctors_symbol_scope.fmt(f)?;self.model_member_symbol_scope.fmt(f)?;self.symbol_scope_name.fmt(f)?;self.scope_symbols.fmt(f)?;self.semantic_el.fmt(f)?;self.zero.fmt(f)?;self.succ.fmt(f)?;self.type_list_len.fmt(f)?;self.term_list_len.fmt(f)?;self.before_rule_structure.fmt(f)?;self.ambient_model_el_structure.fmt(f)?;self.ambient_model_el_morphism.fmt(f)?;self.if_atom_morphism.fmt(f)?;self.then_atom_morphism.fmt(f)?;self.branch_stmt_morphism.fmt(f)?;self.match_stmt_morphism.fmt(f)?;self.semantic_name.fmt(f)?;self.semantic_els.fmt(f)?;self.wildcard_name.fmt(f)?;self.rel_app_parent_model_el.fmt(f)?;self.match_case_pattern_ctor.fmt(f)?;self.cases_determined_enum.fmt(f)?;
         Ok(())
     }
 }
