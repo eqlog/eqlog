@@ -7,6 +7,8 @@ use std::iter::successors;
 
 use Case::Snake;
 
+use crate::fmt_util::FmtFn;
+
 pub fn iter_els<'a>(structure: Structure, eqlog: &'a Eqlog) -> impl 'a + Iterator<Item = El> {
     eqlog.iter_el_structure().filter_map(move |(el, strct)| {
         if eqlog.are_equal_structure(strct, structure) {
@@ -212,11 +214,44 @@ pub fn display_type<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let ident = eqlog
-        .iter_semantic_type()
-        .find_map(|(_sym_scope, ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident))
-        .expect("semantic_type should be surjective");
-    identifiers.get(&ident).unwrap().as_str()
+    FmtFn(move |f| {
+        let semantic_type_ident = eqlog
+            .iter_semantic_type()
+            .find_map(|(_sym_scope, ident, typ0)| eqlog.are_equal_type(typ0, typ).then_some(ident));
+        if let Some(semantic_type_ident) = semantic_type_ident {
+            write!(
+                f,
+                "{}",
+                identifiers.get(&semantic_type_ident).unwrap().as_str()
+            )?;
+            return Ok(());
+        }
+
+        let model_type = eqlog
+            .iter_hom_type()
+            .find_map(|(model_type, hom_type)| {
+                if eqlog.are_equal_type(hom_type, typ) {
+                    Some(model_type)
+                } else {
+                    None
+                }
+            })
+            .expect("Every Type should be either a semantic_type or a hom_type");
+
+        let model_type_ident = eqlog
+            .iter_semantic_type()
+            .find_map(|(_sym_scope, ident, typ0)| {
+                eqlog.are_equal_type(typ0, model_type).then_some(ident)
+            })
+            .expect("Every model type should be a semantic_type");
+
+        write!(
+            f,
+            "{}Hom",
+            identifiers.get(&model_type_ident).unwrap().as_str()
+        )?;
+        Ok(())
+    })
 }
 
 pub fn display_rel<'a>(
@@ -234,9 +269,28 @@ pub fn display_rel<'a>(
     if let Some(pred) = pred {
         let ident = eqlog
             .iter_semantic_pred()
-            .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
-            .expect("semantic_pred should be surjective");
-        return identifiers.get(&ident).unwrap().clone();
+            .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident));
+        if let Some(ident) = ident {
+            return identifiers.get(&ident).unwrap().clone();
+        }
+
+        // At this point, pred cannot be a semantic pred. Currently the only such predicates are
+        // signature predicates.
+        let model_type = eqlog
+            .iter_hom_type_signature()
+            .find_map(|(model_type, signature_pred)| {
+                if eqlog.are_equal_pred(pred, signature_pred) {
+                    Some(model_type)
+                } else {
+                    None
+                }
+            })
+            .expect("Predicate must be either a user-defined or a hom signature predicate");
+
+        let type_name = display_type(model_type, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        return format!("{type_name}_hom_signature");
     }
 
     let func = eqlog.iter_func_rel().find_map(|(func, rel0)| {

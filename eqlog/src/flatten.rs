@@ -36,10 +36,7 @@ fn assign_el_vars(
         let cod = eqlog.cod(transition).expect("cod should be total");
         for el in iter_els(cod, eqlog) {
             el_vars.entry(el).or_insert_with(|| {
-                let typ = match eqlog.element_type_case(el_type(el, eqlog).unwrap()) {
-                    ElementTypeCase::AmbientType(typ) => typ,
-                    ElementTypeCase::InstantiatedType(_, typ) => typ,
-                };
+                let typ = eqlog.underlying_type(el_type(el, eqlog).unwrap()).unwrap();
                 let base_name: &str = eqlog
                     .iter_semantic_el()
                     .find_map(|(tm, _, el0)| -> Option<TermNode> {
@@ -134,33 +131,38 @@ fn flatten_if_arbitrary(
     {
         let var = el_vars.get(&el).unwrap().clone();
         let age = QueryAge::All;
-        let el_typ = el_type(el, eqlog).unwrap();
+        let el_type = el_type(el, eqlog).unwrap();
 
-        let (parent_var, typ) = match eqlog.element_type_case(el_typ) {
+        let if_stmt = match eqlog.element_type_case(el_type) {
             ElementTypeCase::AmbientType(typ) => {
                 let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
                 let el_struct = eqlog.el_structure(el).unwrap();
-                let model_var = eqlog
-                    .ambient_model_el(typ_def_sym_scope, el_struct)
-                    .map(|model_el| el_vars.get(&model_el).unwrap().clone());
-                (model_var, typ)
-            }
-            ElementTypeCase::InstantiatedType(model_el, typ) => {
-                let var = Some(el_vars.get(&model_el).unwrap().clone());
-                (var, typ)
-            }
-        };
-
-        let if_stmt = match parent_var {
-            None => {
-                let rel = FlatInRel::TypeSet(typ);
-                FlatIfStmt {
-                    rel,
-                    args: vec![var],
-                    age,
+                let model_el = eqlog.ambient_model_el(typ_def_sym_scope, el_struct);
+                match model_el {
+                    Some(model_el) => {
+                        let parent_var = el_vars.get(&model_el).unwrap().clone();
+                        let rel: Rel = eqlog
+                            .func_rel(eqlog.parent_model_func(typ).unwrap())
+                            .unwrap();
+                        let rel = FlatInRel::EqlogRel(rel);
+                        FlatIfStmt {
+                            rel,
+                            args: vec![var, parent_var],
+                            age,
+                        }
+                    }
+                    None => {
+                        let rel = FlatInRel::TypeSet(typ);
+                        FlatIfStmt {
+                            rel,
+                            args: vec![var],
+                            age,
+                        }
+                    }
                 }
             }
-            Some(parent_var) => {
+            ElementTypeCase::InstantiatedType(model_el, typ) => {
+                let parent_var = el_vars.get(&model_el).unwrap().clone();
                 let rel: Rel = eqlog
                     .func_rel(eqlog.parent_model_func(typ).unwrap())
                     .unwrap();
@@ -168,6 +170,20 @@ fn flatten_if_arbitrary(
                 FlatIfStmt {
                     rel,
                     args: vec![var, parent_var],
+                    age,
+                }
+            }
+            ElementTypeCase::HomElType(dom_el, cod_el) => {
+                let typ = eqlog.underlying_type(el_type).unwrap();
+                let dom_var = el_vars.get(&dom_el).unwrap().clone();
+                let cod_var = el_vars.get(&cod_el).unwrap().clone();
+                let rel: Rel = eqlog
+                    .pred_rel(eqlog.hom_type_signature(typ).unwrap())
+                    .unwrap();
+                let rel = FlatInRel::EqlogRel(rel);
+                FlatIfStmt {
+                    rel,
+                    args: vec![var, dom_var, cod_var],
                     age,
                 }
             }
