@@ -263,12 +263,12 @@ TypeDecl: TypeDeclNode = {
 }
 
 ArgDecl: ArgDeclNode = {
-    <l: @L> <name: PairFirst<Id, ":">?> <typ: Id> <r: @R> => {
+    <l: @L> <name: PairFirst<Id, ":">?> <type_expr: TypeExpr> <r: @R> => {
         let arg_decl = eqlog.new_arg_decl_node();
         if let Some(name) = name {
             eqlog.insert_arg_decl_node_name(arg_decl, name);
         }
-        eqlog.insert_arg_decl_node_type(arg_decl, typ);
+        eqlog.insert_arg_decl_node_type(arg_decl, type_expr);
 
         let loc = make_loc(Location(l, r), eqlog, locations);
         eqlog.insert_arg_decl_node_loc(arg_decl, loc);

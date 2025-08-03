@@ -31,7 +31,7 @@ type ArgDeclNode;
 // arg_decl_node_name is optional (but must be unique), arg_decl_node_type is
 // mandatory and must be unique.
 pred arg_decl_node_name(ArgDeclNode, name: Ident);
-pred arg_decl_node_type(ArgDeclNode, typ: Ident);
+pred arg_decl_node_type(ArgDeclNode, typ: TypeExprNode);
 
 type ArgDeclListNode;
 pred nil_arg_decl_list_node(ArgDeclListNode);
@@ -697,6 +697,35 @@ rule parent_model_func_domain {
     then flat_domain(parent_func) = typ_nil;
 }
 
+func semantic_arg_type(arg: ArgDeclNode) -> Type;
+
+pred illegal_member_type_expr_in_arg_decl(arg: ArgDeclNode, type_expr: TypeExprNode);
+
+rule semantic_arg_type_def {
+    if arg_decl_node_type(arg, type_expr);
+    if loc = arg_decl_node_loc(arg);
+    if ss = arg_symbol_scope(arg);
+    branch {
+        if ambient_type_expr(type_expr, ty_ident);
+        if type_kind = TypeSymbol();
+        if enum_kind = EnumSymbol();
+        if model_kind = ModelSymbol();
+        then should_be_symbol_3(ty_ident, type_kind, enum_kind, model_kind, ss, loc);
+        if typ = semantic_type(ss, ty_ident);
+        then semantic_arg_type(arg) = typ;
+    } along {
+        if member_type_expr(type_expr, _, _); 
+        then illegal_member_type_expr_in_arg_decl(arg, type_expr);
+    } along {
+        if mor_type_expr(type_expr, model_ty_ident);
+        if model_kind = ModelSymbol();
+        then should_be_symbol(model_ty_ident, model_kind, ss, loc);
+        if model_ty = semantic_type(ss, model_ty_ident);
+        if mor_ty = mor_type(model_ty);
+        then semantic_arg_type(arg) = mor_ty;
+    }
+}
+
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
 rule semantic_arg_types_nil {
     if nil_arg_decl_list_node(n);
@@ -705,12 +734,10 @@ rule semantic_arg_types_nil {
 }
 rule semantic_arg_types_cons {
     if cons_arg_decl_list_node(arg_decls, head, tail);
-    if ss = arg_symbol_scope(head);
-    if arg_decl_node_type(head, head_type_name);
-    if head_type = semantic_type(ss, head_type_name);
+    if head_type = semantic_arg_type(head);
     if tail_types = semantic_arg_types(tail);
-    then ConsTypeList(head_type, tail_types)!;
-    then semantic_arg_types(arg_decls) = ConsTypeList(head_type, tail_types);
+    then tys := ConsTypeList(head_type, tail_types)!;
+    then semantic_arg_types(arg_decls) = tys;
 }
 
 type Pred;
@@ -1494,15 +1521,6 @@ pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, sco
 // Three kinds of symbols are allowed, with `kind_1` being the typical one.
 pred should_be_symbol_3(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, kind_3: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
 
-rule arg_decl_should_be_type {
-    if arg_decl_node_type(arg_decl, name);
-    if ss = arg_symbol_scope(arg_decl);
-    if type_kind = TypeSymbol();
-    if enum_kind = EnumSymbol();
-    if model_kind = ModelSymbol();
-    if loc = arg_decl_node_loc(arg_decl);
-    then should_be_symbol_3(name, type_kind, enum_kind, model_kind, ss, loc);
-}
 rule result_should_be_type {
     if decl_node_func(decl, func_decl);
     if func_decl(func_decl, _, _, result_type);
