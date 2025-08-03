@@ -228,15 +228,15 @@ pub fn display_type<'a>(
         }
 
         let model_type = eqlog
-            .iter_hom_type()
-            .find_map(|(model_type, hom_type)| {
-                if eqlog.are_equal_type(hom_type, typ) {
+            .iter_mor_type()
+            .find_map(|(model_type, mor_type)| {
+                if eqlog.are_equal_type(mor_type, typ) {
                     Some(model_type)
                 } else {
                     None
                 }
             })
-            .expect("Every Type should be either a semantic_type or a hom_type");
+            .expect("Every Type should be either a semantic_type or a mor_type");
 
         let model_type_ident = eqlog
             .iter_semantic_type()
@@ -269,28 +269,9 @@ pub fn display_rel<'a>(
     if let Some(pred) = pred {
         let ident = eqlog
             .iter_semantic_pred()
-            .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident));
-        if let Some(ident) = ident {
-            return identifiers.get(&ident).unwrap().clone();
-        }
-
-        // At this point, pred cannot be a semantic pred. Currently the only such predicates are
-        // signature predicates.
-        let model_type = eqlog
-            .iter_hom_type_signature()
-            .find_map(|(model_type, signature_pred)| {
-                if eqlog.are_equal_pred(pred, signature_pred) {
-                    Some(model_type)
-                } else {
-                    None
-                }
-            })
-            .expect("Predicate must be either a user-defined or a hom signature predicate");
-
-        let type_name = display_type(model_type, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        return format!("{type_name}_hom_signature");
+            .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
+            .expect("Every predicate should be a semantic predicate");
+        return identifiers.get(&ident).unwrap().clone();
     }
 
     let func = eqlog.iter_func_rel().find_map(|(func, rel0)| {
@@ -302,28 +283,70 @@ pub fn display_rel<'a>(
     });
 
     if let Some(func) = func {
-        let ident = eqlog
+        let semantic_func_ident = eqlog
             .iter_semantic_func()
             .find_map(|(_, ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident));
-        if let Some(ident) = ident {
-            return identifiers.get(&ident).unwrap().clone();
+        if let Some(semantic_func_ident) = semantic_func_ident {
+            return identifiers.get(&semantic_func_ident).unwrap().clone();
         }
 
-        let model_type = eqlog
+        let nested_type = eqlog
             .iter_parent_model_func()
-            .find_map(|(model_type, func0)| {
+            .find_map(|(nested_type, func0)| {
                 if eqlog.are_equal_func(func, func0) {
-                    Some(model_type)
+                    Some(nested_type)
                 } else {
                     None
                 }
             });
-        if let Some(model_type) = model_type {
-            let type_name = display_type(model_type, eqlog, identifiers)
+        if let Some(nested_type) = nested_type {
+            let type_name = display_type(nested_type, eqlog, identifiers)
                 .to_string()
                 .to_case(Snake);
             return format!("{type_name}_parent");
         }
+
+        let domain_for_mor_type: Option<Type> =
+            eqlog
+                .iter_mor_type_dom_func()
+                .find_map(|(mor_type, func0)| {
+                    if eqlog.are_equal_func(func0, func) {
+                        Some(mor_type)
+                    } else {
+                        None
+                    }
+                });
+        let codomain_for_mor_type: Option<Type> =
+            eqlog
+                .iter_mor_type_cod_func()
+                .find_map(|(mor_type, func0)| {
+                    if eqlog.are_equal_func(func0, func) {
+                        Some(mor_type)
+                    } else {
+                        None
+                    }
+                });
+
+        let (mor_type, func_str): (Type, &str) = match (domain_for_mor_type, codomain_for_mor_type)
+        {
+            (Some(_), Some(_)) => {
+                panic!(
+                    "Func should be only one of domain or codomain func for a mor type, not both"
+                )
+            }
+            (Some(mor_type), None) => (mor_type, "dom"),
+            (None, Some(mor_type)) => (mor_type, "cod"),
+            (None, None) => {
+                panic!(
+                    "Func should be either a domain or codomain func for a mor type, not neither"
+                )
+            }
+        };
+
+        let mor_type = display_type(mor_type, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        return format!("{mor_type}_{func_str}");
     }
 
     panic!("Rel should be either pred or func")

@@ -173,20 +173,6 @@ fn flatten_if_arbitrary(
                     age,
                 }
             }
-            ElementTypeCase::HomElType(dom_el, cod_el) => {
-                let typ = eqlog.underlying_type(el_type).unwrap();
-                let dom_var = el_vars.get(&dom_el).unwrap().clone();
-                let cod_var = el_vars.get(&cod_el).unwrap().clone();
-                let rel: Rel = eqlog
-                    .pred_rel(eqlog.hom_type_signature(typ).unwrap())
-                    .unwrap();
-                let rel = FlatInRel::EqlogRel(rel);
-                FlatIfStmt {
-                    rel,
-                    args: vec![var, dom_var, cod_var],
-                    age,
-                }
-            }
         };
         stmts.push(if_stmt);
     }

@@ -1,23 +1,23 @@
 type Obj;
-type Mor;
+type Morphism;
 
-func dom(Mor) -> Obj;
-func cod(Mor) -> Obj;
-func id(Obj) -> Mor;
-func comp(Mor, Mor) -> Mor;
+func dom(Morphism) -> Obj;
+func cod(Morphism) -> Obj;
+func id(Obj) -> Morphism;
+func comp(Morphism, Morphism) -> Morphism;
 
 // Fibre products.
 type FibreProd;
-func left(FibreProd) -> Mor;
-func right(FibreProd) -> Mor;
+func left(FibreProd) -> Morphism;
+func right(FibreProd) -> Morphism;
 func fibre_prod_obj(FibreProd) -> Obj;
-func left_proj(FibreProd) -> Mor;
-func right_proj(FibreProd) -> Mor;
-func tuple(FibreProd, Mor, Mor) -> Mor;
+func left_proj(FibreProd) -> Morphism;
+func right_proj(FibreProd) -> Morphism;
+func tuple(FibreProd, Morphism, Morphism) -> Morphism;
 
 // Every morphism has a domain and a codomain.
 rule {
-    if f: Mor;
+    if f: Morphism;
     then dom(f)!;
     then cod(f)!;
 }

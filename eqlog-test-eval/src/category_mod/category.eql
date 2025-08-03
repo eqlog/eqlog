@@ -1,10 +1,10 @@
 type Obj;
-type Mor;
+type Morphism;
 
-func dom(Mor) -> Obj;
-func cod(Mor) -> Obj;
-func comp(Mor, Mor) -> Mor;
-func id(Obj) -> Mor;
+func dom(Morphism) -> Obj;
+func cod(Morphism) -> Obj;
+func comp(Morphism, Morphism) -> Morphism;
+func id(Obj) -> Morphism;
 
 rule {
     if cod(f) = dom(g);

@@ -2448,7 +2448,7 @@ fn display_theory_impl<'a>(
         }
 
         for typ in eqlog.iter_type() {
-            if eqlog.is_normal_type(typ) || eqlog.is_model_type(typ) || eqlog.is_hom_type(typ) {
+            if eqlog.is_normal_type(typ) || eqlog.is_model_type(typ) || eqlog.is_mor_type(typ) {
                 let new_el_fn = display_new_element_fn(typ, eqlog, identifiers);
                 writeln!(f, "{new_el_fn}")?;
             } else if eqlog.is_enum_type(typ) {

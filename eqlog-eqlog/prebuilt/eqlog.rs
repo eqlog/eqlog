@@ -1,4 +1,4 @@
-// src-digest: EC92F27C6F087E8CDBDFC8BD57888A384A5EB4515B0A45763FDA0A713170107A
+// src-digest: 23200B5F818DFE2ADF3BAA7FFD507E4631CBED0092FE0D77BFE64CCEFB5B0630
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -329,20 +329,20 @@ impl fmt::Display for SymbolScope {
 }
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct Pred(pub u32);
-impl Into<u32> for Pred { fn into(self) -> u32 { self.0 } }
-impl From<u32> for Pred { fn from(x: u32) -> Self { Pred(x) } }
-impl fmt::Display for Pred {
+pub struct Func(pub u32);
+impl Into<u32> for Func { fn into(self) -> u32 { self.0 } }
+impl From<u32> for Func { fn from(x: u32) -> Self { Func(x) } }
+impl fmt::Display for Func {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct Func(pub u32);
-impl Into<u32> for Func { fn into(self) -> u32 { self.0 } }
-impl From<u32> for Func { fn from(x: u32) -> Self { Func(x) } }
-impl fmt::Display for Func {
+pub struct Pred(pub u32);
+impl Into<u32> for Pred { fn into(self) -> u32 { self.0 } }
+impl From<u32> for Pred { fn from(x: u32) -> Self { Pred(x) } }
+impl fmt::Display for Pred {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -479,7 +479,6 @@ SnocElList(ElList, El),
 pub enum ElementTypeCase {
 AmbientType(Type),
 InstantiatedType(El, Type),
-HomElType(El, El),
 
 }
 
@@ -4202,33 +4201,31 @@ impl fmt::Display for MemberTypeExprTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomTypeExpr(pub TypeExprNode, pub TermNode, pub TermNode);
+struct MorTypeExpr(pub TypeExprNode, pub Ident);
 #[derive(Clone, Hash, Debug)]
-struct HomTypeExprTable {
-    index_new_0_1_2: BTreeSet<(u32, u32, u32, )>,
-    index_old_0_1_2: BTreeSet<(u32, u32, u32, )>,
-    index_old_0_2_1: BTreeSet<(u32, u32, u32, )>,
-    element_index_term_node: BTreeMap<TermNode, Vec<HomTypeExpr>>,
-    element_index_type_expr_node: BTreeMap<TypeExprNode, Vec<HomTypeExpr>>,
+struct MorTypeExprTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    element_index_ident: BTreeMap<Ident, Vec<MorTypeExpr>>,
+    element_index_type_expr_node: BTreeMap<TypeExprNode, Vec<MorTypeExpr>>,
 }
-impl HomTypeExprTable {
+impl MorTypeExprTable {
 #[allow(unused)]
-const WEIGHT: usize = 12;
+const WEIGHT: usize = 6;
 fn new() -> Self {
     Self {
-        index_new_0_1_2: BTreeSet::new(),
-        index_old_0_1_2: BTreeSet::new(),
-        index_old_0_2_1: BTreeSet::new(),
-    element_index_term_node: BTreeMap::new(),
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+    element_index_ident: BTreeMap::new(),
     element_index_type_expr_node: BTreeMap::new(),
     }
 }
 #[allow(dead_code)]
-fn insert(&mut self, t: HomTypeExpr) -> bool {
-if self.index_old_0_1_2.contains(&Self::permute_0_1_2(t)) {
+fn insert(&mut self, t: MorTypeExpr) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
 return false;
 }
-if !self.index_new_0_1_2.insert(Self::permute_0_1_2(t)) {
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
 return false;
 }
 
@@ -4240,147 +4237,91 @@ return false;
             };
         
 
-            match self.element_index_term_node.get_mut(&t.1) {
+            match self.element_index_ident.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_term_node.insert(t.1, vec![t]); },
-            };
-        
-
-            match self.element_index_term_node.get_mut(&t.2) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_term_node.insert(t.2, vec![t]); },
+                None => { self.element_index_ident.insert(t.1, vec![t]); },
             };
         
 true
 }
 #[allow(dead_code)]
-fn contains(&self, t: HomTypeExpr) -> bool {
-    self.index_new_0_1_2.contains(&Self::permute_0_1_2(t))
- || self.index_old_0_1_2.contains(&Self::permute_0_1_2(t))
+fn contains(&self, t: MorTypeExpr) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
 
 }
 fn drop_dirt(&mut self) {
-self.index_old_0_1_2.extend(
-    self.index_new_0_1_2
+self.index_old_0_1.extend(
+    self.index_new_0_1
     .iter().copied()
-    .map(|t| Self::permute_0_1_2(Self::permute_inverse_0_1_2(t)))
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
 );
 
-self.index_old_0_2_1.extend(
-    self.index_new_0_1_2
-    .iter().copied()
-    .map(|t| Self::permute_0_2_1(Self::permute_inverse_0_1_2(t)))
-);
-
-self.index_new_0_1_2.clear();
+self.index_new_0_1.clear();
 
 }
 fn is_dirty(&self) -> bool {
-    !self.index_new_0_1_2.is_empty()
+    !self.index_new_0_1.is_empty()
 }
 #[allow(unused)]
-fn permute_0_1_2(t: HomTypeExpr) -> (u32, u32, u32, ) {
-    (t.0.into(), t.1.into(), t.2.into(), )
+fn permute_0_1(t: MorTypeExpr) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
 }
 #[allow(unused)]
-fn permute_inverse_0_1_2(t: (u32, u32, u32, )) -> HomTypeExpr {
-    HomTypeExpr(TypeExprNode::from(t.0), TermNode::from(t.1), TermNode::from(t.2))
-}
-#[allow(unused)]
-fn permute_0_2_1(t: HomTypeExpr) -> (u32, u32, u32, ) {
-    (t.0.into(), t.2.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_2_1(t: (u32, u32, u32, )) -> HomTypeExpr {
-    HomTypeExpr(TypeExprNode::from(t.0), TermNode::from(t.2), TermNode::from(t.1))
+fn permute_inverse_0_1(t: (u32, u32, )) -> MorTypeExpr {
+    MorTypeExpr(TypeExprNode::from(t.0), Ident::from(t.1))
 }
 #[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = HomTypeExpr> {
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = MorTypeExpr> {
 
-self.index_new_0_1_2
+self.index_new_0_1
     .range((
-        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_0_1_2)
+    .map(Self::permute_inverse_0_1)
 }
 #[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = HomTypeExpr> {
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = MorTypeExpr> {
 
-self.index_new_0_1_2
+self.index_new_0_1
     .range((
-        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_0_1_2)
-.chain(self.index_old_0_1_2
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
     .range((
-        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
     ))
     .copied()
-    .map(Self::permute_inverse_0_1_2)
+    .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_old_0(&self, arg0: TypeExprNode) -> impl '_ + Iterator<Item = HomTypeExpr> {
-    let arg0 = arg0.0;
-self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: TypeExprNode, arg1: TermNode) -> impl '_ + Iterator<Item = HomTypeExpr> {
+fn iter_all_0_1(&self, arg0: TypeExprNode, arg1: Ident) -> impl '_ + Iterator<Item = MorTypeExpr> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
-self.index_old_0_1_2
+self.index_new_0_1
     .range((
-        Bound::Included(&(arg0, arg1,  u32::MIN, )),
-        Bound::Included(&(arg0, arg1,  u32::MAX, ))
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
     ))
     .copied()
-    .map(Self::permute_inverse_0_1_2)
-}
-#[allow(dead_code)]
-fn iter_all_0_1_2(&self, arg0: TypeExprNode, arg1: TermNode, arg2: TermNode) -> impl '_ + Iterator<Item = HomTypeExpr> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-    let arg2 = arg2.0;
-self.index_new_0_1_2
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
     .range((
-        Bound::Included(&(arg0, arg1, arg2,  )),
-        Bound::Included(&(arg0, arg1, arg2,  ))
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
     ))
     .copied()
-    .map(Self::permute_inverse_0_1_2)
-.chain(self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0, arg1, arg2,  )),
-        Bound::Included(&(arg0, arg1, arg2,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
+    .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_old_0_2(&self, arg0: TypeExprNode, arg2: TermNode) -> impl '_ + Iterator<Item = HomTypeExpr> {
-    let arg0 = arg0.0;
-    let arg2 = arg2.0;
-self.index_old_0_2_1
-    .range((
-        Bound::Included(&(arg0, arg2,  u32::MIN, )),
-        Bound::Included(&(arg0, arg2,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_2_1)
-}
-#[allow(dead_code)]
-fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<HomTypeExpr> {
-    let mut ts = match self.element_index_term_node.remove(&tm) {
+fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<MorTypeExpr> {
+    let mut ts = match self.element_index_ident.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
     };
@@ -4388,11 +4329,11 @@ fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<HomTypeExpr> {
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
             
             i += 1;
-        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
-            self.index_old_0_2_1.remove(&Self::permute_0_2_1(t));
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -4402,7 +4343,7 @@ fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<HomTypeExpr> {
     ts
 }
 #[allow(dead_code)]
-fn drain_with_element_type_expr_node(&mut self, tm: TypeExprNode) -> Vec<HomTypeExpr> {
+fn drain_with_element_type_expr_node(&mut self, tm: TypeExprNode) -> Vec<MorTypeExpr> {
     let mut ts = match self.element_index_type_expr_node.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
@@ -4411,11 +4352,11 @@ fn drain_with_element_type_expr_node(&mut self, tm: TypeExprNode) -> Vec<HomType
     let mut i = 0;
     while i < ts.len() {
         let t = ts[i];
-        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
             
             i += 1;
-        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
-            self.index_old_0_2_1.remove(&Self::permute_0_2_1(t));
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -4425,11 +4366,11 @@ fn drain_with_element_type_expr_node(&mut self, tm: TypeExprNode) -> Vec<HomType
     ts
 }
 }
-impl fmt::Display for HomTypeExprTable {
+impl fmt::Display for MorTypeExprTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("hom_type_expr"))
+            .with(Header("mor_type_expr"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -13997,14 +13938,14 @@ impl fmt::Display for IsModelTypeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct IsHomType(pub Type);
+struct IsMorType(pub Type);
 #[derive(Clone, Hash, Debug)]
-struct IsHomTypeTable {
+struct IsMorTypeTable {
     index_new_0: BTreeSet<(u32, )>,
     index_old_0: BTreeSet<(u32, )>,
-    element_index_type: BTreeMap<Type, Vec<IsHomType>>,
+    element_index_type: BTreeMap<Type, Vec<IsMorType>>,
 }
-impl IsHomTypeTable {
+impl IsMorTypeTable {
 #[allow(unused)]
 const WEIGHT: usize = 3;
 fn new() -> Self {
@@ -14015,7 +13956,7 @@ fn new() -> Self {
     }
 }
 #[allow(dead_code)]
-fn insert(&mut self, t: IsHomType) -> bool {
+fn insert(&mut self, t: IsMorType) -> bool {
 if self.index_old_0.contains(&Self::permute_0(t)) {
 return false;
 }
@@ -14033,7 +13974,7 @@ return false;
 true
 }
 #[allow(dead_code)]
-fn contains(&self, t: IsHomType) -> bool {
+fn contains(&self, t: IsMorType) -> bool {
     self.index_new_0.contains(&Self::permute_0(t))
  || self.index_old_0.contains(&Self::permute_0(t))
 
@@ -14052,15 +13993,15 @@ fn is_dirty(&self) -> bool {
     !self.index_new_0.is_empty()
 }
 #[allow(unused)]
-fn permute_0(t: IsHomType) -> (u32, ) {
+fn permute_0(t: IsMorType) -> (u32, ) {
     (t.0.into(), )
 }
 #[allow(unused)]
-fn permute_inverse_0(t: (u32, )) -> IsHomType {
-    IsHomType(Type::from(t.0))
+fn permute_inverse_0(t: (u32, )) -> IsMorType {
+    IsMorType(Type::from(t.0))
 }
 #[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = IsHomType> {
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = IsMorType> {
 
 self.index_new_0
     .range((
@@ -14071,7 +14012,7 @@ self.index_new_0
     .map(Self::permute_inverse_0)
 }
 #[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = IsHomType> {
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = IsMorType> {
 
 self.index_new_0
     .range((
@@ -14089,7 +14030,7 @@ self.index_new_0
     .map(Self::permute_inverse_0)
 )}
 #[allow(dead_code)]
-fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = IsHomType> {
+fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = IsMorType> {
     let arg0 = arg0.0;
 self.index_new_0
     .range((
@@ -14107,7 +14048,7 @@ self.index_new_0
     .map(Self::permute_inverse_0)
 )}
 #[allow(dead_code)]
-fn drain_with_element_type(&mut self, tm: Type) -> Vec<IsHomType> {
+fn drain_with_element_type(&mut self, tm: Type) -> Vec<IsMorType> {
     let mut ts = match self.element_index_type.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
@@ -14130,11 +14071,11 @@ fn drain_with_element_type(&mut self, tm: Type) -> Vec<IsHomType> {
     ts
 }
 }
-impl fmt::Display for IsHomTypeTable {
+impl fmt::Display for IsMorTypeTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("is_hom_type"))
+            .with(Header("is_mor_type"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -24971,479 +24912,6 @@ impl fmt::Display for VirtRealIdentTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Dom(pub Morphism, pub Structure);
-#[derive(Clone, Hash, Debug)]
-struct DomTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_morphism: BTreeMap<Morphism, Vec<Dom>>,
-    element_index_structure: BTreeMap<Structure, Vec<Dom>>,
-}
-impl DomTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_morphism: BTreeMap::new(),
-    element_index_structure: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: Dom) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_morphism.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_morphism.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_structure.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_structure.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: Dom) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: Dom) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> Dom {
-    Dom(Morphism::from(t.0), Structure::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: Dom) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> Dom {
-    Dom(Morphism::from(t.1), Structure::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = Dom> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = Dom> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Dom> {
-    let mut ts = match self.element_index_morphism.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Dom> {
-    let mut ts = match self.element_index_structure.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for DomTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("dom"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Cod(pub Morphism, pub Structure);
-#[derive(Clone, Hash, Debug)]
-struct CodTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_morphism: BTreeMap<Morphism, Vec<Cod>>,
-    element_index_structure: BTreeMap<Structure, Vec<Cod>>,
-}
-impl CodTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_morphism: BTreeMap::new(),
-    element_index_structure: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: Cod) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_morphism.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_morphism.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_structure.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_structure.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: Cod) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: Cod) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> Cod {
-    Cod(Morphism::from(t.0), Structure::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: Cod) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> Cod {
-    Cod(Morphism::from(t.1), Structure::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = Cod> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = Cod> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Cod> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Cod> {
-    let mut ts = match self.element_index_morphism.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Cod> {
-    let mut ts = match self.element_index_structure.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for CodTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("cod"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct Var(pub Structure, pub ElName, pub El);
 #[derive(Clone, Hash, Debug)]
 struct VarTable {
@@ -35577,19 +35045,6 @@ self.index_new_0_1_2
     .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
-fn iter_old_0_1_2(&self, arg0: Type, arg1: TypeList, arg2: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-    let arg2 = arg2.0;
-self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0, arg1, arg2,  )),
-        Bound::Included(&(arg0, arg1, arg2,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-}
-#[allow(dead_code)]
 fn iter_all_0_1_2(&self, arg0: Type, arg1: TypeList, arg2: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
@@ -35609,18 +35064,6 @@ self.index_new_2_0_1
     .copied()
     .map(Self::permute_inverse_0_1_2)
 )}
-#[allow(dead_code)]
-fn iter_old_0_2(&self, arg0: Type, arg2: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
-    let arg0 = arg0.0;
-    let arg2 = arg2.0;
-self.index_old_2_0_1
-    .range((
-        Bound::Included(&(arg2, arg0,  u32::MIN, )),
-        Bound::Included(&(arg2, arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_2_0_1)
-}
 #[allow(dead_code)]
 fn iter_old_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = ConsTypeList> {
     let arg1 = arg1.0;
@@ -36641,25 +36084,27 @@ impl fmt::Display for DeclSymbolScopeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomType(pub Type, pub Type);
+struct MorType(pub Type, pub Type);
 #[derive(Clone, Hash, Debug)]
-struct HomTypeTable {
+struct MorTypeTable {
     index_new_0_1: BTreeSet<(u32, u32, )>,
     index_old_0_1: BTreeSet<(u32, u32, )>,
-    element_index_type: BTreeMap<Type, Vec<HomType>>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_type: BTreeMap<Type, Vec<MorType>>,
 }
-impl HomTypeTable {
+impl MorTypeTable {
 #[allow(unused)]
-const WEIGHT: usize = 6;
+const WEIGHT: usize = 8;
 fn new() -> Self {
     Self {
         index_new_0_1: BTreeSet::new(),
         index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
     element_index_type: BTreeMap::new(),
     }
 }
 #[allow(dead_code)]
-fn insert(&mut self, t: HomType) -> bool {
+fn insert(&mut self, t: MorType) -> bool {
 if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
 return false;
 }
@@ -36683,196 +36128,7 @@ return false;
 true
 }
 #[allow(dead_code)]
-fn contains(&self, t: HomType) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: HomType) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> HomType {
-    HomType(Type::from(t.0), Type::from(t.1))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = HomType> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = HomType> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = HomType> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: Type, arg1: Type) -> impl '_ + Iterator<Item = HomType> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Type, arg1: Type) -> impl '_ + Iterator<Item = HomType> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn drain_with_element_type(&mut self, tm: Type) -> Vec<HomType> {
-    let mut ts = match self.element_index_type.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for HomTypeTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("hom_type"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomTypeSignature(pub Type, pub Pred);
-#[derive(Clone, Hash, Debug)]
-struct HomTypeSignatureTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_pred: BTreeMap<Pred, Vec<HomTypeSignature>>,
-    element_index_type: BTreeMap<Type, Vec<HomTypeSignature>>,
-}
-impl HomTypeSignatureTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_pred: BTreeMap::new(),
-    element_index_type: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: HomTypeSignature) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_type.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_type.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_pred.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_pred.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: HomTypeSignature) -> bool {
+fn contains(&self, t: MorType) -> bool {
     self.index_new_0_1.contains(&Self::permute_0_1(t))
  || self.index_old_0_1.contains(&Self::permute_0_1(t))
 
@@ -36897,23 +36153,23 @@ fn is_dirty(&self) -> bool {
     !self.index_new_0_1.is_empty()
 }
 #[allow(unused)]
-fn permute_0_1(t: HomTypeSignature) -> (u32, u32, ) {
+fn permute_0_1(t: MorType) -> (u32, u32, ) {
     (t.0.into(), t.1.into(), )
 }
 #[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> HomTypeSignature {
-    HomTypeSignature(Type::from(t.0), Pred::from(t.1))
+fn permute_inverse_0_1(t: (u32, u32, )) -> MorType {
+    MorType(Type::from(t.0), Type::from(t.1))
 }
 #[allow(unused)]
-fn permute_1_0(t: HomTypeSignature) -> (u32, u32, ) {
+fn permute_1_0(t: MorType) -> (u32, u32, ) {
     (t.1.into(), t.0.into(), )
 }
 #[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> HomTypeSignature {
-    HomTypeSignature(Type::from(t.1), Pred::from(t.0))
+fn permute_inverse_1_0(t: (u32, u32, )) -> MorType {
+    MorType(Type::from(t.1), Type::from(t.0))
 }
 #[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = HomTypeSignature> {
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = MorType> {
 
 self.index_new_0_1
     .range((
@@ -36924,7 +36180,7 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 }
 #[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = HomTypeSignature> {
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = MorType> {
 
 self.index_new_0_1
     .range((
@@ -36942,7 +36198,7 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_old_0(&self, arg0: Type) -> impl '_ + Iterator<Item = HomTypeSignature> {
+fn iter_old_0(&self, arg0: Type) -> impl '_ + Iterator<Item = MorType> {
     let arg0 = arg0.0;
 self.index_old_0_1
     .range((
@@ -36953,7 +36209,7 @@ self.index_old_0_1
     .map(Self::permute_inverse_0_1)
 }
 #[allow(dead_code)]
-fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = HomTypeSignature> {
+fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = MorType> {
     let arg0 = arg0.0;
 self.index_new_0_1
     .range((
@@ -36971,7 +36227,19 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Type, arg1: Pred) -> impl '_ + Iterator<Item = HomTypeSignature> {
+fn iter_old_0_1(&self, arg0: Type, arg1: Type) -> impl '_ + Iterator<Item = MorType> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Type, arg1: Type) -> impl '_ + Iterator<Item = MorType> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
 self.index_new_0_1
@@ -36990,7 +36258,7 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_old_1(&self, arg1: Pred) -> impl '_ + Iterator<Item = HomTypeSignature> {
+fn iter_old_1(&self, arg1: Type) -> impl '_ + Iterator<Item = MorType> {
     let arg1 = arg1.0;
 self.index_old_1_0
     .range((
@@ -37001,30 +36269,7 @@ self.index_old_1_0
     .map(Self::permute_inverse_1_0)
 }
 #[allow(dead_code)]
-fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<HomTypeSignature> {
-    let mut ts = match self.element_index_pred.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_type(&mut self, tm: Type) -> Vec<HomTypeSignature> {
+fn drain_with_element_type(&mut self, tm: Type) -> Vec<MorType> {
     let mut ts = match self.element_index_type.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
@@ -37047,11 +36292,11 @@ fn drain_with_element_type(&mut self, tm: Type) -> Vec<HomTypeSignature> {
     ts
 }
 }
-impl fmt::Display for HomTypeSignatureTable {
+impl fmt::Display for MorTypeTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("hom_type_signature"))
+            .with(Header("mor_type"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -37062,17 +36307,736 @@ impl fmt::Display for HomTypeSignatureTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct PredArity(pub Pred, pub TypeList);
+struct MorTypeDomFunc(pub Type, pub Func);
 #[derive(Clone, Hash, Debug)]
-struct PredArityTable {
+struct MorTypeDomFuncTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_func: BTreeMap<Func, Vec<MorTypeDomFunc>>,
+    element_index_type: BTreeMap<Type, Vec<MorTypeDomFunc>>,
+}
+impl MorTypeDomFuncTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_func: BTreeMap::new(),
+    element_index_type: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: MorTypeDomFunc) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_type.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_func.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_func.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: MorTypeDomFunc) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: MorTypeDomFunc) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> MorTypeDomFunc {
+    MorTypeDomFunc(Type::from(t.0), Func::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: MorTypeDomFunc) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> MorTypeDomFunc {
+    MorTypeDomFunc(Type::from(t.1), Func::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = MorTypeDomFunc> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = MorTypeDomFunc> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Type) -> impl '_ + Iterator<Item = MorTypeDomFunc> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = MorTypeDomFunc> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Type, arg1: Func) -> impl '_ + Iterator<Item = MorTypeDomFunc> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Func) -> impl '_ + Iterator<Item = MorTypeDomFunc> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_func(&mut self, tm: Func) -> Vec<MorTypeDomFunc> {
+    let mut ts = match self.element_index_func.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type(&mut self, tm: Type) -> Vec<MorTypeDomFunc> {
+    let mut ts = match self.element_index_type.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for MorTypeDomFuncTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("mor_type_dom_func"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct MorTypeCodFunc(pub Type, pub Func);
+#[derive(Clone, Hash, Debug)]
+struct MorTypeCodFuncTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_func: BTreeMap<Func, Vec<MorTypeCodFunc>>,
+    element_index_type: BTreeMap<Type, Vec<MorTypeCodFunc>>,
+}
+impl MorTypeCodFuncTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_func: BTreeMap::new(),
+    element_index_type: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: MorTypeCodFunc) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_type.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_func.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_func.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: MorTypeCodFunc) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: MorTypeCodFunc) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> MorTypeCodFunc {
+    MorTypeCodFunc(Type::from(t.0), Func::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: MorTypeCodFunc) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> MorTypeCodFunc {
+    MorTypeCodFunc(Type::from(t.1), Func::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+
+self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Type) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Type, arg1: Func) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Func) -> impl '_ + Iterator<Item = MorTypeCodFunc> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_func(&mut self, tm: Func) -> Vec<MorTypeCodFunc> {
+    let mut ts = match self.element_index_func.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type(&mut self, tm: Type) -> Vec<MorTypeCodFunc> {
+    let mut ts = match self.element_index_type.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for MorTypeCodFuncTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("mor_type_cod_func"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct TypeDefinitionSymbolScope(pub Type, pub SymbolScope);
+#[derive(Clone, Hash, Debug)]
+struct TypeDefinitionSymbolScopeTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_symbol_scope: BTreeMap<SymbolScope, Vec<TypeDefinitionSymbolScope>>,
+    element_index_type: BTreeMap<Type, Vec<TypeDefinitionSymbolScope>>,
+}
+impl TypeDefinitionSymbolScopeTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_symbol_scope: BTreeMap::new(),
+    element_index_type: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: TypeDefinitionSymbolScope) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_type.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_symbol_scope.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_symbol_scope.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: TypeDefinitionSymbolScope) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: TypeDefinitionSymbolScope) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> TypeDefinitionSymbolScope {
+    TypeDefinitionSymbolScope(Type::from(t.0), SymbolScope::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: TypeDefinitionSymbolScope) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> TypeDefinitionSymbolScope {
+    TypeDefinitionSymbolScope(Type::from(t.1), SymbolScope::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Type) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Type, arg1: SymbolScope) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: SymbolScope) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<TypeDefinitionSymbolScope> {
+    let mut ts = match self.element_index_symbol_scope.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type(&mut self, tm: Type) -> Vec<TypeDefinitionSymbolScope> {
+    let mut ts = match self.element_index_type.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for TypeDefinitionSymbolScopeTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("type_definition_symbol_scope"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct FuncRel(pub Func, pub Rel);
+#[derive(Clone, Hash, Debug)]
+struct FuncRelTable {
     index_new_0_1: BTreeSet<(u32, u32, )>,
     index_old_0_1: BTreeSet<(u32, u32, )>,
     index_new_1_0: BTreeSet<(u32, u32, )>,
     index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_pred: BTreeMap<Pred, Vec<PredArity>>,
-    element_index_type_list: BTreeMap<TypeList, Vec<PredArity>>,
+    element_index_func: BTreeMap<Func, Vec<FuncRel>>,
+    element_index_rel: BTreeMap<Rel, Vec<FuncRel>>,
 }
-impl PredArityTable {
+impl FuncRelTable {
 #[allow(unused)]
 const WEIGHT: usize = 10;
 fn new() -> Self {
@@ -37081,12 +37045,12 @@ fn new() -> Self {
         index_old_0_1: BTreeSet::new(),
         index_new_1_0: BTreeSet::new(),
         index_old_1_0: BTreeSet::new(),
-    element_index_pred: BTreeMap::new(),
-    element_index_type_list: BTreeMap::new(),
+    element_index_func: BTreeMap::new(),
+    element_index_rel: BTreeMap::new(),
     }
 }
 #[allow(dead_code)]
-fn insert(&mut self, t: PredArity) -> bool {
+fn insert(&mut self, t: FuncRel) -> bool {
 if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
 return false;
 }
@@ -37096,21 +37060,21 @@ return false;
 
 self.index_new_1_0.insert(Self::permute_1_0(t));
 
-            match self.element_index_pred.get_mut(&t.0) {
+            match self.element_index_func.get_mut(&t.0) {
                 Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_pred.insert(t.0, vec![t]); },
+                None => { self.element_index_func.insert(t.0, vec![t]); },
             };
         
 
-            match self.element_index_type_list.get_mut(&t.1) {
+            match self.element_index_rel.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_type_list.insert(t.1, vec![t]); },
+                None => { self.element_index_rel.insert(t.1, vec![t]); },
             };
         
 true
 }
 #[allow(dead_code)]
-fn contains(&self, t: PredArity) -> bool {
+fn contains(&self, t: FuncRel) -> bool {
     self.index_new_0_1.contains(&Self::permute_0_1(t))
  || self.index_old_0_1.contains(&Self::permute_0_1(t))
 
@@ -37137,23 +37101,23 @@ fn is_dirty(&self) -> bool {
     !self.index_new_0_1.is_empty()
 }
 #[allow(unused)]
-fn permute_0_1(t: PredArity) -> (u32, u32, ) {
+fn permute_0_1(t: FuncRel) -> (u32, u32, ) {
     (t.0.into(), t.1.into(), )
 }
 #[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> PredArity {
-    PredArity(Pred::from(t.0), TypeList::from(t.1))
+fn permute_inverse_0_1(t: (u32, u32, )) -> FuncRel {
+    FuncRel(Func::from(t.0), Rel::from(t.1))
 }
 #[allow(unused)]
-fn permute_1_0(t: PredArity) -> (u32, u32, ) {
+fn permute_1_0(t: FuncRel) -> (u32, u32, ) {
     (t.1.into(), t.0.into(), )
 }
 #[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> PredArity {
-    PredArity(Pred::from(t.1), TypeList::from(t.0))
+fn permute_inverse_1_0(t: (u32, u32, )) -> FuncRel {
+    FuncRel(Func::from(t.1), Rel::from(t.0))
 }
 #[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = PredArity> {
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = FuncRel> {
 
 self.index_new_0_1
     .range((
@@ -37164,7 +37128,18 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 }
 #[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = PredArity> {
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = FuncRel> {
+
+self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = FuncRel> {
 
 self.index_new_0_1
     .range((
@@ -37182,7 +37157,7 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_old_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredArity> {
+fn iter_old_0(&self, arg0: Func) -> impl '_ + Iterator<Item = FuncRel> {
     let arg0 = arg0.0;
 self.index_old_0_1
     .range((
@@ -37193,7 +37168,7 @@ self.index_old_0_1
     .map(Self::permute_inverse_0_1)
 }
 #[allow(dead_code)]
-fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredArity> {
+fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = FuncRel> {
     let arg0 = arg0.0;
 self.index_new_0_1
     .range((
@@ -37211,7 +37186,7 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Pred, arg1: TypeList) -> impl '_ + Iterator<Item = PredArity> {
+fn iter_all_0_1(&self, arg0: Func, arg1: Rel) -> impl '_ + Iterator<Item = FuncRel> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
 self.index_new_0_1
@@ -37230,7 +37205,18 @@ self.index_new_0_1
     .map(Self::permute_inverse_0_1)
 )}
 #[allow(dead_code)]
-fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = PredArity> {
+fn iter_old_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = FuncRel> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn iter_all_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = FuncRel> {
     let arg1 = arg1.0;
 self.index_new_1_0
     .range((
@@ -37248,8 +37234,8 @@ self.index_new_1_0
     .map(Self::permute_inverse_1_0)
 )}
 #[allow(dead_code)]
-fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<PredArity> {
-    let mut ts = match self.element_index_pred.remove(&tm) {
+fn drain_with_element_func(&mut self, tm: Func) -> Vec<FuncRel> {
+    let mut ts = match self.element_index_func.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
     };
@@ -37271,7 +37257,514 @@ fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<PredArity> {
     ts
 }
 #[allow(dead_code)]
-fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<PredArity> {
+fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<FuncRel> {
+    let mut ts = match self.element_index_rel.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for FuncRelTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("FuncRel"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct RelDefinitionSymbolScope(pub Rel, pub SymbolScope);
+#[derive(Clone, Hash, Debug)]
+struct RelDefinitionSymbolScopeTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_rel: BTreeMap<Rel, Vec<RelDefinitionSymbolScope>>,
+    element_index_symbol_scope: BTreeMap<SymbolScope, Vec<RelDefinitionSymbolScope>>,
+}
+impl RelDefinitionSymbolScopeTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_rel: BTreeMap::new(),
+    element_index_symbol_scope: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: RelDefinitionSymbolScope) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_rel.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_rel.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_symbol_scope.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_symbol_scope.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: RelDefinitionSymbolScope) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: RelDefinitionSymbolScope) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> RelDefinitionSymbolScope {
+    RelDefinitionSymbolScope(Rel::from(t.0), SymbolScope::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: RelDefinitionSymbolScope) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> RelDefinitionSymbolScope {
+    RelDefinitionSymbolScope(Rel::from(t.1), SymbolScope::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Rel) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Rel) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0_1(&self, arg0: Rel, arg1: SymbolScope) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Rel, arg1: SymbolScope) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: SymbolScope) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<RelDefinitionSymbolScope> {
+    let mut ts = match self.element_index_rel.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<RelDefinitionSymbolScope> {
+    let mut ts = match self.element_index_symbol_scope.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for RelDefinitionSymbolScopeTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("rel_definition_symbol_scope"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct Domain(pub Func, pub TypeList);
+#[derive(Clone, Hash, Debug)]
+struct DomainTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_new_1_0: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_func: BTreeMap<Func, Vec<Domain>>,
+    element_index_type_list: BTreeMap<TypeList, Vec<Domain>>,
+}
+impl DomainTable {
+#[allow(unused)]
+const WEIGHT: usize = 10;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_new_1_0: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_func: BTreeMap::new(),
+    element_index_type_list: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: Domain) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+self.index_new_1_0.insert(Self::permute_1_0(t));
+
+            match self.element_index_func.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_func.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_type_list.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type_list.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: Domain) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+self.index_new_1_0.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: Domain) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> Domain {
+    Domain(Func::from(t.0), TypeList::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: Domain) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> Domain {
+    Domain(Func::from(t.1), TypeList::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = Domain> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = Domain> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Func) -> impl '_ + Iterator<Item = Domain> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = Domain> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0_1(&self, arg0: Func, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Func, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
+    let arg1 = arg1.0;
+self.index_new_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+.chain(self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+)}
+#[allow(dead_code)]
+fn drain_with_element_func(&mut self, tm: Func) -> Vec<Domain> {
+    let mut ts = match self.element_index_func.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<Domain> {
     let mut ts = match self.element_index_type_list.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
@@ -37294,11 +37787,258 @@ fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<PredArity> {
     ts
 }
 }
-impl fmt::Display for PredArityTable {
+impl fmt::Display for DomainTable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
-            .with(Header("pred_arity"))
+            .with(Header("domain"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct Codomain(pub Func, pub Type);
+#[derive(Clone, Hash, Debug)]
+struct CodomainTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_new_1_0: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_func: BTreeMap<Func, Vec<Codomain>>,
+    element_index_type: BTreeMap<Type, Vec<Codomain>>,
+}
+impl CodomainTable {
+#[allow(unused)]
+const WEIGHT: usize = 10;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_new_1_0: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_func: BTreeMap::new(),
+    element_index_type: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: Codomain) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+self.index_new_1_0.insert(Self::permute_1_0(t));
+
+            match self.element_index_func.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_func.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_type.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: Codomain) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+self.index_new_1_0.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: Codomain) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> Codomain {
+    Codomain(Func::from(t.0), Type::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: Codomain) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> Codomain {
+    Codomain(Func::from(t.1), Type::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = Codomain> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = Codomain> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = Codomain> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Func, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
+    let arg1 = arg1.0;
+self.index_new_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+.chain(self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+)}
+#[allow(dead_code)]
+fn drain_with_element_func(&mut self, tm: Func) -> Vec<Codomain> {
+    let mut ts = match self.element_index_func.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type(&mut self, tm: Type) -> Vec<Codomain> {
+    let mut ts = match self.element_index_type.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for CodomainTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("codomain"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -37924,242 +38664,6 @@ impl fmt::Display for ParentModelFuncTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct TypeDefinitionSymbolScope(pub Type, pub SymbolScope);
-#[derive(Clone, Hash, Debug)]
-struct TypeDefinitionSymbolScopeTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_symbol_scope: BTreeMap<SymbolScope, Vec<TypeDefinitionSymbolScope>>,
-    element_index_type: BTreeMap<Type, Vec<TypeDefinitionSymbolScope>>,
-}
-impl TypeDefinitionSymbolScopeTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_symbol_scope: BTreeMap::new(),
-    element_index_type: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: TypeDefinitionSymbolScope) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_type.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_type.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_symbol_scope.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_symbol_scope.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: TypeDefinitionSymbolScope) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: TypeDefinitionSymbolScope) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> TypeDefinitionSymbolScope {
-    TypeDefinitionSymbolScope(Type::from(t.0), SymbolScope::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: TypeDefinitionSymbolScope) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> TypeDefinitionSymbolScope {
-    TypeDefinitionSymbolScope(Type::from(t.1), SymbolScope::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Type) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Type) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Type, arg1: SymbolScope) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: SymbolScope) -> impl '_ + Iterator<Item = TypeDefinitionSymbolScope> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<TypeDefinitionSymbolScope> {
-    let mut ts = match self.element_index_symbol_scope.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_type(&mut self, tm: Type) -> Vec<TypeDefinitionSymbolScope> {
-    let mut ts = match self.element_index_type.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for TypeDefinitionSymbolScopeTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("type_definition_symbol_scope"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SymbolScopeModel(pub SymbolScope, pub Type);
 #[derive(Clone, Hash, Debug)]
 struct SymbolScopeModelTable {
@@ -38386,1287 +38890,6 @@ impl fmt::Display for SymbolScopeModelTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("symbol_scope_model"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Codomain(pub Func, pub Type);
-#[derive(Clone, Hash, Debug)]
-struct CodomainTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_new_1_0: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_func: BTreeMap<Func, Vec<Codomain>>,
-    element_index_type: BTreeMap<Type, Vec<Codomain>>,
-}
-impl CodomainTable {
-#[allow(unused)]
-const WEIGHT: usize = 10;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_new_1_0: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_func: BTreeMap::new(),
-    element_index_type: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: Codomain) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-self.index_new_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_func.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_func.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_type.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_type.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: Codomain) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-self.index_new_1_0.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: Codomain) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> Codomain {
-    Codomain(Func::from(t.0), Type::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: Codomain) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> Codomain {
-    Codomain(Func::from(t.1), Type::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = Codomain> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = Codomain> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = Codomain> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Func, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn iter_all_1(&self, arg1: Type) -> impl '_ + Iterator<Item = Codomain> {
-    let arg1 = arg1.0;
-self.index_new_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-.chain(self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-)}
-#[allow(dead_code)]
-fn drain_with_element_func(&mut self, tm: Func) -> Vec<Codomain> {
-    let mut ts = match self.element_index_func.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_type(&mut self, tm: Type) -> Vec<Codomain> {
-    let mut ts = match self.element_index_type.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for CodomainTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("codomain"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct FuncRel(pub Func, pub Rel);
-#[derive(Clone, Hash, Debug)]
-struct FuncRelTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_new_1_0: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_func: BTreeMap<Func, Vec<FuncRel>>,
-    element_index_rel: BTreeMap<Rel, Vec<FuncRel>>,
-}
-impl FuncRelTable {
-#[allow(unused)]
-const WEIGHT: usize = 10;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_new_1_0: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_func: BTreeMap::new(),
-    element_index_rel: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: FuncRel) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-self.index_new_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_func.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_func.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_rel.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_rel.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: FuncRel) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-self.index_new_1_0.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: FuncRel) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> FuncRel {
-    FuncRel(Func::from(t.0), Rel::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: FuncRel) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> FuncRel {
-    FuncRel(Func::from(t.1), Rel::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = FuncRel> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_old(&self, ) -> impl '_ + Iterator<Item = FuncRel> {
-
-self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = FuncRel> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Func) -> impl '_ + Iterator<Item = FuncRel> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = FuncRel> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Func, arg1: Rel) -> impl '_ + Iterator<Item = FuncRel> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = FuncRel> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn iter_all_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = FuncRel> {
-    let arg1 = arg1.0;
-self.index_new_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-.chain(self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-)}
-#[allow(dead_code)]
-fn drain_with_element_func(&mut self, tm: Func) -> Vec<FuncRel> {
-    let mut ts = match self.element_index_func.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<FuncRel> {
-    let mut ts = match self.element_index_rel.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for FuncRelTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("FuncRel"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RelDefinitionSymbolScope(pub Rel, pub SymbolScope);
-#[derive(Clone, Hash, Debug)]
-struct RelDefinitionSymbolScopeTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_rel: BTreeMap<Rel, Vec<RelDefinitionSymbolScope>>,
-    element_index_symbol_scope: BTreeMap<SymbolScope, Vec<RelDefinitionSymbolScope>>,
-}
-impl RelDefinitionSymbolScopeTable {
-#[allow(unused)]
-const WEIGHT: usize = 8;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_rel: BTreeMap::new(),
-    element_index_symbol_scope: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: RelDefinitionSymbolScope) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-
-
-            match self.element_index_rel.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_rel.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_symbol_scope.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_symbol_scope.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: RelDefinitionSymbolScope) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: RelDefinitionSymbolScope) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> RelDefinitionSymbolScope {
-    RelDefinitionSymbolScope(Rel::from(t.0), SymbolScope::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: RelDefinitionSymbolScope) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> RelDefinitionSymbolScope {
-    RelDefinitionSymbolScope(Rel::from(t.1), SymbolScope::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Rel) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Rel) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: Rel, arg1: SymbolScope) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Rel, arg1: SymbolScope) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: SymbolScope) -> impl '_ + Iterator<Item = RelDefinitionSymbolScope> {
-    let arg1 = arg1.0;
-self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-}
-#[allow(dead_code)]
-fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<RelDefinitionSymbolScope> {
-    let mut ts = match self.element_index_rel.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_symbol_scope(&mut self, tm: SymbolScope) -> Vec<RelDefinitionSymbolScope> {
-    let mut ts = match self.element_index_symbol_scope.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for RelDefinitionSymbolScopeTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("rel_definition_symbol_scope"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct PredRel(pub Pred, pub Rel);
-#[derive(Clone, Hash, Debug)]
-struct PredRelTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_new_1_0: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_pred: BTreeMap<Pred, Vec<PredRel>>,
-    element_index_rel: BTreeMap<Rel, Vec<PredRel>>,
-}
-impl PredRelTable {
-#[allow(unused)]
-const WEIGHT: usize = 10;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_new_1_0: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_pred: BTreeMap::new(),
-    element_index_rel: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: PredRel) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-self.index_new_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_pred.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_pred.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_rel.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_rel.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: PredRel) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-self.index_new_1_0.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: PredRel) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> PredRel {
-    PredRel(Pred::from(t.0), Rel::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: PredRel) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> PredRel {
-    PredRel(Pred::from(t.1), Rel::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = PredRel> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_old(&self, ) -> impl '_ + Iterator<Item = PredRel> {
-
-self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = PredRel> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredRel> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredRel> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Pred, arg1: Rel) -> impl '_ + Iterator<Item = PredRel> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = PredRel> {
-    let arg1 = arg1.0;
-self.index_new_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-.chain(self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-)}
-#[allow(dead_code)]
-fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<PredRel> {
-    let mut ts = match self.element_index_pred.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<PredRel> {
-    let mut ts = match self.element_index_rel.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for PredRelTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("PredRel"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct Domain(pub Func, pub TypeList);
-#[derive(Clone, Hash, Debug)]
-struct DomainTable {
-    index_new_0_1: BTreeSet<(u32, u32, )>,
-    index_old_0_1: BTreeSet<(u32, u32, )>,
-    index_new_1_0: BTreeSet<(u32, u32, )>,
-    index_old_1_0: BTreeSet<(u32, u32, )>,
-    element_index_func: BTreeMap<Func, Vec<Domain>>,
-    element_index_type_list: BTreeMap<TypeList, Vec<Domain>>,
-}
-impl DomainTable {
-#[allow(unused)]
-const WEIGHT: usize = 10;
-fn new() -> Self {
-    Self {
-        index_new_0_1: BTreeSet::new(),
-        index_old_0_1: BTreeSet::new(),
-        index_new_1_0: BTreeSet::new(),
-        index_old_1_0: BTreeSet::new(),
-    element_index_func: BTreeMap::new(),
-    element_index_type_list: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: Domain) -> bool {
-if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
-return false;
-}
-if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
-return false;
-}
-
-self.index_new_1_0.insert(Self::permute_1_0(t));
-
-            match self.element_index_func.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_func.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_type_list.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_type_list.insert(t.1, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: Domain) -> bool {
-    self.index_new_0_1.contains(&Self::permute_0_1(t))
- || self.index_old_0_1.contains(&Self::permute_0_1(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
-);
-
-self.index_old_1_0.extend(
-    self.index_new_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
-);
-
-self.index_new_0_1.clear();
-
-self.index_new_1_0.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1(t: Domain) -> (u32, u32, ) {
-    (t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1(t: (u32, u32, )) -> Domain {
-    Domain(Func::from(t.0), TypeList::from(t.1))
-}
-#[allow(unused)]
-fn permute_1_0(t: Domain) -> (u32, u32, ) {
-    (t.1.into(), t.0.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0(t: (u32, u32, )) -> Domain {
-    Domain(Func::from(t.1), TypeList::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = Domain> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = Domain> {
-
-self.index_new_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: Func) -> impl '_ + Iterator<Item = Domain> {
-    let arg0 = arg0.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0(&self, arg0: Func) -> impl '_ + Iterator<Item = Domain> {
-    let arg0 = arg0.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: Func, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: Func, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-.chain(self.index_old_0_1
-    .range((
-        Bound::Included(&(arg0, arg1,  )),
-        Bound::Included(&(arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1)
-)}
-#[allow(dead_code)]
-fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = Domain> {
-    let arg1 = arg1.0;
-self.index_new_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-.chain(self.index_old_1_0
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0)
-)}
-#[allow(dead_code)]
-fn drain_with_element_func(&mut self, tm: Func) -> Vec<Domain> {
-    let mut ts = match self.element_index_func.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<Domain> {
-    let mut ts = match self.element_index_type_list.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_new_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
-            self.index_old_1_0.remove(&Self::permute_1_0(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for DomainTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("domain"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -40707,6 +39930,253 @@ impl fmt::Display for SemanticPredTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct PredArity(pub Pred, pub TypeList);
+#[derive(Clone, Hash, Debug)]
+struct PredArityTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_new_1_0: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_pred: BTreeMap<Pred, Vec<PredArity>>,
+    element_index_type_list: BTreeMap<TypeList, Vec<PredArity>>,
+}
+impl PredArityTable {
+#[allow(unused)]
+const WEIGHT: usize = 10;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_new_1_0: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_pred: BTreeMap::new(),
+    element_index_type_list: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: PredArity) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+self.index_new_1_0.insert(Self::permute_1_0(t));
+
+            match self.element_index_pred.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_pred.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_type_list.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_type_list.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: PredArity) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+self.index_new_1_0.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: PredArity) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> PredArity {
+    PredArity(Pred::from(t.0), TypeList::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: PredArity) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> PredArity {
+    PredArity(Pred::from(t.1), TypeList::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = PredArity> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = PredArity> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredArity> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredArity> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Pred, arg1: TypeList) -> impl '_ + Iterator<Item = PredArity> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_1(&self, arg1: TypeList) -> impl '_ + Iterator<Item = PredArity> {
+    let arg1 = arg1.0;
+self.index_new_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+.chain(self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+)}
+#[allow(dead_code)]
+fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<PredArity> {
+    let mut ts = match self.element_index_pred.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type_list(&mut self, tm: TypeList) -> Vec<PredArity> {
+    let mut ts = match self.element_index_type_list.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for PredArityTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("pred_arity"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticFunc(pub SymbolScope, pub Ident, pub Func);
 #[derive(Clone, Hash, Debug)]
 struct SemanticFuncTable {
@@ -41314,6 +40784,264 @@ impl fmt::Display for CtorSymbolScopeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct PredRel(pub Pred, pub Rel);
+#[derive(Clone, Hash, Debug)]
+struct PredRelTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_new_1_0: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_pred: BTreeMap<Pred, Vec<PredRel>>,
+    element_index_rel: BTreeMap<Rel, Vec<PredRel>>,
+}
+impl PredRelTable {
+#[allow(unused)]
+const WEIGHT: usize = 10;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_new_1_0: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_pred: BTreeMap::new(),
+    element_index_rel: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: PredRel) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+self.index_new_1_0.insert(Self::permute_1_0(t));
+
+            match self.element_index_pred.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_pred.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_rel.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_rel.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: PredRel) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+self.index_new_1_0.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: PredRel) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> PredRel {
+    PredRel(Pred::from(t.0), Rel::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: PredRel) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> PredRel {
+    PredRel(Pred::from(t.1), Rel::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = PredRel> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = PredRel> {
+
+self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = PredRel> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredRel> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Pred) -> impl '_ + Iterator<Item = PredRel> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Pred, arg1: Rel) -> impl '_ + Iterator<Item = PredRel> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_1(&self, arg1: Rel) -> impl '_ + Iterator<Item = PredRel> {
+    let arg1 = arg1.0;
+self.index_new_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+.chain(self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+)}
+#[allow(dead_code)]
+fn drain_with_element_pred(&mut self, tm: Pred) -> Vec<PredRel> {
+    let mut ts = match self.element_index_pred.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_rel(&mut self, tm: Rel) -> Vec<PredRel> {
+    let mut ts = match self.element_index_rel.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_new_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for PredRelTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("PredRel"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RelName(pub Rel, pub Ident);
 #[derive(Clone, Hash, Debug)]
 struct RelNameTable {
@@ -41750,6 +41478,479 @@ impl fmt::Display for ArityTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("arity"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct Dom(pub Morphism, pub Structure);
+#[derive(Clone, Hash, Debug)]
+struct DomTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_morphism: BTreeMap<Morphism, Vec<Dom>>,
+    element_index_structure: BTreeMap<Structure, Vec<Dom>>,
+}
+impl DomTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_morphism: BTreeMap::new(),
+    element_index_structure: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: Dom) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_morphism.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_structure.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_structure.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: Dom) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: Dom) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> Dom {
+    Dom(Morphism::from(t.0), Structure::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: Dom) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> Dom {
+    Dom(Morphism::from(t.1), Structure::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = Dom> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = Dom> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Dom> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Dom> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Dom> {
+    let mut ts = match self.element_index_morphism.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Dom> {
+    let mut ts = match self.element_index_structure.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for DomTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("dom"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct Cod(pub Morphism, pub Structure);
+#[derive(Clone, Hash, Debug)]
+struct CodTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_morphism: BTreeMap<Morphism, Vec<Cod>>,
+    element_index_structure: BTreeMap<Structure, Vec<Cod>>,
+}
+impl CodTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_morphism: BTreeMap::new(),
+    element_index_structure: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: Cod) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_morphism.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_morphism.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_structure.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_structure.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: Cod) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: Cod) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> Cod {
+    Cod(Morphism::from(t.0), Structure::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: Cod) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> Cod {
+    Cod(Morphism::from(t.1), Structure::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = Cod> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = Cod> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: Morphism) -> impl '_ + Iterator<Item = Cod> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: Morphism, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Structure) -> impl '_ + Iterator<Item = Cod> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_morphism(&mut self, tm: Morphism) -> Vec<Cod> {
+    let mut ts = match self.element_index_morphism.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_structure(&mut self, tm: Structure) -> Vec<Cod> {
+    let mut ts = match self.element_index_structure.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for CodTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("cod"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -44223,302 +44424,6 @@ impl fmt::Display for InstantiatedTypeTable {
         Table::new(self.iter_all())
             .with(Extract::segment(1.., ..))
             .with(Header("InstantiatedType"))
-            .with(Modify::new(Segment::all()).with(Alignment::center()))
-            .with(
-                Style::modern()
-                    .top_intersection('─')
-                    .header_intersection('┬')
-            )
-            .fmt(f)
-    }
-}
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomElType(pub El, pub El, pub ElementType);
-#[derive(Clone, Hash, Debug)]
-struct HomElTypeTable {
-    index_new_0_1_2: BTreeSet<(u32, u32, u32, )>,
-    index_old_0_1_2: BTreeSet<(u32, u32, u32, )>,
-    index_old_1_0_2: BTreeSet<(u32, u32, u32, )>,
-    index_new_2_0_1: BTreeSet<(u32, u32, u32, )>,
-    index_old_2_0_1: BTreeSet<(u32, u32, u32, )>,
-    element_index_el: BTreeMap<El, Vec<HomElType>>,
-    element_index_element_type: BTreeMap<ElementType, Vec<HomElType>>,
-}
-impl HomElTypeTable {
-#[allow(unused)]
-const WEIGHT: usize = 18;
-fn new() -> Self {
-    Self {
-        index_new_0_1_2: BTreeSet::new(),
-        index_old_0_1_2: BTreeSet::new(),
-        index_old_1_0_2: BTreeSet::new(),
-        index_new_2_0_1: BTreeSet::new(),
-        index_old_2_0_1: BTreeSet::new(),
-    element_index_el: BTreeMap::new(),
-    element_index_element_type: BTreeMap::new(),
-    }
-}
-#[allow(dead_code)]
-fn insert(&mut self, t: HomElType) -> bool {
-if self.index_old_0_1_2.contains(&Self::permute_0_1_2(t)) {
-return false;
-}
-if !self.index_new_2_0_1.insert(Self::permute_2_0_1(t)) {
-return false;
-}
-
-self.index_new_0_1_2.insert(Self::permute_0_1_2(t));
-
-            match self.element_index_el.get_mut(&t.0) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_el.insert(t.0, vec![t]); },
-            };
-        
-
-            match self.element_index_el.get_mut(&t.1) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_el.insert(t.1, vec![t]); },
-            };
-        
-
-            match self.element_index_element_type.get_mut(&t.2) {
-                Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_element_type.insert(t.2, vec![t]); },
-            };
-        
-true
-}
-#[allow(dead_code)]
-fn contains(&self, t: HomElType) -> bool {
-    self.index_new_2_0_1.contains(&Self::permute_2_0_1(t))
- || self.index_old_0_1_2.contains(&Self::permute_0_1_2(t))
-
-}
-fn drop_dirt(&mut self) {
-self.index_old_0_1_2.extend(
-    self.index_new_2_0_1
-    .iter().copied()
-    .map(|t| Self::permute_0_1_2(Self::permute_inverse_2_0_1(t)))
-);
-
-self.index_old_1_0_2.extend(
-    self.index_new_2_0_1
-    .iter().copied()
-    .map(|t| Self::permute_1_0_2(Self::permute_inverse_2_0_1(t)))
-);
-
-self.index_old_2_0_1.extend(
-    self.index_new_2_0_1
-    .iter().copied()
-    .map(|t| Self::permute_2_0_1(Self::permute_inverse_2_0_1(t)))
-);
-
-self.index_new_0_1_2.clear();
-
-self.index_new_2_0_1.clear();
-
-}
-fn is_dirty(&self) -> bool {
-    !self.index_new_2_0_1.is_empty()
-}
-#[allow(unused)]
-fn permute_0_1_2(t: HomElType) -> (u32, u32, u32, ) {
-    (t.0.into(), t.1.into(), t.2.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_0_1_2(t: (u32, u32, u32, )) -> HomElType {
-    HomElType(El::from(t.0), El::from(t.1), ElementType::from(t.2))
-}
-#[allow(unused)]
-fn permute_1_0_2(t: HomElType) -> (u32, u32, u32, ) {
-    (t.1.into(), t.0.into(), t.2.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_1_0_2(t: (u32, u32, u32, )) -> HomElType {
-    HomElType(El::from(t.1), El::from(t.0), ElementType::from(t.2))
-}
-#[allow(unused)]
-fn permute_2_0_1(t: HomElType) -> (u32, u32, u32, ) {
-    (t.2.into(), t.0.into(), t.1.into(), )
-}
-#[allow(unused)]
-fn permute_inverse_2_0_1(t: (u32, u32, u32, )) -> HomElType {
-    HomElType(El::from(t.1), El::from(t.2), ElementType::from(t.0))
-}
-#[allow(dead_code)]
-fn iter_new(&self, ) -> impl '_ + Iterator<Item = HomElType> {
-
-self.index_new_2_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_2_0_1)
-}
-#[allow(dead_code)]
-fn iter_all(&self, ) -> impl '_ + Iterator<Item = HomElType> {
-
-self.index_new_2_0_1
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_0_1_2
-    .range((
-        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
-        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-)}
-#[allow(dead_code)]
-fn iter_old_0(&self, arg0: El) -> impl '_ + Iterator<Item = HomElType> {
-    let arg0 = arg0.0;
-self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
-        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-}
-#[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: El, arg1: El) -> impl '_ + Iterator<Item = HomElType> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0, arg1,  u32::MIN, )),
-        Bound::Included(&(arg0, arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-}
-#[allow(dead_code)]
-fn iter_all_0_1(&self, arg0: El, arg1: El) -> impl '_ + Iterator<Item = HomElType> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-self.index_new_0_1_2
-    .range((
-        Bound::Included(&(arg0, arg1,  u32::MIN, )),
-        Bound::Included(&(arg0, arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-.chain(self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0, arg1,  u32::MIN, )),
-        Bound::Included(&(arg0, arg1,  u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-)}
-#[allow(dead_code)]
-fn iter_all_0_1_2(&self, arg0: El, arg1: El, arg2: ElementType) -> impl '_ + Iterator<Item = HomElType> {
-    let arg0 = arg0.0;
-    let arg1 = arg1.0;
-    let arg2 = arg2.0;
-self.index_new_2_0_1
-    .range((
-        Bound::Included(&(arg2, arg0, arg1,  )),
-        Bound::Included(&(arg2, arg0, arg1,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_0_1_2
-    .range((
-        Bound::Included(&(arg0, arg1, arg2,  )),
-        Bound::Included(&(arg0, arg1, arg2,  ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_0_1_2)
-)}
-#[allow(dead_code)]
-fn iter_old_1(&self, arg1: El) -> impl '_ + Iterator<Item = HomElType> {
-    let arg1 = arg1.0;
-self.index_old_1_0_2
-    .range((
-        Bound::Included(&(arg1,  u32::MIN, u32::MIN, )),
-        Bound::Included(&(arg1,  u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_1_0_2)
-}
-#[allow(dead_code)]
-fn iter_all_2(&self, arg2: ElementType) -> impl '_ + Iterator<Item = HomElType> {
-    let arg2 = arg2.0;
-self.index_new_2_0_1
-    .range((
-        Bound::Included(&(arg2,  u32::MIN, u32::MIN, )),
-        Bound::Included(&(arg2,  u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_2_0_1)
-.chain(self.index_old_2_0_1
-    .range((
-        Bound::Included(&(arg2,  u32::MIN, u32::MIN, )),
-        Bound::Included(&(arg2,  u32::MAX, u32::MAX, ))
-    ))
-    .copied()
-    .map(Self::permute_inverse_2_0_1)
-)}
-#[allow(dead_code)]
-fn drain_with_element_el(&mut self, tm: El) -> Vec<HomElType> {
-    let mut ts = match self.element_index_el.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
-            i += 1;
-        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
-            self.index_old_1_0_2.remove(&Self::permute_1_0_2(t));
-self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-#[allow(dead_code)]
-fn drain_with_element_element_type(&mut self, tm: ElementType) -> Vec<HomElType> {
-    let mut ts = match self.element_index_element_type.remove(&tm) {
-        None => Vec::new(),
-        Some(tuples) => tuples,
-    };
-
-    let mut i = 0;
-    while i < ts.len() {
-        let t = ts[i];
-        if self.index_new_2_0_1.remove(&Self::permute_2_0_1(t)) {
-            self.index_new_0_1_2.remove(&Self::permute_0_1_2(t));
-            i += 1;
-        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
-            self.index_old_1_0_2.remove(&Self::permute_1_0_2(t));
-self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
-            i += 1;
-        } else {
-            ts.swap_remove(i);
-        }
-    }
-
-    ts
-}
-}
-impl fmt::Display for HomElTypeTable {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Table::new(self.iter_all())
-            .with(Extract::segment(1.., ..))
-            .with(Header("HomElType"))
             .with(Modify::new(Segment::all()).with(Alignment::center()))
             .with(
                 Style::modern()
@@ -53869,12 +53774,6 @@ struct RealVirtIdentArgs(pub Ident);
 struct VirtRealIdentArgs(pub VirtIdent);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DomArgs(pub Morphism);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CodArgs(pub Morphism);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct VarArgs(pub Structure, pub ElName);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -54025,13 +53924,28 @@ struct SemanticTypeArgs(pub SymbolScope, pub Ident);
 struct DeclSymbolScopeArgs(pub DeclNode);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomTypeArgs(pub Type);
+struct MorTypeArgs(pub Type);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomTypeSignatureArgs(pub Type);
+struct MorTypeDomFuncArgs(pub Type);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct PredArityArgs(pub Pred);
+struct MorTypeCodFuncArgs(pub Type);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct TypeDefinitionSymbolScopeArgs(pub Type);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct FuncRelArgs(pub Func);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct RelDefinitionSymbolScopeArgs(pub Rel);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct DomainArgs(pub Func);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct CodomainArgs(pub Func);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct TypeNameArgs(pub Type);
@@ -54043,25 +53957,7 @@ struct VirtualSymbolScopeArgs();
 struct ParentModelFuncArgs(pub Type);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct TypeDefinitionSymbolScopeArgs(pub Type);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SymbolScopeModelArgs(pub SymbolScope);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct CodomainArgs(pub Func);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct FuncRelArgs(pub Func);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct RelDefinitionSymbolScopeArgs(pub Rel);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct PredRelArgs(pub Pred);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct DomainArgs(pub Func);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct FlatDomainArgs(pub Func);
@@ -54076,16 +53972,28 @@ struct ArgSymbolScopeArgs(pub ArgDeclNode);
 struct SemanticPredArgs(pub SymbolScope, pub Ident);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct PredArityArgs(pub Pred);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct SemanticFuncArgs(pub SymbolScope, pub Ident);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct CtorSymbolScopeArgs(pub CtorDeclNode);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct PredRelArgs(pub Pred);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RelNameArgs(pub Rel);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct ArityArgs(pub Rel);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct DomArgs(pub Morphism);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct CodArgs(pub Morphism);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct FlatArityArgs(pub Rel);
@@ -54113,9 +54021,6 @@ struct AmbientTypeArgs(pub Type);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct InstantiatedTypeArgs(pub El, pub Type);
-#[allow(unused)]
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct HomElTypeArgs(pub El, pub El);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct UnderlyingTypeArgs(pub ElementType);
@@ -54258,7 +54163,7 @@ struct ModelDelta {
     new_cons_term_list_node: Vec<ConsTermListNode>,
     new_ambient_type_expr: Vec<AmbientTypeExpr>,
     new_member_type_expr: Vec<MemberTypeExpr>,
-    new_hom_type_expr: Vec<HomTypeExpr>,
+    new_mor_type_expr: Vec<MorTypeExpr>,
     new_none_term_node: Vec<NoneTermNode>,
     new_some_term_node: Vec<SomeTermNode>,
     new_var_term_node: Vec<VarTermNode>,
@@ -54300,7 +54205,7 @@ struct ModelDelta {
     new_is_normal_type: Vec<IsNormalType>,
     new_is_enum_type: Vec<IsEnumType>,
     new_is_model_type: Vec<IsModelType>,
-    new_is_hom_type: Vec<IsHomType>,
+    new_is_mor_type: Vec<IsMorType>,
     new_is_total_func: Vec<IsTotalFunc>,
     new_rel_app: Vec<RelApp>,
     new_el_type: Vec<ElType>,
@@ -54357,8 +54262,6 @@ struct ModelDelta {
     new_match_stmt_contains_ctor: Vec<MatchStmtContainsCtor>,
     new_real_virt_ident: Vec<RealVirtIdent>,
     new_virt_real_ident: Vec<VirtRealIdent>,
-    new_dom: Vec<Dom>,
-    new_cod: Vec<Cod>,
     new_var: Vec<Var>,
     new_rule_name: Vec<RuleName>,
     new_module_name: Vec<ModuleName>,
@@ -54409,27 +54312,30 @@ struct ModelDelta {
     new_snoc_type_list: Vec<SnocTypeList>,
     new_semantic_type: Vec<SemanticType>,
     new_decl_symbol_scope: Vec<DeclSymbolScope>,
-    new_hom_type: Vec<HomType>,
-    new_hom_type_signature: Vec<HomTypeSignature>,
-    new_pred_arity: Vec<PredArity>,
+    new_mor_type: Vec<MorType>,
+    new_mor_type_dom_func: Vec<MorTypeDomFunc>,
+    new_mor_type_cod_func: Vec<MorTypeCodFunc>,
+    new_type_definition_symbol_scope: Vec<TypeDefinitionSymbolScope>,
+    new_func_rel: Vec<FuncRel>,
+    new_rel_definition_symbol_scope: Vec<RelDefinitionSymbolScope>,
+    new_domain: Vec<Domain>,
+    new_codomain: Vec<Codomain>,
     new_type_name: Vec<TypeName>,
     new_virtual_symbol_scope: Vec<VirtualSymbolScope>,
     new_parent_model_func: Vec<ParentModelFunc>,
-    new_type_definition_symbol_scope: Vec<TypeDefinitionSymbolScope>,
     new_symbol_scope_model: Vec<SymbolScopeModel>,
-    new_codomain: Vec<Codomain>,
-    new_func_rel: Vec<FuncRel>,
-    new_rel_definition_symbol_scope: Vec<RelDefinitionSymbolScope>,
-    new_pred_rel: Vec<PredRel>,
-    new_domain: Vec<Domain>,
     new_flat_domain: Vec<FlatDomain>,
     new_semantic_arg_types: Vec<SemanticArgTypes>,
     new_arg_symbol_scope: Vec<ArgSymbolScope>,
     new_semantic_pred: Vec<SemanticPred>,
+    new_pred_arity: Vec<PredArity>,
     new_semantic_func: Vec<SemanticFunc>,
     new_ctor_symbol_scope: Vec<CtorSymbolScope>,
+    new_pred_rel: Vec<PredRel>,
     new_rel_name: Vec<RelName>,
     new_arity: Vec<Arity>,
+    new_dom: Vec<Dom>,
+    new_cod: Vec<Cod>,
     new_flat_arity: Vec<FlatArity>,
     new_module_symbol_scope: Vec<ModuleSymbolScope>,
     new_nil_el_list: Vec<NilElList>,
@@ -54439,7 +54345,6 @@ struct ModelDelta {
     new_els_structure: Vec<ElsStructure>,
     new_ambient_type: Vec<AmbientType>,
     new_instantiated_type: Vec<InstantiatedType>,
-    new_hom_el_type: Vec<HomElType>,
     new_underlying_type: Vec<UnderlyingType>,
     new_nil_element_type_list: Vec<NilElementTypeList>,
     new_cons_element_type_list: Vec<ConsElementTypeList>,
@@ -54513,8 +54418,8 @@ struct ModelDelta {
     new_type_equalities: Vec<(Type, Type)>,
     new_type_list_equalities: Vec<(TypeList, TypeList)>,
     new_symbol_scope_equalities: Vec<(SymbolScope, SymbolScope)>,
-    new_pred_equalities: Vec<(Pred, Pred)>,
     new_func_equalities: Vec<(Func, Func)>,
+    new_pred_equalities: Vec<(Pred, Pred)>,
     new_rel_equalities: Vec<(Rel, Rel)>,
     new_structure_equalities: Vec<(Structure, Structure)>,
     new_el_equalities: Vec<(El, El)>,
@@ -54527,8 +54432,6 @@ struct ModelDelta {
     new_nat_equalities: Vec<(Nat, Nat)>,
 new_real_virt_ident_def: Vec<RealVirtIdentArgs>,
 new_virt_real_ident_def: Vec<VirtRealIdentArgs>,
-new_dom_def: Vec<DomArgs>,
-new_cod_def: Vec<CodArgs>,
 new_var_def: Vec<VarArgs>,
 new_rule_name_def: Vec<RuleNameArgs>,
 new_module_name_def: Vec<ModuleNameArgs>,
@@ -54579,22 +54482,25 @@ new_cons_type_list_def: Vec<ConsTypeListArgs>,
 new_snoc_type_list_def: Vec<SnocTypeListArgs>,
 new_semantic_type_def: Vec<SemanticTypeArgs>,
 new_decl_symbol_scope_def: Vec<DeclSymbolScopeArgs>,
-new_hom_type_def: Vec<HomTypeArgs>,
-new_hom_type_signature_def: Vec<HomTypeSignatureArgs>,
+new_mor_type_def: Vec<MorTypeArgs>,
+new_mor_type_dom_func_def: Vec<MorTypeDomFuncArgs>,
+new_mor_type_cod_func_def: Vec<MorTypeCodFuncArgs>,
+new_type_definition_symbol_scope_def: Vec<TypeDefinitionSymbolScopeArgs>,
+new_func_rel_def: Vec<FuncRelArgs>,
+new_rel_definition_symbol_scope_def: Vec<RelDefinitionSymbolScopeArgs>,
+new_codomain_def: Vec<CodomainArgs>,
 new_type_name_def: Vec<TypeNameArgs>,
 new_virtual_symbol_scope_def: Vec<VirtualSymbolScopeArgs>,
 new_parent_model_func_def: Vec<ParentModelFuncArgs>,
-new_type_definition_symbol_scope_def: Vec<TypeDefinitionSymbolScopeArgs>,
 new_symbol_scope_model_def: Vec<SymbolScopeModelArgs>,
-new_codomain_def: Vec<CodomainArgs>,
-new_func_rel_def: Vec<FuncRelArgs>,
-new_rel_definition_symbol_scope_def: Vec<RelDefinitionSymbolScopeArgs>,
-new_pred_rel_def: Vec<PredRelArgs>,
 new_arg_symbol_scope_def: Vec<ArgSymbolScopeArgs>,
 new_semantic_pred_def: Vec<SemanticPredArgs>,
 new_semantic_func_def: Vec<SemanticFuncArgs>,
 new_ctor_symbol_scope_def: Vec<CtorSymbolScopeArgs>,
+new_pred_rel_def: Vec<PredRelArgs>,
 new_rel_name_def: Vec<RelNameArgs>,
+new_dom_def: Vec<DomArgs>,
+new_cod_def: Vec<CodArgs>,
 new_module_symbol_scope_def: Vec<ModuleSymbolScopeArgs>,
 new_nil_el_list_def: Vec<NilElListArgs>,
 new_cons_el_list_def: Vec<ConsElListArgs>,
@@ -54603,7 +54509,6 @@ new_el_structure_def: Vec<ElStructureArgs>,
 new_els_structure_def: Vec<ElsStructureArgs>,
 new_ambient_type_def: Vec<AmbientTypeArgs>,
 new_instantiated_type_def: Vec<InstantiatedTypeArgs>,
-new_hom_el_type_def: Vec<HomElTypeArgs>,
 new_underlying_type_def: Vec<UnderlyingTypeArgs>,
 new_nil_element_type_list_def: Vec<NilElementTypeListArgs>,
 new_cons_element_type_list_def: Vec<ConsElementTypeListArgs>,
@@ -54839,17 +54744,17 @@ symbol_scope_new: BTreeSet<SymbolScope>,
 symbol_scope_weights: Vec<usize>,
 symbol_scope_uprooted: Vec<SymbolScope>,
 
-pred_equalities: Unification<Pred>,
-pred_old: BTreeSet<Pred>,
-pred_new: BTreeSet<Pred>,
-pred_weights: Vec<usize>,
-pred_uprooted: Vec<Pred>,
-
 func_equalities: Unification<Func>,
 func_old: BTreeSet<Func>,
 func_new: BTreeSet<Func>,
 func_weights: Vec<usize>,
 func_uprooted: Vec<Func>,
+
+pred_equalities: Unification<Pred>,
+pred_old: BTreeSet<Pred>,
+pred_new: BTreeSet<Pred>,
+pred_weights: Vec<usize>,
+pred_uprooted: Vec<Pred>,
 
 rel_equalities: Unification<Rel>,
 rel_old: BTreeSet<Rel>,
@@ -54911,7 +54816,7 @@ nat_new: BTreeSet<Nat>,
 nat_weights: Vec<usize>,
 nat_uprooted: Vec<Nat>,
 
-  absurd: AbsurdTable,  type_decl: TypeDeclTable,  arg_decl_node_name: ArgDeclNodeNameTable,  arg_decl_node_type: ArgDeclNodeTypeTable,  nil_arg_decl_list_node: NilArgDeclListNodeTable,  cons_arg_decl_list_node: ConsArgDeclListNodeTable,  pred_decl: PredDeclTable,  func_decl: FuncDeclTable,  ctor_decl: CtorDeclTable,  nil_ctor_decl_list_node: NilCtorDeclListNodeTable,  cons_ctor_decl_list_node: ConsCtorDeclListNodeTable,  enum_decl: EnumDeclTable,  nil_term_list_node: NilTermListNodeTable,  cons_term_list_node: ConsTermListNodeTable,  ambient_type_expr: AmbientTypeExprTable,  member_type_expr: MemberTypeExprTable,  hom_type_expr: HomTypeExprTable,  none_term_node: NoneTermNodeTable,  some_term_node: SomeTermNodeTable,  var_term_node: VarTermNodeTable,  wildcard_term_node: WildcardTermNodeTable,  app_term_node: AppTermNodeTable,  match_case: MatchCaseTable,  nil_match_case_list_node: NilMatchCaseListNodeTable,  cons_match_case_list_node: ConsMatchCaseListNodeTable,  equal_if_atom_node: EqualIfAtomNodeTable,  defined_if_atom_node: DefinedIfAtomNodeTable,  pred_if_atom_node: PredIfAtomNodeTable,  var_if_atom_node: VarIfAtomNodeTable,  equal_then_atom_node: EqualThenAtomNodeTable,  defined_then_atom_node: DefinedThenAtomNodeTable,  pred_then_atom_node: PredThenAtomNodeTable,  if_stmt_node: IfStmtNodeTable,  then_stmt_node: ThenStmtNodeTable,  branch_stmt_node: BranchStmtNodeTable,  match_stmt_node: MatchStmtNodeTable,  nil_stmt_list_node: NilStmtListNodeTable,  cons_stmt_list_node: ConsStmtListNodeTable,  nil_stmt_block_list_node: NilStmtBlockListNodeTable,  cons_stmt_block_list_node: ConsStmtBlockListNodeTable,  rule_decl: RuleDeclTable,  model_decl: ModelDeclTable,  decl_node_type: DeclNodeTypeTable,  decl_node_pred: DeclNodePredTable,  decl_node_func: DeclNodeFuncTable,  decl_node_rule: DeclNodeRuleTable,  decl_node_enum: DeclNodeEnumTable,  decl_node_model: DeclNodeModelTable,  nil_decl_list_node: NilDeclListNodeTable,  cons_decl_list_node: ConsDeclListNodeTable,  decls_module_node: DeclsModuleNodeTable,  var_in_scope: VarInScopeTable,  scope_extension: ScopeExtensionTable,  scope_single_child: ScopeSingleChildTable,  scope_extension_siblings: ScopeExtensionSiblingsTable,  is_normal_type: IsNormalTypeTable,  is_enum_type: IsEnumTypeTable,  is_model_type: IsModelTypeTable,  is_hom_type: IsHomTypeTable,  is_total_func: IsTotalFuncTable,  rel_app: RelAppTable,  el_type: ElTypeTable,  el_types: ElTypesTable,  constrained_el: ConstrainedElTable,  constrained_els: ConstrainedElsTable,  in_ker: InKerTable,  el_in_img: ElInImgTable,  rel_tuple_in_img: RelTupleInImgTable,  symbol_scope_extension: SymbolScopeExtensionTable,  symbol_scope_ancestor: SymbolScopeAncestorTable,  element_member_symbol_scope: ElementMemberSymbolScopeTable,  defined_symbol: DefinedSymbolTable,  accessible_symbol: AccessibleSymbolTable,  should_be_symbol: ShouldBeSymbolTable,  should_be_symbol_2: ShouldBeSymbol2Table,  should_be_symbol_3: ShouldBeSymbol3Table,  pred_arg_num_should_match: PredArgNumShouldMatchTable,  func_arg_num_should_match: FuncArgNumShouldMatchTable,  cfg_edge: CfgEdgeTable,  cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,  cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,  cfg_edge_fork: CfgEdgeForkTable,  cfg_edge_join: CfgEdgeJoinTable,  before_stmt_structure: BeforeStmtStructureTable,  stmt_morphism: StmtMorphismTable,  if_morphism: IfMorphismTable,  surj_then_morphism: SurjThenMorphismTable,  non_surj_then_morphism: NonSurjThenMorphismTable,  noop_morphism: NoopMorphismTable,  stmt_structure: StmtStructureTable,  if_atom_structure: IfAtomStructureTable,  then_atom_structure: ThenAtomStructureTable,  term_structure: TermStructureTable,  terms_structure: TermsStructureTable,  opt_term_structure: OptTermStructureTable,  type_expr_structure: TypeExprStructureTable,  term_should_be_epic_ok: TermShouldBeEpicOkTable,  terms_should_be_epic_ok: TermsShouldBeEpicOkTable,  el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,  el_is_surjective_ok: ElIsSurjectiveOkTable,  should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,  is_given_by_ctor: IsGivenByCtorTable,  function_can_be_made_defined: FunctionCanBeMadeDefinedTable,  case_pattern_is_variable: CasePatternIsVariableTable,  case_pattern_is_wildcard: CasePatternIsWildcardTable,  is_pattern_ctor_arg: IsPatternCtorArgTable,  are_pattern_ctor_args: ArePatternCtorArgsTable,  pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,  pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,  cases_contain_ctor: CasesContainCtorTable,  match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,  match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,  match_stmt_contains_ctor: MatchStmtContainsCtorTable,  real_virt_ident: RealVirtIdentTable,  virt_real_ident: VirtRealIdentTable,  dom: DomTable,  cod: CodTable,  var: VarTable,  rule_name: RuleNameTable,  module_name: ModuleNameTable,  type_decl_node_loc: TypeDeclNodeLocTable,  arg_decl_node_loc: ArgDeclNodeLocTable,  arg_decl_list_node_loc: ArgDeclListNodeLocTable,  pred_decl_node_loc: PredDeclNodeLocTable,  func_decl_node_loc: FuncDeclNodeLocTable,  ctor_decl_node_loc: CtorDeclNodeLocTable,  enum_decl_node_loc: EnumDeclNodeLocTable,  model_decl_node_loc: ModelDeclNodeLocTable,  term_node_loc: TermNodeLocTable,  term_list_node_loc: TermListNodeLocTable,  match_case_node_loc: MatchCaseNodeLocTable,  opt_term_node_loc: OptTermNodeLocTable,  if_atom_node_loc: IfAtomNodeLocTable,  then_atom_node_loc: ThenAtomNodeLocTable,  stmt_node_loc: StmtNodeLocTable,  stmt_list_node_loc: StmtListNodeLocTable,  rule_decl_node_loc: RuleDeclNodeLocTable,  decl_node_loc: DeclNodeLocTable,  decl_list_node_loc: DeclListNodeLocTable,  module_node_loc: ModuleNodeLocTable,  rule_descendant_rule: RuleDescendantRuleTable,  rule_descendant_term: RuleDescendantTermTable,  rule_descendant_term_list: RuleDescendantTermListTable,  rule_descendant_opt_term: RuleDescendantOptTermTable,  rule_descendant_if_atom: RuleDescendantIfAtomTable,  rule_descendant_then_atom: RuleDescendantThenAtomTable,  rule_descendant_match_case: RuleDescendantMatchCaseTable,  rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,  rule_descendant_stmt: RuleDescendantStmtTable,  rule_descendant_stmt_list: RuleDescendantStmtListTable,  rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,  rule_descendant_type_expr: RuleDescendantTypeExprTable,  entry_scope: EntryScopeTable,  exit_scope: ExitScopeTable,  ctor_enum: CtorEnumTable,  ctors_enum: CtorsEnumTable,  cases_discriminee: CasesDiscrimineeTable,  case_discriminee: CaseDiscrimineeTable,  desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,  desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,  desugared_case_block: DesugaredCaseBlockTable,  desugared_case_block_list: DesugaredCaseBlockListTable,  nil_type_list: NilTypeListTable,  cons_type_list: ConsTypeListTable,  snoc_type_list: SnocTypeListTable,  semantic_type: SemanticTypeTable,  decl_symbol_scope: DeclSymbolScopeTable,  hom_type: HomTypeTable,  hom_type_signature: HomTypeSignatureTable,  pred_arity: PredArityTable,  type_name: TypeNameTable,  virtual_symbol_scope: VirtualSymbolScopeTable,  parent_model_func: ParentModelFuncTable,  type_definition_symbol_scope: TypeDefinitionSymbolScopeTable,  symbol_scope_model: SymbolScopeModelTable,  codomain: CodomainTable,  func_rel: FuncRelTable,  rel_definition_symbol_scope: RelDefinitionSymbolScopeTable,  pred_rel: PredRelTable,  domain: DomainTable,  flat_domain: FlatDomainTable,  semantic_arg_types: SemanticArgTypesTable,  arg_symbol_scope: ArgSymbolScopeTable,  semantic_pred: SemanticPredTable,  semantic_func: SemanticFuncTable,  ctor_symbol_scope: CtorSymbolScopeTable,  rel_name: RelNameTable,  arity: ArityTable,  flat_arity: FlatArityTable,  module_symbol_scope: ModuleSymbolScopeTable,  nil_el_list: NilElListTable,  cons_el_list: ConsElListTable,  snoc_el_list: SnocElListTable,  el_structure: ElStructureTable,  els_structure: ElsStructureTable,  ambient_type: AmbientTypeTable,  instantiated_type: InstantiatedTypeTable,  hom_el_type: HomElTypeTable,  underlying_type: UnderlyingTypeTable,  nil_element_type_list: NilElementTypeListTable,  cons_element_type_list: ConsElementTypeListTable,  snoc_element_type_list: SnocElementTypeListTable,  ambient_el_type_list: AmbientElTypeListTable,  func_app: FuncAppTable,  map_el: MapElTable,  map_els: MapElsTable,  ambient_model_el: AmbientModelElTable,  type_symbol: TypeSymbolTable,  pred_symbol: PredSymbolTable,  func_symbol: FuncSymbolTable,  rule_symbol: RuleSymbolTable,  enum_symbol: EnumSymbolTable,  ctor_symbol: CtorSymbolTable,  model_symbol: ModelSymbolTable,  symbol_scope_parent: SymbolScopeParentTable,  decls_symbol_scope: DeclsSymbolScopeTable,  args_symbol_scope: ArgsSymbolScopeTable,  ctors_symbol_scope: CtorsSymbolScopeTable,  model_member_symbol_scope: ModelMemberSymbolScopeTable,  symbol_scope_name: SymbolScopeNameTable,  scope_symbols: ScopeSymbolsTable,  semantic_el: SemanticElTable,  zero: ZeroTable,  succ: SuccTable,  type_list_len: TypeListLenTable,  term_list_len: TermListLenTable,  before_rule_structure: BeforeRuleStructureTable,  ambient_model_el_structure: AmbientModelElStructureTable,  ambient_model_el_morphism: AmbientModelElMorphismTable,  if_atom_morphism: IfAtomMorphismTable,  then_atom_morphism: ThenAtomMorphismTable,  branch_stmt_morphism: BranchStmtMorphismTable,  match_stmt_morphism: MatchStmtMorphismTable,  semantic_name: SemanticNameTable,  semantic_els: SemanticElsTable,  wildcard_name: WildcardNameTable,  rel_app_parent_model_el: RelAppParentModelElTable,  match_case_pattern_ctor: MatchCasePatternCtorTable,  cases_determined_enum: CasesDeterminedEnumTable,empty_join_is_dirty: bool,
+  absurd: AbsurdTable,  type_decl: TypeDeclTable,  arg_decl_node_name: ArgDeclNodeNameTable,  arg_decl_node_type: ArgDeclNodeTypeTable,  nil_arg_decl_list_node: NilArgDeclListNodeTable,  cons_arg_decl_list_node: ConsArgDeclListNodeTable,  pred_decl: PredDeclTable,  func_decl: FuncDeclTable,  ctor_decl: CtorDeclTable,  nil_ctor_decl_list_node: NilCtorDeclListNodeTable,  cons_ctor_decl_list_node: ConsCtorDeclListNodeTable,  enum_decl: EnumDeclTable,  nil_term_list_node: NilTermListNodeTable,  cons_term_list_node: ConsTermListNodeTable,  ambient_type_expr: AmbientTypeExprTable,  member_type_expr: MemberTypeExprTable,  mor_type_expr: MorTypeExprTable,  none_term_node: NoneTermNodeTable,  some_term_node: SomeTermNodeTable,  var_term_node: VarTermNodeTable,  wildcard_term_node: WildcardTermNodeTable,  app_term_node: AppTermNodeTable,  match_case: MatchCaseTable,  nil_match_case_list_node: NilMatchCaseListNodeTable,  cons_match_case_list_node: ConsMatchCaseListNodeTable,  equal_if_atom_node: EqualIfAtomNodeTable,  defined_if_atom_node: DefinedIfAtomNodeTable,  pred_if_atom_node: PredIfAtomNodeTable,  var_if_atom_node: VarIfAtomNodeTable,  equal_then_atom_node: EqualThenAtomNodeTable,  defined_then_atom_node: DefinedThenAtomNodeTable,  pred_then_atom_node: PredThenAtomNodeTable,  if_stmt_node: IfStmtNodeTable,  then_stmt_node: ThenStmtNodeTable,  branch_stmt_node: BranchStmtNodeTable,  match_stmt_node: MatchStmtNodeTable,  nil_stmt_list_node: NilStmtListNodeTable,  cons_stmt_list_node: ConsStmtListNodeTable,  nil_stmt_block_list_node: NilStmtBlockListNodeTable,  cons_stmt_block_list_node: ConsStmtBlockListNodeTable,  rule_decl: RuleDeclTable,  model_decl: ModelDeclTable,  decl_node_type: DeclNodeTypeTable,  decl_node_pred: DeclNodePredTable,  decl_node_func: DeclNodeFuncTable,  decl_node_rule: DeclNodeRuleTable,  decl_node_enum: DeclNodeEnumTable,  decl_node_model: DeclNodeModelTable,  nil_decl_list_node: NilDeclListNodeTable,  cons_decl_list_node: ConsDeclListNodeTable,  decls_module_node: DeclsModuleNodeTable,  var_in_scope: VarInScopeTable,  scope_extension: ScopeExtensionTable,  scope_single_child: ScopeSingleChildTable,  scope_extension_siblings: ScopeExtensionSiblingsTable,  is_normal_type: IsNormalTypeTable,  is_enum_type: IsEnumTypeTable,  is_model_type: IsModelTypeTable,  is_mor_type: IsMorTypeTable,  is_total_func: IsTotalFuncTable,  rel_app: RelAppTable,  el_type: ElTypeTable,  el_types: ElTypesTable,  constrained_el: ConstrainedElTable,  constrained_els: ConstrainedElsTable,  in_ker: InKerTable,  el_in_img: ElInImgTable,  rel_tuple_in_img: RelTupleInImgTable,  symbol_scope_extension: SymbolScopeExtensionTable,  symbol_scope_ancestor: SymbolScopeAncestorTable,  element_member_symbol_scope: ElementMemberSymbolScopeTable,  defined_symbol: DefinedSymbolTable,  accessible_symbol: AccessibleSymbolTable,  should_be_symbol: ShouldBeSymbolTable,  should_be_symbol_2: ShouldBeSymbol2Table,  should_be_symbol_3: ShouldBeSymbol3Table,  pred_arg_num_should_match: PredArgNumShouldMatchTable,  func_arg_num_should_match: FuncArgNumShouldMatchTable,  cfg_edge: CfgEdgeTable,  cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,  cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,  cfg_edge_fork: CfgEdgeForkTable,  cfg_edge_join: CfgEdgeJoinTable,  before_stmt_structure: BeforeStmtStructureTable,  stmt_morphism: StmtMorphismTable,  if_morphism: IfMorphismTable,  surj_then_morphism: SurjThenMorphismTable,  non_surj_then_morphism: NonSurjThenMorphismTable,  noop_morphism: NoopMorphismTable,  stmt_structure: StmtStructureTable,  if_atom_structure: IfAtomStructureTable,  then_atom_structure: ThenAtomStructureTable,  term_structure: TermStructureTable,  terms_structure: TermsStructureTable,  opt_term_structure: OptTermStructureTable,  type_expr_structure: TypeExprStructureTable,  term_should_be_epic_ok: TermShouldBeEpicOkTable,  terms_should_be_epic_ok: TermsShouldBeEpicOkTable,  el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,  el_is_surjective_ok: ElIsSurjectiveOkTable,  should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,  is_given_by_ctor: IsGivenByCtorTable,  function_can_be_made_defined: FunctionCanBeMadeDefinedTable,  case_pattern_is_variable: CasePatternIsVariableTable,  case_pattern_is_wildcard: CasePatternIsWildcardTable,  is_pattern_ctor_arg: IsPatternCtorArgTable,  are_pattern_ctor_args: ArePatternCtorArgsTable,  pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,  pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,  cases_contain_ctor: CasesContainCtorTable,  match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,  match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,  match_stmt_contains_ctor: MatchStmtContainsCtorTable,  real_virt_ident: RealVirtIdentTable,  virt_real_ident: VirtRealIdentTable,  var: VarTable,  rule_name: RuleNameTable,  module_name: ModuleNameTable,  type_decl_node_loc: TypeDeclNodeLocTable,  arg_decl_node_loc: ArgDeclNodeLocTable,  arg_decl_list_node_loc: ArgDeclListNodeLocTable,  pred_decl_node_loc: PredDeclNodeLocTable,  func_decl_node_loc: FuncDeclNodeLocTable,  ctor_decl_node_loc: CtorDeclNodeLocTable,  enum_decl_node_loc: EnumDeclNodeLocTable,  model_decl_node_loc: ModelDeclNodeLocTable,  term_node_loc: TermNodeLocTable,  term_list_node_loc: TermListNodeLocTable,  match_case_node_loc: MatchCaseNodeLocTable,  opt_term_node_loc: OptTermNodeLocTable,  if_atom_node_loc: IfAtomNodeLocTable,  then_atom_node_loc: ThenAtomNodeLocTable,  stmt_node_loc: StmtNodeLocTable,  stmt_list_node_loc: StmtListNodeLocTable,  rule_decl_node_loc: RuleDeclNodeLocTable,  decl_node_loc: DeclNodeLocTable,  decl_list_node_loc: DeclListNodeLocTable,  module_node_loc: ModuleNodeLocTable,  rule_descendant_rule: RuleDescendantRuleTable,  rule_descendant_term: RuleDescendantTermTable,  rule_descendant_term_list: RuleDescendantTermListTable,  rule_descendant_opt_term: RuleDescendantOptTermTable,  rule_descendant_if_atom: RuleDescendantIfAtomTable,  rule_descendant_then_atom: RuleDescendantThenAtomTable,  rule_descendant_match_case: RuleDescendantMatchCaseTable,  rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,  rule_descendant_stmt: RuleDescendantStmtTable,  rule_descendant_stmt_list: RuleDescendantStmtListTable,  rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,  rule_descendant_type_expr: RuleDescendantTypeExprTable,  entry_scope: EntryScopeTable,  exit_scope: ExitScopeTable,  ctor_enum: CtorEnumTable,  ctors_enum: CtorsEnumTable,  cases_discriminee: CasesDiscrimineeTable,  case_discriminee: CaseDiscrimineeTable,  desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,  desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,  desugared_case_block: DesugaredCaseBlockTable,  desugared_case_block_list: DesugaredCaseBlockListTable,  nil_type_list: NilTypeListTable,  cons_type_list: ConsTypeListTable,  snoc_type_list: SnocTypeListTable,  semantic_type: SemanticTypeTable,  decl_symbol_scope: DeclSymbolScopeTable,  mor_type: MorTypeTable,  mor_type_dom_func: MorTypeDomFuncTable,  mor_type_cod_func: MorTypeCodFuncTable,  type_definition_symbol_scope: TypeDefinitionSymbolScopeTable,  func_rel: FuncRelTable,  rel_definition_symbol_scope: RelDefinitionSymbolScopeTable,  domain: DomainTable,  codomain: CodomainTable,  type_name: TypeNameTable,  virtual_symbol_scope: VirtualSymbolScopeTable,  parent_model_func: ParentModelFuncTable,  symbol_scope_model: SymbolScopeModelTable,  flat_domain: FlatDomainTable,  semantic_arg_types: SemanticArgTypesTable,  arg_symbol_scope: ArgSymbolScopeTable,  semantic_pred: SemanticPredTable,  pred_arity: PredArityTable,  semantic_func: SemanticFuncTable,  ctor_symbol_scope: CtorSymbolScopeTable,  pred_rel: PredRelTable,  rel_name: RelNameTable,  arity: ArityTable,  dom: DomTable,  cod: CodTable,  flat_arity: FlatArityTable,  module_symbol_scope: ModuleSymbolScopeTable,  nil_el_list: NilElListTable,  cons_el_list: ConsElListTable,  snoc_el_list: SnocElListTable,  el_structure: ElStructureTable,  els_structure: ElsStructureTable,  ambient_type: AmbientTypeTable,  instantiated_type: InstantiatedTypeTable,  underlying_type: UnderlyingTypeTable,  nil_element_type_list: NilElementTypeListTable,  cons_element_type_list: ConsElementTypeListTable,  snoc_element_type_list: SnocElementTypeListTable,  ambient_el_type_list: AmbientElTypeListTable,  func_app: FuncAppTable,  map_el: MapElTable,  map_els: MapElsTable,  ambient_model_el: AmbientModelElTable,  type_symbol: TypeSymbolTable,  pred_symbol: PredSymbolTable,  func_symbol: FuncSymbolTable,  rule_symbol: RuleSymbolTable,  enum_symbol: EnumSymbolTable,  ctor_symbol: CtorSymbolTable,  model_symbol: ModelSymbolTable,  symbol_scope_parent: SymbolScopeParentTable,  decls_symbol_scope: DeclsSymbolScopeTable,  args_symbol_scope: ArgsSymbolScopeTable,  ctors_symbol_scope: CtorsSymbolScopeTable,  model_member_symbol_scope: ModelMemberSymbolScopeTable,  symbol_scope_name: SymbolScopeNameTable,  scope_symbols: ScopeSymbolsTable,  semantic_el: SemanticElTable,  zero: ZeroTable,  succ: SuccTable,  type_list_len: TypeListLenTable,  term_list_len: TermListLenTable,  before_rule_structure: BeforeRuleStructureTable,  ambient_model_el_structure: AmbientModelElStructureTable,  ambient_model_el_morphism: AmbientModelElMorphismTable,  if_atom_morphism: IfAtomMorphismTable,  then_atom_morphism: ThenAtomMorphismTable,  branch_stmt_morphism: BranchStmtMorphismTable,  match_stmt_morphism: MatchStmtMorphismTable,  semantic_name: SemanticNameTable,  semantic_els: SemanticElsTable,  wildcard_name: WildcardNameTable,  rel_app_parent_model_el: RelAppParentModelElTable,  match_case_pattern_ctor: MatchCasePatternCtorTable,  cases_determined_enum: CasesDeterminedEnumTable,empty_join_is_dirty: bool,
 }
 type Model = Eqlog;impl ModelDelta {
 fn new() -> ModelDelta {
@@ -54932,7 +54837,7 @@ fn new() -> ModelDelta {
     new_cons_term_list_node: Vec::new(),
     new_ambient_type_expr: Vec::new(),
     new_member_type_expr: Vec::new(),
-    new_hom_type_expr: Vec::new(),
+    new_mor_type_expr: Vec::new(),
     new_none_term_node: Vec::new(),
     new_some_term_node: Vec::new(),
     new_var_term_node: Vec::new(),
@@ -54974,7 +54879,7 @@ fn new() -> ModelDelta {
     new_is_normal_type: Vec::new(),
     new_is_enum_type: Vec::new(),
     new_is_model_type: Vec::new(),
-    new_is_hom_type: Vec::new(),
+    new_is_mor_type: Vec::new(),
     new_is_total_func: Vec::new(),
     new_rel_app: Vec::new(),
     new_el_type: Vec::new(),
@@ -55031,8 +54936,6 @@ fn new() -> ModelDelta {
     new_match_stmt_contains_ctor: Vec::new(),
     new_real_virt_ident: Vec::new(),
     new_virt_real_ident: Vec::new(),
-    new_dom: Vec::new(),
-    new_cod: Vec::new(),
     new_var: Vec::new(),
     new_rule_name: Vec::new(),
     new_module_name: Vec::new(),
@@ -55083,27 +54986,30 @@ fn new() -> ModelDelta {
     new_snoc_type_list: Vec::new(),
     new_semantic_type: Vec::new(),
     new_decl_symbol_scope: Vec::new(),
-    new_hom_type: Vec::new(),
-    new_hom_type_signature: Vec::new(),
-    new_pred_arity: Vec::new(),
+    new_mor_type: Vec::new(),
+    new_mor_type_dom_func: Vec::new(),
+    new_mor_type_cod_func: Vec::new(),
+    new_type_definition_symbol_scope: Vec::new(),
+    new_func_rel: Vec::new(),
+    new_rel_definition_symbol_scope: Vec::new(),
+    new_domain: Vec::new(),
+    new_codomain: Vec::new(),
     new_type_name: Vec::new(),
     new_virtual_symbol_scope: Vec::new(),
     new_parent_model_func: Vec::new(),
-    new_type_definition_symbol_scope: Vec::new(),
     new_symbol_scope_model: Vec::new(),
-    new_codomain: Vec::new(),
-    new_func_rel: Vec::new(),
-    new_rel_definition_symbol_scope: Vec::new(),
-    new_pred_rel: Vec::new(),
-    new_domain: Vec::new(),
     new_flat_domain: Vec::new(),
     new_semantic_arg_types: Vec::new(),
     new_arg_symbol_scope: Vec::new(),
     new_semantic_pred: Vec::new(),
+    new_pred_arity: Vec::new(),
     new_semantic_func: Vec::new(),
     new_ctor_symbol_scope: Vec::new(),
+    new_pred_rel: Vec::new(),
     new_rel_name: Vec::new(),
     new_arity: Vec::new(),
+    new_dom: Vec::new(),
+    new_cod: Vec::new(),
     new_flat_arity: Vec::new(),
     new_module_symbol_scope: Vec::new(),
     new_nil_el_list: Vec::new(),
@@ -55113,7 +55019,6 @@ fn new() -> ModelDelta {
     new_els_structure: Vec::new(),
     new_ambient_type: Vec::new(),
     new_instantiated_type: Vec::new(),
-    new_hom_el_type: Vec::new(),
     new_underlying_type: Vec::new(),
     new_nil_element_type_list: Vec::new(),
     new_cons_element_type_list: Vec::new(),
@@ -55187,8 +55092,8 @@ fn new() -> ModelDelta {
     new_type_equalities: Vec::new(),
     new_type_list_equalities: Vec::new(),
     new_symbol_scope_equalities: Vec::new(),
-    new_pred_equalities: Vec::new(),
     new_func_equalities: Vec::new(),
+    new_pred_equalities: Vec::new(),
     new_rel_equalities: Vec::new(),
     new_structure_equalities: Vec::new(),
     new_el_equalities: Vec::new(),
@@ -55202,10 +55107,6 @@ fn new() -> ModelDelta {
 new_real_virt_ident_def: Vec::new(),
 
 new_virt_real_ident_def: Vec::new(),
-
-new_dom_def: Vec::new(),
-
-new_cod_def: Vec::new(),
 
 new_var_def: Vec::new(),
 
@@ -55307,9 +55208,19 @@ new_semantic_type_def: Vec::new(),
 
 new_decl_symbol_scope_def: Vec::new(),
 
-new_hom_type_def: Vec::new(),
+new_mor_type_def: Vec::new(),
 
-new_hom_type_signature_def: Vec::new(),
+new_mor_type_dom_func_def: Vec::new(),
+
+new_mor_type_cod_func_def: Vec::new(),
+
+new_type_definition_symbol_scope_def: Vec::new(),
+
+new_func_rel_def: Vec::new(),
+
+new_rel_definition_symbol_scope_def: Vec::new(),
+
+new_codomain_def: Vec::new(),
 
 new_type_name_def: Vec::new(),
 
@@ -55317,17 +55228,7 @@ new_virtual_symbol_scope_def: Vec::new(),
 
 new_parent_model_func_def: Vec::new(),
 
-new_type_definition_symbol_scope_def: Vec::new(),
-
 new_symbol_scope_model_def: Vec::new(),
-
-new_codomain_def: Vec::new(),
-
-new_func_rel_def: Vec::new(),
-
-new_rel_definition_symbol_scope_def: Vec::new(),
-
-new_pred_rel_def: Vec::new(),
 
 new_arg_symbol_scope_def: Vec::new(),
 
@@ -55337,7 +55238,13 @@ new_semantic_func_def: Vec::new(),
 
 new_ctor_symbol_scope_def: Vec::new(),
 
+new_pred_rel_def: Vec::new(),
+
 new_rel_name_def: Vec::new(),
+
+new_dom_def: Vec::new(),
+
+new_cod_def: Vec::new(),
 
 new_module_symbol_scope_def: Vec::new(),
 
@@ -55354,8 +55261,6 @@ new_els_structure_def: Vec::new(),
 new_ambient_type_def: Vec::new(),
 
 new_instantiated_type_def: Vec::new(),
-
-new_hom_el_type_def: Vec::new(),
 
 new_underlying_type_def: Vec::new(),
 
@@ -55686,8 +55591,8 @@ for MemberTypeExpr(tm0, tm1, tm2) in self.new_member_type_expr.drain(..) {
     model.insert_member_type_expr(tm0, tm1, tm2);
 }
 
-for HomTypeExpr(tm0, tm1, tm2) in self.new_hom_type_expr.drain(..) {
-    model.insert_hom_type_expr(tm0, tm1, tm2);
+for MorTypeExpr(tm0, tm1) in self.new_mor_type_expr.drain(..) {
+    model.insert_mor_type_expr(tm0, tm1);
 }
 
 for NoneTermNode(tm0) in self.new_none_term_node.drain(..) {
@@ -55854,8 +55759,8 @@ for IsModelType(tm0) in self.new_is_model_type.drain(..) {
     model.insert_is_model_type(tm0);
 }
 
-for IsHomType(tm0) in self.new_is_hom_type.drain(..) {
-    model.insert_is_hom_type(tm0);
+for IsMorType(tm0) in self.new_is_mor_type.drain(..) {
+    model.insert_is_mor_type(tm0);
 }
 
 for IsTotalFunc(tm0) in self.new_is_total_func.drain(..) {
@@ -56082,14 +55987,6 @@ for VirtRealIdent(tm0, tm1) in self.new_virt_real_ident.drain(..) {
     model.insert_virt_real_ident(tm0, tm1);
 }
 
-for Dom(tm0, tm1) in self.new_dom.drain(..) {
-    model.insert_dom(tm0, tm1);
-}
-
-for Cod(tm0, tm1) in self.new_cod.drain(..) {
-    model.insert_cod(tm0, tm1);
-}
-
 for Var(tm0, tm1, tm2) in self.new_var.drain(..) {
     model.insert_var(tm0, tm1, tm2);
 }
@@ -56290,16 +56187,36 @@ for DeclSymbolScope(tm0, tm1) in self.new_decl_symbol_scope.drain(..) {
     model.insert_decl_symbol_scope(tm0, tm1);
 }
 
-for HomType(tm0, tm1) in self.new_hom_type.drain(..) {
-    model.insert_hom_type(tm0, tm1);
+for MorType(tm0, tm1) in self.new_mor_type.drain(..) {
+    model.insert_mor_type(tm0, tm1);
 }
 
-for HomTypeSignature(tm0, tm1) in self.new_hom_type_signature.drain(..) {
-    model.insert_hom_type_signature(tm0, tm1);
+for MorTypeDomFunc(tm0, tm1) in self.new_mor_type_dom_func.drain(..) {
+    model.insert_mor_type_dom_func(tm0, tm1);
 }
 
-for PredArity(tm0, tm1) in self.new_pred_arity.drain(..) {
-    model.insert_pred_arity(tm0, tm1);
+for MorTypeCodFunc(tm0, tm1) in self.new_mor_type_cod_func.drain(..) {
+    model.insert_mor_type_cod_func(tm0, tm1);
+}
+
+for TypeDefinitionSymbolScope(tm0, tm1) in self.new_type_definition_symbol_scope.drain(..) {
+    model.insert_type_definition_symbol_scope(tm0, tm1);
+}
+
+for FuncRel(tm0, tm1) in self.new_func_rel.drain(..) {
+    model.insert_func_rel(tm0, tm1);
+}
+
+for RelDefinitionSymbolScope(tm0, tm1) in self.new_rel_definition_symbol_scope.drain(..) {
+    model.insert_rel_definition_symbol_scope(tm0, tm1);
+}
+
+for Domain(tm0, tm1) in self.new_domain.drain(..) {
+    model.insert_domain(tm0, tm1);
+}
+
+for Codomain(tm0, tm1) in self.new_codomain.drain(..) {
+    model.insert_codomain(tm0, tm1);
 }
 
 for TypeName(tm0, tm1) in self.new_type_name.drain(..) {
@@ -56314,32 +56231,8 @@ for ParentModelFunc(tm0, tm1) in self.new_parent_model_func.drain(..) {
     model.insert_parent_model_func(tm0, tm1);
 }
 
-for TypeDefinitionSymbolScope(tm0, tm1) in self.new_type_definition_symbol_scope.drain(..) {
-    model.insert_type_definition_symbol_scope(tm0, tm1);
-}
-
 for SymbolScopeModel(tm0, tm1) in self.new_symbol_scope_model.drain(..) {
     model.insert_symbol_scope_model(tm0, tm1);
-}
-
-for Codomain(tm0, tm1) in self.new_codomain.drain(..) {
-    model.insert_codomain(tm0, tm1);
-}
-
-for FuncRel(tm0, tm1) in self.new_func_rel.drain(..) {
-    model.insert_func_rel(tm0, tm1);
-}
-
-for RelDefinitionSymbolScope(tm0, tm1) in self.new_rel_definition_symbol_scope.drain(..) {
-    model.insert_rel_definition_symbol_scope(tm0, tm1);
-}
-
-for PredRel(tm0, tm1) in self.new_pred_rel.drain(..) {
-    model.insert_pred_rel(tm0, tm1);
-}
-
-for Domain(tm0, tm1) in self.new_domain.drain(..) {
-    model.insert_domain(tm0, tm1);
 }
 
 for FlatDomain(tm0, tm1) in self.new_flat_domain.drain(..) {
@@ -56358,6 +56251,10 @@ for SemanticPred(tm0, tm1, tm2) in self.new_semantic_pred.drain(..) {
     model.insert_semantic_pred(tm0, tm1, tm2);
 }
 
+for PredArity(tm0, tm1) in self.new_pred_arity.drain(..) {
+    model.insert_pred_arity(tm0, tm1);
+}
+
 for SemanticFunc(tm0, tm1, tm2) in self.new_semantic_func.drain(..) {
     model.insert_semantic_func(tm0, tm1, tm2);
 }
@@ -56366,12 +56263,24 @@ for CtorSymbolScope(tm0, tm1) in self.new_ctor_symbol_scope.drain(..) {
     model.insert_ctor_symbol_scope(tm0, tm1);
 }
 
+for PredRel(tm0, tm1) in self.new_pred_rel.drain(..) {
+    model.insert_pred_rel(tm0, tm1);
+}
+
 for RelName(tm0, tm1) in self.new_rel_name.drain(..) {
     model.insert_rel_name(tm0, tm1);
 }
 
 for Arity(tm0, tm1) in self.new_arity.drain(..) {
     model.insert_arity(tm0, tm1);
+}
+
+for Dom(tm0, tm1) in self.new_dom.drain(..) {
+    model.insert_dom(tm0, tm1);
+}
+
+for Cod(tm0, tm1) in self.new_cod.drain(..) {
+    model.insert_cod(tm0, tm1);
 }
 
 for FlatArity(tm0, tm1) in self.new_flat_arity.drain(..) {
@@ -56408,10 +56317,6 @@ for AmbientType(tm0, tm1) in self.new_ambient_type.drain(..) {
 
 for InstantiatedType(tm0, tm1, tm2) in self.new_instantiated_type.drain(..) {
     model.insert_instantiated_type(tm0, tm1, tm2);
-}
-
-for HomElType(tm0, tm1, tm2) in self.new_hom_el_type.drain(..) {
-    model.insert_hom_el_type(tm0, tm1, tm2);
 }
 
 for UnderlyingType(tm0, tm1) in self.new_underlying_type.drain(..) {
@@ -56587,14 +56492,6 @@ fn apply_func_defs(&mut self, model: &mut Model) {
 
 for VirtRealIdentArgs(tm0) in self.new_virt_real_ident_def.drain(..) {
     model.define_virt_real_ident(tm0);
-}
-
-for DomArgs(tm0) in self.new_dom_def.drain(..) {
-    model.define_dom(tm0);
-}
-
-for CodArgs(tm0) in self.new_cod_def.drain(..) {
-    model.define_cod(tm0);
 }
 
 for VarArgs(tm0, tm1) in self.new_var_def.drain(..) {
@@ -56797,12 +56694,32 @@ for DeclSymbolScopeArgs(tm0) in self.new_decl_symbol_scope_def.drain(..) {
     model.define_decl_symbol_scope(tm0);
 }
 
-for HomTypeArgs(tm0) in self.new_hom_type_def.drain(..) {
-    model.define_hom_type(tm0);
+for MorTypeArgs(tm0) in self.new_mor_type_def.drain(..) {
+    model.define_mor_type(tm0);
 }
 
-for HomTypeSignatureArgs(tm0) in self.new_hom_type_signature_def.drain(..) {
-    model.define_hom_type_signature(tm0);
+for MorTypeDomFuncArgs(tm0) in self.new_mor_type_dom_func_def.drain(..) {
+    model.define_mor_type_dom_func(tm0);
+}
+
+for MorTypeCodFuncArgs(tm0) in self.new_mor_type_cod_func_def.drain(..) {
+    model.define_mor_type_cod_func(tm0);
+}
+
+for TypeDefinitionSymbolScopeArgs(tm0) in self.new_type_definition_symbol_scope_def.drain(..) {
+    model.define_type_definition_symbol_scope(tm0);
+}
+
+for FuncRelArgs(tm0) in self.new_func_rel_def.drain(..) {
+    model.define_func_rel(tm0);
+}
+
+for RelDefinitionSymbolScopeArgs(tm0) in self.new_rel_definition_symbol_scope_def.drain(..) {
+    model.define_rel_definition_symbol_scope(tm0);
+}
+
+for CodomainArgs(tm0) in self.new_codomain_def.drain(..) {
+    model.define_codomain(tm0);
 }
 
 for TypeNameArgs(tm0) in self.new_type_name_def.drain(..) {
@@ -56817,28 +56734,8 @@ for ParentModelFuncArgs(tm0) in self.new_parent_model_func_def.drain(..) {
     model.define_parent_model_func(tm0);
 }
 
-for TypeDefinitionSymbolScopeArgs(tm0) in self.new_type_definition_symbol_scope_def.drain(..) {
-    model.define_type_definition_symbol_scope(tm0);
-}
-
 for SymbolScopeModelArgs(tm0) in self.new_symbol_scope_model_def.drain(..) {
     model.define_symbol_scope_model(tm0);
-}
-
-for CodomainArgs(tm0) in self.new_codomain_def.drain(..) {
-    model.define_codomain(tm0);
-}
-
-for FuncRelArgs(tm0) in self.new_func_rel_def.drain(..) {
-    model.define_func_rel(tm0);
-}
-
-for RelDefinitionSymbolScopeArgs(tm0) in self.new_rel_definition_symbol_scope_def.drain(..) {
-    model.define_rel_definition_symbol_scope(tm0);
-}
-
-for PredRelArgs(tm0) in self.new_pred_rel_def.drain(..) {
-    model.define_pred_rel(tm0);
 }
 
 for ArgSymbolScopeArgs(tm0) in self.new_arg_symbol_scope_def.drain(..) {
@@ -56857,8 +56754,20 @@ for CtorSymbolScopeArgs(tm0) in self.new_ctor_symbol_scope_def.drain(..) {
     model.define_ctor_symbol_scope(tm0);
 }
 
+for PredRelArgs(tm0) in self.new_pred_rel_def.drain(..) {
+    model.define_pred_rel(tm0);
+}
+
 for RelNameArgs(tm0) in self.new_rel_name_def.drain(..) {
     model.define_rel_name(tm0);
+}
+
+for DomArgs(tm0) in self.new_dom_def.drain(..) {
+    model.define_dom(tm0);
+}
+
+for CodArgs(tm0) in self.new_cod_def.drain(..) {
+    model.define_cod(tm0);
 }
 
 for ModuleSymbolScopeArgs(tm0) in self.new_module_symbol_scope_def.drain(..) {
@@ -56891,10 +56800,6 @@ for AmbientTypeArgs(tm0) in self.new_ambient_type_def.drain(..) {
 
 for InstantiatedTypeArgs(tm0, tm1) in self.new_instantiated_type_def.drain(..) {
     model.define_instantiated_type(tm0, tm1);
-}
-
-for HomElTypeArgs(tm0, tm1) in self.new_hom_el_type_def.drain(..) {
-    model.define_hom_el_type(tm0, tm1);
 }
 
 for UnderlyingTypeArgs(tm0) in self.new_underlying_type_def.drain(..) {
@@ -57217,16 +57122,16 @@ symbol_scope_weights: Vec::new(),
 symbol_scope_new: BTreeSet::new(),
 symbol_scope_old: BTreeSet::new(),
 symbol_scope_uprooted: Vec::new(),
-pred_equalities: Unification::new(),
-pred_weights: Vec::new(),
-pred_new: BTreeSet::new(),
-pred_old: BTreeSet::new(),
-pred_uprooted: Vec::new(),
 func_equalities: Unification::new(),
 func_weights: Vec::new(),
 func_new: BTreeSet::new(),
 func_old: BTreeSet::new(),
 func_uprooted: Vec::new(),
+pred_equalities: Unification::new(),
+pred_weights: Vec::new(),
+pred_new: BTreeSet::new(),
+pred_old: BTreeSet::new(),
+pred_uprooted: Vec::new(),
 rel_equalities: Unification::new(),
 rel_weights: Vec::new(),
 rel_new: BTreeSet::new(),
@@ -57277,7 +57182,7 @@ nat_weights: Vec::new(),
 nat_new: BTreeSet::new(),
 nat_old: BTreeSet::new(),
 nat_uprooted: Vec::new(),
-absurd: AbsurdTable::new(),type_decl: TypeDeclTable::new(),arg_decl_node_name: ArgDeclNodeNameTable::new(),arg_decl_node_type: ArgDeclNodeTypeTable::new(),nil_arg_decl_list_node: NilArgDeclListNodeTable::new(),cons_arg_decl_list_node: ConsArgDeclListNodeTable::new(),pred_decl: PredDeclTable::new(),func_decl: FuncDeclTable::new(),ctor_decl: CtorDeclTable::new(),nil_ctor_decl_list_node: NilCtorDeclListNodeTable::new(),cons_ctor_decl_list_node: ConsCtorDeclListNodeTable::new(),enum_decl: EnumDeclTable::new(),nil_term_list_node: NilTermListNodeTable::new(),cons_term_list_node: ConsTermListNodeTable::new(),ambient_type_expr: AmbientTypeExprTable::new(),member_type_expr: MemberTypeExprTable::new(),hom_type_expr: HomTypeExprTable::new(),none_term_node: NoneTermNodeTable::new(),some_term_node: SomeTermNodeTable::new(),var_term_node: VarTermNodeTable::new(),wildcard_term_node: WildcardTermNodeTable::new(),app_term_node: AppTermNodeTable::new(),match_case: MatchCaseTable::new(),nil_match_case_list_node: NilMatchCaseListNodeTable::new(),cons_match_case_list_node: ConsMatchCaseListNodeTable::new(),equal_if_atom_node: EqualIfAtomNodeTable::new(),defined_if_atom_node: DefinedIfAtomNodeTable::new(),pred_if_atom_node: PredIfAtomNodeTable::new(),var_if_atom_node: VarIfAtomNodeTable::new(),equal_then_atom_node: EqualThenAtomNodeTable::new(),defined_then_atom_node: DefinedThenAtomNodeTable::new(),pred_then_atom_node: PredThenAtomNodeTable::new(),if_stmt_node: IfStmtNodeTable::new(),then_stmt_node: ThenStmtNodeTable::new(),branch_stmt_node: BranchStmtNodeTable::new(),match_stmt_node: MatchStmtNodeTable::new(),nil_stmt_list_node: NilStmtListNodeTable::new(),cons_stmt_list_node: ConsStmtListNodeTable::new(),nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),rule_decl: RuleDeclTable::new(),model_decl: ModelDeclTable::new(),decl_node_type: DeclNodeTypeTable::new(),decl_node_pred: DeclNodePredTable::new(),decl_node_func: DeclNodeFuncTable::new(),decl_node_rule: DeclNodeRuleTable::new(),decl_node_enum: DeclNodeEnumTable::new(),decl_node_model: DeclNodeModelTable::new(),nil_decl_list_node: NilDeclListNodeTable::new(),cons_decl_list_node: ConsDeclListNodeTable::new(),decls_module_node: DeclsModuleNodeTable::new(),var_in_scope: VarInScopeTable::new(),scope_extension: ScopeExtensionTable::new(),scope_single_child: ScopeSingleChildTable::new(),scope_extension_siblings: ScopeExtensionSiblingsTable::new(),is_normal_type: IsNormalTypeTable::new(),is_enum_type: IsEnumTypeTable::new(),is_model_type: IsModelTypeTable::new(),is_hom_type: IsHomTypeTable::new(),is_total_func: IsTotalFuncTable::new(),rel_app: RelAppTable::new(),el_type: ElTypeTable::new(),el_types: ElTypesTable::new(),constrained_el: ConstrainedElTable::new(),constrained_els: ConstrainedElsTable::new(),in_ker: InKerTable::new(),el_in_img: ElInImgTable::new(),rel_tuple_in_img: RelTupleInImgTable::new(),symbol_scope_extension: SymbolScopeExtensionTable::new(),symbol_scope_ancestor: SymbolScopeAncestorTable::new(),element_member_symbol_scope: ElementMemberSymbolScopeTable::new(),defined_symbol: DefinedSymbolTable::new(),accessible_symbol: AccessibleSymbolTable::new(),should_be_symbol: ShouldBeSymbolTable::new(),should_be_symbol_2: ShouldBeSymbol2Table::new(),should_be_symbol_3: ShouldBeSymbol3Table::new(),pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),cfg_edge: CfgEdgeTable::new(),cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),cfg_edge_fork: CfgEdgeForkTable::new(),cfg_edge_join: CfgEdgeJoinTable::new(),before_stmt_structure: BeforeStmtStructureTable::new(),stmt_morphism: StmtMorphismTable::new(),if_morphism: IfMorphismTable::new(),surj_then_morphism: SurjThenMorphismTable::new(),non_surj_then_morphism: NonSurjThenMorphismTable::new(),noop_morphism: NoopMorphismTable::new(),stmt_structure: StmtStructureTable::new(),if_atom_structure: IfAtomStructureTable::new(),then_atom_structure: ThenAtomStructureTable::new(),term_structure: TermStructureTable::new(),terms_structure: TermsStructureTable::new(),opt_term_structure: OptTermStructureTable::new(),type_expr_structure: TypeExprStructureTable::new(),term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),el_is_surjective_ok: ElIsSurjectiveOkTable::new(),should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),is_given_by_ctor: IsGivenByCtorTable::new(),function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),case_pattern_is_variable: CasePatternIsVariableTable::new(),case_pattern_is_wildcard: CasePatternIsWildcardTable::new(),is_pattern_ctor_arg: IsPatternCtorArgTable::new(),are_pattern_ctor_args: ArePatternCtorArgsTable::new(),pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),cases_contain_ctor: CasesContainCtorTable::new(),match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),real_virt_ident: RealVirtIdentTable::new(),virt_real_ident: VirtRealIdentTable::new(),dom: DomTable::new(),cod: CodTable::new(),var: VarTable::new(),rule_name: RuleNameTable::new(),module_name: ModuleNameTable::new(),type_decl_node_loc: TypeDeclNodeLocTable::new(),arg_decl_node_loc: ArgDeclNodeLocTable::new(),arg_decl_list_node_loc: ArgDeclListNodeLocTable::new(),pred_decl_node_loc: PredDeclNodeLocTable::new(),func_decl_node_loc: FuncDeclNodeLocTable::new(),ctor_decl_node_loc: CtorDeclNodeLocTable::new(),enum_decl_node_loc: EnumDeclNodeLocTable::new(),model_decl_node_loc: ModelDeclNodeLocTable::new(),term_node_loc: TermNodeLocTable::new(),term_list_node_loc: TermListNodeLocTable::new(),match_case_node_loc: MatchCaseNodeLocTable::new(),opt_term_node_loc: OptTermNodeLocTable::new(),if_atom_node_loc: IfAtomNodeLocTable::new(),then_atom_node_loc: ThenAtomNodeLocTable::new(),stmt_node_loc: StmtNodeLocTable::new(),stmt_list_node_loc: StmtListNodeLocTable::new(),rule_decl_node_loc: RuleDeclNodeLocTable::new(),decl_node_loc: DeclNodeLocTable::new(),decl_list_node_loc: DeclListNodeLocTable::new(),module_node_loc: ModuleNodeLocTable::new(),rule_descendant_rule: RuleDescendantRuleTable::new(),rule_descendant_term: RuleDescendantTermTable::new(),rule_descendant_term_list: RuleDescendantTermListTable::new(),rule_descendant_opt_term: RuleDescendantOptTermTable::new(),rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),rule_descendant_stmt: RuleDescendantStmtTable::new(),rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),rule_descendant_type_expr: RuleDescendantTypeExprTable::new(),entry_scope: EntryScopeTable::new(),exit_scope: ExitScopeTable::new(),ctor_enum: CtorEnumTable::new(),ctors_enum: CtorsEnumTable::new(),cases_discriminee: CasesDiscrimineeTable::new(),case_discriminee: CaseDiscrimineeTable::new(),desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),desugared_case_block: DesugaredCaseBlockTable::new(),desugared_case_block_list: DesugaredCaseBlockListTable::new(),nil_type_list: NilTypeListTable::new(),cons_type_list: ConsTypeListTable::new(),snoc_type_list: SnocTypeListTable::new(),semantic_type: SemanticTypeTable::new(),decl_symbol_scope: DeclSymbolScopeTable::new(),hom_type: HomTypeTable::new(),hom_type_signature: HomTypeSignatureTable::new(),pred_arity: PredArityTable::new(),type_name: TypeNameTable::new(),virtual_symbol_scope: VirtualSymbolScopeTable::new(),parent_model_func: ParentModelFuncTable::new(),type_definition_symbol_scope: TypeDefinitionSymbolScopeTable::new(),symbol_scope_model: SymbolScopeModelTable::new(),codomain: CodomainTable::new(),func_rel: FuncRelTable::new(),rel_definition_symbol_scope: RelDefinitionSymbolScopeTable::new(),pred_rel: PredRelTable::new(),domain: DomainTable::new(),flat_domain: FlatDomainTable::new(),semantic_arg_types: SemanticArgTypesTable::new(),arg_symbol_scope: ArgSymbolScopeTable::new(),semantic_pred: SemanticPredTable::new(),semantic_func: SemanticFuncTable::new(),ctor_symbol_scope: CtorSymbolScopeTable::new(),rel_name: RelNameTable::new(),arity: ArityTable::new(),flat_arity: FlatArityTable::new(),module_symbol_scope: ModuleSymbolScopeTable::new(),nil_el_list: NilElListTable::new(),cons_el_list: ConsElListTable::new(),snoc_el_list: SnocElListTable::new(),el_structure: ElStructureTable::new(),els_structure: ElsStructureTable::new(),ambient_type: AmbientTypeTable::new(),instantiated_type: InstantiatedTypeTable::new(),hom_el_type: HomElTypeTable::new(),underlying_type: UnderlyingTypeTable::new(),nil_element_type_list: NilElementTypeListTable::new(),cons_element_type_list: ConsElementTypeListTable::new(),snoc_element_type_list: SnocElementTypeListTable::new(),ambient_el_type_list: AmbientElTypeListTable::new(),func_app: FuncAppTable::new(),map_el: MapElTable::new(),map_els: MapElsTable::new(),ambient_model_el: AmbientModelElTable::new(),type_symbol: TypeSymbolTable::new(),pred_symbol: PredSymbolTable::new(),func_symbol: FuncSymbolTable::new(),rule_symbol: RuleSymbolTable::new(),enum_symbol: EnumSymbolTable::new(),ctor_symbol: CtorSymbolTable::new(),model_symbol: ModelSymbolTable::new(),symbol_scope_parent: SymbolScopeParentTable::new(),decls_symbol_scope: DeclsSymbolScopeTable::new(),args_symbol_scope: ArgsSymbolScopeTable::new(),ctors_symbol_scope: CtorsSymbolScopeTable::new(),model_member_symbol_scope: ModelMemberSymbolScopeTable::new(),symbol_scope_name: SymbolScopeNameTable::new(),scope_symbols: ScopeSymbolsTable::new(),semantic_el: SemanticElTable::new(),zero: ZeroTable::new(),succ: SuccTable::new(),type_list_len: TypeListLenTable::new(),term_list_len: TermListLenTable::new(),before_rule_structure: BeforeRuleStructureTable::new(),ambient_model_el_structure: AmbientModelElStructureTable::new(),ambient_model_el_morphism: AmbientModelElMorphismTable::new(),if_atom_morphism: IfAtomMorphismTable::new(),then_atom_morphism: ThenAtomMorphismTable::new(),branch_stmt_morphism: BranchStmtMorphismTable::new(),match_stmt_morphism: MatchStmtMorphismTable::new(),semantic_name: SemanticNameTable::new(),semantic_els: SemanticElsTable::new(),wildcard_name: WildcardNameTable::new(),rel_app_parent_model_el: RelAppParentModelElTable::new(),match_case_pattern_ctor: MatchCasePatternCtorTable::new(),cases_determined_enum: CasesDeterminedEnumTable::new(),empty_join_is_dirty: true,
+absurd: AbsurdTable::new(),type_decl: TypeDeclTable::new(),arg_decl_node_name: ArgDeclNodeNameTable::new(),arg_decl_node_type: ArgDeclNodeTypeTable::new(),nil_arg_decl_list_node: NilArgDeclListNodeTable::new(),cons_arg_decl_list_node: ConsArgDeclListNodeTable::new(),pred_decl: PredDeclTable::new(),func_decl: FuncDeclTable::new(),ctor_decl: CtorDeclTable::new(),nil_ctor_decl_list_node: NilCtorDeclListNodeTable::new(),cons_ctor_decl_list_node: ConsCtorDeclListNodeTable::new(),enum_decl: EnumDeclTable::new(),nil_term_list_node: NilTermListNodeTable::new(),cons_term_list_node: ConsTermListNodeTable::new(),ambient_type_expr: AmbientTypeExprTable::new(),member_type_expr: MemberTypeExprTable::new(),mor_type_expr: MorTypeExprTable::new(),none_term_node: NoneTermNodeTable::new(),some_term_node: SomeTermNodeTable::new(),var_term_node: VarTermNodeTable::new(),wildcard_term_node: WildcardTermNodeTable::new(),app_term_node: AppTermNodeTable::new(),match_case: MatchCaseTable::new(),nil_match_case_list_node: NilMatchCaseListNodeTable::new(),cons_match_case_list_node: ConsMatchCaseListNodeTable::new(),equal_if_atom_node: EqualIfAtomNodeTable::new(),defined_if_atom_node: DefinedIfAtomNodeTable::new(),pred_if_atom_node: PredIfAtomNodeTable::new(),var_if_atom_node: VarIfAtomNodeTable::new(),equal_then_atom_node: EqualThenAtomNodeTable::new(),defined_then_atom_node: DefinedThenAtomNodeTable::new(),pred_then_atom_node: PredThenAtomNodeTable::new(),if_stmt_node: IfStmtNodeTable::new(),then_stmt_node: ThenStmtNodeTable::new(),branch_stmt_node: BranchStmtNodeTable::new(),match_stmt_node: MatchStmtNodeTable::new(),nil_stmt_list_node: NilStmtListNodeTable::new(),cons_stmt_list_node: ConsStmtListNodeTable::new(),nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),rule_decl: RuleDeclTable::new(),model_decl: ModelDeclTable::new(),decl_node_type: DeclNodeTypeTable::new(),decl_node_pred: DeclNodePredTable::new(),decl_node_func: DeclNodeFuncTable::new(),decl_node_rule: DeclNodeRuleTable::new(),decl_node_enum: DeclNodeEnumTable::new(),decl_node_model: DeclNodeModelTable::new(),nil_decl_list_node: NilDeclListNodeTable::new(),cons_decl_list_node: ConsDeclListNodeTable::new(),decls_module_node: DeclsModuleNodeTable::new(),var_in_scope: VarInScopeTable::new(),scope_extension: ScopeExtensionTable::new(),scope_single_child: ScopeSingleChildTable::new(),scope_extension_siblings: ScopeExtensionSiblingsTable::new(),is_normal_type: IsNormalTypeTable::new(),is_enum_type: IsEnumTypeTable::new(),is_model_type: IsModelTypeTable::new(),is_mor_type: IsMorTypeTable::new(),is_total_func: IsTotalFuncTable::new(),rel_app: RelAppTable::new(),el_type: ElTypeTable::new(),el_types: ElTypesTable::new(),constrained_el: ConstrainedElTable::new(),constrained_els: ConstrainedElsTable::new(),in_ker: InKerTable::new(),el_in_img: ElInImgTable::new(),rel_tuple_in_img: RelTupleInImgTable::new(),symbol_scope_extension: SymbolScopeExtensionTable::new(),symbol_scope_ancestor: SymbolScopeAncestorTable::new(),element_member_symbol_scope: ElementMemberSymbolScopeTable::new(),defined_symbol: DefinedSymbolTable::new(),accessible_symbol: AccessibleSymbolTable::new(),should_be_symbol: ShouldBeSymbolTable::new(),should_be_symbol_2: ShouldBeSymbol2Table::new(),should_be_symbol_3: ShouldBeSymbol3Table::new(),pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),cfg_edge: CfgEdgeTable::new(),cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),cfg_edge_fork: CfgEdgeForkTable::new(),cfg_edge_join: CfgEdgeJoinTable::new(),before_stmt_structure: BeforeStmtStructureTable::new(),stmt_morphism: StmtMorphismTable::new(),if_morphism: IfMorphismTable::new(),surj_then_morphism: SurjThenMorphismTable::new(),non_surj_then_morphism: NonSurjThenMorphismTable::new(),noop_morphism: NoopMorphismTable::new(),stmt_structure: StmtStructureTable::new(),if_atom_structure: IfAtomStructureTable::new(),then_atom_structure: ThenAtomStructureTable::new(),term_structure: TermStructureTable::new(),terms_structure: TermsStructureTable::new(),opt_term_structure: OptTermStructureTable::new(),type_expr_structure: TypeExprStructureTable::new(),term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),el_is_surjective_ok: ElIsSurjectiveOkTable::new(),should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),is_given_by_ctor: IsGivenByCtorTable::new(),function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),case_pattern_is_variable: CasePatternIsVariableTable::new(),case_pattern_is_wildcard: CasePatternIsWildcardTable::new(),is_pattern_ctor_arg: IsPatternCtorArgTable::new(),are_pattern_ctor_args: ArePatternCtorArgsTable::new(),pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),cases_contain_ctor: CasesContainCtorTable::new(),match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),real_virt_ident: RealVirtIdentTable::new(),virt_real_ident: VirtRealIdentTable::new(),var: VarTable::new(),rule_name: RuleNameTable::new(),module_name: ModuleNameTable::new(),type_decl_node_loc: TypeDeclNodeLocTable::new(),arg_decl_node_loc: ArgDeclNodeLocTable::new(),arg_decl_list_node_loc: ArgDeclListNodeLocTable::new(),pred_decl_node_loc: PredDeclNodeLocTable::new(),func_decl_node_loc: FuncDeclNodeLocTable::new(),ctor_decl_node_loc: CtorDeclNodeLocTable::new(),enum_decl_node_loc: EnumDeclNodeLocTable::new(),model_decl_node_loc: ModelDeclNodeLocTable::new(),term_node_loc: TermNodeLocTable::new(),term_list_node_loc: TermListNodeLocTable::new(),match_case_node_loc: MatchCaseNodeLocTable::new(),opt_term_node_loc: OptTermNodeLocTable::new(),if_atom_node_loc: IfAtomNodeLocTable::new(),then_atom_node_loc: ThenAtomNodeLocTable::new(),stmt_node_loc: StmtNodeLocTable::new(),stmt_list_node_loc: StmtListNodeLocTable::new(),rule_decl_node_loc: RuleDeclNodeLocTable::new(),decl_node_loc: DeclNodeLocTable::new(),decl_list_node_loc: DeclListNodeLocTable::new(),module_node_loc: ModuleNodeLocTable::new(),rule_descendant_rule: RuleDescendantRuleTable::new(),rule_descendant_term: RuleDescendantTermTable::new(),rule_descendant_term_list: RuleDescendantTermListTable::new(),rule_descendant_opt_term: RuleDescendantOptTermTable::new(),rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),rule_descendant_stmt: RuleDescendantStmtTable::new(),rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),rule_descendant_type_expr: RuleDescendantTypeExprTable::new(),entry_scope: EntryScopeTable::new(),exit_scope: ExitScopeTable::new(),ctor_enum: CtorEnumTable::new(),ctors_enum: CtorsEnumTable::new(),cases_discriminee: CasesDiscrimineeTable::new(),case_discriminee: CaseDiscrimineeTable::new(),desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),desugared_case_block: DesugaredCaseBlockTable::new(),desugared_case_block_list: DesugaredCaseBlockListTable::new(),nil_type_list: NilTypeListTable::new(),cons_type_list: ConsTypeListTable::new(),snoc_type_list: SnocTypeListTable::new(),semantic_type: SemanticTypeTable::new(),decl_symbol_scope: DeclSymbolScopeTable::new(),mor_type: MorTypeTable::new(),mor_type_dom_func: MorTypeDomFuncTable::new(),mor_type_cod_func: MorTypeCodFuncTable::new(),type_definition_symbol_scope: TypeDefinitionSymbolScopeTable::new(),func_rel: FuncRelTable::new(),rel_definition_symbol_scope: RelDefinitionSymbolScopeTable::new(),domain: DomainTable::new(),codomain: CodomainTable::new(),type_name: TypeNameTable::new(),virtual_symbol_scope: VirtualSymbolScopeTable::new(),parent_model_func: ParentModelFuncTable::new(),symbol_scope_model: SymbolScopeModelTable::new(),flat_domain: FlatDomainTable::new(),semantic_arg_types: SemanticArgTypesTable::new(),arg_symbol_scope: ArgSymbolScopeTable::new(),semantic_pred: SemanticPredTable::new(),pred_arity: PredArityTable::new(),semantic_func: SemanticFuncTable::new(),ctor_symbol_scope: CtorSymbolScopeTable::new(),pred_rel: PredRelTable::new(),rel_name: RelNameTable::new(),arity: ArityTable::new(),dom: DomTable::new(),cod: CodTable::new(),flat_arity: FlatArityTable::new(),module_symbol_scope: ModuleSymbolScopeTable::new(),nil_el_list: NilElListTable::new(),cons_el_list: ConsElListTable::new(),snoc_el_list: SnocElListTable::new(),el_structure: ElStructureTable::new(),els_structure: ElsStructureTable::new(),ambient_type: AmbientTypeTable::new(),instantiated_type: InstantiatedTypeTable::new(),underlying_type: UnderlyingTypeTable::new(),nil_element_type_list: NilElementTypeListTable::new(),cons_element_type_list: ConsElementTypeListTable::new(),snoc_element_type_list: SnocElementTypeListTable::new(),ambient_el_type_list: AmbientElTypeListTable::new(),func_app: FuncAppTable::new(),map_el: MapElTable::new(),map_els: MapElsTable::new(),ambient_model_el: AmbientModelElTable::new(),type_symbol: TypeSymbolTable::new(),pred_symbol: PredSymbolTable::new(),func_symbol: FuncSymbolTable::new(),rule_symbol: RuleSymbolTable::new(),enum_symbol: EnumSymbolTable::new(),ctor_symbol: CtorSymbolTable::new(),model_symbol: ModelSymbolTable::new(),symbol_scope_parent: SymbolScopeParentTable::new(),decls_symbol_scope: DeclsSymbolScopeTable::new(),args_symbol_scope: ArgsSymbolScopeTable::new(),ctors_symbol_scope: CtorsSymbolScopeTable::new(),model_member_symbol_scope: ModelMemberSymbolScopeTable::new(),symbol_scope_name: SymbolScopeNameTable::new(),scope_symbols: ScopeSymbolsTable::new(),semantic_el: SemanticElTable::new(),zero: ZeroTable::new(),succ: SuccTable::new(),type_list_len: TypeListLenTable::new(),term_list_len: TermListLenTable::new(),before_rule_structure: BeforeRuleStructureTable::new(),ambient_model_el_structure: AmbientModelElStructureTable::new(),ambient_model_el_morphism: AmbientModelElMorphismTable::new(),if_atom_morphism: IfAtomMorphismTable::new(),then_atom_morphism: ThenAtomMorphismTable::new(),branch_stmt_morphism: BranchStmtMorphismTable::new(),match_stmt_morphism: MatchStmtMorphismTable::new(),semantic_name: SemanticNameTable::new(),semantic_els: SemanticElsTable::new(),wildcard_name: WildcardNameTable::new(),rel_app_parent_model_el: RelAppParentModelElTable::new(),match_case_pattern_ctor: MatchCasePatternCtorTable::new(),cases_determined_enum: CasesDeterminedEnumTable::new(),empty_join_is_dirty: true,
 }
 }
 
@@ -57469,7 +57374,6 @@ self.scopes_opt_term_some_0(&mut delta);
 self.scopes_term_app_0(&mut delta);
 self.scopes_term_var_0(&mut delta);
 self.scopes_member_type_expr_0(&mut delta);
-self.scopes_hom_type_expr_0(&mut delta);
 self.enum_ctors_0(&mut delta);
 self.enum_ctors_cons_0(&mut delta);
 self.match_stmt_cases_discriminee_0(&mut delta);
@@ -57487,14 +57391,17 @@ self.type_list_cons_injective_0(&mut delta);
 self.semantic_decl_type_0(&mut delta);
 self.semantic_decl_enum_0(&mut delta);
 self.semantic_decl_model_0(&mut delta);
-self.hom_type_defined_for_model_0(&mut delta);
-self.hom_type_is_hom_type_0(&mut delta);
-self.hom_type_signature_defined_and_arity_0(&mut delta);
+self.mor_type_defined_for_model_0(&mut delta);
+self.mor_type_is_mor_type_0(&mut delta);
+self.mor_type_symbol_scope_0(&mut delta);
+self.mor_type_dom_func_symbol_scope_0(&mut delta);
+self.mor_type_cod_func_symbol_scope_0(&mut delta);
+self.mor_type_dom_cod_func_domains_0(&mut delta);
+self.mor_type_dom_cod_func_codomains_0(&mut delta);
 self.type_name_semantic_type_0(&mut delta);
 self.virtual_symbol_scope_total_0(&mut delta);
 self.parent_model_func_defined_and_codomain_0(&mut delta);
 self.parent_model_func_def_scope_0(&mut delta);
-self.hom_signature_symbol_scope_0(&mut delta);
 self.parent_model_func_domain_0(&mut delta);
 self.semantic_arg_types_nil_0(&mut delta);
 self.semantic_arg_types_cons_0(&mut delta);
@@ -57550,7 +57457,7 @@ self.map_preserves_ambient_model_els_0(&mut delta);
 self.in_ker_rule_0(&mut delta);
 self.el_in_img_rule_0(&mut delta);
 self.rel_tuple_in_img_law_0(&mut delta);
-self.anonymous_rule_121_0(&mut delta);
+self.anonymous_rule_123_0(&mut delta);
 self.symbol_scope_extension_parent_0(&mut delta);
 self.symbol_scope_ancestor_reflexivity_0(&mut delta);
 self.symbol_scope_ancestor_parent_0(&mut delta);
@@ -57650,7 +57557,6 @@ self.equal_then_atom_structure_0(&mut delta);
 self.defined_then_atom_structure_0(&mut delta);
 self.pred_then_atom_structure_0(&mut delta);
 self.member_type_expr_structure_0(&mut delta);
-self.hom_type_expr_structure_0(&mut delta);
 self.cons_term_list_structure_0(&mut delta);
 self.some_opt_term_structure_0(&mut delta);
 self.app_term_structure_0(&mut delta);
@@ -58398,27 +58304,6 @@ pub fn are_equal_symbol_scope(&self, lhs: SymbolScope, rhs: SymbolScope) -> bool
     self.root_symbol_scope(lhs) == self.root_symbol_scope(rhs)
 }
 
-/// Returns and iterator over elements of sort `Pred`.
-/// The iterator yields canonical representatives only.
-#[allow(dead_code)]
-pub fn iter_pred(&self) -> impl '_ + Iterator<Item=Pred> {
-    self.pred_new.iter().chain(self.pred_old.iter()).copied()
-}
-/// Returns the canonical representative of the equivalence class of `el`.
-#[allow(dead_code)]
-pub fn root_pred(&self, el: Pred) -> Pred {
-    if el.0 as usize >= self.pred_equalities.len() {
-        el
-    } else {
-        self.pred_equalities.root_const(el)
-    }
-}
-/// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
-#[allow(dead_code)]
-pub fn are_equal_pred(&self, lhs: Pred, rhs: Pred) -> bool {
-    self.root_pred(lhs) == self.root_pred(rhs)
-}
-
 /// Returns and iterator over elements of sort `Func`.
 /// The iterator yields canonical representatives only.
 #[allow(dead_code)]
@@ -58438,6 +58323,27 @@ pub fn root_func(&self, el: Func) -> Func {
 #[allow(dead_code)]
 pub fn are_equal_func(&self, lhs: Func, rhs: Func) -> bool {
     self.root_func(lhs) == self.root_func(rhs)
+}
+
+/// Returns and iterator over elements of sort `Pred`.
+/// The iterator yields canonical representatives only.
+#[allow(dead_code)]
+pub fn iter_pred(&self) -> impl '_ + Iterator<Item=Pred> {
+    self.pred_new.iter().chain(self.pred_old.iter()).copied()
+}
+/// Returns the canonical representative of the equivalence class of `el`.
+#[allow(dead_code)]
+pub fn root_pred(&self, el: Pred) -> Pred {
+    if el.0 as usize >= self.pred_equalities.len() {
+        el
+    } else {
+        self.pred_equalities.root_const(el)
+    }
+}
+/// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
+#[allow(dead_code)]
+pub fn are_equal_pred(&self, lhs: Pred, rhs: Pred) -> bool {
+    self.root_pred(lhs) == self.root_pred(rhs)
 }
 
 /// Returns and iterator over elements of sort `Rel`.
@@ -60667,9 +60573,6 @@ pub fn new_element_type(&mut self, value: ElementTypeCase) -> ElementType {
 ElementTypeCase::InstantiatedType(tm0, tm1) => {
     self.define_instantiated_type(tm0, tm1)
 }
-ElementTypeCase::HomElType(tm0, tm1) => {
-    self.define_hom_el_type(tm0, tm1)
-}
 
     }
 }
@@ -60689,14 +60592,6 @@ let el = self.element_type_equalities.root_const(el);
 .chain(self.iter_instantiated_type().filter_map(move |(tm0, tm1, tm2)| {
     if el == tm2 {
         Some(ElementTypeCase::InstantiatedType(tm0, tm1))
-    } else {
-        None
-    }
-}))
-
-.chain(self.iter_hom_el_type().filter_map(move |(tm0, tm1, tm2)| {
-    if el == tm2 {
-        Some(ElementTypeCase::HomElType(tm0, tm1))
     } else {
         None
     }
@@ -60911,64 +60806,6 @@ tm1 = self.ident_equalities.root(tm1);
 
 let weight1 = &mut self.ident_weights[tm1.0 as usize];
 *weight1 = weight1.saturating_add(VirtRealIdentTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `dom(arg0)`.
-#[allow(dead_code)]
-pub fn dom(&self, mut arg0: Morphism) -> Option<Structure> {
-    arg0 = self.root_morphism(arg0);
-    self.dom.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `dom` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_dom(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
-    self.dom.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `dom(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_dom(&mut self, mut tm0: Morphism, mut tm1: Structure) {
-    tm0 = self.morphism_equalities.root(tm0);
-tm1 = self.structure_equalities.root(tm1);
-    if self.dom.insert(Dom(tm0, tm1)) {
-        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(DomTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `cod(arg0)`.
-#[allow(dead_code)]
-pub fn cod(&self, mut arg0: Morphism) -> Option<Structure> {
-    arg0 = self.root_morphism(arg0);
-    self.cod.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `cod` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_cod(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
-    self.cod.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `cod(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_cod(&mut self, mut tm0: Morphism, mut tm1: Structure) {
-    tm0 = self.morphism_equalities.root(tm0);
-tm1 = self.structure_equalities.root(tm1);
-    if self.cod.insert(Cod(tm0, tm1)) {
-        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(CodTable::WEIGHT);
 
     }
 }
@@ -62439,89 +62276,234 @@ let weight1 = &mut self.symbol_scope_weights[tm1.0 as usize];
     }
 }
 
-/// Evaluates `hom_type(arg0)`.
+/// Evaluates `mor_type(arg0)`.
 #[allow(dead_code)]
-pub fn hom_type(&self, mut arg0: Type) -> Option<Type> {
+pub fn mor_type(&self, mut arg0: Type) -> Option<Type> {
     arg0 = self.root_type(arg0);
-    self.hom_type.iter_all_0(arg0).next().map(|t| t.1)
+    self.mor_type.iter_all_0(arg0).next().map(|t| t.1)
 }
-/// Returns an iterator over tuples in the graph of the `hom_type` function.
+/// Returns an iterator over tuples in the graph of the `mor_type` function.
 /// The relation yielded by the iterator need not be functional if the model is not closed.
 
 #[allow(dead_code)]
-pub fn iter_hom_type(&self) -> impl '_ + Iterator<Item=(Type, Type)> {
-    self.hom_type.iter_all().map(|t| (t.0, t.1))
+pub fn iter_mor_type(&self) -> impl '_ + Iterator<Item=(Type, Type)> {
+    self.mor_type.iter_all().map(|t| (t.0, t.1))
 }
-/// Makes the equation `hom_type(tm0) = tm1` hold.
+/// Makes the equation `mor_type(tm0) = tm1` hold.
 
 #[allow(dead_code)]
-pub fn insert_hom_type(&mut self, mut tm0: Type, mut tm1: Type) {
+pub fn insert_mor_type(&mut self, mut tm0: Type, mut tm1: Type) {
     tm0 = self.type_equalities.root(tm0);
 tm1 = self.type_equalities.root(tm1);
-    if self.hom_type.insert(HomType(tm0, tm1)) {
+    if self.mor_type.insert(MorType(tm0, tm1)) {
         let weight0 = &mut self.type_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeTable::WEIGHT);
 
 let weight1 = &mut self.type_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeTable::WEIGHT);
+*weight1 = weight1.saturating_add(MorTypeTable::WEIGHT);
 
     }
 }
 
-/// Evaluates `hom_type_signature(arg0)`.
+/// Evaluates `mor_type_dom_func(arg0)`.
 #[allow(dead_code)]
-pub fn hom_type_signature(&self, mut arg0: Type) -> Option<Pred> {
+pub fn mor_type_dom_func(&self, mut arg0: Type) -> Option<Func> {
     arg0 = self.root_type(arg0);
-    self.hom_type_signature.iter_all_0(arg0).next().map(|t| t.1)
+    self.mor_type_dom_func.iter_all_0(arg0).next().map(|t| t.1)
 }
-/// Returns an iterator over tuples in the graph of the `hom_type_signature` function.
+/// Returns an iterator over tuples in the graph of the `mor_type_dom_func` function.
 /// The relation yielded by the iterator need not be functional if the model is not closed.
 
 #[allow(dead_code)]
-pub fn iter_hom_type_signature(&self) -> impl '_ + Iterator<Item=(Type, Pred)> {
-    self.hom_type_signature.iter_all().map(|t| (t.0, t.1))
+pub fn iter_mor_type_dom_func(&self) -> impl '_ + Iterator<Item=(Type, Func)> {
+    self.mor_type_dom_func.iter_all().map(|t| (t.0, t.1))
 }
-/// Makes the equation `hom_type_signature(tm0) = tm1` hold.
+/// Makes the equation `mor_type_dom_func(tm0) = tm1` hold.
 
 #[allow(dead_code)]
-pub fn insert_hom_type_signature(&mut self, mut tm0: Type, mut tm1: Pred) {
+pub fn insert_mor_type_dom_func(&mut self, mut tm0: Type, mut tm1: Func) {
     tm0 = self.type_equalities.root(tm0);
-tm1 = self.pred_equalities.root(tm1);
-    if self.hom_type_signature.insert(HomTypeSignature(tm0, tm1)) {
+tm1 = self.func_equalities.root(tm1);
+    if self.mor_type_dom_func.insert(MorTypeDomFunc(tm0, tm1)) {
         let weight0 = &mut self.type_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeSignatureTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeDomFuncTable::WEIGHT);
 
-let weight1 = &mut self.pred_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeSignatureTable::WEIGHT);
+let weight1 = &mut self.func_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeDomFuncTable::WEIGHT);
 
     }
 }
 
-/// Evaluates `pred_arity(arg0)`.
+/// Evaluates `mor_type_cod_func(arg0)`.
 #[allow(dead_code)]
-pub fn pred_arity(&self, mut arg0: Pred) -> Option<TypeList> {
-    arg0 = self.root_pred(arg0);
-    self.pred_arity.iter_all_0(arg0).next().map(|t| t.1)
+pub fn mor_type_cod_func(&self, mut arg0: Type) -> Option<Func> {
+    arg0 = self.root_type(arg0);
+    self.mor_type_cod_func.iter_all_0(arg0).next().map(|t| t.1)
 }
-/// Returns an iterator over tuples in the graph of the `pred_arity` function.
+/// Returns an iterator over tuples in the graph of the `mor_type_cod_func` function.
 /// The relation yielded by the iterator need not be functional if the model is not closed.
 
 #[allow(dead_code)]
-pub fn iter_pred_arity(&self) -> impl '_ + Iterator<Item=(Pred, TypeList)> {
-    self.pred_arity.iter_all().map(|t| (t.0, t.1))
+pub fn iter_mor_type_cod_func(&self) -> impl '_ + Iterator<Item=(Type, Func)> {
+    self.mor_type_cod_func.iter_all().map(|t| (t.0, t.1))
 }
-/// Makes the equation `pred_arity(tm0) = tm1` hold.
+/// Makes the equation `mor_type_cod_func(tm0) = tm1` hold.
 
 #[allow(dead_code)]
-pub fn insert_pred_arity(&mut self, mut tm0: Pred, mut tm1: TypeList) {
-    tm0 = self.pred_equalities.root(tm0);
+pub fn insert_mor_type_cod_func(&mut self, mut tm0: Type, mut tm1: Func) {
+    tm0 = self.type_equalities.root(tm0);
+tm1 = self.func_equalities.root(tm1);
+    if self.mor_type_cod_func.insert(MorTypeCodFunc(tm0, tm1)) {
+        let weight0 = &mut self.type_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(MorTypeCodFuncTable::WEIGHT);
+
+let weight1 = &mut self.func_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeCodFuncTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `type_definition_symbol_scope(arg0)`.
+#[allow(dead_code)]
+pub fn type_definition_symbol_scope(&self, mut arg0: Type) -> Option<SymbolScope> {
+    arg0 = self.root_type(arg0);
+    self.type_definition_symbol_scope.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `type_definition_symbol_scope` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_type_definition_symbol_scope(&self) -> impl '_ + Iterator<Item=(Type, SymbolScope)> {
+    self.type_definition_symbol_scope.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `type_definition_symbol_scope(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_type_definition_symbol_scope(&mut self, mut tm0: Type, mut tm1: SymbolScope) {
+    tm0 = self.type_equalities.root(tm0);
+tm1 = self.symbol_scope_equalities.root(tm1);
+    if self.type_definition_symbol_scope.insert(TypeDefinitionSymbolScope(tm0, tm1)) {
+        let weight0 = &mut self.type_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `FuncRel(arg0)`.
+#[allow(dead_code)]
+pub fn func_rel(&self, mut arg0: Func) -> Option<Rel> {
+    arg0 = self.root_func(arg0);
+    self.func_rel.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `FuncRel` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_func_rel(&self) -> impl '_ + Iterator<Item=(Func, Rel)> {
+    self.func_rel.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `func_rel(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_func_rel(&mut self, mut tm0: Func, mut tm1: Rel) {
+    tm0 = self.func_equalities.root(tm0);
+tm1 = self.rel_equalities.root(tm1);
+    if self.func_rel.insert(FuncRel(tm0, tm1)) {
+        let weight0 = &mut self.func_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(FuncRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(FuncRelTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `rel_definition_symbol_scope(arg0)`.
+#[allow(dead_code)]
+pub fn rel_definition_symbol_scope(&self, mut arg0: Rel) -> Option<SymbolScope> {
+    arg0 = self.root_rel(arg0);
+    self.rel_definition_symbol_scope.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `rel_definition_symbol_scope` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_rel_definition_symbol_scope(&self) -> impl '_ + Iterator<Item=(Rel, SymbolScope)> {
+    self.rel_definition_symbol_scope.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `rel_definition_symbol_scope(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_rel_definition_symbol_scope(&mut self, mut tm0: Rel, mut tm1: SymbolScope) {
+    tm0 = self.rel_equalities.root(tm0);
+tm1 = self.symbol_scope_equalities.root(tm1);
+    if self.rel_definition_symbol_scope.insert(RelDefinitionSymbolScope(tm0, tm1)) {
+        let weight0 = &mut self.rel_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `domain(arg0)`.
+#[allow(dead_code)]
+pub fn domain(&self, mut arg0: Func) -> Option<TypeList> {
+    arg0 = self.root_func(arg0);
+    self.domain.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `domain` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_domain(&self) -> impl '_ + Iterator<Item=(Func, TypeList)> {
+    self.domain.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `domain(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_domain(&mut self, mut tm0: Func, mut tm1: TypeList) {
+    tm0 = self.func_equalities.root(tm0);
 tm1 = self.type_list_equalities.root(tm1);
-    if self.pred_arity.insert(PredArity(tm0, tm1)) {
-        let weight0 = &mut self.pred_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
+    if self.domain.insert(Domain(tm0, tm1)) {
+        let weight0 = &mut self.func_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(DomainTable::WEIGHT);
 
 let weight1 = &mut self.type_list_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
+*weight1 = weight1.saturating_add(DomainTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `codomain(arg0)`.
+#[allow(dead_code)]
+pub fn codomain(&self, mut arg0: Func) -> Option<Type> {
+    arg0 = self.root_func(arg0);
+    self.codomain.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `codomain` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_codomain(&self) -> impl '_ + Iterator<Item=(Func, Type)> {
+    self.codomain.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `codomain(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_codomain(&mut self, mut tm0: Func, mut tm1: Type) {
+    tm0 = self.func_equalities.root(tm0);
+tm1 = self.type_equalities.root(tm1);
+    if self.codomain.insert(Codomain(tm0, tm1)) {
+        let weight0 = &mut self.func_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(CodomainTable::WEIGHT);
+
+let weight1 = &mut self.type_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(CodomainTable::WEIGHT);
 
     }
 }
@@ -62609,35 +62591,6 @@ let weight1 = &mut self.func_weights[tm1.0 as usize];
     }
 }
 
-/// Evaluates `type_definition_symbol_scope(arg0)`.
-#[allow(dead_code)]
-pub fn type_definition_symbol_scope(&self, mut arg0: Type) -> Option<SymbolScope> {
-    arg0 = self.root_type(arg0);
-    self.type_definition_symbol_scope.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `type_definition_symbol_scope` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_type_definition_symbol_scope(&self) -> impl '_ + Iterator<Item=(Type, SymbolScope)> {
-    self.type_definition_symbol_scope.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `type_definition_symbol_scope(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_type_definition_symbol_scope(&mut self, mut tm0: Type, mut tm1: SymbolScope) {
-    tm0 = self.type_equalities.root(tm0);
-tm1 = self.symbol_scope_equalities.root(tm1);
-    if self.type_definition_symbol_scope.insert(TypeDefinitionSymbolScope(tm0, tm1)) {
-        let weight0 = &mut self.type_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-    }
-}
-
 /// Evaluates `symbol_scope_model(arg0)`.
 #[allow(dead_code)]
 pub fn symbol_scope_model(&self, mut arg0: SymbolScope) -> Option<Type> {
@@ -62663,151 +62616,6 @@ tm1 = self.type_equalities.root(tm1);
 
 let weight1 = &mut self.type_weights[tm1.0 as usize];
 *weight1 = weight1.saturating_add(SymbolScopeModelTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `codomain(arg0)`.
-#[allow(dead_code)]
-pub fn codomain(&self, mut arg0: Func) -> Option<Type> {
-    arg0 = self.root_func(arg0);
-    self.codomain.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `codomain` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_codomain(&self) -> impl '_ + Iterator<Item=(Func, Type)> {
-    self.codomain.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `codomain(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_codomain(&mut self, mut tm0: Func, mut tm1: Type) {
-    tm0 = self.func_equalities.root(tm0);
-tm1 = self.type_equalities.root(tm1);
-    if self.codomain.insert(Codomain(tm0, tm1)) {
-        let weight0 = &mut self.func_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(CodomainTable::WEIGHT);
-
-let weight1 = &mut self.type_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(CodomainTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `FuncRel(arg0)`.
-#[allow(dead_code)]
-pub fn func_rel(&self, mut arg0: Func) -> Option<Rel> {
-    arg0 = self.root_func(arg0);
-    self.func_rel.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `FuncRel` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_func_rel(&self) -> impl '_ + Iterator<Item=(Func, Rel)> {
-    self.func_rel.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `func_rel(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_func_rel(&mut self, mut tm0: Func, mut tm1: Rel) {
-    tm0 = self.func_equalities.root(tm0);
-tm1 = self.rel_equalities.root(tm1);
-    if self.func_rel.insert(FuncRel(tm0, tm1)) {
-        let weight0 = &mut self.func_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(FuncRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(FuncRelTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `rel_definition_symbol_scope(arg0)`.
-#[allow(dead_code)]
-pub fn rel_definition_symbol_scope(&self, mut arg0: Rel) -> Option<SymbolScope> {
-    arg0 = self.root_rel(arg0);
-    self.rel_definition_symbol_scope.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `rel_definition_symbol_scope` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_rel_definition_symbol_scope(&self) -> impl '_ + Iterator<Item=(Rel, SymbolScope)> {
-    self.rel_definition_symbol_scope.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `rel_definition_symbol_scope(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_rel_definition_symbol_scope(&mut self, mut tm0: Rel, mut tm1: SymbolScope) {
-    tm0 = self.rel_equalities.root(tm0);
-tm1 = self.symbol_scope_equalities.root(tm1);
-    if self.rel_definition_symbol_scope.insert(RelDefinitionSymbolScope(tm0, tm1)) {
-        let weight0 = &mut self.rel_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `PredRel(arg0)`.
-#[allow(dead_code)]
-pub fn pred_rel(&self, mut arg0: Pred) -> Option<Rel> {
-    arg0 = self.root_pred(arg0);
-    self.pred_rel.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `PredRel` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_pred_rel(&self) -> impl '_ + Iterator<Item=(Pred, Rel)> {
-    self.pred_rel.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `pred_rel(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_pred_rel(&mut self, mut tm0: Pred, mut tm1: Rel) {
-    tm0 = self.pred_equalities.root(tm0);
-tm1 = self.rel_equalities.root(tm1);
-    if self.pred_rel.insert(PredRel(tm0, tm1)) {
-        let weight0 = &mut self.pred_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(PredRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(PredRelTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `domain(arg0)`.
-#[allow(dead_code)]
-pub fn domain(&self, mut arg0: Func) -> Option<TypeList> {
-    arg0 = self.root_func(arg0);
-    self.domain.iter_all_0(arg0).next().map(|t| t.1)
-}
-/// Returns an iterator over tuples in the graph of the `domain` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_domain(&self) -> impl '_ + Iterator<Item=(Func, TypeList)> {
-    self.domain.iter_all().map(|t| (t.0, t.1))
-}
-/// Makes the equation `domain(tm0) = tm1` hold.
-
-#[allow(dead_code)]
-pub fn insert_domain(&mut self, mut tm0: Func, mut tm1: TypeList) {
-    tm0 = self.func_equalities.root(tm0);
-tm1 = self.type_list_equalities.root(tm1);
-    if self.domain.insert(Domain(tm0, tm1)) {
-        let weight0 = &mut self.func_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(DomainTable::WEIGHT);
-
-let weight1 = &mut self.type_list_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(DomainTable::WEIGHT);
 
     }
 }
@@ -62933,6 +62741,35 @@ let weight2 = &mut self.pred_weights[tm2.0 as usize];
     }
 }
 
+/// Evaluates `pred_arity(arg0)`.
+#[allow(dead_code)]
+pub fn pred_arity(&self, mut arg0: Pred) -> Option<TypeList> {
+    arg0 = self.root_pred(arg0);
+    self.pred_arity.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `pred_arity` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_pred_arity(&self) -> impl '_ + Iterator<Item=(Pred, TypeList)> {
+    self.pred_arity.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `pred_arity(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_pred_arity(&mut self, mut tm0: Pred, mut tm1: TypeList) {
+    tm0 = self.pred_equalities.root(tm0);
+tm1 = self.type_list_equalities.root(tm1);
+    if self.pred_arity.insert(PredArity(tm0, tm1)) {
+        let weight0 = &mut self.pred_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
+
+let weight1 = &mut self.type_list_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
+
+    }
+}
+
 /// Evaluates `semantic_func(arg0, arg1)`.
 #[allow(dead_code)]
 pub fn semantic_func(&self, mut arg0: SymbolScope, mut arg1: Ident) -> Option<Func> {
@@ -62996,6 +62833,35 @@ let weight1 = &mut self.symbol_scope_weights[tm1.0 as usize];
     }
 }
 
+/// Evaluates `PredRel(arg0)`.
+#[allow(dead_code)]
+pub fn pred_rel(&self, mut arg0: Pred) -> Option<Rel> {
+    arg0 = self.root_pred(arg0);
+    self.pred_rel.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `PredRel` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_pred_rel(&self) -> impl '_ + Iterator<Item=(Pred, Rel)> {
+    self.pred_rel.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `pred_rel(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_pred_rel(&mut self, mut tm0: Pred, mut tm1: Rel) {
+    tm0 = self.pred_equalities.root(tm0);
+tm1 = self.rel_equalities.root(tm1);
+    if self.pred_rel.insert(PredRel(tm0, tm1)) {
+        let weight0 = &mut self.pred_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(PredRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(PredRelTable::WEIGHT);
+
+    }
+}
+
 /// Evaluates `rel_name(arg0)`.
 #[allow(dead_code)]
 pub fn rel_name(&self, mut arg0: Rel) -> Option<Ident> {
@@ -63050,6 +62916,64 @@ tm1 = self.type_list_equalities.root(tm1);
 
 let weight1 = &mut self.type_list_weights[tm1.0 as usize];
 *weight1 = weight1.saturating_add(ArityTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `dom(arg0)`.
+#[allow(dead_code)]
+pub fn dom(&self, mut arg0: Morphism) -> Option<Structure> {
+    arg0 = self.root_morphism(arg0);
+    self.dom.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `dom` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_dom(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
+    self.dom.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `dom(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_dom(&mut self, mut tm0: Morphism, mut tm1: Structure) {
+    tm0 = self.morphism_equalities.root(tm0);
+tm1 = self.structure_equalities.root(tm1);
+    if self.dom.insert(Dom(tm0, tm1)) {
+        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(DomTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `cod(arg0)`.
+#[allow(dead_code)]
+pub fn cod(&self, mut arg0: Morphism) -> Option<Structure> {
+    arg0 = self.root_morphism(arg0);
+    self.cod.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `cod` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_cod(&self) -> impl '_ + Iterator<Item=(Morphism, Structure)> {
+    self.cod.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `cod(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_cod(&mut self, mut tm0: Morphism, mut tm1: Structure) {
+    tm0 = self.morphism_equalities.root(tm0);
+tm1 = self.structure_equalities.root(tm1);
+    if self.cod.insert(Cod(tm0, tm1)) {
+        let weight0 = &mut self.morphism_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(CodTable::WEIGHT);
 
     }
 }
@@ -63326,40 +63250,6 @@ let weight1 = &mut self.type_weights[tm1.0 as usize];
 
 let weight2 = &mut self.element_type_weights[tm2.0 as usize];
 *weight2 = weight2.saturating_add(InstantiatedTypeTable::WEIGHT);
-
-    }
-}
-
-/// Evaluates `HomElType(arg0, arg1)`.
-#[allow(dead_code)]
-pub fn hom_el_type(&self, mut arg0: El, mut arg1: El) -> Option<ElementType> {
-    arg0 = self.root_el(arg0);
-arg1 = self.root_el(arg1);
-    self.hom_el_type.iter_all_0_1(arg0, arg1).next().map(|t| t.2)
-}
-/// Returns an iterator over tuples in the graph of the `HomElType` function.
-/// The relation yielded by the iterator need not be functional if the model is not closed.
-
-#[allow(dead_code)]
-pub fn iter_hom_el_type(&self) -> impl '_ + Iterator<Item=(El, El, ElementType)> {
-    self.hom_el_type.iter_all().map(|t| (t.0, t.1, t.2))
-}
-/// Makes the equation `hom_el_type(tm0, tm1) = tm2` hold.
-
-#[allow(dead_code)]
-pub fn insert_hom_el_type(&mut self, mut tm0: El, mut tm1: El, mut tm2: ElementType) {
-    tm0 = self.el_equalities.root(tm0);
-tm1 = self.el_equalities.root(tm1);
-tm2 = self.element_type_equalities.root(tm2);
-    if self.hom_el_type.insert(HomElType(tm0, tm1, tm2)) {
-        let weight0 = &mut self.el_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(HomElTypeTable::WEIGHT);
-
-let weight1 = &mut self.el_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(HomElTypeTable::WEIGHT);
-
-let weight2 = &mut self.element_type_weights[tm2.0 as usize];
-*weight2 = weight2.saturating_add(HomElTypeTable::WEIGHT);
 
     }
 }
@@ -65151,26 +65041,38 @@ pub fn define_semantic_type(&mut self, tm0: SymbolScope, tm1: Ident) -> Type {
         }
     }
 }
-/// Enforces that `hom_type(tm0)` is defined, adjoining a new element if necessary.
+/// Enforces that `mor_type(tm0)` is defined, adjoining a new element if necessary.
 #[allow(dead_code)]
-pub fn define_hom_type(&mut self, tm0: Type) -> Type {
-    match self.hom_type(tm0) {
+pub fn define_mor_type(&mut self, tm0: Type) -> Type {
+    match self.mor_type(tm0) {
         Some(result) => result,
         None => {
             let tm1 = self.new_type_internal();
-            self.insert_hom_type(tm0, tm1);
+            self.insert_mor_type(tm0, tm1);
             tm1
         }
     }
 }
-/// Enforces that `hom_type_signature(tm0)` is defined, adjoining a new element if necessary.
+/// Enforces that `mor_type_dom_func(tm0)` is defined, adjoining a new element if necessary.
 #[allow(dead_code)]
-pub fn define_hom_type_signature(&mut self, tm0: Type) -> Pred {
-    match self.hom_type_signature(tm0) {
+pub fn define_mor_type_dom_func(&mut self, tm0: Type) -> Func {
+    match self.mor_type_dom_func(tm0) {
         Some(result) => result,
         None => {
-            let tm1 = self.new_pred_internal();
-            self.insert_hom_type_signature(tm0, tm1);
+            let tm1 = self.new_func_internal();
+            self.insert_mor_type_dom_func(tm0, tm1);
+            tm1
+        }
+    }
+}
+/// Enforces that `mor_type_cod_func(tm0)` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_mor_type_cod_func(&mut self, tm0: Type) -> Func {
+    match self.mor_type_cod_func(tm0) {
+        Some(result) => result,
+        None => {
+            let tm1 = self.new_func_internal();
+            self.insert_mor_type_cod_func(tm0, tm1);
             tm1
         }
     }
@@ -65859,18 +65761,6 @@ pub fn define_instantiated_type(&mut self, tm0: El, tm1: Type) -> ElementType {
         }
     }
 }
-/// Enforces that `hom_el_type(tm0, tm1)` is defined, adjoining a new element if necessary.
-#[allow(dead_code)]
-pub fn define_hom_el_type(&mut self, tm0: El, tm1: El) -> ElementType {
-    match self.hom_el_type(tm0, tm1) {
-        Some(result) => result,
-        None => {
-            let tm2 = self.new_element_type_internal();
-            self.insert_hom_el_type(tm0, tm1, tm2);
-            tm2
-        }
-    }
-}
 /// Enforces that `nil_element_type_list()` is defined, adjoining a new element if necessary.
 #[allow(dead_code)]
 pub fn define_nil_element_type_list(&mut self, ) -> ElementTypeList {
@@ -66472,36 +66362,31 @@ let weight2 = &mut self.ident_weights[tm2.0 as usize];
     }
 }
 
-/// Returns `true` if `hom_type_expr(arg0, arg1, arg2)` holds.
+/// Returns `true` if `mor_type_expr(arg0, arg1)` holds.
 #[allow(dead_code)]
-pub fn hom_type_expr(&self, mut arg0: TypeExprNode, mut arg1: TermNode, mut arg2: TermNode) -> bool {
+pub fn mor_type_expr(&self, mut arg0: TypeExprNode, mut arg1: Ident) -> bool {
     arg0 = self.root_type_expr_node(arg0);
-arg1 = self.root_term_node(arg1);
-arg2 = self.root_term_node(arg2);
-    self.hom_type_expr.contains(HomTypeExpr(arg0, arg1, arg2))
+arg1 = self.root_ident(arg1);
+    self.mor_type_expr.contains(MorTypeExpr(arg0, arg1))
 }
-/// Returns an iterator over tuples of elements satisfying the `hom_type_expr` predicate.
+/// Returns an iterator over tuples of elements satisfying the `mor_type_expr` predicate.
 
 #[allow(dead_code)]
-pub fn iter_hom_type_expr(&self) -> impl '_ + Iterator<Item=(TypeExprNode, TermNode, TermNode)> {
-    self.hom_type_expr.iter_all().map(|t| (t.0, t.1, t.2))
+pub fn iter_mor_type_expr(&self) -> impl '_ + Iterator<Item=(TypeExprNode, Ident)> {
+    self.mor_type_expr.iter_all().map(|t| (t.0, t.1))
 }
-/// Makes `hom_type_expr(tm0, tm1, tm2)` hold.
+/// Makes `mor_type_expr(tm0, tm1)` hold.
 
 #[allow(dead_code)]
-pub fn insert_hom_type_expr(&mut self, mut tm0: TypeExprNode, mut tm1: TermNode, mut tm2: TermNode) {
+pub fn insert_mor_type_expr(&mut self, mut tm0: TypeExprNode, mut tm1: Ident) {
     tm0 = self.type_expr_node_equalities.root(tm0);
-tm1 = self.term_node_equalities.root(tm1);
-tm2 = self.term_node_equalities.root(tm2);
-    if self.hom_type_expr.insert(HomTypeExpr(tm0, tm1, tm2)) {
+tm1 = self.ident_equalities.root(tm1);
+    if self.mor_type_expr.insert(MorTypeExpr(tm0, tm1)) {
         let weight0 = &mut self.type_expr_node_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeExprTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeExprTable::WEIGHT);
 
-let weight1 = &mut self.term_node_weights[tm1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeExprTable::WEIGHT);
-
-let weight2 = &mut self.term_node_weights[tm2.0 as usize];
-*weight2 = weight2.saturating_add(HomTypeExprTable::WEIGHT);
+let weight1 = &mut self.ident_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeExprTable::WEIGHT);
 
     }
 }
@@ -67725,26 +67610,26 @@ pub fn insert_is_model_type(&mut self, mut tm0: Type) {
     }
 }
 
-/// Returns `true` if `is_hom_type(arg0)` holds.
+/// Returns `true` if `is_mor_type(arg0)` holds.
 #[allow(dead_code)]
-pub fn is_hom_type(&self, mut arg0: Type) -> bool {
+pub fn is_mor_type(&self, mut arg0: Type) -> bool {
     arg0 = self.root_type(arg0);
-    self.is_hom_type.contains(IsHomType(arg0))
+    self.is_mor_type.contains(IsMorType(arg0))
 }
-/// Returns an iterator over elements satisfying the `is_hom_type` predicate.
+/// Returns an iterator over elements satisfying the `is_mor_type` predicate.
 
 #[allow(dead_code)]
-pub fn iter_is_hom_type(&self) -> impl '_ + Iterator<Item=Type> {
-    self.is_hom_type.iter_all().map(|t| t.0)
+pub fn iter_is_mor_type(&self) -> impl '_ + Iterator<Item=Type> {
+    self.is_mor_type.iter_all().map(|t| t.0)
 }
-/// Makes `is_hom_type(tm0)` hold.
+/// Makes `is_mor_type(tm0)` hold.
 
 #[allow(dead_code)]
-pub fn insert_is_hom_type(&mut self, mut tm0: Type) {
+pub fn insert_is_mor_type(&mut self, mut tm0: Type) {
     tm0 = self.type_equalities.root(tm0);
-    if self.is_hom_type.insert(IsHomType(tm0)) {
+    if self.is_mor_type.insert(IsMorType(tm0)) {
         let weight0 = &mut self.type_weights[tm0.0 as usize];
-*weight0 = weight0.saturating_add(IsHomTypeTable::WEIGHT);
+*weight0 = weight0.saturating_add(IsMorTypeTable::WEIGHT);
 
     }
 }
@@ -70151,58 +70036,44 @@ let weight2 = &mut self.ident_weights[t.2.0 as usize];
     }
 }
 
-for el in self.term_node_uprooted.iter().copied() {
-    let ts = self.hom_type_expr.drain_with_element_term_node(el);
+for el in self.ident_uprooted.iter().copied() {
+    let ts = self.mor_type_expr.drain_with_element_ident(el);
     for mut t in ts {
         let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomTypeExprTable::WEIGHT);
+*weight0 = weight0.saturating_sub(MorTypeExprTable::WEIGHT);
 
-let weight1 = &mut self.term_node_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomTypeExprTable::WEIGHT);
-
-let weight2 = &mut self.term_node_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_sub(HomTypeExprTable::WEIGHT);
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MorTypeExprTable::WEIGHT);
 
         t.0 = self.root_type_expr_node(t.0);
-t.1 = self.root_term_node(t.1);
-t.2 = self.root_term_node(t.2);
-        if self.hom_type_expr.insert(t) {
+t.1 = self.root_ident(t.1);
+        if self.mor_type_expr.insert(t) {
             let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeExprTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeExprTable::WEIGHT);
 
-let weight1 = &mut self.term_node_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeExprTable::WEIGHT);
-
-let weight2 = &mut self.term_node_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_add(HomTypeExprTable::WEIGHT);
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeExprTable::WEIGHT);
 
         }
     }
 }
 for el in self.type_expr_node_uprooted.iter().copied() {
-    let ts = self.hom_type_expr.drain_with_element_type_expr_node(el);
+    let ts = self.mor_type_expr.drain_with_element_type_expr_node(el);
     for mut t in ts {
         let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomTypeExprTable::WEIGHT);
+*weight0 = weight0.saturating_sub(MorTypeExprTable::WEIGHT);
 
-let weight1 = &mut self.term_node_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomTypeExprTable::WEIGHT);
-
-let weight2 = &mut self.term_node_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_sub(HomTypeExprTable::WEIGHT);
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MorTypeExprTable::WEIGHT);
 
         t.0 = self.root_type_expr_node(t.0);
-t.1 = self.root_term_node(t.1);
-t.2 = self.root_term_node(t.2);
-        if self.hom_type_expr.insert(t) {
+t.1 = self.root_ident(t.1);
+        if self.mor_type_expr.insert(t) {
             let weight0 = &mut self.type_expr_node_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeExprTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeExprTable::WEIGHT);
 
-let weight1 = &mut self.term_node_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeExprTable::WEIGHT);
-
-let weight2 = &mut self.term_node_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_add(HomTypeExprTable::WEIGHT);
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeExprTable::WEIGHT);
 
         }
     }
@@ -72084,15 +71955,15 @@ for el in self.type_uprooted.iter().copied() {
 }
 
 for el in self.type_uprooted.iter().copied() {
-    let ts = self.is_hom_type.drain_with_element_type(el);
+    let ts = self.is_mor_type.drain_with_element_type(el);
     for mut t in ts {
         let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(IsHomTypeTable::WEIGHT);
+*weight0 = weight0.saturating_sub(IsMorTypeTable::WEIGHT);
 
         t.0 = self.root_type(t.0);
-        if self.is_hom_type.insert(t) {
+        if self.is_mor_type.insert(t) {
             let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(IsHomTypeTable::WEIGHT);
+*weight0 = weight0.saturating_add(IsMorTypeTable::WEIGHT);
 
         }
     }
@@ -74639,92 +74510,6 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
     }
 }
 
-for el in self.morphism_uprooted.iter().copied() {
-    let ts = self.dom.drain_with_element_morphism(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.dom.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(DomTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.structure_uprooted.iter().copied() {
-    let ts = self.dom.drain_with_element_structure(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.dom.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(DomTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(DomTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.morphism_uprooted.iter().copied() {
-    let ts = self.cod.drain_with_element_morphism(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.cod.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(CodTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.structure_uprooted.iter().copied() {
-    let ts = self.cod.drain_with_element_structure(el);
-    for mut t in ts {
-        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
-
-        t.0 = self.root_morphism(t.0);
-t.1 = self.root_structure(t.1);
-        if self.cod.insert(t) {
-            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(CodTable::WEIGHT);
-
-let weight1 = &mut self.structure_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(CodTable::WEIGHT);
-
-        }
-    }
-}
-
 for el in self.el_uprooted.iter().copied() {
     let ts = self.var.drain_with_element_el(el);
     for mut t in ts {
@@ -76960,108 +76745,323 @@ let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
 }
 
 for el in self.type_uprooted.iter().copied() {
-    let ts = self.hom_type.drain_with_element_type(el);
+    let ts = self.mor_type.drain_with_element_type(el);
     for mut t in ts {
         let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomTypeTable::WEIGHT);
+*weight0 = weight0.saturating_sub(MorTypeTable::WEIGHT);
 
 let weight1 = &mut self.type_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomTypeTable::WEIGHT);
+*weight1 = weight1.saturating_sub(MorTypeTable::WEIGHT);
 
         t.0 = self.root_type(t.0);
 t.1 = self.root_type(t.1);
-        if self.hom_type.insert(t) {
+        if self.mor_type.insert(t) {
             let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeTable::WEIGHT);
 
 let weight1 = &mut self.type_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeTable::WEIGHT);
+*weight1 = weight1.saturating_add(MorTypeTable::WEIGHT);
 
         }
     }
 }
 
-for el in self.pred_uprooted.iter().copied() {
-    let ts = self.hom_type_signature.drain_with_element_pred(el);
+for el in self.func_uprooted.iter().copied() {
+    let ts = self.mor_type_dom_func.drain_with_element_func(el);
     for mut t in ts {
         let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomTypeSignatureTable::WEIGHT);
+*weight0 = weight0.saturating_sub(MorTypeDomFuncTable::WEIGHT);
 
-let weight1 = &mut self.pred_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomTypeSignatureTable::WEIGHT);
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MorTypeDomFuncTable::WEIGHT);
 
         t.0 = self.root_type(t.0);
-t.1 = self.root_pred(t.1);
-        if self.hom_type_signature.insert(t) {
+t.1 = self.root_func(t.1);
+        if self.mor_type_dom_func.insert(t) {
             let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeSignatureTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeDomFuncTable::WEIGHT);
 
-let weight1 = &mut self.pred_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeSignatureTable::WEIGHT);
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeDomFuncTable::WEIGHT);
 
         }
     }
 }
 for el in self.type_uprooted.iter().copied() {
-    let ts = self.hom_type_signature.drain_with_element_type(el);
+    let ts = self.mor_type_dom_func.drain_with_element_type(el);
     for mut t in ts {
         let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomTypeSignatureTable::WEIGHT);
+*weight0 = weight0.saturating_sub(MorTypeDomFuncTable::WEIGHT);
 
-let weight1 = &mut self.pred_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomTypeSignatureTable::WEIGHT);
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MorTypeDomFuncTable::WEIGHT);
 
         t.0 = self.root_type(t.0);
-t.1 = self.root_pred(t.1);
-        if self.hom_type_signature.insert(t) {
+t.1 = self.root_func(t.1);
+        if self.mor_type_dom_func.insert(t) {
             let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomTypeSignatureTable::WEIGHT);
+*weight0 = weight0.saturating_add(MorTypeDomFuncTable::WEIGHT);
 
-let weight1 = &mut self.pred_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomTypeSignatureTable::WEIGHT);
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeDomFuncTable::WEIGHT);
 
         }
     }
 }
 
-for el in self.pred_uprooted.iter().copied() {
-    let ts = self.pred_arity.drain_with_element_pred(el);
+for el in self.func_uprooted.iter().copied() {
+    let ts = self.mor_type_cod_func.drain_with_element_func(el);
     for mut t in ts {
-        let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(PredArityTable::WEIGHT);
+        let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(MorTypeCodFuncTable::WEIGHT);
+
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MorTypeCodFuncTable::WEIGHT);
+
+        t.0 = self.root_type(t.0);
+t.1 = self.root_func(t.1);
+        if self.mor_type_cod_func.insert(t) {
+            let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(MorTypeCodFuncTable::WEIGHT);
+
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeCodFuncTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.type_uprooted.iter().copied() {
+    let ts = self.mor_type_cod_func.drain_with_element_type(el);
+    for mut t in ts {
+        let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(MorTypeCodFuncTable::WEIGHT);
+
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MorTypeCodFuncTable::WEIGHT);
+
+        t.0 = self.root_type(t.0);
+t.1 = self.root_func(t.1);
+        if self.mor_type_cod_func.insert(t) {
+            let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(MorTypeCodFuncTable::WEIGHT);
+
+let weight1 = &mut self.func_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MorTypeCodFuncTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.symbol_scope_uprooted.iter().copied() {
+    let ts = self.type_definition_symbol_scope.drain_with_element_symbol_scope(el);
+    for mut t in ts {
+        let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+        t.0 = self.root_type(t.0);
+t.1 = self.root_symbol_scope(t.1);
+        if self.type_definition_symbol_scope.insert(t) {
+            let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.type_uprooted.iter().copied() {
+    let ts = self.type_definition_symbol_scope.drain_with_element_type(el);
+    for mut t in ts {
+        let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+        t.0 = self.root_type(t.0);
+t.1 = self.root_symbol_scope(t.1);
+        if self.type_definition_symbol_scope.insert(t) {
+            let weight0 = &mut self.type_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.func_uprooted.iter().copied() {
+    let ts = self.func_rel.drain_with_element_func(el);
+    for mut t in ts {
+        let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(FuncRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(FuncRelTable::WEIGHT);
+
+        t.0 = self.root_func(t.0);
+t.1 = self.root_rel(t.1);
+        if self.func_rel.insert(t) {
+            let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(FuncRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(FuncRelTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.rel_uprooted.iter().copied() {
+    let ts = self.func_rel.drain_with_element_rel(el);
+    for mut t in ts {
+        let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(FuncRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(FuncRelTable::WEIGHT);
+
+        t.0 = self.root_func(t.0);
+t.1 = self.root_rel(t.1);
+        if self.func_rel.insert(t) {
+            let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(FuncRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(FuncRelTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.rel_uprooted.iter().copied() {
+    let ts = self.rel_definition_symbol_scope.drain_with_element_rel(el);
+    for mut t in ts {
+        let weight0 = &mut self.rel_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
+
+        t.0 = self.root_rel(t.0);
+t.1 = self.root_symbol_scope(t.1);
+        if self.rel_definition_symbol_scope.insert(t) {
+            let weight0 = &mut self.rel_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.symbol_scope_uprooted.iter().copied() {
+    let ts = self.rel_definition_symbol_scope.drain_with_element_symbol_scope(el);
+    for mut t in ts {
+        let weight0 = &mut self.rel_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
+
+        t.0 = self.root_rel(t.0);
+t.1 = self.root_symbol_scope(t.1);
+        if self.rel_definition_symbol_scope.insert(t) {
+            let weight0 = &mut self.rel_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
+
+let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.func_uprooted.iter().copied() {
+    let ts = self.domain.drain_with_element_func(el);
+    for mut t in ts {
+        let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(DomainTable::WEIGHT);
 
 let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(PredArityTable::WEIGHT);
+*weight1 = weight1.saturating_sub(DomainTable::WEIGHT);
 
-        t.0 = self.root_pred(t.0);
+        t.0 = self.root_func(t.0);
 t.1 = self.root_type_list(t.1);
-        if self.pred_arity.insert(t) {
-            let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
+        if self.domain.insert(t) {
+            let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(DomainTable::WEIGHT);
 
 let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
+*weight1 = weight1.saturating_add(DomainTable::WEIGHT);
 
         }
     }
 }
 for el in self.type_list_uprooted.iter().copied() {
-    let ts = self.pred_arity.drain_with_element_type_list(el);
+    let ts = self.domain.drain_with_element_type_list(el);
     for mut t in ts {
-        let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(PredArityTable::WEIGHT);
+        let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(DomainTable::WEIGHT);
 
 let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(PredArityTable::WEIGHT);
+*weight1 = weight1.saturating_sub(DomainTable::WEIGHT);
 
-        t.0 = self.root_pred(t.0);
+        t.0 = self.root_func(t.0);
 t.1 = self.root_type_list(t.1);
-        if self.pred_arity.insert(t) {
-            let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
+        if self.domain.insert(t) {
+            let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(DomainTable::WEIGHT);
 
 let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
+*weight1 = weight1.saturating_add(DomainTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.func_uprooted.iter().copied() {
+    let ts = self.codomain.drain_with_element_func(el);
+    for mut t in ts {
+        let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(CodomainTable::WEIGHT);
+
+let weight1 = &mut self.type_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(CodomainTable::WEIGHT);
+
+        t.0 = self.root_func(t.0);
+t.1 = self.root_type(t.1);
+        if self.codomain.insert(t) {
+            let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(CodomainTable::WEIGHT);
+
+let weight1 = &mut self.type_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(CodomainTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.type_uprooted.iter().copied() {
+    let ts = self.codomain.drain_with_element_type(el);
+    for mut t in ts {
+        let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(CodomainTable::WEIGHT);
+
+let weight1 = &mut self.type_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(CodomainTable::WEIGHT);
+
+        t.0 = self.root_func(t.0);
+t.1 = self.root_type(t.1);
+        if self.codomain.insert(t) {
+            let weight0 = &mut self.func_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(CodomainTable::WEIGHT);
+
+let weight1 = &mut self.type_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(CodomainTable::WEIGHT);
 
         }
     }
@@ -77169,49 +77169,6 @@ let weight1 = &mut self.func_weights[t.1.0 as usize];
 }
 
 for el in self.symbol_scope_uprooted.iter().copied() {
-    let ts = self.type_definition_symbol_scope.drain_with_element_symbol_scope(el);
-    for mut t in ts {
-        let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-        t.0 = self.root_type(t.0);
-t.1 = self.root_symbol_scope(t.1);
-        if self.type_definition_symbol_scope.insert(t) {
-            let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.type_uprooted.iter().copied() {
-    let ts = self.type_definition_symbol_scope.drain_with_element_type(el);
-    for mut t in ts {
-        let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-        t.0 = self.root_type(t.0);
-t.1 = self.root_symbol_scope(t.1);
-        if self.type_definition_symbol_scope.insert(t) {
-            let weight0 = &mut self.type_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(TypeDefinitionSymbolScopeTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.symbol_scope_uprooted.iter().copied() {
     let ts = self.symbol_scope_model.drain_with_element_symbol_scope(el);
     for mut t in ts {
         let weight0 = &mut self.symbol_scope_weights[t.0.0 as usize];
@@ -77249,221 +77206,6 @@ t.1 = self.root_type(t.1);
 
 let weight1 = &mut self.type_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_add(SymbolScopeModelTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.func_uprooted.iter().copied() {
-    let ts = self.codomain.drain_with_element_func(el);
-    for mut t in ts {
-        let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(CodomainTable::WEIGHT);
-
-let weight1 = &mut self.type_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(CodomainTable::WEIGHT);
-
-        t.0 = self.root_func(t.0);
-t.1 = self.root_type(t.1);
-        if self.codomain.insert(t) {
-            let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(CodomainTable::WEIGHT);
-
-let weight1 = &mut self.type_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(CodomainTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.type_uprooted.iter().copied() {
-    let ts = self.codomain.drain_with_element_type(el);
-    for mut t in ts {
-        let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(CodomainTable::WEIGHT);
-
-let weight1 = &mut self.type_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(CodomainTable::WEIGHT);
-
-        t.0 = self.root_func(t.0);
-t.1 = self.root_type(t.1);
-        if self.codomain.insert(t) {
-            let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(CodomainTable::WEIGHT);
-
-let weight1 = &mut self.type_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(CodomainTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.func_uprooted.iter().copied() {
-    let ts = self.func_rel.drain_with_element_func(el);
-    for mut t in ts {
-        let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(FuncRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(FuncRelTable::WEIGHT);
-
-        t.0 = self.root_func(t.0);
-t.1 = self.root_rel(t.1);
-        if self.func_rel.insert(t) {
-            let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(FuncRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(FuncRelTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.rel_uprooted.iter().copied() {
-    let ts = self.func_rel.drain_with_element_rel(el);
-    for mut t in ts {
-        let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(FuncRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(FuncRelTable::WEIGHT);
-
-        t.0 = self.root_func(t.0);
-t.1 = self.root_rel(t.1);
-        if self.func_rel.insert(t) {
-            let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(FuncRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(FuncRelTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.rel_uprooted.iter().copied() {
-    let ts = self.rel_definition_symbol_scope.drain_with_element_rel(el);
-    for mut t in ts {
-        let weight0 = &mut self.rel_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
-
-        t.0 = self.root_rel(t.0);
-t.1 = self.root_symbol_scope(t.1);
-        if self.rel_definition_symbol_scope.insert(t) {
-            let weight0 = &mut self.rel_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.symbol_scope_uprooted.iter().copied() {
-    let ts = self.rel_definition_symbol_scope.drain_with_element_symbol_scope(el);
-    for mut t in ts {
-        let weight0 = &mut self.rel_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(RelDefinitionSymbolScopeTable::WEIGHT);
-
-        t.0 = self.root_rel(t.0);
-t.1 = self.root_symbol_scope(t.1);
-        if self.rel_definition_symbol_scope.insert(t) {
-            let weight0 = &mut self.rel_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
-
-let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(RelDefinitionSymbolScopeTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.pred_uprooted.iter().copied() {
-    let ts = self.pred_rel.drain_with_element_pred(el);
-    for mut t in ts {
-        let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(PredRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(PredRelTable::WEIGHT);
-
-        t.0 = self.root_pred(t.0);
-t.1 = self.root_rel(t.1);
-        if self.pred_rel.insert(t) {
-            let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(PredRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(PredRelTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.rel_uprooted.iter().copied() {
-    let ts = self.pred_rel.drain_with_element_rel(el);
-    for mut t in ts {
-        let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(PredRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(PredRelTable::WEIGHT);
-
-        t.0 = self.root_pred(t.0);
-t.1 = self.root_rel(t.1);
-        if self.pred_rel.insert(t) {
-            let weight0 = &mut self.pred_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(PredRelTable::WEIGHT);
-
-let weight1 = &mut self.rel_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(PredRelTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.func_uprooted.iter().copied() {
-    let ts = self.domain.drain_with_element_func(el);
-    for mut t in ts {
-        let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(DomainTable::WEIGHT);
-
-let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(DomainTable::WEIGHT);
-
-        t.0 = self.root_func(t.0);
-t.1 = self.root_type_list(t.1);
-        if self.domain.insert(t) {
-            let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(DomainTable::WEIGHT);
-
-let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(DomainTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.type_list_uprooted.iter().copied() {
-    let ts = self.domain.drain_with_element_type_list(el);
-    for mut t in ts {
-        let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(DomainTable::WEIGHT);
-
-let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(DomainTable::WEIGHT);
-
-        t.0 = self.root_func(t.0);
-t.1 = self.root_type_list(t.1);
-        if self.domain.insert(t) {
-            let weight0 = &mut self.func_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(DomainTable::WEIGHT);
-
-let weight1 = &mut self.type_list_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(DomainTable::WEIGHT);
 
         }
     }
@@ -77683,6 +77425,49 @@ let weight2 = &mut self.pred_weights[t.2.0 as usize];
     }
 }
 
+for el in self.pred_uprooted.iter().copied() {
+    let ts = self.pred_arity.drain_with_element_pred(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(PredArityTable::WEIGHT);
+
+let weight1 = &mut self.type_list_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(PredArityTable::WEIGHT);
+
+        t.0 = self.root_pred(t.0);
+t.1 = self.root_type_list(t.1);
+        if self.pred_arity.insert(t) {
+            let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
+
+let weight1 = &mut self.type_list_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.type_list_uprooted.iter().copied() {
+    let ts = self.pred_arity.drain_with_element_type_list(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(PredArityTable::WEIGHT);
+
+let weight1 = &mut self.type_list_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(PredArityTable::WEIGHT);
+
+        t.0 = self.root_pred(t.0);
+t.1 = self.root_type_list(t.1);
+        if self.pred_arity.insert(t) {
+            let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(PredArityTable::WEIGHT);
+
+let weight1 = &mut self.type_list_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(PredArityTable::WEIGHT);
+
+        }
+    }
+}
+
 for el in self.func_uprooted.iter().copied() {
     let ts = self.semantic_func.drain_with_element_func(el);
     for mut t in ts {
@@ -77811,6 +77596,49 @@ let weight1 = &mut self.symbol_scope_weights[t.1.0 as usize];
     }
 }
 
+for el in self.pred_uprooted.iter().copied() {
+    let ts = self.pred_rel.drain_with_element_pred(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(PredRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(PredRelTable::WEIGHT);
+
+        t.0 = self.root_pred(t.0);
+t.1 = self.root_rel(t.1);
+        if self.pred_rel.insert(t) {
+            let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(PredRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(PredRelTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.rel_uprooted.iter().copied() {
+    let ts = self.pred_rel.drain_with_element_rel(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(PredRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(PredRelTable::WEIGHT);
+
+        t.0 = self.root_pred(t.0);
+t.1 = self.root_rel(t.1);
+        if self.pred_rel.insert(t) {
+            let weight0 = &mut self.pred_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(PredRelTable::WEIGHT);
+
+let weight1 = &mut self.rel_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(PredRelTable::WEIGHT);
+
+        }
+    }
+}
+
 for el in self.ident_uprooted.iter().copied() {
     let ts = self.rel_name.drain_with_element_ident(el);
     for mut t in ts {
@@ -77892,6 +77720,92 @@ t.1 = self.root_type_list(t.1);
 
 let weight1 = &mut self.type_list_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_add(ArityTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.morphism_uprooted.iter().copied() {
+    let ts = self.dom.drain_with_element_morphism(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.dom.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(DomTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.structure_uprooted.iter().copied() {
+    let ts = self.dom.drain_with_element_structure(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(DomTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.dom.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(DomTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(DomTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.morphism_uprooted.iter().copied() {
+    let ts = self.cod.drain_with_element_morphism(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.cod.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(CodTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.structure_uprooted.iter().copied() {
+    let ts = self.cod.drain_with_element_structure(el);
+    for mut t in ts {
+        let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(CodTable::WEIGHT);
+
+        t.0 = self.root_morphism(t.0);
+t.1 = self.root_structure(t.1);
+        if self.cod.insert(t) {
+            let weight0 = &mut self.morphism_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(CodTable::WEIGHT);
+
+let weight1 = &mut self.structure_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(CodTable::WEIGHT);
 
         }
     }
@@ -78349,63 +78263,6 @@ let weight1 = &mut self.type_weights[t.1.0 as usize];
 
 let weight2 = &mut self.element_type_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_add(InstantiatedTypeTable::WEIGHT);
-
-        }
-    }
-}
-
-for el in self.el_uprooted.iter().copied() {
-    let ts = self.hom_el_type.drain_with_element_el(el);
-    for mut t in ts {
-        let weight0 = &mut self.el_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomElTypeTable::WEIGHT);
-
-let weight1 = &mut self.el_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomElTypeTable::WEIGHT);
-
-let weight2 = &mut self.element_type_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_sub(HomElTypeTable::WEIGHT);
-
-        t.0 = self.root_el(t.0);
-t.1 = self.root_el(t.1);
-t.2 = self.root_element_type(t.2);
-        if self.hom_el_type.insert(t) {
-            let weight0 = &mut self.el_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomElTypeTable::WEIGHT);
-
-let weight1 = &mut self.el_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomElTypeTable::WEIGHT);
-
-let weight2 = &mut self.element_type_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_add(HomElTypeTable::WEIGHT);
-
-        }
-    }
-}
-for el in self.element_type_uprooted.iter().copied() {
-    let ts = self.hom_el_type.drain_with_element_element_type(el);
-    for mut t in ts {
-        let weight0 = &mut self.el_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_sub(HomElTypeTable::WEIGHT);
-
-let weight1 = &mut self.el_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_sub(HomElTypeTable::WEIGHT);
-
-let weight2 = &mut self.element_type_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_sub(HomElTypeTable::WEIGHT);
-
-        t.0 = self.root_el(t.0);
-t.1 = self.root_el(t.1);
-t.2 = self.root_element_type(t.2);
-        if self.hom_el_type.insert(t) {
-            let weight0 = &mut self.el_weights[t.0.0 as usize];
-*weight0 = weight0.saturating_add(HomElTypeTable::WEIGHT);
-
-let weight1 = &mut self.el_weights[t.1.0 as usize];
-*weight1 = weight1.saturating_add(HomElTypeTable::WEIGHT);
-
-let weight2 = &mut self.element_type_weights[t.2.0 as usize];
-*weight2 = weight2.saturating_add(HomElTypeTable::WEIGHT);
 
         }
     }
@@ -80403,7 +80260,7 @@ self.element_type_list_uprooted.clear();
 self.symbol_kind_uprooted.clear();
 }
 fn is_dirty(&self) -> bool {
-    self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.ambient_type_expr.is_dirty() || self.member_type_expr.is_dirty() || self.hom_type_expr.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.is_hom_type.is_dirty() || self.is_total_func.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.symbol_scope_ancestor.is_dirty() || self.element_member_symbol_scope.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.should_be_symbol_3.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.type_expr_structure.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.rule_descendant_type_expr.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.hom_type.is_dirty() || self.hom_type_signature.is_dirty() || self.pred_arity.is_dirty() || self.type_name.is_dirty() || self.virtual_symbol_scope.is_dirty() || self.parent_model_func.is_dirty() || self.type_definition_symbol_scope.is_dirty() || self.symbol_scope_model.is_dirty() || self.codomain.is_dirty() || self.func_rel.is_dirty() || self.rel_definition_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.domain.is_dirty() || self.flat_domain.is_dirty() || self.semantic_arg_types.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_pred.is_dirty() || self.semantic_func.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.flat_arity.is_dirty() || self.module_symbol_scope.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.ambient_type.is_dirty() || self.instantiated_type.is_dirty() || self.hom_el_type.is_dirty() || self.underlying_type.is_dirty() || self.nil_element_type_list.is_dirty() || self.cons_element_type_list.is_dirty() || self.snoc_element_type_list.is_dirty() || self.ambient_el_type_list.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.ambient_model_el.is_dirty() || self.type_symbol.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.model_symbol.is_dirty() || self.symbol_scope_parent.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.semantic_el.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.ambient_model_el_structure.is_dirty() || self.ambient_model_el_morphism.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.rel_app_parent_model_el.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.type_expr_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.pred_new.is_empty() || !self.func_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.element_type_new.is_empty() || !self.element_type_list_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.type_expr_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.element_type_uprooted.is_empty() || !self.element_type_list_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
+    self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.ambient_type_expr.is_dirty() || self.member_type_expr.is_dirty() || self.mor_type_expr.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.is_mor_type.is_dirty() || self.is_total_func.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.symbol_scope_ancestor.is_dirty() || self.element_member_symbol_scope.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.should_be_symbol_3.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.type_expr_structure.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.rule_descendant_type_expr.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.mor_type.is_dirty() || self.mor_type_dom_func.is_dirty() || self.mor_type_cod_func.is_dirty() || self.type_definition_symbol_scope.is_dirty() || self.func_rel.is_dirty() || self.rel_definition_symbol_scope.is_dirty() || self.domain.is_dirty() || self.codomain.is_dirty() || self.type_name.is_dirty() || self.virtual_symbol_scope.is_dirty() || self.parent_model_func.is_dirty() || self.symbol_scope_model.is_dirty() || self.flat_domain.is_dirty() || self.semantic_arg_types.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_pred.is_dirty() || self.pred_arity.is_dirty() || self.semantic_func.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.flat_arity.is_dirty() || self.module_symbol_scope.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.ambient_type.is_dirty() || self.instantiated_type.is_dirty() || self.underlying_type.is_dirty() || self.nil_element_type_list.is_dirty() || self.cons_element_type_list.is_dirty() || self.snoc_element_type_list.is_dirty() || self.ambient_el_type_list.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.ambient_model_el.is_dirty() || self.type_symbol.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.model_symbol.is_dirty() || self.symbol_scope_parent.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.semantic_el.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.ambient_model_el_structure.is_dirty() || self.ambient_model_el_morphism.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.rel_app_parent_model_el.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.type_expr_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.func_new.is_empty() || !self.pred_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.element_type_new.is_empty() || !self.element_type_list_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.type_expr_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.element_type_uprooted.is_empty() || !self.element_type_list_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
 }
 
 #[allow(unused_variables)]
@@ -81397,10 +81254,10 @@ delta.new_type_equalities.push((tm2, tm3));
 fn implicit_functionality_47_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomType(tm0, tm1, ) in self.hom_type.iter_new() {
+for MorType(tm0, tm1, ) in self.mor_type.iter_new() {
 
 #[allow(unused_variables)]
-for HomType(_, tm2, ) in self.hom_type.iter_all_0(tm0, ) {
+for MorType(_, tm2, ) in self.mor_type.iter_all_0(tm0, ) {
 
 delta.new_type_equalities.push((tm1, tm2));
 
@@ -81418,12 +81275,12 @@ delta.new_type_equalities.push((tm1, tm2));
 fn implicit_functionality_48_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomTypeSignature(tm0, tm1, ) in self.hom_type_signature.iter_new() {
+for MorTypeDomFunc(tm0, tm1, ) in self.mor_type_dom_func.iter_new() {
 
 #[allow(unused_variables)]
-for HomTypeSignature(_, tm2, ) in self.hom_type_signature.iter_all_0(tm0, ) {
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_all_0(tm0, ) {
 
-delta.new_pred_equalities.push((tm1, tm2));
+delta.new_func_equalities.push((tm1, tm2));
 
 
 
@@ -81437,6 +81294,27 @@ delta.new_pred_equalities.push((tm1, tm2));
 
 #[allow(unused_variables)]
 fn implicit_functionality_49_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm0, tm1, ) in self.mor_type_cod_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm2, ) in self.mor_type_cod_func.iter_all_0(tm0, ) {
+
+delta.new_func_equalities.push((tm1, tm2));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_50_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeName(tm0, tm1, ) in self.type_name.iter_new() {
@@ -81457,7 +81335,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_50_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_51_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for VirtualSymbolScope(tm0, ) in self.virtual_symbol_scope.iter_new() {
@@ -81478,7 +81356,7 @@ delta.new_symbol_scope_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_51_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_52_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ParentModelFunc(tm0, tm1, ) in self.parent_model_func.iter_new() {
@@ -81499,7 +81377,7 @@ delta.new_func_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_52_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_53_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticArgTypes(tm0, tm1, ) in self.semantic_arg_types.iter_new() {
@@ -81520,7 +81398,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_53_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_54_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticPred(tm0, tm1, tm2, ) in self.semantic_pred.iter_new() {
@@ -81541,7 +81419,7 @@ delta.new_pred_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_54_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_55_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredArity(tm0, tm1, ) in self.pred_arity.iter_new() {
@@ -81562,7 +81440,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_55_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_56_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticFunc(tm0, tm1, tm2, ) in self.semantic_func.iter_new() {
@@ -81583,7 +81461,7 @@ delta.new_func_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_56_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_57_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Domain(tm0, tm1, ) in self.domain.iter_new() {
@@ -81604,7 +81482,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_57_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_58_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Codomain(tm0, tm1, ) in self.codomain.iter_new() {
@@ -81625,7 +81503,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_58_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_59_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RelName(tm0, tm1, ) in self.rel_name.iter_new() {
@@ -81646,7 +81524,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_59_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_60_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Arity(tm0, tm1, ) in self.arity.iter_new() {
@@ -81667,7 +81545,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_60_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_61_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FlatArity(tm0, tm1, ) in self.flat_arity.iter_new() {
@@ -81688,7 +81566,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_61_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_62_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FlatDomain(tm0, tm1, ) in self.flat_domain.iter_new() {
@@ -81709,7 +81587,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_62_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_63_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Var(tm0, tm1, tm2, ) in self.var.iter_new() {
@@ -81730,7 +81608,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_63_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_64_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ElStructure(tm0, tm1, ) in self.el_structure.iter_new() {
@@ -81751,7 +81629,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_64_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_65_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ElsStructure(tm0, tm1, ) in self.els_structure.iter_new() {
@@ -81772,7 +81650,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_65_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_66_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for UnderlyingType(tm0, tm1, ) in self.underlying_type.iter_new() {
@@ -81793,7 +81671,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_66_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_67_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientElTypeList(tm0, tm1, ) in self.ambient_el_type_list.iter_new() {
@@ -81814,7 +81692,7 @@ delta.new_element_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_67_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_68_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncApp(tm0, tm1, tm2, ) in self.func_app.iter_new() {
@@ -81835,7 +81713,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_68_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_69_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Dom(tm0, tm1, ) in self.dom.iter_new() {
@@ -81856,7 +81734,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_69_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_70_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Cod(tm0, tm1, ) in self.cod.iter_new() {
@@ -81877,7 +81755,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_70_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_71_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MapEl(tm0, tm1, tm2, ) in self.map_el.iter_new() {
@@ -81898,7 +81776,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_71_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_72_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MapEls(tm0, tm1, tm2, ) in self.map_els.iter_new() {
@@ -81919,7 +81797,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_72_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_73_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeParent(tm0, tm1, ) in self.symbol_scope_parent.iter_new() {
@@ -81940,7 +81818,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_73_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_74_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModuleSymbolScope(tm0, tm1, ) in self.module_symbol_scope.iter_new() {
@@ -81961,7 +81839,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_74_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_75_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclSymbolScope(tm0, tm1, ) in self.decl_symbol_scope.iter_new() {
@@ -81982,7 +81860,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_75_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_76_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclsSymbolScope(tm0, tm1, ) in self.decls_symbol_scope.iter_new() {
@@ -82003,7 +81881,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_76_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_77_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ArgSymbolScope(tm0, tm1, ) in self.arg_symbol_scope.iter_new() {
@@ -82024,7 +81902,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_77_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_78_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ArgsSymbolScope(tm0, tm1, ) in self.args_symbol_scope.iter_new() {
@@ -82045,7 +81923,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_78_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_79_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbolScope(tm0, tm1, ) in self.ctor_symbol_scope.iter_new() {
@@ -82066,7 +81944,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_79_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_80_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorsSymbolScope(tm0, tm1, ) in self.ctors_symbol_scope.iter_new() {
@@ -82087,7 +81965,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_80_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_81_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelMemberSymbolScope(tm0, tm1, ) in self.model_member_symbol_scope.iter_new() {
@@ -82108,7 +81986,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_81_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_82_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeModel(tm0, tm1, ) in self.symbol_scope_model.iter_new() {
@@ -82129,7 +82007,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_82_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_83_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeName(tm0, tm1, ) in self.symbol_scope_name.iter_new() {
@@ -82150,7 +82028,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_83_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_84_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ScopeSymbols(tm0, tm1, ) in self.scope_symbols.iter_new() {
@@ -82171,7 +82049,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_84_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_85_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeDefinitionSymbolScope(tm0, tm1, ) in self.type_definition_symbol_scope.iter_new() {
@@ -82192,7 +82070,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_85_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_86_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RelDefinitionSymbolScope(tm0, tm1, ) in self.rel_definition_symbol_scope.iter_new() {
@@ -82213,7 +82091,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_86_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_87_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Zero(tm0, ) in self.zero.iter_new() {
@@ -82234,7 +82112,7 @@ delta.new_nat_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_87_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_88_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Succ(tm0, tm1, ) in self.succ.iter_new() {
@@ -82255,7 +82133,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_88_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_89_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeListLen(tm0, tm1, ) in self.type_list_len.iter_new() {
@@ -82276,7 +82154,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_89_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_90_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TermListLen(tm0, tm1, ) in self.term_list_len.iter_new() {
@@ -82297,7 +82175,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_90_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_91_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for BeforeRuleStructure(tm0, tm1, ) in self.before_rule_structure.iter_new() {
@@ -82318,7 +82196,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_91_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_92_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientModelElStructure(tm0, tm1, ) in self.ambient_model_el_structure.iter_new() {
@@ -82339,7 +82217,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_92_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_93_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientModelElMorphism(tm0, tm1, ) in self.ambient_model_el_morphism.iter_new() {
@@ -82360,7 +82238,7 @@ delta.new_morphism_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_93_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_94_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for IfAtomMorphism(tm0, tm1, tm2, ) in self.if_atom_morphism.iter_new() {
@@ -82381,7 +82259,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_94_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_95_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ThenAtomMorphism(tm0, tm1, tm2, ) in self.then_atom_morphism.iter_new() {
@@ -82402,7 +82280,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_95_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_96_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for BranchStmtMorphism(tm0, tm1, tm2, ) in self.branch_stmt_morphism.iter_new() {
@@ -82423,7 +82301,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_96_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_97_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MatchStmtMorphism(tm0, tm1, tm2, ) in self.match_stmt_morphism.iter_new() {
@@ -82444,7 +82322,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_97_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_98_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticName(tm0, tm1, tm2, ) in self.semantic_name.iter_new() {
@@ -82465,7 +82343,7 @@ delta.new_el_name_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_98_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_99_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticEl(tm0, tm1, tm2, ) in self.semantic_el.iter_new() {
@@ -82486,7 +82364,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_99_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_100_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticEls(tm0, tm1, tm2, ) in self.semantic_els.iter_new() {
@@ -82507,7 +82385,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_100_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_101_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientModelEl(tm0, tm1, tm2, ) in self.ambient_model_el.iter_new() {
@@ -82528,7 +82406,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_101_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_102_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for WildcardName(tm0, tm1, ) in self.wildcard_name.iter_new() {
@@ -82549,7 +82427,7 @@ delta.new_el_name_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_102_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_103_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RelAppParentModelEl(tm0, tm1, tm2, ) in self.rel_app_parent_model_el.iter_new() {
@@ -82570,7 +82448,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_103_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_104_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MatchCasePatternCtor(tm0, tm1, ) in self.match_case_pattern_ctor.iter_new() {
@@ -82591,7 +82469,7 @@ delta.new_ctor_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_104_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_105_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CasesDeterminedEnum(tm0, tm1, ) in self.cases_determined_enum.iter_new() {
@@ -82612,7 +82490,7 @@ delta.new_enum_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_105_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_106_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilTypeList(tm0, ) in self.nil_type_list.iter_new() {
@@ -82633,7 +82511,7 @@ delta.new_type_list_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_106_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_107_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsTypeList(tm0, tm1, tm2, ) in self.cons_type_list.iter_new() {
@@ -82654,7 +82532,7 @@ delta.new_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_107_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_108_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocTypeList(tm0, tm1, tm2, ) in self.snoc_type_list.iter_new() {
@@ -82675,7 +82553,7 @@ delta.new_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_108_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_109_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredRel(tm0, tm1, ) in self.pred_rel.iter_new() {
@@ -82696,7 +82574,7 @@ delta.new_rel_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_109_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_110_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncRel(tm0, tm1, ) in self.func_rel.iter_new() {
@@ -82717,7 +82595,7 @@ delta.new_rel_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_110_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_111_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilElList(tm0, tm1, ) in self.nil_el_list.iter_new() {
@@ -82738,7 +82616,7 @@ delta.new_el_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_111_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_112_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsElList(tm0, tm1, tm2, ) in self.cons_el_list.iter_new() {
@@ -82759,7 +82637,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_112_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_113_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocElList(tm0, tm1, tm2, ) in self.snoc_el_list.iter_new() {
@@ -82780,7 +82658,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_113_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_114_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientType(tm0, tm1, ) in self.ambient_type.iter_new() {
@@ -82801,34 +82679,13 @@ delta.new_element_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_114_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_115_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for InstantiatedType(tm0, tm1, tm2, ) in self.instantiated_type.iter_new() {
 
 #[allow(unused_variables)]
 for InstantiatedType(_, _, tm3, ) in self.instantiated_type.iter_all_0_1(tm0, tm1, ) {
-
-delta.new_element_type_equalities.push((tm2, tm3));
-
-
-
-}
-
-}
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn implicit_functionality_115_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomElType(tm0, tm1, tm2, ) in self.hom_el_type.iter_new() {
-
-#[allow(unused_variables)]
-for HomElType(_, _, tm3, ) in self.hom_el_type.iter_all_0_1(tm0, tm1, ) {
 
 delta.new_element_type_equalities.push((tm2, tm3));
 
@@ -88081,199 +87938,6 @@ delta.new_scope_single_child.push(ScopeSingleChild(tm4, tm3));
 
 
 #[allow(unused_variables)]
-fn scopes_hom_type_expr_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-self.scopes_hom_type_expr_1(delta, );
-self.scopes_hom_type_expr_2(delta, );
-self.scopes_hom_type_expr_5(delta, );
-self.scopes_hom_type_expr_8(delta, );
-self.scopes_hom_type_expr_11(delta, );
-
-
-
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_1(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_2(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomTypeExpr(tm0, tm1, tm2, ) in self.hom_type_expr.iter_new() {
-
-self.scopes_hom_type_expr_3(delta, tm0, tm1, tm2);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_3(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode) {
-for _ in [()] {
-self.scopes_hom_type_expr_4(delta, tm0, tm1, tm2);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_4(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleDescendantTypeExpr(_, tm3, ) in self.rule_descendant_type_expr.iter_all_0(tm0, ) {
-
-self.scopes_hom_type_expr_6(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_5(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleDescendantTypeExpr(tm0, tm3, ) in self.rule_descendant_type_expr.iter_new() {
-
-#[allow(unused_variables)]
-for HomTypeExpr(_, tm1, tm2, ) in self.hom_type_expr.iter_old_0(tm0, ) {
-
-self.scopes_hom_type_expr_6(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_6(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode) {
-for _ in [()] {
-self.scopes_hom_type_expr_7(delta, tm0, tm1, tm2, tm3);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_7(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleDescendantTerm(_, tm4, ) in self.rule_descendant_term.iter_all_0(tm1, ) {
-
-self.scopes_hom_type_expr_9(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_8(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleDescendantTerm(tm1, tm4, ) in self.rule_descendant_term.iter_new() {
-
-#[allow(unused_variables)]
-for RuleDescendantTypeExpr(tm0, tm3, ) in self.rule_descendant_type_expr.iter_old() {
-
-#[allow(unused_variables)]
-for HomTypeExpr(_, _, tm2, ) in self.hom_type_expr.iter_old_0_1(tm0, tm1, ) {
-
-self.scopes_hom_type_expr_9(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_9(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode) {
-for _ in [()] {
-self.scopes_hom_type_expr_10(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_10(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleDescendantTerm(_, tm5, ) in self.rule_descendant_term.iter_all_0(tm2, ) {
-
-self.scopes_hom_type_expr_12(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_11(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for RuleDescendantTerm(tm2, tm5, ) in self.rule_descendant_term.iter_new() {
-
-#[allow(unused_variables)]
-for RuleDescendantTypeExpr(tm0, tm3, ) in self.rule_descendant_type_expr.iter_old() {
-
-#[allow(unused_variables)]
-for HomTypeExpr(_, tm1, _, ) in self.hom_type_expr.iter_old_0_2(tm0, tm2, ) {
-
-#[allow(unused_variables)]
-for RuleDescendantTerm(_, tm4, ) in self.rule_descendant_term.iter_old_0(tm1, ) {
-
-self.scopes_hom_type_expr_12(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn scopes_hom_type_expr_12(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode, tm5: RuleDescendantNode) {
-for _ in [()] {
-let exists_already = self.scope_extension_siblings.iter_all_0_1_2(tm4, tm5, tm3).next().is_some();
-if !exists_already {
-delta.new_scope_extension_siblings.push(ScopeExtensionSiblings(tm4, tm5, tm3));
-}
-
-
-
-}
-}
-
-
-#[allow(unused_variables)]
 fn enum_ctors_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 self.enum_ctors_1(delta, );
@@ -90767,11 +90431,15 @@ delta.new_is_model_type.push(IsModelType(tm5));
 
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_0(&self, delta: &mut ModelDelta, ) {
+fn mor_type_defined_for_model_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.hom_type_defined_for_model_1(delta, );
-self.hom_type_defined_for_model_2(delta, );
-self.hom_type_defined_for_model_5(delta, );
+self.mor_type_defined_for_model_1(delta, );
+self.mor_type_defined_for_model_2(delta, );
+self.mor_type_defined_for_model_5(delta, );
+self.mor_type_defined_for_model_8(delta, );
+self.mor_type_defined_for_model_11(delta, );
+
+
 
 
 
@@ -90780,19 +90448,19 @@ self.hom_type_defined_for_model_5(delta, );
 }
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_1(&self, delta: &mut ModelDelta, ) {
+fn mor_type_defined_for_model_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_2(&self, delta: &mut ModelDelta, ) {
+fn mor_type_defined_for_model_2(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for IsModelType(tm0, ) in self.is_model_type.iter_new() {
 
-self.hom_type_defined_for_model_3(delta, tm0);
+self.mor_type_defined_for_model_3(delta, tm0);
 
 
 }
@@ -90801,26 +90469,26 @@ self.hom_type_defined_for_model_3(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_3(&self, delta: &mut ModelDelta, tm0: Type) {
+fn mor_type_defined_for_model_3(&self, delta: &mut ModelDelta, tm0: Type) {
 for _ in [()] {
-self.hom_type_defined_for_model_4(delta, tm0);
+self.mor_type_defined_for_model_4(delta, tm0);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_4(&self, delta: &mut ModelDelta, tm0: Type) {
+fn mor_type_defined_for_model_4(&self, delta: &mut ModelDelta, tm0: Type) {
 for _ in [()] {
-let tm1 = match self.hom_type.iter_all_0(tm0).next() {
-    Some(HomType(_,  res)) => res,
+let tm1 = match self.mor_type.iter_all_0(tm0).next() {
+    Some(MorType(_,  res)) => res,
     None => { 
-        delta.new_hom_type_def.push(HomTypeArgs(tm0));
+        delta.new_mor_type_def.push(MorTypeArgs(tm0));
         break;
     },
 };
 
-self.hom_type_defined_for_model_6(delta, tm0, tm1);
+self.mor_type_defined_for_model_6(delta, tm0, tm1);
 
 
 
@@ -90828,15 +90496,15 @@ self.hom_type_defined_for_model_6(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_5(&self, delta: &mut ModelDelta, ) {
+fn mor_type_defined_for_model_5(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomType(tm0, tm1, ) in self.hom_type.iter_new() {
+for MorType(tm0, tm1, ) in self.mor_type.iter_new() {
 
 #[allow(unused_variables)]
 for IsModelType(_, ) in self.is_model_type.iter_old_0(tm0, ) {
 
-self.hom_type_defined_for_model_6(delta, tm0, tm1);
+self.mor_type_defined_for_model_6(delta, tm0, tm1);
 
 
 }
@@ -90847,7 +90515,114 @@ self.hom_type_defined_for_model_6(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn hom_type_defined_for_model_6(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+fn mor_type_defined_for_model_6(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+for _ in [()] {
+self.mor_type_defined_for_model_7(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_defined_for_model_7(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+for _ in [()] {
+let tm2 = match self.mor_type_dom_func.iter_all_0(tm1).next() {
+    Some(MorTypeDomFunc(_,  res)) => res,
+    None => { 
+        delta.new_mor_type_dom_func_def.push(MorTypeDomFuncArgs(tm1));
+        break;
+    },
+};
+
+self.mor_type_defined_for_model_9(delta, tm0, tm1, tm2);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_defined_for_model_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(tm1, tm2, ) in self.mor_type_dom_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorType(tm0, _, ) in self.mor_type.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for IsModelType(_, ) in self.is_model_type.iter_old_0(tm0, ) {
+
+self.mor_type_defined_for_model_9(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_defined_for_model_9(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func) {
+for _ in [()] {
+self.mor_type_defined_for_model_10(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_defined_for_model_10(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func) {
+for _ in [()] {
+let tm3 = match self.mor_type_cod_func.iter_all_0(tm1).next() {
+    Some(MorTypeCodFunc(_,  res)) => res,
+    None => { 
+        delta.new_mor_type_cod_func_def.push(MorTypeCodFuncArgs(tm1));
+        break;
+    },
+};
+
+self.mor_type_defined_for_model_12(delta, tm0, tm1, tm2, tm3);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_defined_for_model_11(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm1, tm3, ) in self.mor_type_cod_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for IsModelType(tm0, ) in self.is_model_type.iter_old() {
+
+#[allow(unused_variables)]
+for MorType(_, _, ) in self.mor_type.iter_old_0_1(tm0, tm1, ) {
+
+self.mor_type_defined_for_model_12(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_defined_for_model_12(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func) {
 for _ in [()] {
 
 }
@@ -90855,10 +90630,10 @@ for _ in [()] {
 
 
 #[allow(unused_variables)]
-fn hom_type_is_hom_type_0(&self, delta: &mut ModelDelta, ) {
+fn mor_type_is_mor_type_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.hom_type_is_hom_type_1(delta, );
-self.hom_type_is_hom_type_2(delta, );
+self.mor_type_is_mor_type_1(delta, );
+self.mor_type_is_mor_type_2(delta, );
 
 
 
@@ -90866,19 +90641,19 @@ self.hom_type_is_hom_type_2(delta, );
 }
 
 #[allow(unused_variables)]
-fn hom_type_is_hom_type_1(&self, delta: &mut ModelDelta, ) {
+fn mor_type_is_mor_type_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_is_hom_type_2(&self, delta: &mut ModelDelta, ) {
+fn mor_type_is_mor_type_2(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomType(tm1, tm0, ) in self.hom_type.iter_new() {
+for MorType(tm1, tm0, ) in self.mor_type.iter_new() {
 
-self.hom_type_is_hom_type_3(delta, tm0, tm1);
+self.mor_type_is_mor_type_3(delta, tm0, tm1);
 
 
 }
@@ -90887,11 +90662,11 @@ self.hom_type_is_hom_type_3(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn hom_type_is_hom_type_3(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+fn mor_type_is_mor_type_3(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
 for _ in [()] {
-let exists_already = self.is_hom_type.iter_all_0(tm0).next().is_some();
+let exists_already = self.is_mor_type.iter_all_0(tm0).next().is_some();
 if !exists_already {
-delta.new_is_hom_type.push(IsHomType(tm0));
+delta.new_is_mor_type.push(IsMorType(tm0));
 }
 
 
@@ -90901,21 +90676,11 @@ delta.new_is_hom_type.push(IsHomType(tm0));
 
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_0(&self, delta: &mut ModelDelta, ) {
+fn mor_type_symbol_scope_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.hom_type_signature_defined_and_arity_1(delta, );
-self.hom_type_signature_defined_and_arity_2(delta, );
-self.hom_type_signature_defined_and_arity_5(delta, );
-self.hom_type_signature_defined_and_arity_8(delta, );
-self.hom_type_signature_defined_and_arity_11(delta, );
-self.hom_type_signature_defined_and_arity_14(delta, );
-self.hom_type_signature_defined_and_arity_17(delta, );
-self.hom_type_signature_defined_and_arity_20(delta, );
-
-
-
-
-
+self.mor_type_symbol_scope_1(delta, );
+self.mor_type_symbol_scope_2(delta, );
+self.mor_type_symbol_scope_5(delta, );
 
 
 
@@ -90924,19 +90689,19 @@ self.hom_type_signature_defined_and_arity_20(delta, );
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_1(&self, delta: &mut ModelDelta, ) {
+fn mor_type_symbol_scope_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_2(&self, delta: &mut ModelDelta, ) {
+fn mor_type_symbol_scope_2(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for IsModelType(tm0, ) in self.is_model_type.iter_new() {
+for MorType(tm1, tm0, ) in self.mor_type.iter_new() {
 
-self.hom_type_signature_defined_and_arity_3(delta, tm0);
+self.mor_type_symbol_scope_3(delta, tm0, tm1);
 
 
 }
@@ -90945,45 +90710,22 @@ self.hom_type_signature_defined_and_arity_3(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_3(&self, delta: &mut ModelDelta, tm0: Type) {
+fn mor_type_symbol_scope_3(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
 for _ in [()] {
-self.hom_type_signature_defined_and_arity_4(delta, tm0);
+self.mor_type_symbol_scope_4(delta, tm0, tm1);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_4(&self, delta: &mut ModelDelta, tm0: Type) {
-for _ in [()] {
-let tm1 = match self.hom_type_signature.iter_all_0(tm0).next() {
-    Some(HomTypeSignature(_,  res)) => res,
-    None => { 
-        delta.new_hom_type_signature_def.push(HomTypeSignatureArgs(tm0));
-        break;
-    },
-};
-
-self.hom_type_signature_defined_and_arity_6(delta, tm0, tm1);
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_5(&self, delta: &mut ModelDelta, ) {
+fn mor_type_symbol_scope_4(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomTypeSignature(tm0, tm1, ) in self.hom_type_signature.iter_new() {
+for TypeDefinitionSymbolScope(_, tm2, ) in self.type_definition_symbol_scope.iter_all_0(tm1, ) {
 
-#[allow(unused_variables)]
-for IsModelType(_, ) in self.is_model_type.iter_old_0(tm0, ) {
+self.mor_type_symbol_scope_6(delta, tm0, tm1, tm2);
 
-self.hom_type_signature_defined_and_arity_6(delta, tm0, tm1);
-
-
-}
 
 }
 
@@ -90991,18 +90733,458 @@ self.hom_type_signature_defined_and_arity_6(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_6(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred) {
+fn mor_type_symbol_scope_5(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.hom_type_signature_defined_and_arity_7(delta, tm0, tm1);
+#[allow(unused_variables)]
+for TypeDefinitionSymbolScope(tm1, tm2, ) in self.type_definition_symbol_scope.iter_new() {
+
+#[allow(unused_variables)]
+for MorType(_, tm0, ) in self.mor_type.iter_old_0(tm1, ) {
+
+self.mor_type_symbol_scope_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_symbol_scope_6(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: SymbolScope) {
+for _ in [()] {
+let exists_already = self.type_definition_symbol_scope.iter_all_0_1(tm0, tm2).next().is_some();
+if !exists_already {
+delta.new_type_definition_symbol_scope.push(TypeDefinitionSymbolScope(tm0, tm2));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_type_dom_func_symbol_scope_1(delta, );
+self.mor_type_dom_func_symbol_scope_2(delta, );
+self.mor_type_dom_func_symbol_scope_5(delta, );
+self.mor_type_dom_func_symbol_scope_8(delta, );
+
+
+
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_7(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred) {
+fn mor_type_dom_func_symbol_scope_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-let tm2 = match self.nil_type_list.iter_all().next() {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(tm1, tm0, ) in self.mor_type_dom_func.iter_new() {
+
+self.mor_type_dom_func_symbol_scope_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_3(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type) {
+for _ in [()] {
+self.mor_type_dom_func_symbol_scope_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_4(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for FuncRel(_, tm2, ) in self.func_rel.iter_all_0(tm0, ) {
+
+self.mor_type_dom_func_symbol_scope_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for FuncRel(tm0, tm2, ) in self.func_rel.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(tm1, _, ) in self.mor_type_dom_func.iter_old_1(tm0, ) {
+
+self.mor_type_dom_func_symbol_scope_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_6(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type, tm2: Rel) {
+for _ in [()] {
+self.mor_type_dom_func_symbol_scope_7(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_7(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type, tm2: Rel) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeDefinitionSymbolScope(_, tm3, ) in self.type_definition_symbol_scope.iter_all_0(tm1, ) {
+
+self.mor_type_dom_func_symbol_scope_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeDefinitionSymbolScope(tm1, tm3, ) in self.type_definition_symbol_scope.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm0, ) in self.mor_type_dom_func.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for FuncRel(_, tm2, ) in self.func_rel.iter_old_0(tm0, ) {
+
+self.mor_type_dom_func_symbol_scope_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_func_symbol_scope_9(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type, tm2: Rel, tm3: SymbolScope) {
+for _ in [()] {
+let exists_already = self.rel_definition_symbol_scope.iter_all_0_1(tm2, tm3).next().is_some();
+if !exists_already {
+delta.new_rel_definition_symbol_scope.push(RelDefinitionSymbolScope(tm2, tm3));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_type_cod_func_symbol_scope_1(delta, );
+self.mor_type_cod_func_symbol_scope_2(delta, );
+self.mor_type_cod_func_symbol_scope_5(delta, );
+self.mor_type_cod_func_symbol_scope_8(delta, );
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm1, tm0, ) in self.mor_type_cod_func.iter_new() {
+
+self.mor_type_cod_func_symbol_scope_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_3(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type) {
+for _ in [()] {
+self.mor_type_cod_func_symbol_scope_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_4(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for FuncRel(_, tm2, ) in self.func_rel.iter_all_0(tm0, ) {
+
+self.mor_type_cod_func_symbol_scope_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for FuncRel(tm0, tm2, ) in self.func_rel.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm1, _, ) in self.mor_type_cod_func.iter_old_1(tm0, ) {
+
+self.mor_type_cod_func_symbol_scope_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_6(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type, tm2: Rel) {
+for _ in [()] {
+self.mor_type_cod_func_symbol_scope_7(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_7(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type, tm2: Rel) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeDefinitionSymbolScope(_, tm3, ) in self.type_definition_symbol_scope.iter_all_0(tm1, ) {
+
+self.mor_type_cod_func_symbol_scope_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeDefinitionSymbolScope(tm1, tm3, ) in self.type_definition_symbol_scope.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm0, ) in self.mor_type_cod_func.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for FuncRel(_, tm2, ) in self.func_rel.iter_old_0(tm0, ) {
+
+self.mor_type_cod_func_symbol_scope_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_cod_func_symbol_scope_9(&self, delta: &mut ModelDelta, tm0: Func, tm1: Type, tm2: Rel, tm3: SymbolScope) {
+for _ in [()] {
+let exists_already = self.rel_definition_symbol_scope.iter_all_0_1(tm2, tm3).next().is_some();
+if !exists_already {
+delta.new_rel_definition_symbol_scope.push(RelDefinitionSymbolScope(tm2, tm3));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_type_dom_cod_func_domains_1(delta, );
+self.mor_type_dom_cod_func_domains_2(delta, );
+self.mor_type_dom_cod_func_domains_5(delta, );
+self.mor_type_dom_cod_func_domains_8(delta, );
+self.mor_type_dom_cod_func_domains_11(delta, );
+self.mor_type_dom_cod_func_domains_14(delta, );
+
+
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorType(tm1, tm0, ) in self.mor_type.iter_new() {
+
+self.mor_type_dom_cod_func_domains_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_3(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+for _ in [()] {
+self.mor_type_dom_cod_func_domains_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_4(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_all_0(tm0, ) {
+
+self.mor_type_dom_cod_func_domains_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(tm0, tm2, ) in self.mor_type_dom_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorType(tm1, _, ) in self.mor_type.iter_old_1(tm0, ) {
+
+self.mor_type_dom_cod_func_domains_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_6(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func) {
+for _ in [()] {
+self.mor_type_dom_cod_func_domains_7(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_7(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm3, ) in self.mor_type_cod_func.iter_all_0(tm0, ) {
+
+self.mor_type_dom_cod_func_domains_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm0, tm3, ) in self.mor_type_cod_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for MorType(tm1, _, ) in self.mor_type.iter_old_1(tm0, ) {
+
+self.mor_type_dom_cod_func_domains_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_9(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func) {
+for _ in [()] {
+self.mor_type_dom_cod_func_domains_10(delta, tm0, tm1, tm2, tm3);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_domains_10(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func) {
+for _ in [()] {
+let tm4 = match self.nil_type_list.iter_all().next() {
     Some(NilTypeList( res)) => res,
     None => { 
         delta.new_nil_type_list_def.push(NilTypeListArgs());
@@ -91010,7 +91192,7 @@ let tm2 = match self.nil_type_list.iter_all().next() {
     },
 };
 
-self.hom_type_signature_defined_and_arity_9(delta, tm0, tm1, tm2);
+self.mor_type_dom_cod_func_domains_12(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 
@@ -91018,19 +91200,24 @@ self.hom_type_signature_defined_and_arity_9(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_8(&self, delta: &mut ModelDelta, ) {
+fn mor_type_dom_cod_func_domains_11(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for NilTypeList(tm2, ) in self.nil_type_list.iter_new() {
+for NilTypeList(tm4, ) in self.nil_type_list.iter_new() {
 
 #[allow(unused_variables)]
-for IsModelType(tm0, ) in self.is_model_type.iter_old() {
+for MorTypeCodFunc(tm0, tm3, ) in self.mor_type_cod_func.iter_old() {
 
 #[allow(unused_variables)]
-for HomTypeSignature(_, tm1, ) in self.hom_type_signature.iter_old_0(tm0, ) {
+for MorType(tm1, _, ) in self.mor_type.iter_old_1(tm0, ) {
 
-self.hom_type_signature_defined_and_arity_9(delta, tm0, tm1, tm2);
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_old_0(tm0, ) {
 
+self.mor_type_dom_cod_func_domains_12(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
 
 }
 
@@ -91042,26 +91229,26 @@ self.hom_type_signature_defined_and_arity_9(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_9(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList) {
+fn mor_type_dom_cod_func_domains_12(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func, tm4: TypeList) {
 for _ in [()] {
-self.hom_type_signature_defined_and_arity_10(delta, tm0, tm1, tm2);
+self.mor_type_dom_cod_func_domains_13(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_10(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList) {
+fn mor_type_dom_cod_func_domains_13(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func, tm4: TypeList) {
 for _ in [()] {
-let tm3 = match self.cons_type_list.iter_all_0_1(tm0, tm2).next() {
+let tm5 = match self.cons_type_list.iter_all_0_1(tm0, tm4).next() {
     Some(ConsTypeList(_, _,  res)) => res,
     None => { 
-        delta.new_cons_type_list_def.push(ConsTypeListArgs(tm0, tm2));
+        delta.new_cons_type_list_def.push(ConsTypeListArgs(tm0, tm4));
         break;
     },
 };
 
-self.hom_type_signature_defined_and_arity_12(delta, tm0, tm1, tm2, tm3);
+self.mor_type_dom_cod_func_domains_15(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 
@@ -91069,22 +91256,27 @@ self.hom_type_signature_defined_and_arity_12(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_11(&self, delta: &mut ModelDelta, ) {
+fn mor_type_dom_cod_func_domains_14(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for ConsTypeList(tm0, tm2, tm3, ) in self.cons_type_list.iter_new() {
+for ConsTypeList(tm0, tm4, tm5, ) in self.cons_type_list.iter_new() {
 
 #[allow(unused_variables)]
-for NilTypeList(_, ) in self.nil_type_list.iter_old_0(tm2, ) {
+for NilTypeList(_, ) in self.nil_type_list.iter_old_0(tm4, ) {
 
 #[allow(unused_variables)]
-for IsModelType(_, ) in self.is_model_type.iter_old_0(tm0, ) {
+for MorType(tm1, _, ) in self.mor_type.iter_old_1(tm0, ) {
 
 #[allow(unused_variables)]
-for HomTypeSignature(_, tm1, ) in self.hom_type_signature.iter_old_0(tm0, ) {
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_old_0(tm0, ) {
 
-self.hom_type_signature_defined_and_arity_12(delta, tm0, tm1, tm2, tm3);
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm3, ) in self.mor_type_cod_func.iter_old_0(tm0, ) {
 
+self.mor_type_dom_cod_func_domains_15(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+
+
+}
 
 }
 
@@ -91098,206 +91290,163 @@ self.hom_type_signature_defined_and_arity_12(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_12(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList) {
+fn mor_type_dom_cod_func_domains_15(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func, tm4: TypeList, tm5: TypeList) {
 for _ in [()] {
-self.hom_type_signature_defined_and_arity_13(delta, tm0, tm1, tm2, tm3);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_13(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList) {
-for _ in [()] {
-let tm4 = match self.cons_type_list.iter_all_0_1(tm0, tm3).next() {
-    Some(ConsTypeList(_, _,  res)) => res,
-    None => { 
-        delta.new_cons_type_list_def.push(ConsTypeListArgs(tm0, tm3));
-        break;
-    },
-};
-
-self.hom_type_signature_defined_and_arity_15(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_14(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for ConsTypeList(tm0, tm3, tm4, ) in self.cons_type_list.iter_new() {
-
-#[allow(unused_variables)]
-for IsModelType(_, ) in self.is_model_type.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for ConsTypeList(_, tm2, _, ) in self.cons_type_list.iter_old_0_2(tm0, tm3, ) {
-
-#[allow(unused_variables)]
-for NilTypeList(_, ) in self.nil_type_list.iter_old_0(tm2, ) {
-
-#[allow(unused_variables)]
-for HomTypeSignature(_, tm1, ) in self.hom_type_signature.iter_old_0(tm0, ) {
-
-self.hom_type_signature_defined_and_arity_15(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_15(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList, tm4: TypeList) {
-for _ in [()] {
-self.hom_type_signature_defined_and_arity_16(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_16(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList, tm4: TypeList) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomType(_, tm5, ) in self.hom_type.iter_all_0(tm0, ) {
-
-self.hom_type_signature_defined_and_arity_18(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_17(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomType(tm0, tm5, ) in self.hom_type.iter_new() {
-
-#[allow(unused_variables)]
-for IsModelType(_, ) in self.is_model_type.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for NilTypeList(tm2, ) in self.nil_type_list.iter_old() {
-
-#[allow(unused_variables)]
-for ConsTypeList(_, _, tm3, ) in self.cons_type_list.iter_old_0_1(tm0, tm2, ) {
-
-#[allow(unused_variables)]
-for ConsTypeList(_, _, tm4, ) in self.cons_type_list.iter_old_0_1(tm0, tm3, ) {
-
-#[allow(unused_variables)]
-for HomTypeSignature(_, tm1, ) in self.hom_type_signature.iter_old_0(tm0, ) {
-
-self.hom_type_signature_defined_and_arity_18(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_18(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList, tm4: TypeList, tm5: Type) {
-for _ in [()] {
-self.hom_type_signature_defined_and_arity_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_19(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList, tm4: TypeList, tm5: Type) {
-for _ in [()] {
-let tm6 = match self.cons_type_list.iter_all_0_1(tm5, tm4).next() {
-    Some(ConsTypeList(_, _,  res)) => res,
-    None => { 
-        delta.new_cons_type_list_def.push(ConsTypeListArgs(tm5, tm4));
-        break;
-    },
-};
-
-self.hom_type_signature_defined_and_arity_21(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_20(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for ConsTypeList(tm5, tm4, tm6, ) in self.cons_type_list.iter_new() {
-
-#[allow(unused_variables)]
-for NilTypeList(tm2, ) in self.nil_type_list.iter_old() {
-
-#[allow(unused_variables)]
-for IsModelType(tm0, ) in self.is_model_type.iter_old() {
-
-#[allow(unused_variables)]
-for HomType(_, _, ) in self.hom_type.iter_old_0_1(tm0, tm5, ) {
-
-#[allow(unused_variables)]
-for ConsTypeList(_, tm3, _, ) in self.cons_type_list.iter_old_0_2(tm0, tm4, ) {
-
-#[allow(unused_variables)]
-for ConsTypeList(_, _, _, ) in self.cons_type_list.iter_old_0_1_2(tm0, tm2, tm3, ) {
-
-#[allow(unused_variables)]
-for HomTypeSignature(_, tm1, ) in self.hom_type_signature.iter_old_0(tm0, ) {
-
-self.hom_type_signature_defined_and_arity_21(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_signature_defined_and_arity_21(&self, delta: &mut ModelDelta, tm0: Type, tm1: Pred, tm2: TypeList, tm3: TypeList, tm4: TypeList, tm5: Type, tm6: TypeList) {
-for _ in [()] {
-let exists_already = self.pred_arity.iter_all_0_1(tm1, tm6).next().is_some();
+let exists_already = self.domain.iter_all_0_1(tm2, tm5).next().is_some();
 if !exists_already {
-delta.new_pred_arity.push(PredArity(tm1, tm6));
+delta.new_domain.push(Domain(tm2, tm5));
 }
+
+let exists_already = self.domain.iter_all_0_1(tm3, tm5).next().is_some();
+if !exists_already {
+delta.new_domain.push(Domain(tm3, tm5));
+}
+
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_type_dom_cod_func_codomains_1(delta, );
+self.mor_type_dom_cod_func_codomains_2(delta, );
+self.mor_type_dom_cod_func_codomains_5(delta, );
+self.mor_type_dom_cod_func_codomains_8(delta, );
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorType(tm1, tm0, ) in self.mor_type.iter_new() {
+
+self.mor_type_dom_cod_func_codomains_3(delta, tm0, tm1);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_3(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+for _ in [()] {
+self.mor_type_dom_cod_func_codomains_4(delta, tm0, tm1);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_4(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_all_0(tm0, ) {
+
+self.mor_type_dom_cod_func_codomains_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(tm0, tm2, ) in self.mor_type_dom_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorType(tm1, _, ) in self.mor_type.iter_old_1(tm0, ) {
+
+self.mor_type_dom_cod_func_codomains_6(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_6(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func) {
+for _ in [()] {
+self.mor_type_dom_cod_func_codomains_7(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_7(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm3, ) in self.mor_type_cod_func.iter_all_0(tm0, ) {
+
+self.mor_type_dom_cod_func_codomains_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm0, tm3, ) in self.mor_type_cod_func.iter_new() {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm2, ) in self.mor_type_dom_func.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for MorType(tm1, _, ) in self.mor_type.iter_old_1(tm0, ) {
+
+self.mor_type_dom_cod_func_codomains_9(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_type_dom_cod_func_codomains_9(&self, delta: &mut ModelDelta, tm0: Type, tm1: Type, tm2: Func, tm3: Func) {
+for _ in [()] {
+let exists_already = self.codomain.iter_all_0_1(tm2, tm1).next().is_some();
+if !exists_already {
+delta.new_codomain.push(Codomain(tm2, tm1));
+}
+
+let exists_already = self.codomain.iter_all_0_1(tm3, tm1).next().is_some();
+if !exists_already {
+delta.new_codomain.push(Codomain(tm3, tm1));
+}
+
 
 
 
@@ -91681,145 +91830,6 @@ self.parent_model_func_def_scope_9(delta, tm0, tm1, tm2, tm3);
 
 #[allow(unused_variables)]
 fn parent_model_func_def_scope_9(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: Func, tm2: Type, tm3: Rel) {
-for _ in [()] {
-let exists_already = self.rel_definition_symbol_scope.iter_all_0_1(tm3, tm0).next().is_some();
-if !exists_already {
-delta.new_rel_definition_symbol_scope.push(RelDefinitionSymbolScope(tm3, tm0));
-}
-
-
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-self.hom_signature_symbol_scope_1(delta, );
-self.hom_signature_symbol_scope_2(delta, );
-self.hom_signature_symbol_scope_5(delta, );
-self.hom_signature_symbol_scope_8(delta, );
-
-
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_1(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_2(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for VirtualSymbolScope(tm0, ) in self.virtual_symbol_scope.iter_new() {
-
-self.hom_signature_symbol_scope_3(delta, tm0);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_3(&self, delta: &mut ModelDelta, tm0: SymbolScope) {
-for _ in [()] {
-self.hom_signature_symbol_scope_4(delta, tm0);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_4(&self, delta: &mut ModelDelta, tm0: SymbolScope) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomTypeSignature(tm2, tm1, ) in self.hom_type_signature.iter_all() {
-
-self.hom_signature_symbol_scope_6(delta, tm0, tm1, tm2);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_5(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomTypeSignature(tm2, tm1, ) in self.hom_type_signature.iter_new() {
-
-#[allow(unused_variables)]
-for VirtualSymbolScope(tm0, ) in self.virtual_symbol_scope.iter_old() {
-
-self.hom_signature_symbol_scope_6(delta, tm0, tm1, tm2);
-
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_6(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: Pred, tm2: Type) {
-for _ in [()] {
-self.hom_signature_symbol_scope_7(delta, tm0, tm1, tm2);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_7(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: Pred, tm2: Type) {
-for _ in [()] {
-#[allow(unused_variables)]
-for PredRel(_, tm3, ) in self.pred_rel.iter_all_0(tm1, ) {
-
-self.hom_signature_symbol_scope_9(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_8(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for PredRel(tm1, tm3, ) in self.pred_rel.iter_new() {
-
-#[allow(unused_variables)]
-for VirtualSymbolScope(tm0, ) in self.virtual_symbol_scope.iter_old() {
-
-#[allow(unused_variables)]
-for HomTypeSignature(tm2, _, ) in self.hom_type_signature.iter_old_1(tm1, ) {
-
-self.hom_signature_symbol_scope_9(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_signature_symbol_scope_9(&self, delta: &mut ModelDelta, tm0: SymbolScope, tm1: Pred, tm2: Type, tm3: Rel) {
 for _ in [()] {
 let exists_already = self.rel_definition_symbol_scope.iter_all_0_1(tm3, tm0).next().is_some();
 if !exists_already {
@@ -95961,14 +95971,6 @@ self.underlying_type_law_1(delta, );
 self.underlying_type_law_2(delta, );
 self.underlying_type_law_7(delta, );
 self.underlying_type_law_10(delta, );
-self.underlying_type_law_13(delta, );
-self.underlying_type_law_16(delta, );
-self.underlying_type_law_19(delta, );
-self.underlying_type_law_22(delta, );
-
-
-
-
 
 
 
@@ -96021,8 +96023,6 @@ fn underlying_type_law_5(&self, delta: &mut ModelDelta, tm0: ElementType) {
 for _ in [()] {
 self.underlying_type_law_6(delta, tm0);
 self.underlying_type_law_9(delta, tm0);
-self.underlying_type_law_12(delta, tm0);
-
 
 
 
@@ -96104,188 +96104,6 @@ for _ in [()] {
 let exists_already = self.underlying_type.iter_all_0_1(tm0, tm3).next().is_some();
 if !exists_already {
 delta.new_underlying_type.push(UnderlyingType(tm0, tm3));
-}
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_12(&self, delta: &mut ModelDelta, tm0: ElementType) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomElType(tm4, tm5, _, ) in self.hom_el_type.iter_all_2(tm0, ) {
-
-self.underlying_type_law_14(delta, tm0, tm4, tm5);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_13(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomElType(tm4, tm5, tm0, ) in self.hom_el_type.iter_new() {
-
-self.underlying_type_law_14(delta, tm0, tm4, tm5);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_14(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El) {
-for _ in [()] {
-self.underlying_type_law_15(delta, tm0, tm4, tm5);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_15(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El) {
-for _ in [()] {
-#[allow(unused_variables)]
-for ElType(_, tm6, ) in self.el_type.iter_all_0(tm4, ) {
-
-self.underlying_type_law_17(delta, tm0, tm4, tm5, tm6);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_16(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for ElType(tm4, tm6, ) in self.el_type.iter_new() {
-
-#[allow(unused_variables)]
-for HomElType(_, tm5, tm0, ) in self.hom_el_type.iter_old_0(tm4, ) {
-
-self.underlying_type_law_17(delta, tm0, tm4, tm5, tm6);
-
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_17(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El, tm6: ElementType) {
-for _ in [()] {
-self.underlying_type_law_18(delta, tm0, tm4, tm5, tm6);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_18(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El, tm6: ElementType) {
-for _ in [()] {
-#[allow(unused_variables)]
-for UnderlyingType(_, tm7, ) in self.underlying_type.iter_all_0(tm6, ) {
-
-self.underlying_type_law_20(delta, tm0, tm4, tm5, tm6, tm7);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_19(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for UnderlyingType(tm6, tm7, ) in self.underlying_type.iter_new() {
-
-#[allow(unused_variables)]
-for ElType(tm4, _, ) in self.el_type.iter_old_1(tm6, ) {
-
-#[allow(unused_variables)]
-for HomElType(_, tm5, tm0, ) in self.hom_el_type.iter_old_0(tm4, ) {
-
-self.underlying_type_law_20(delta, tm0, tm4, tm5, tm6, tm7);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_20(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El, tm6: ElementType, tm7: Type) {
-for _ in [()] {
-self.underlying_type_law_21(delta, tm0, tm4, tm5, tm6, tm7);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_21(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El, tm6: ElementType, tm7: Type) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomType(_, tm8, ) in self.hom_type.iter_all_0(tm7, ) {
-
-self.underlying_type_law_23(delta, tm0, tm4, tm5, tm6, tm7, tm8);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_22(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomType(tm7, tm8, ) in self.hom_type.iter_new() {
-
-#[allow(unused_variables)]
-for UnderlyingType(tm6, _, ) in self.underlying_type.iter_old_1(tm7, ) {
-
-#[allow(unused_variables)]
-for ElType(tm4, _, ) in self.el_type.iter_old_1(tm6, ) {
-
-#[allow(unused_variables)]
-for HomElType(_, tm5, tm0, ) in self.hom_el_type.iter_old_0(tm4, ) {
-
-self.underlying_type_law_23(delta, tm0, tm4, tm5, tm6, tm7, tm8);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn underlying_type_law_23(&self, delta: &mut ModelDelta, tm0: ElementType, tm4: El, tm5: El, tm6: ElementType, tm7: Type, tm8: Type) {
-for _ in [()] {
-let exists_already = self.underlying_type.iter_all_0_1(tm0, tm8).next().is_some();
-if !exists_already {
-delta.new_underlying_type.push(UnderlyingType(tm0, tm8));
 }
 
 
@@ -99330,14 +99148,6 @@ self.map_preserves_el_type_10(delta, );
 self.map_preserves_el_type_13(delta, );
 self.map_preserves_el_type_16(delta, );
 self.map_preserves_el_type_19(delta, );
-self.map_preserves_el_type_22(delta, );
-self.map_preserves_el_type_25(delta, );
-self.map_preserves_el_type_28(delta, );
-self.map_preserves_el_type_31(delta, );
-
-
-
-
 
 
 
@@ -99435,8 +99245,6 @@ fn map_preserves_el_type_8(&self, delta: &mut ModelDelta, tm0: El, tm1: ElementT
 for _ in [()] {
 self.map_preserves_el_type_9(delta, tm0, tm1, tm2, tm3);
 self.map_preserves_el_type_12(delta, tm0, tm1, tm2, tm3);
-self.map_preserves_el_type_15(delta, tm0, tm1, tm2, tm3);
-
 
 
 
@@ -99535,19 +99343,19 @@ self.map_preserves_el_type_14(delta, tm0, tm2, tm3, tm1, tm5, tm6);
 #[allow(unused_variables)]
 fn map_preserves_el_type_14(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type) {
 for _ in [()] {
-self.map_preserves_el_type_18(delta, tm0, tm2, tm3, tm1, tm5, tm6);
+self.map_preserves_el_type_15(delta, tm0, tm2, tm3, tm1, tm5, tm6);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn map_preserves_el_type_15(&self, delta: &mut ModelDelta, tm0: El, tm1: ElementType, tm2: El, tm3: Morphism) {
+fn map_preserves_el_type_15(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomElType(tm7, tm8, _, ) in self.hom_el_type.iter_all_2(tm1, ) {
+for MapEl(_, _, tm7, ) in self.map_el.iter_all_0_1(tm3, tm5, ) {
 
-self.map_preserves_el_type_17(delta, tm0, tm2, tm3, tm1, tm7, tm8);
+self.map_preserves_el_type_17(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm7);
 
 
 }
@@ -99559,54 +99367,7 @@ self.map_preserves_el_type_17(delta, tm0, tm2, tm3, tm1, tm7, tm8);
 fn map_preserves_el_type_16(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for HomElType(tm7, tm8, tm1, ) in self.hom_el_type.iter_new() {
-
-#[allow(unused_variables)]
-for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
-
-#[allow(unused_variables)]
-for MapEl(tm3, _, tm2, ) in self.map_el.iter_old_1(tm0, ) {
-
-self.map_preserves_el_type_17(delta, tm0, tm2, tm3, tm1, tm7, tm8);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_17(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El) {
-for _ in [()] {
-self.map_preserves_el_type_21(delta, tm0, tm2, tm3, tm1, tm7, tm8);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_18(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type) {
-for _ in [()] {
-#[allow(unused_variables)]
-for MapEl(_, _, tm9, ) in self.map_el.iter_all_0_1(tm3, tm5, ) {
-
-self.map_preserves_el_type_20(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_19(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for MapEl(tm3, tm5, tm9, ) in self.map_el.iter_new() {
+for MapEl(tm3, tm5, tm7, ) in self.map_el.iter_new() {
 
 #[allow(unused_variables)]
 for InstantiatedType(_, tm6, tm1, ) in self.instantiated_type.iter_old_0(tm5, ) {
@@ -99617,7 +99378,7 @@ for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
 #[allow(unused_variables)]
 for MapEl(_, _, tm2, ) in self.map_el.iter_old_0_1(tm3, tm0, ) {
 
-self.map_preserves_el_type_20(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9);
+self.map_preserves_el_type_17(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm7);
 
 
 }
@@ -99632,135 +99393,26 @@ self.map_preserves_el_type_20(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9);
 }
 
 #[allow(unused_variables)]
-fn map_preserves_el_type_20(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type, tm9: El) {
+fn map_preserves_el_type_17(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type, tm7: El) {
 for _ in [()] {
-self.map_preserves_el_type_27(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9);
+self.map_preserves_el_type_18(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm7);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn map_preserves_el_type_21(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El) {
+fn map_preserves_el_type_18(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type, tm7: El) {
 for _ in [()] {
-#[allow(unused_variables)]
-for MapEl(_, _, tm10, ) in self.map_el.iter_all_0_1(tm3, tm7, ) {
-
-self.map_preserves_el_type_23(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_22(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for MapEl(tm3, tm7, tm10, ) in self.map_el.iter_new() {
-
-#[allow(unused_variables)]
-for HomElType(_, tm8, tm1, ) in self.hom_el_type.iter_old_0(tm7, ) {
-
-#[allow(unused_variables)]
-for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
-
-#[allow(unused_variables)]
-for MapEl(_, _, tm2, ) in self.map_el.iter_old_0_1(tm3, tm0, ) {
-
-self.map_preserves_el_type_23(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_23(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El, tm10: El) {
-for _ in [()] {
-self.map_preserves_el_type_24(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_24(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El, tm10: El) {
-for _ in [()] {
-#[allow(unused_variables)]
-for MapEl(_, _, tm11, ) in self.map_el.iter_all_0_1(tm3, tm8, ) {
-
-self.map_preserves_el_type_26(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10, tm11);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_25(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for MapEl(tm3, tm8, tm11, ) in self.map_el.iter_new() {
-
-#[allow(unused_variables)]
-for HomElType(tm7, _, tm1, ) in self.hom_el_type.iter_old_1(tm8, ) {
-
-#[allow(unused_variables)]
-for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
-
-#[allow(unused_variables)]
-for MapEl(_, _, tm2, ) in self.map_el.iter_old_0_1(tm3, tm0, ) {
-
-#[allow(unused_variables)]
-for MapEl(_, _, tm10, ) in self.map_el.iter_old_0_1(tm3, tm7, ) {
-
-self.map_preserves_el_type_26(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10, tm11);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_26(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El, tm10: El, tm11: El) {
-for _ in [()] {
-self.map_preserves_el_type_30(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10, tm11);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_27(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type, tm9: El) {
-for _ in [()] {
-let tm12 = match self.instantiated_type.iter_all_0_1(tm9, tm6).next() {
+let tm8 = match self.instantiated_type.iter_all_0_1(tm7, tm6).next() {
     Some(InstantiatedType(_, _,  res)) => res,
     None => { 
-        delta.new_instantiated_type_def.push(InstantiatedTypeArgs(tm9, tm6));
+        delta.new_instantiated_type_def.push(InstantiatedTypeArgs(tm7, tm6));
         break;
     },
 };
 
-self.map_preserves_el_type_29(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9, tm12);
+self.map_preserves_el_type_20(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm7, tm8);
 
 
 
@@ -99768,10 +99420,10 @@ self.map_preserves_el_type_29(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9, tm12);
 }
 
 #[allow(unused_variables)]
-fn map_preserves_el_type_28(&self, delta: &mut ModelDelta, ) {
+fn map_preserves_el_type_19(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for InstantiatedType(tm9, tm6, tm12, ) in self.instantiated_type.iter_new() {
+for InstantiatedType(tm7, tm6, tm8, ) in self.instantiated_type.iter_new() {
 
 #[allow(unused_variables)]
 for InstantiatedType(tm5, _, tm1, ) in self.instantiated_type.iter_old_1(tm6, ) {
@@ -99780,12 +99432,12 @@ for InstantiatedType(tm5, _, tm1, ) in self.instantiated_type.iter_old_1(tm6, ) 
 for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
 
 #[allow(unused_variables)]
-for MapEl(tm3, _, _, ) in self.map_el.iter_old_1_2(tm5, tm9, ) {
+for MapEl(tm3, _, _, ) in self.map_el.iter_old_1_2(tm5, tm7, ) {
 
 #[allow(unused_variables)]
 for MapEl(_, _, tm2, ) in self.map_el.iter_old_0_1(tm3, tm0, ) {
 
-self.map_preserves_el_type_29(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9, tm12);
+self.map_preserves_el_type_20(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm7, tm8);
 
 
 }
@@ -99802,81 +99454,11 @@ self.map_preserves_el_type_29(delta, tm0, tm2, tm3, tm1, tm5, tm6, tm9, tm12);
 }
 
 #[allow(unused_variables)]
-fn map_preserves_el_type_29(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type, tm9: El, tm12: ElementType) {
+fn map_preserves_el_type_20(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm5: El, tm6: Type, tm7: El, tm8: ElementType) {
 for _ in [()] {
-let exists_already = self.el_type.iter_all_0_1(tm2, tm12).next().is_some();
+let exists_already = self.el_type.iter_all_0_1(tm2, tm8).next().is_some();
 if !exists_already {
-delta.new_el_type.push(ElType(tm2, tm12));
-}
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_30(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El, tm10: El, tm11: El) {
-for _ in [()] {
-let tm13 = match self.hom_el_type.iter_all_0_1(tm10, tm11).next() {
-    Some(HomElType(_, _,  res)) => res,
-    None => { 
-        delta.new_hom_el_type_def.push(HomElTypeArgs(tm10, tm11));
-        break;
-    },
-};
-
-self.map_preserves_el_type_32(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10, tm11, tm13);
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_31(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomElType(tm10, tm11, tm13, ) in self.hom_el_type.iter_new() {
-
-#[allow(unused_variables)]
-for MapEl(tm3, tm8, _, ) in self.map_el.iter_old_2(tm11, ) {
-
-#[allow(unused_variables)]
-for MapEl(_, tm7, _, ) in self.map_el.iter_old_0_2(tm3, tm10, ) {
-
-#[allow(unused_variables)]
-for HomElType(_, _, tm1, ) in self.hom_el_type.iter_old_0_1(tm7, tm8, ) {
-
-#[allow(unused_variables)]
-for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
-
-#[allow(unused_variables)]
-for MapEl(_, _, tm2, ) in self.map_el.iter_old_0_1(tm3, tm0, ) {
-
-self.map_preserves_el_type_32(delta, tm0, tm2, tm3, tm1, tm7, tm8, tm10, tm11, tm13);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_preserves_el_type_32(&self, delta: &mut ModelDelta, tm0: El, tm2: El, tm3: Morphism, tm1: ElementType, tm7: El, tm8: El, tm10: El, tm11: El, tm13: ElementType) {
-for _ in [()] {
-let exists_already = self.el_type.iter_all_0_1(tm2, tm13).next().is_some();
-if !exists_already {
-delta.new_el_type.push(ElType(tm2, tm13));
+delta.new_el_type.push(ElType(tm2, tm8));
 }
 
 
@@ -99893,8 +99475,6 @@ self.map_reflects_el_type_2(delta, );
 self.map_reflects_el_type_3(delta, );
 self.map_reflects_el_type_8(delta, );
 self.map_reflects_el_type_11(delta, );
-self.map_reflects_el_type_14(delta, );
-
 
 
 
@@ -99972,8 +99552,6 @@ fn map_reflects_el_type_6(&self, delta: &mut ModelDelta, tm0: El, tm2: Morphism,
 for _ in [()] {
 self.map_reflects_el_type_7(delta, tm0, tm2, tm3, tm1);
 self.map_reflects_el_type_10(delta, tm0, tm2, tm3, tm1);
-self.map_reflects_el_type_13(delta, tm0, tm2, tm3, tm1);
-
 
 
 
@@ -100071,51 +99649,6 @@ self.map_reflects_el_type_12(delta, tm0, tm2, tm3, tm1, tm5, tm6);
 
 #[allow(unused_variables)]
 fn map_reflects_el_type_12(&self, delta: &mut ModelDelta, tm0: El, tm2: Morphism, tm3: El, tm1: ElementType, tm5: El, tm6: Type) {
-for _ in [()] {
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_reflects_el_type_13(&self, delta: &mut ModelDelta, tm0: El, tm2: Morphism, tm3: El, tm1: ElementType) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomElType(tm7, tm8, _, ) in self.hom_el_type.iter_all_2(tm1, ) {
-
-self.map_reflects_el_type_15(delta, tm0, tm2, tm3, tm1, tm7, tm8);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_reflects_el_type_14(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomElType(tm7, tm8, tm1, ) in self.hom_el_type.iter_new() {
-
-#[allow(unused_variables)]
-for ElType(tm0, _, ) in self.el_type.iter_old_1(tm1, ) {
-
-#[allow(unused_variables)]
-for MapEl(tm2, tm3, _, ) in self.map_el.iter_old_2(tm0, ) {
-
-self.map_reflects_el_type_15(delta, tm0, tm2, tm3, tm1, tm7, tm8);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn map_reflects_el_type_15(&self, delta: &mut ModelDelta, tm0: El, tm2: Morphism, tm3: El, tm1: ElementType, tm7: El, tm8: El) {
 for _ in [()] {
 
 }
@@ -100470,16 +100003,16 @@ delta.new_rel_tuple_in_img.push(RelTupleInImg(tm3, tm0, tm2));
 
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_0(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.anonymous_rule_121_1(delta, );
-self.anonymous_rule_121_3(delta, );
-self.anonymous_rule_121_6(delta, );
-self.anonymous_rule_121_9(delta, );
-self.anonymous_rule_121_12(delta, );
-self.anonymous_rule_121_15(delta, );
-self.anonymous_rule_121_18(delta, );
-self.anonymous_rule_121_21(delta, );
+self.anonymous_rule_123_1(delta, );
+self.anonymous_rule_123_3(delta, );
+self.anonymous_rule_123_6(delta, );
+self.anonymous_rule_123_9(delta, );
+self.anonymous_rule_123_12(delta, );
+self.anonymous_rule_123_15(delta, );
+self.anonymous_rule_123_18(delta, );
+self.anonymous_rule_123_21(delta, );
 
 
 
@@ -100493,16 +100026,16 @@ self.anonymous_rule_121_21(delta, );
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_1(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.anonymous_rule_121_2(delta, );
+self.anonymous_rule_123_2(delta, );
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_2(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_2(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 let tm0 = match self.type_symbol.iter_all().next() {
     Some(TypeSymbol( res)) => res,
@@ -100512,7 +100045,7 @@ let tm0 = match self.type_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_4(delta, tm0);
+self.anonymous_rule_123_4(delta, tm0);
 
 
 
@@ -100520,12 +100053,12 @@ self.anonymous_rule_121_4(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_3(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_3(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_new() {
 
-self.anonymous_rule_121_4(delta, tm0);
+self.anonymous_rule_123_4(delta, tm0);
 
 
 }
@@ -100534,16 +100067,16 @@ self.anonymous_rule_121_4(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+fn anonymous_rule_123_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_121_5(delta, tm0);
+self.anonymous_rule_123_5(delta, tm0);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+fn anonymous_rule_123_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
 for _ in [()] {
 let tm1 = match self.pred_symbol.iter_all().next() {
     Some(PredSymbol( res)) => res,
@@ -100553,7 +100086,7 @@ let tm1 = match self.pred_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_7(delta, tm0, tm1);
+self.anonymous_rule_123_7(delta, tm0, tm1);
 
 
 
@@ -100561,7 +100094,7 @@ self.anonymous_rule_121_7(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_6(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_6(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredSymbol(tm1, ) in self.pred_symbol.iter_new() {
@@ -100569,7 +100102,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_new() {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 
-self.anonymous_rule_121_7(delta, tm0, tm1);
+self.anonymous_rule_123_7(delta, tm0, tm1);
 
 
 }
@@ -100580,16 +100113,16 @@ self.anonymous_rule_121_7(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+fn anonymous_rule_123_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_121_8(delta, tm0, tm1);
+self.anonymous_rule_123_8(delta, tm0, tm1);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+fn anonymous_rule_123_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
 for _ in [()] {
 let tm2 = match self.func_symbol.iter_all().next() {
     Some(FuncSymbol( res)) => res,
@@ -100599,7 +100132,7 @@ let tm2 = match self.func_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_10(delta, tm0, tm1, tm2);
+self.anonymous_rule_123_10(delta, tm0, tm1, tm2);
 
 
 
@@ -100607,7 +100140,7 @@ self.anonymous_rule_121_10(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_9(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_9(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncSymbol(tm2, ) in self.func_symbol.iter_new() {
@@ -100618,7 +100151,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 
-self.anonymous_rule_121_10(delta, tm0, tm1, tm2);
+self.anonymous_rule_123_10(delta, tm0, tm1, tm2);
 
 
 }
@@ -100631,16 +100164,16 @@ self.anonymous_rule_121_10(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_10(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
+fn anonymous_rule_123_10(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_121_11(delta, tm0, tm1, tm2);
+self.anonymous_rule_123_11(delta, tm0, tm1, tm2);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_11(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
+fn anonymous_rule_123_11(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
 for _ in [()] {
 let tm3 = match self.rule_symbol.iter_all().next() {
     Some(RuleSymbol( res)) => res,
@@ -100650,7 +100183,7 @@ let tm3 = match self.rule_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_13(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_123_13(delta, tm0, tm1, tm2, tm3);
 
 
 
@@ -100658,7 +100191,7 @@ self.anonymous_rule_121_13(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_12(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_12(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleSymbol(tm3, ) in self.rule_symbol.iter_new() {
@@ -100672,7 +100205,7 @@ for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 #[allow(unused_variables)]
 for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 
-self.anonymous_rule_121_13(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_123_13(delta, tm0, tm1, tm2, tm3);
 
 
 }
@@ -100687,16 +100220,16 @@ self.anonymous_rule_121_13(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_13(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
+fn anonymous_rule_123_13(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_121_14(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_123_14(delta, tm0, tm1, tm2, tm3);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_14(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
+fn anonymous_rule_123_14(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
 for _ in [()] {
 let tm4 = match self.enum_symbol.iter_all().next() {
     Some(EnumSymbol( res)) => res,
@@ -100706,7 +100239,7 @@ let tm4 = match self.enum_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_16(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_123_16(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 
@@ -100714,7 +100247,7 @@ self.anonymous_rule_121_16(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_15(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_15(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for EnumSymbol(tm4, ) in self.enum_symbol.iter_new() {
@@ -100731,7 +100264,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 #[allow(unused_variables)]
 for FuncSymbol(tm2, ) in self.func_symbol.iter_old() {
 
-self.anonymous_rule_121_16(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_123_16(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
@@ -100748,16 +100281,16 @@ self.anonymous_rule_121_16(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_16(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
+fn anonymous_rule_123_16(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_121_17(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_123_17(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_17(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
+fn anonymous_rule_123_17(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
 for _ in [()] {
 let tm5 = match self.ctor_symbol.iter_all().next() {
     Some(CtorSymbol( res)) => res,
@@ -100767,7 +100300,7 @@ let tm5 = match self.ctor_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_123_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 
@@ -100775,7 +100308,7 @@ self.anonymous_rule_121_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_18(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_18(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbol(tm5, ) in self.ctor_symbol.iter_new() {
@@ -100795,7 +100328,7 @@ for FuncSymbol(tm2, ) in self.func_symbol.iter_old() {
 #[allow(unused_variables)]
 for RuleSymbol(tm3, ) in self.rule_symbol.iter_old() {
 
-self.anonymous_rule_121_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_123_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 }
@@ -100814,16 +100347,16 @@ self.anonymous_rule_121_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_19(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
+fn anonymous_rule_123_19(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_121_20(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_123_20(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_20(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
+fn anonymous_rule_123_20(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
 for _ in [()] {
 let tm6 = match self.model_symbol.iter_all().next() {
     Some(ModelSymbol( res)) => res,
@@ -100833,7 +100366,7 @@ let tm6 = match self.model_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_121_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.anonymous_rule_123_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
 
 
@@ -100841,7 +100374,7 @@ self.anonymous_rule_121_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_21(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_123_21(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelSymbol(tm6, ) in self.model_symbol.iter_new() {
@@ -100864,7 +100397,7 @@ for RuleSymbol(tm3, ) in self.rule_symbol.iter_old() {
 #[allow(unused_variables)]
 for EnumSymbol(tm4, ) in self.enum_symbol.iter_old() {
 
-self.anonymous_rule_121_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.anonymous_rule_123_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
 
 }
@@ -100885,7 +100418,7 @@ self.anonymous_rule_121_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_121_22(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind, tm6: SymbolKind) {
+fn anonymous_rule_123_22(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind, tm6: SymbolKind) {
 for _ in [()] {
 
 }
@@ -116484,102 +116017,6 @@ delta.new_term_structure.push(TermStructure(tm1, tm3));
 
 
 #[allow(unused_variables)]
-fn hom_type_expr_structure_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-self.hom_type_expr_structure_1(delta, );
-self.hom_type_expr_structure_2(delta, );
-self.hom_type_expr_structure_5(delta, );
-
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_expr_structure_1(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_expr_structure_2(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for HomTypeExpr(tm0, tm1, tm2, ) in self.hom_type_expr.iter_new() {
-
-self.hom_type_expr_structure_3(delta, tm0, tm1, tm2);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_expr_structure_3(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode) {
-for _ in [()] {
-self.hom_type_expr_structure_4(delta, tm0, tm1, tm2);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_expr_structure_4(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode) {
-for _ in [()] {
-#[allow(unused_variables)]
-for TypeExprStructure(_, tm3, ) in self.type_expr_structure.iter_all_0(tm0, ) {
-
-self.hom_type_expr_structure_6(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_expr_structure_5(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for TypeExprStructure(tm0, tm3, ) in self.type_expr_structure.iter_new() {
-
-#[allow(unused_variables)]
-for HomTypeExpr(_, tm1, tm2, ) in self.hom_type_expr.iter_old_0(tm0, ) {
-
-self.hom_type_expr_structure_6(delta, tm0, tm1, tm2, tm3);
-
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn hom_type_expr_structure_6(&self, delta: &mut ModelDelta, tm0: TypeExprNode, tm1: TermNode, tm2: TermNode, tm3: Structure) {
-for _ in [()] {
-let exists_already = self.term_structure.iter_all_0_1(tm1, tm3).next().is_some();
-if !exists_already {
-delta.new_term_structure.push(TermStructure(tm1, tm3));
-}
-
-let exists_already = self.term_structure.iter_all_0_1(tm2, tm3).next().is_some();
-if !exists_already {
-delta.new_term_structure.push(TermStructure(tm2, tm3));
-}
-
-
-
-
-}
-}
-
-
-#[allow(unused_variables)]
 fn cons_term_list_structure_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 self.cons_term_list_structure_1(delta, );
@@ -126049,7 +125486,7 @@ self.nil_term_list_node.drop_dirt();
 self.cons_term_list_node.drop_dirt();
 self.ambient_type_expr.drop_dirt();
 self.member_type_expr.drop_dirt();
-self.hom_type_expr.drop_dirt();
+self.mor_type_expr.drop_dirt();
 self.none_term_node.drop_dirt();
 self.some_term_node.drop_dirt();
 self.var_term_node.drop_dirt();
@@ -126091,7 +125528,7 @@ self.scope_extension_siblings.drop_dirt();
 self.is_normal_type.drop_dirt();
 self.is_enum_type.drop_dirt();
 self.is_model_type.drop_dirt();
-self.is_hom_type.drop_dirt();
+self.is_mor_type.drop_dirt();
 self.is_total_func.drop_dirt();
 self.rel_app.drop_dirt();
 self.el_type.drop_dirt();
@@ -126148,8 +125585,6 @@ self.match_stmt_should_contain_ctor.drop_dirt();
 self.match_stmt_contains_ctor.drop_dirt();
 self.real_virt_ident.drop_dirt();
 self.virt_real_ident.drop_dirt();
-self.dom.drop_dirt();
-self.cod.drop_dirt();
 self.var.drop_dirt();
 self.rule_name.drop_dirt();
 self.module_name.drop_dirt();
@@ -126200,27 +125635,30 @@ self.cons_type_list.drop_dirt();
 self.snoc_type_list.drop_dirt();
 self.semantic_type.drop_dirt();
 self.decl_symbol_scope.drop_dirt();
-self.hom_type.drop_dirt();
-self.hom_type_signature.drop_dirt();
-self.pred_arity.drop_dirt();
+self.mor_type.drop_dirt();
+self.mor_type_dom_func.drop_dirt();
+self.mor_type_cod_func.drop_dirt();
+self.type_definition_symbol_scope.drop_dirt();
+self.func_rel.drop_dirt();
+self.rel_definition_symbol_scope.drop_dirt();
+self.domain.drop_dirt();
+self.codomain.drop_dirt();
 self.type_name.drop_dirt();
 self.virtual_symbol_scope.drop_dirt();
 self.parent_model_func.drop_dirt();
-self.type_definition_symbol_scope.drop_dirt();
 self.symbol_scope_model.drop_dirt();
-self.codomain.drop_dirt();
-self.func_rel.drop_dirt();
-self.rel_definition_symbol_scope.drop_dirt();
-self.pred_rel.drop_dirt();
-self.domain.drop_dirt();
 self.flat_domain.drop_dirt();
 self.semantic_arg_types.drop_dirt();
 self.arg_symbol_scope.drop_dirt();
 self.semantic_pred.drop_dirt();
+self.pred_arity.drop_dirt();
 self.semantic_func.drop_dirt();
 self.ctor_symbol_scope.drop_dirt();
+self.pred_rel.drop_dirt();
 self.rel_name.drop_dirt();
 self.arity.drop_dirt();
+self.dom.drop_dirt();
+self.cod.drop_dirt();
 self.flat_arity.drop_dirt();
 self.module_symbol_scope.drop_dirt();
 self.nil_el_list.drop_dirt();
@@ -126230,7 +125668,6 @@ self.el_structure.drop_dirt();
 self.els_structure.drop_dirt();
 self.ambient_type.drop_dirt();
 self.instantiated_type.drop_dirt();
-self.hom_el_type.drop_dirt();
 self.underlying_type.drop_dirt();
 self.nil_element_type_list.drop_dirt();
 self.cons_element_type_list.drop_dirt();
@@ -126305,8 +125742,8 @@ self.scope_old.append(&mut self.scope_new);
 self.type_old.append(&mut self.type_new);
 self.type_list_old.append(&mut self.type_list_new);
 self.symbol_scope_old.append(&mut self.symbol_scope_new);
-self.pred_old.append(&mut self.pred_new);
 self.func_old.append(&mut self.func_new);
+self.pred_old.append(&mut self.pred_new);
 self.rel_old.append(&mut self.rel_new);
 self.structure_old.append(&mut self.structure_new);
 self.el_old.append(&mut self.el_new);
@@ -126577,7 +126014,7 @@ impl fmt::Display for Eqlog {
         .top_intersection('─')
         .header_intersection('┬')
 )
-.fmt(f)?;self.pred_equalities.class_table().with(Header("Pred"))
+.fmt(f)?;self.func_equalities.class_table().with(Header("Func"))
 .with(Modify::new(Segment::all())
 .with(Alignment::center()))
 .with(
@@ -126585,7 +126022,7 @@ impl fmt::Display for Eqlog {
         .top_intersection('─')
         .header_intersection('┬')
 )
-.fmt(f)?;self.func_equalities.class_table().with(Header("Func"))
+.fmt(f)?;self.pred_equalities.class_table().with(Header("Pred"))
 .with(Modify::new(Segment::all())
 .with(Alignment::center()))
 .with(
@@ -126674,7 +126111,7 @@ impl fmt::Display for Eqlog {
         .header_intersection('┬')
 )
 .fmt(f)?;
-        self.absurd.fmt(f)?;self.type_decl.fmt(f)?;self.arg_decl_node_name.fmt(f)?;self.arg_decl_node_type.fmt(f)?;self.nil_arg_decl_list_node.fmt(f)?;self.cons_arg_decl_list_node.fmt(f)?;self.pred_decl.fmt(f)?;self.func_decl.fmt(f)?;self.ctor_decl.fmt(f)?;self.nil_ctor_decl_list_node.fmt(f)?;self.cons_ctor_decl_list_node.fmt(f)?;self.enum_decl.fmt(f)?;self.nil_term_list_node.fmt(f)?;self.cons_term_list_node.fmt(f)?;self.ambient_type_expr.fmt(f)?;self.member_type_expr.fmt(f)?;self.hom_type_expr.fmt(f)?;self.none_term_node.fmt(f)?;self.some_term_node.fmt(f)?;self.var_term_node.fmt(f)?;self.wildcard_term_node.fmt(f)?;self.app_term_node.fmt(f)?;self.match_case.fmt(f)?;self.nil_match_case_list_node.fmt(f)?;self.cons_match_case_list_node.fmt(f)?;self.equal_if_atom_node.fmt(f)?;self.defined_if_atom_node.fmt(f)?;self.pred_if_atom_node.fmt(f)?;self.var_if_atom_node.fmt(f)?;self.equal_then_atom_node.fmt(f)?;self.defined_then_atom_node.fmt(f)?;self.pred_then_atom_node.fmt(f)?;self.if_stmt_node.fmt(f)?;self.then_stmt_node.fmt(f)?;self.branch_stmt_node.fmt(f)?;self.match_stmt_node.fmt(f)?;self.nil_stmt_list_node.fmt(f)?;self.cons_stmt_list_node.fmt(f)?;self.nil_stmt_block_list_node.fmt(f)?;self.cons_stmt_block_list_node.fmt(f)?;self.rule_decl.fmt(f)?;self.model_decl.fmt(f)?;self.decl_node_type.fmt(f)?;self.decl_node_pred.fmt(f)?;self.decl_node_func.fmt(f)?;self.decl_node_rule.fmt(f)?;self.decl_node_enum.fmt(f)?;self.decl_node_model.fmt(f)?;self.nil_decl_list_node.fmt(f)?;self.cons_decl_list_node.fmt(f)?;self.decls_module_node.fmt(f)?;self.var_in_scope.fmt(f)?;self.scope_extension.fmt(f)?;self.scope_single_child.fmt(f)?;self.scope_extension_siblings.fmt(f)?;self.is_normal_type.fmt(f)?;self.is_enum_type.fmt(f)?;self.is_model_type.fmt(f)?;self.is_hom_type.fmt(f)?;self.is_total_func.fmt(f)?;self.rel_app.fmt(f)?;self.el_type.fmt(f)?;self.el_types.fmt(f)?;self.constrained_el.fmt(f)?;self.constrained_els.fmt(f)?;self.in_ker.fmt(f)?;self.el_in_img.fmt(f)?;self.rel_tuple_in_img.fmt(f)?;self.symbol_scope_extension.fmt(f)?;self.symbol_scope_ancestor.fmt(f)?;self.element_member_symbol_scope.fmt(f)?;self.defined_symbol.fmt(f)?;self.accessible_symbol.fmt(f)?;self.should_be_symbol.fmt(f)?;self.should_be_symbol_2.fmt(f)?;self.should_be_symbol_3.fmt(f)?;self.pred_arg_num_should_match.fmt(f)?;self.func_arg_num_should_match.fmt(f)?;self.cfg_edge.fmt(f)?;self.cfg_edge_stmts_stmt.fmt(f)?;self.cfg_edge_stmt_stmts.fmt(f)?;self.cfg_edge_fork.fmt(f)?;self.cfg_edge_join.fmt(f)?;self.before_stmt_structure.fmt(f)?;self.stmt_morphism.fmt(f)?;self.if_morphism.fmt(f)?;self.surj_then_morphism.fmt(f)?;self.non_surj_then_morphism.fmt(f)?;self.noop_morphism.fmt(f)?;self.stmt_structure.fmt(f)?;self.if_atom_structure.fmt(f)?;self.then_atom_structure.fmt(f)?;self.term_structure.fmt(f)?;self.terms_structure.fmt(f)?;self.opt_term_structure.fmt(f)?;self.type_expr_structure.fmt(f)?;self.term_should_be_epic_ok.fmt(f)?;self.terms_should_be_epic_ok.fmt(f)?;self.el_should_be_surjective_ok.fmt(f)?;self.el_is_surjective_ok.fmt(f)?;self.should_be_obtained_by_ctor.fmt(f)?;self.is_given_by_ctor.fmt(f)?;self.function_can_be_made_defined.fmt(f)?;self.case_pattern_is_variable.fmt(f)?;self.case_pattern_is_wildcard.fmt(f)?;self.is_pattern_ctor_arg.fmt(f)?;self.are_pattern_ctor_args.fmt(f)?;self.pattern_ctor_arg_is_app.fmt(f)?;self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;self.cases_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor_of_enum.fmt(f)?;self.match_stmt_should_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor.fmt(f)?;self.real_virt_ident.fmt(f)?;self.virt_real_ident.fmt(f)?;self.dom.fmt(f)?;self.cod.fmt(f)?;self.var.fmt(f)?;self.rule_name.fmt(f)?;self.module_name.fmt(f)?;self.type_decl_node_loc.fmt(f)?;self.arg_decl_node_loc.fmt(f)?;self.arg_decl_list_node_loc.fmt(f)?;self.pred_decl_node_loc.fmt(f)?;self.func_decl_node_loc.fmt(f)?;self.ctor_decl_node_loc.fmt(f)?;self.enum_decl_node_loc.fmt(f)?;self.model_decl_node_loc.fmt(f)?;self.term_node_loc.fmt(f)?;self.term_list_node_loc.fmt(f)?;self.match_case_node_loc.fmt(f)?;self.opt_term_node_loc.fmt(f)?;self.if_atom_node_loc.fmt(f)?;self.then_atom_node_loc.fmt(f)?;self.stmt_node_loc.fmt(f)?;self.stmt_list_node_loc.fmt(f)?;self.rule_decl_node_loc.fmt(f)?;self.decl_node_loc.fmt(f)?;self.decl_list_node_loc.fmt(f)?;self.module_node_loc.fmt(f)?;self.rule_descendant_rule.fmt(f)?;self.rule_descendant_term.fmt(f)?;self.rule_descendant_term_list.fmt(f)?;self.rule_descendant_opt_term.fmt(f)?;self.rule_descendant_if_atom.fmt(f)?;self.rule_descendant_then_atom.fmt(f)?;self.rule_descendant_match_case.fmt(f)?;self.rule_descendant_match_case_list.fmt(f)?;self.rule_descendant_stmt.fmt(f)?;self.rule_descendant_stmt_list.fmt(f)?;self.rule_descendant_stmt_block_list.fmt(f)?;self.rule_descendant_type_expr.fmt(f)?;self.entry_scope.fmt(f)?;self.exit_scope.fmt(f)?;self.ctor_enum.fmt(f)?;self.ctors_enum.fmt(f)?;self.cases_discriminee.fmt(f)?;self.case_discriminee.fmt(f)?;self.desugared_case_equality_atom.fmt(f)?;self.desugared_case_equality_stmt.fmt(f)?;self.desugared_case_block.fmt(f)?;self.desugared_case_block_list.fmt(f)?;self.nil_type_list.fmt(f)?;self.cons_type_list.fmt(f)?;self.snoc_type_list.fmt(f)?;self.semantic_type.fmt(f)?;self.decl_symbol_scope.fmt(f)?;self.hom_type.fmt(f)?;self.hom_type_signature.fmt(f)?;self.pred_arity.fmt(f)?;self.type_name.fmt(f)?;self.virtual_symbol_scope.fmt(f)?;self.parent_model_func.fmt(f)?;self.type_definition_symbol_scope.fmt(f)?;self.symbol_scope_model.fmt(f)?;self.codomain.fmt(f)?;self.func_rel.fmt(f)?;self.rel_definition_symbol_scope.fmt(f)?;self.pred_rel.fmt(f)?;self.domain.fmt(f)?;self.flat_domain.fmt(f)?;self.semantic_arg_types.fmt(f)?;self.arg_symbol_scope.fmt(f)?;self.semantic_pred.fmt(f)?;self.semantic_func.fmt(f)?;self.ctor_symbol_scope.fmt(f)?;self.rel_name.fmt(f)?;self.arity.fmt(f)?;self.flat_arity.fmt(f)?;self.module_symbol_scope.fmt(f)?;self.nil_el_list.fmt(f)?;self.cons_el_list.fmt(f)?;self.snoc_el_list.fmt(f)?;self.el_structure.fmt(f)?;self.els_structure.fmt(f)?;self.ambient_type.fmt(f)?;self.instantiated_type.fmt(f)?;self.hom_el_type.fmt(f)?;self.underlying_type.fmt(f)?;self.nil_element_type_list.fmt(f)?;self.cons_element_type_list.fmt(f)?;self.snoc_element_type_list.fmt(f)?;self.ambient_el_type_list.fmt(f)?;self.func_app.fmt(f)?;self.map_el.fmt(f)?;self.map_els.fmt(f)?;self.ambient_model_el.fmt(f)?;self.type_symbol.fmt(f)?;self.pred_symbol.fmt(f)?;self.func_symbol.fmt(f)?;self.rule_symbol.fmt(f)?;self.enum_symbol.fmt(f)?;self.ctor_symbol.fmt(f)?;self.model_symbol.fmt(f)?;self.symbol_scope_parent.fmt(f)?;self.decls_symbol_scope.fmt(f)?;self.args_symbol_scope.fmt(f)?;self.ctors_symbol_scope.fmt(f)?;self.model_member_symbol_scope.fmt(f)?;self.symbol_scope_name.fmt(f)?;self.scope_symbols.fmt(f)?;self.semantic_el.fmt(f)?;self.zero.fmt(f)?;self.succ.fmt(f)?;self.type_list_len.fmt(f)?;self.term_list_len.fmt(f)?;self.before_rule_structure.fmt(f)?;self.ambient_model_el_structure.fmt(f)?;self.ambient_model_el_morphism.fmt(f)?;self.if_atom_morphism.fmt(f)?;self.then_atom_morphism.fmt(f)?;self.branch_stmt_morphism.fmt(f)?;self.match_stmt_morphism.fmt(f)?;self.semantic_name.fmt(f)?;self.semantic_els.fmt(f)?;self.wildcard_name.fmt(f)?;self.rel_app_parent_model_el.fmt(f)?;self.match_case_pattern_ctor.fmt(f)?;self.cases_determined_enum.fmt(f)?;
+        self.absurd.fmt(f)?;self.type_decl.fmt(f)?;self.arg_decl_node_name.fmt(f)?;self.arg_decl_node_type.fmt(f)?;self.nil_arg_decl_list_node.fmt(f)?;self.cons_arg_decl_list_node.fmt(f)?;self.pred_decl.fmt(f)?;self.func_decl.fmt(f)?;self.ctor_decl.fmt(f)?;self.nil_ctor_decl_list_node.fmt(f)?;self.cons_ctor_decl_list_node.fmt(f)?;self.enum_decl.fmt(f)?;self.nil_term_list_node.fmt(f)?;self.cons_term_list_node.fmt(f)?;self.ambient_type_expr.fmt(f)?;self.member_type_expr.fmt(f)?;self.mor_type_expr.fmt(f)?;self.none_term_node.fmt(f)?;self.some_term_node.fmt(f)?;self.var_term_node.fmt(f)?;self.wildcard_term_node.fmt(f)?;self.app_term_node.fmt(f)?;self.match_case.fmt(f)?;self.nil_match_case_list_node.fmt(f)?;self.cons_match_case_list_node.fmt(f)?;self.equal_if_atom_node.fmt(f)?;self.defined_if_atom_node.fmt(f)?;self.pred_if_atom_node.fmt(f)?;self.var_if_atom_node.fmt(f)?;self.equal_then_atom_node.fmt(f)?;self.defined_then_atom_node.fmt(f)?;self.pred_then_atom_node.fmt(f)?;self.if_stmt_node.fmt(f)?;self.then_stmt_node.fmt(f)?;self.branch_stmt_node.fmt(f)?;self.match_stmt_node.fmt(f)?;self.nil_stmt_list_node.fmt(f)?;self.cons_stmt_list_node.fmt(f)?;self.nil_stmt_block_list_node.fmt(f)?;self.cons_stmt_block_list_node.fmt(f)?;self.rule_decl.fmt(f)?;self.model_decl.fmt(f)?;self.decl_node_type.fmt(f)?;self.decl_node_pred.fmt(f)?;self.decl_node_func.fmt(f)?;self.decl_node_rule.fmt(f)?;self.decl_node_enum.fmt(f)?;self.decl_node_model.fmt(f)?;self.nil_decl_list_node.fmt(f)?;self.cons_decl_list_node.fmt(f)?;self.decls_module_node.fmt(f)?;self.var_in_scope.fmt(f)?;self.scope_extension.fmt(f)?;self.scope_single_child.fmt(f)?;self.scope_extension_siblings.fmt(f)?;self.is_normal_type.fmt(f)?;self.is_enum_type.fmt(f)?;self.is_model_type.fmt(f)?;self.is_mor_type.fmt(f)?;self.is_total_func.fmt(f)?;self.rel_app.fmt(f)?;self.el_type.fmt(f)?;self.el_types.fmt(f)?;self.constrained_el.fmt(f)?;self.constrained_els.fmt(f)?;self.in_ker.fmt(f)?;self.el_in_img.fmt(f)?;self.rel_tuple_in_img.fmt(f)?;self.symbol_scope_extension.fmt(f)?;self.symbol_scope_ancestor.fmt(f)?;self.element_member_symbol_scope.fmt(f)?;self.defined_symbol.fmt(f)?;self.accessible_symbol.fmt(f)?;self.should_be_symbol.fmt(f)?;self.should_be_symbol_2.fmt(f)?;self.should_be_symbol_3.fmt(f)?;self.pred_arg_num_should_match.fmt(f)?;self.func_arg_num_should_match.fmt(f)?;self.cfg_edge.fmt(f)?;self.cfg_edge_stmts_stmt.fmt(f)?;self.cfg_edge_stmt_stmts.fmt(f)?;self.cfg_edge_fork.fmt(f)?;self.cfg_edge_join.fmt(f)?;self.before_stmt_structure.fmt(f)?;self.stmt_morphism.fmt(f)?;self.if_morphism.fmt(f)?;self.surj_then_morphism.fmt(f)?;self.non_surj_then_morphism.fmt(f)?;self.noop_morphism.fmt(f)?;self.stmt_structure.fmt(f)?;self.if_atom_structure.fmt(f)?;self.then_atom_structure.fmt(f)?;self.term_structure.fmt(f)?;self.terms_structure.fmt(f)?;self.opt_term_structure.fmt(f)?;self.type_expr_structure.fmt(f)?;self.term_should_be_epic_ok.fmt(f)?;self.terms_should_be_epic_ok.fmt(f)?;self.el_should_be_surjective_ok.fmt(f)?;self.el_is_surjective_ok.fmt(f)?;self.should_be_obtained_by_ctor.fmt(f)?;self.is_given_by_ctor.fmt(f)?;self.function_can_be_made_defined.fmt(f)?;self.case_pattern_is_variable.fmt(f)?;self.case_pattern_is_wildcard.fmt(f)?;self.is_pattern_ctor_arg.fmt(f)?;self.are_pattern_ctor_args.fmt(f)?;self.pattern_ctor_arg_is_app.fmt(f)?;self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;self.cases_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor_of_enum.fmt(f)?;self.match_stmt_should_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor.fmt(f)?;self.real_virt_ident.fmt(f)?;self.virt_real_ident.fmt(f)?;self.var.fmt(f)?;self.rule_name.fmt(f)?;self.module_name.fmt(f)?;self.type_decl_node_loc.fmt(f)?;self.arg_decl_node_loc.fmt(f)?;self.arg_decl_list_node_loc.fmt(f)?;self.pred_decl_node_loc.fmt(f)?;self.func_decl_node_loc.fmt(f)?;self.ctor_decl_node_loc.fmt(f)?;self.enum_decl_node_loc.fmt(f)?;self.model_decl_node_loc.fmt(f)?;self.term_node_loc.fmt(f)?;self.term_list_node_loc.fmt(f)?;self.match_case_node_loc.fmt(f)?;self.opt_term_node_loc.fmt(f)?;self.if_atom_node_loc.fmt(f)?;self.then_atom_node_loc.fmt(f)?;self.stmt_node_loc.fmt(f)?;self.stmt_list_node_loc.fmt(f)?;self.rule_decl_node_loc.fmt(f)?;self.decl_node_loc.fmt(f)?;self.decl_list_node_loc.fmt(f)?;self.module_node_loc.fmt(f)?;self.rule_descendant_rule.fmt(f)?;self.rule_descendant_term.fmt(f)?;self.rule_descendant_term_list.fmt(f)?;self.rule_descendant_opt_term.fmt(f)?;self.rule_descendant_if_atom.fmt(f)?;self.rule_descendant_then_atom.fmt(f)?;self.rule_descendant_match_case.fmt(f)?;self.rule_descendant_match_case_list.fmt(f)?;self.rule_descendant_stmt.fmt(f)?;self.rule_descendant_stmt_list.fmt(f)?;self.rule_descendant_stmt_block_list.fmt(f)?;self.rule_descendant_type_expr.fmt(f)?;self.entry_scope.fmt(f)?;self.exit_scope.fmt(f)?;self.ctor_enum.fmt(f)?;self.ctors_enum.fmt(f)?;self.cases_discriminee.fmt(f)?;self.case_discriminee.fmt(f)?;self.desugared_case_equality_atom.fmt(f)?;self.desugared_case_equality_stmt.fmt(f)?;self.desugared_case_block.fmt(f)?;self.desugared_case_block_list.fmt(f)?;self.nil_type_list.fmt(f)?;self.cons_type_list.fmt(f)?;self.snoc_type_list.fmt(f)?;self.semantic_type.fmt(f)?;self.decl_symbol_scope.fmt(f)?;self.mor_type.fmt(f)?;self.mor_type_dom_func.fmt(f)?;self.mor_type_cod_func.fmt(f)?;self.type_definition_symbol_scope.fmt(f)?;self.func_rel.fmt(f)?;self.rel_definition_symbol_scope.fmt(f)?;self.domain.fmt(f)?;self.codomain.fmt(f)?;self.type_name.fmt(f)?;self.virtual_symbol_scope.fmt(f)?;self.parent_model_func.fmt(f)?;self.symbol_scope_model.fmt(f)?;self.flat_domain.fmt(f)?;self.semantic_arg_types.fmt(f)?;self.arg_symbol_scope.fmt(f)?;self.semantic_pred.fmt(f)?;self.pred_arity.fmt(f)?;self.semantic_func.fmt(f)?;self.ctor_symbol_scope.fmt(f)?;self.pred_rel.fmt(f)?;self.rel_name.fmt(f)?;self.arity.fmt(f)?;self.dom.fmt(f)?;self.cod.fmt(f)?;self.flat_arity.fmt(f)?;self.module_symbol_scope.fmt(f)?;self.nil_el_list.fmt(f)?;self.cons_el_list.fmt(f)?;self.snoc_el_list.fmt(f)?;self.el_structure.fmt(f)?;self.els_structure.fmt(f)?;self.ambient_type.fmt(f)?;self.instantiated_type.fmt(f)?;self.underlying_type.fmt(f)?;self.nil_element_type_list.fmt(f)?;self.cons_element_type_list.fmt(f)?;self.snoc_element_type_list.fmt(f)?;self.ambient_el_type_list.fmt(f)?;self.func_app.fmt(f)?;self.map_el.fmt(f)?;self.map_els.fmt(f)?;self.ambient_model_el.fmt(f)?;self.type_symbol.fmt(f)?;self.pred_symbol.fmt(f)?;self.func_symbol.fmt(f)?;self.rule_symbol.fmt(f)?;self.enum_symbol.fmt(f)?;self.ctor_symbol.fmt(f)?;self.model_symbol.fmt(f)?;self.symbol_scope_parent.fmt(f)?;self.decls_symbol_scope.fmt(f)?;self.args_symbol_scope.fmt(f)?;self.ctors_symbol_scope.fmt(f)?;self.model_member_symbol_scope.fmt(f)?;self.symbol_scope_name.fmt(f)?;self.scope_symbols.fmt(f)?;self.semantic_el.fmt(f)?;self.zero.fmt(f)?;self.succ.fmt(f)?;self.type_list_len.fmt(f)?;self.term_list_len.fmt(f)?;self.before_rule_structure.fmt(f)?;self.ambient_model_el_structure.fmt(f)?;self.ambient_model_el_morphism.fmt(f)?;self.if_atom_morphism.fmt(f)?;self.then_atom_morphism.fmt(f)?;self.branch_stmt_morphism.fmt(f)?;self.match_stmt_morphism.fmt(f)?;self.semantic_name.fmt(f)?;self.semantic_els.fmt(f)?;self.wildcard_name.fmt(f)?;self.rel_app_parent_model_el.fmt(f)?;self.match_case_pattern_ctor.fmt(f)?;self.cases_determined_enum.fmt(f)?;
         Ok(())
     }
 }

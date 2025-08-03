@@ -62,7 +62,7 @@ pred cons_term_list_node(node: TermListNode, head: TermNode, tail: TermListNode)
 type TypeExprNode;
 pred ambient_type_expr(node: TypeExprNode, ty_ident: Ident);
 pred member_type_expr(node: TypeExprNode, tm: TermNode, ty_ident: Ident);
-pred hom_type_expr(node: TypeExprNode, dom: TermNode, cod: TermNode);
+pred mor_type_expr(node: TypeExprNode, ty_ident: Ident);
 
 type OptTermNode;
 pred none_term_node(OptTermNode);
@@ -442,13 +442,6 @@ rule scopes_member_type_expr {
     if tm_descendant = rule_descendant_term(tm);
     then scope_single_child(tm_descendant, type_expr_descendant);
 }
-rule scopes_hom_type_expr {
-    if hom_type_expr(type_expr, dom, cod);
-    if type_expr_descendant = rule_descendant_type_expr(type_expr);
-    if dom_desc = rule_descendant_term(dom);
-    if cod_desc = rule_descendant_term(cod);
-    then scope_extension_siblings(dom_desc, cod_desc, type_expr_descendant);
-}
 
 // ### The enum constructor belong to
 
@@ -570,7 +563,7 @@ type Type;
 pred is_normal_type(ty: Type);
 pred is_enum_type(ty: Type);
 pred is_model_type(ty: Type);
-pred is_hom_type(ty: Type);
+pred is_mor_type(ty: Type);
 
 enum TypeList {
     NilTypeList(),
@@ -611,28 +604,63 @@ rule semantic_decl_model {
     then is_model_type(typ);
 }
 
-func hom_type(model_type: Type) -> Type;
-func hom_type_signature(model_type: Type) -> Pred;
+func mor_type(model_type: Type) -> Type;
+func mor_type_dom_func(mor_type: Type) -> Func;
+func mor_type_cod_func(mor_type: Type) -> Func;
 
-rule hom_type_defined_for_model {
+rule mor_type_defined_for_model {
     if is_model_type(typ);
-    then hom_type(typ)!;
+    then mor_type := mor_type(typ)!;
+    then mor_type_dom_func(mor_type)!;
+    then mor_type_cod_func(mor_type)!;
 }
 
-rule hom_type_is_hom_type {
-    if ty = hom_type(_);
-    then is_hom_type(ty);
+rule mor_type_is_mor_type {
+    if ty = mor_type(_);
+    then is_mor_type(ty);
 }
 
-rule hom_type_signature_defined_and_arity {
-    if is_model_type(typ);
-    then signature := hom_type_signature(typ)!;
+rule mor_type_symbol_scope {
+    if mor_type = mor_type(model_type);
+    if ss = type_definition_symbol_scope(model_type);
+    then type_definition_symbol_scope(mor_type) = ss;
+}
+
+rule mor_type_dom_func_symbol_scope {
+    if dom_func = mor_type_dom_func(mor_type);
+    if dom_func_rel = FuncRel(dom_func);
+    if ss = type_definition_symbol_scope(mor_type);
+    then rel_definition_symbol_scope(dom_func_rel) = ss;
+}
+
+rule mor_type_cod_func_symbol_scope {
+    if cod_func = mor_type_cod_func(mor_type);
+    if cod_func_rel = FuncRel(cod_func);
+    if ss = type_definition_symbol_scope(mor_type);
+    then rel_definition_symbol_scope(cod_func_rel) = ss;
+}
+
+rule mor_type_dom_cod_func_domains {
+    if mor_type = mor_type(_);
+
+    if dom_func = mor_type_dom_func(mor_type);
+    if cod_func = mor_type_cod_func(mor_type);
+
     then nil := NilTypeList()!;
-    then one := ConsTypeList(typ, nil)!;
-    then two := ConsTypeList(typ, one)!;
-    if mor = hom_type(typ);
-    then three := ConsTypeList(mor, two)!;
-    then pred_arity(signature) = three;
+    then mor_typ_singleton := ConsTypeList(mor_type, nil)!;
+
+    then domain(dom_func) = mor_typ_singleton;
+    then domain(cod_func) = mor_typ_singleton;
+}
+
+rule mor_type_dom_cod_func_codomains {
+    if mor_type = mor_type(model_type);
+
+    if dom_func = mor_type_dom_func(mor_type);
+    if cod_func = mor_type_cod_func(mor_type);
+
+    then codomain(dom_func) = model_type;
+    then codomain(cod_func) = model_type;
 }
 
 func type_name(Type) -> Ident;
@@ -658,12 +686,6 @@ rule parent_model_func_def_scope {
     if ss = virtual_symbol_scope();
     if parent_func = parent_model_func(_);
     if rel = FuncRel(parent_func);
-    then rel_definition_symbol_scope(rel) = ss;
-}
-rule hom_signature_symbol_scope {
-    if ss = virtual_symbol_scope();
-    if signature_pred = hom_type_signature(_);
-    if rel = PredRel(signature_pred);
     then rel_definition_symbol_scope(rel) = ss;
 }
 
@@ -906,8 +928,7 @@ rule var_structure {
 
 enum ElementType {
     AmbientType(Type),
-    InstantiatedType(El, Type),
-    HomElType(dom: El, cod: El)
+    InstantiatedType(El, Type)
 }
 
 rule ambient_type_total {
@@ -924,15 +945,6 @@ rule underlying_type_law {
         }
         InstantiatedType(_, typ) => {
             then underlying_type(el_type) = typ;
-        }
-        HomElType(dom, _) => {
-            if el_type(dom, dom_el_typ);
-            // TODO: This makes only sense if dom_el_typ is unique.
-            // If not, we're collapsing different hom_type values here due to
-            // functionality of underlying_type.
-            if dom_typ = underlying_type(dom_el_typ);
-            if hom_typ = hom_type(dom_typ);
-            then underlying_type(el_type) = hom_typ;
         }
     }
 }
@@ -1119,12 +1131,6 @@ rule map_preserves_el_type {
             then mapped_el_typ := InstantiatedType(mapped_model_el, local_typ)!;
             then el_type(mapped_el, mapped_el_typ);
         }
-        HomElType(dom_el, cod_el) => {
-            if mapped_dom = map_el(morph, dom_el);
-            if mapped_cod = map_el(morph, cod_el);
-            then mapped_hom_type := HomElType(mapped_dom, mapped_cod)!;
-            then el_type(mapped_el, mapped_hom_type);
-        }
     }
 }
 rule map_reflects_el_type {
@@ -1148,9 +1154,6 @@ rule map_reflects_el_type {
             // InstantiatedType(preimage_model_el, typ). This would be similar to Hindley-Milner,
             // but I'm not sure the existing machinery can deal with elements that are introduced
             // in this way.
-        }
-        HomElType(_, _) => {
-            // Same issue as with InstantiatedType.
         }
     }
 }
@@ -1987,12 +1990,6 @@ rule member_type_expr_structure {
     if member_type_expr(type_expr, model_tm, _);
     if type_expr_structure(type_expr, strct);
     then term_structure(model_tm, strct);
-}
-rule hom_type_expr_structure {
-    if hom_type_expr(type_expr, dom_tm, cod_tm);
-    if type_expr_structure(type_expr, strct);
-    then term_structure(dom_tm, strct);
-    then term_structure(cod_tm, strct);
 }
 
 // #### Propagate associated structures through terms.

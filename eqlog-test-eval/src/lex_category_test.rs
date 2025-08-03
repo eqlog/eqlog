@@ -1,11 +1,11 @@
 use crate::lex_category::*;
 
-fn iter_mor_with_signature<'a>(
+fn iter_morphism_with_signature<'a>(
     dom: Obj,
     cod: Obj,
     cat: &'a LexCategory,
-) -> impl 'a + Iterator<Item = Mor> {
-    cat.iter_mor().filter_map(move |mor| {
+) -> impl 'a + Iterator<Item = Morphism> {
+    cat.iter_morphism().filter_map(move |mor| {
         let mor_dom = cat.dom(mor)?;
         cat.are_equal_obj(dom, mor_dom).then_some(())?;
         let mor_cod = cat.cod(mor)?;
@@ -28,8 +28,8 @@ fn are_isomorphic(lhs: Obj, rhs: Obj, cat: &LexCategory) -> bool {
         }
     };
 
-    for lhs_rhs in iter_mor_with_signature(lhs, rhs, cat) {
-        for rhs_lhs in iter_mor_with_signature(rhs, lhs, cat) {
+    for lhs_rhs in iter_morphism_with_signature(lhs, rhs, cat) {
+        for rhs_lhs in iter_morphism_with_signature(rhs, lhs, cat) {
             let lhs_comp = match cat.comp(rhs_lhs, lhs_rhs) {
                 Some(lhs_comp) => lhs_comp,
                 None => {
@@ -42,7 +42,8 @@ fn are_isomorphic(lhs: Obj, rhs: Obj, cat: &LexCategory) -> bool {
                     continue;
                 }
             };
-            if cat.are_equal_mor(lhs_comp, lhs_id) && cat.are_equal_mor(rhs_comp, rhs_id) {
+            if cat.are_equal_morphism(lhs_comp, lhs_id) && cat.are_equal_morphism(rhs_comp, rhs_id)
+            {
                 return true;
             }
         }
@@ -54,8 +55,8 @@ fn are_isomorphic(lhs: Obj, rhs: Obj, cat: &LexCategory) -> bool {
 #[test]
 fn test_fibre_products_are_isomorphic() {
     let mut cat = LexCategory::new();
-    let f = cat.new_mor();
-    let g = cat.new_mor();
+    let f = cat.new_morphism();
+    let g = cat.new_morphism();
     let prod0 = cat.new_fibre_prod();
     let prod1 = cat.new_fibre_prod();
     for prod in [prod0, prod1] {
@@ -73,11 +74,11 @@ fn test_fibre_products_are_isomorphic() {
 fn test_fibre_products_are_associative() {
     let mut cat = LexCategory::new();
 
-    let f0 = cat.new_mor();
-    let f1 = cat.new_mor();
+    let f0 = cat.new_morphism();
+    let f1 = cat.new_morphism();
     let f = cat.define_comp(f1, f0);
 
-    let g = cat.new_mor();
+    let g = cat.new_morphism();
 
     let prod_f1_g = cat.new_fibre_prod();
     cat.insert_left(prod_f1_g, f1);

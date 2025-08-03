@@ -1,24 +1,24 @@
 type Obj;
-type Mor;
+type Morphism;
 
-func dom(Mor) -> Obj;
-func cod(Mor) -> Obj;
-func id(Obj) -> Mor;
-func comp(Mor, Mor) -> Mor;
+func dom(Morphism) -> Obj;
+func cod(Morphism) -> Obj;
+func id(Obj) -> Morphism;
+func comp(Morphism, Morphism) -> Morphism;
 
 // Product objects.
 type Prod;
 func left(Prod) -> Obj;
 func right(Prod) -> Obj;
 func prod_obj(Prod) -> Obj;
-func left_proj(Prod) -> Mor;
-func right_proj(Prod) -> Mor;
+func left_proj(Prod) -> Morphism;
+func right_proj(Prod) -> Morphism;
 
-func tuple(Prod, Mor, Mor) -> Mor;
+func tuple(Prod, Morphism, Morphism) -> Morphism;
 
 // Every morphism has a domain and a codomain.
 rule {
-    if f: Mor;
+    if f: Morphism;
     then dom(f)!;
     then cod(f)!;
 }
