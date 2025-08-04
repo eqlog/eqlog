@@ -1,15 +1,15 @@
 use crate::product_category::*;
 
 fn iter_morphism_with_signature<'a>(
-    dom: Obj,
-    cod: Obj,
+    mor_dom: Obj,
+    mor_cod: Obj,
     cat: &'a ProductCategory,
 ) -> impl 'a + Iterator<Item = Morphism> {
     cat.iter_morphism().filter_map(move |mor| {
-        let mor_dom = cat.dom(mor)?;
-        cat.are_equal_obj(dom, mor_dom).then_some(())?;
-        let mor_cod = cat.cod(mor)?;
-        cat.are_equal_obj(cod, mor_cod).then_some(())?;
+        let mor_dom0 = cat.mor_dom(mor)?;
+        cat.are_equal_obj(mor_dom0, mor_dom).then_some(())?;
+        let mor_cod0 = cat.mor_cod(mor)?;
+        cat.are_equal_obj(mor_cod0, mor_cod).then_some(())?;
         Some(mor)
     })
 }

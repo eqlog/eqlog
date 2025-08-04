@@ -1,8 +1,8 @@
 type Obj;
 type Morphism;
 
-func dom(Morphism) -> Obj;
-func cod(Morphism) -> Obj;
+func mor_dom(Morphism) -> Obj;
+func mor_cod(Morphism) -> Obj;
 func id(Obj) -> Morphism;
 func comp(Morphism, Morphism) -> Morphism;
 
@@ -18,8 +18,8 @@ func tuple(FibreProd, Morphism, Morphism) -> Morphism;
 // Every morphism has a domain and a codomain.
 rule {
     if f: Morphism;
-    then dom(f)!;
-    then cod(f)!;
+    then mor_dom(f)!;
+    then mor_cod(f)!;
 }
 
 // Every object has an identity.
@@ -30,56 +30,56 @@ rule {
 
 // Composition is defined if and only domain and codomain match.
 rule {
-    if cod(f) = dom(g);
+    if mor_cod(f) = mor_dom(g);
     then comp(g, f)!;
 }
 rule {
     if comp(g, f)!;
     if t_0 = f;
-    if to = dom(g);
-    then cod(t_0) = to;
+    if to = mor_dom(g);
+    then mor_cod(t_0) = to;
 }
 rule {
     if comp(g, f)!;
     if t_0 = g;
-    if to = cod(f);
-    then dom(t_0) = to;
+    if to = mor_cod(f);
+    then mor_dom(t_0) = to;
 }
 
 // Domains and codomains of identities.
 rule {
     if t_0 = id(x);
     if to = x;
-    then dom(t_0) = to;
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = id(x);
     if to = x;
-    then cod(t_0) = to;
+    then mor_cod(t_0) = to;
 }
 
 // Domains and codomains of compositions.
 rule {
     if t_0 = comp(_, f);
-    if to = dom(f);
-    then dom(t_0) = to;
+    if to = mor_dom(f);
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = comp(g, _);
-    if to = cod(g);
-    then cod(t_0) = to;
+    if to = mor_cod(g);
+    then mor_cod(t_0) = to;
 }
 
 // Identity morphisms are left and right identities.
 rule {
-    if t_0 = id(cod(f));
+    if t_0 = id(mor_cod(f));
     if t_1 = f;
     if to = f;
     then comp(t_0, t_1) = to;
 }
 rule {
     if t_0 = f;
-    if t_1 = id(dom(f));
+    if t_1 = id(mor_dom(f));
     if to = f;
     then comp(t_0, t_1) = to;
 }
@@ -121,35 +121,35 @@ rule {
 // Left and Right legs of a fibre product have the same codomain.
 rule {
     if t_0 = left(prod);
-    if to = cod(right(prod));
-    then cod(t_0) = to;
+    if to = mor_cod(right(prod));
+    then mor_cod(t_0) = to;
 }
 rule {
     if t_0 = right(prod);
-    if to = cod(left(prod));
-    then cod(t_0) = to;
+    if to = mor_cod(left(prod));
+    then mor_cod(t_0) = to;
 }
 
 // Domain and codomains of the projections.
 rule {
     if t_0 = left_proj(prod);
     if to = fibre_prod_obj(prod);
-    then dom(t_0) = to;
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = right_proj(prod);
     if to = fibre_prod_obj(prod);
-    then dom(t_0) = to;
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = left_proj(prod);
-    if to = dom(left(prod));
-    then cod(t_0) = to;
+    if to = mor_dom(left(prod));
+    then mor_cod(t_0) = to;
 }
 rule {
     if t_0 = right_proj(prod);
-    if to = dom(right(prod));
-    then cod(t_0) = to;
+    if to = mor_dom(right(prod));
+    then mor_cod(t_0) = to;
 }
 
 // The projections commute with left and right legs.
@@ -169,18 +169,18 @@ rule {
 // Domain and codomain of tuple morphisms.
 rule {
     if t_0 = tuple(_, l, _);
-    if to = dom(l);
-    then dom(t_0) = to;
+    if to = mor_dom(l);
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = tuple(_, _, r);
-    if to = dom(r);
-    then dom(t_0) = to;
+    if to = mor_dom(r);
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = tuple(prod, _, _);
     if to = fibre_prod_obj(prod);
-    then cod(t_0) = to;
+    then mor_cod(t_0) = to;
 }
 
 // Tuple(prod, _, _) is defined for pairs morphisms which commute with Left(prod) and Right(prod).

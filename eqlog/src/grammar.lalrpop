@@ -73,10 +73,36 @@ ApplicationTerm: TermNode = {
     },
 }
 
+DomTerm: TermNode = {
+    <l: @L> "dom" "(" <arg_mor: Term> ")" <r: @R> => {
+        let tm = eqlog.new_term_node();
+        eqlog.insert_dom_term_node(tm, arg_mor);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_node_loc(tm, loc);
+
+        tm
+    }
+}
+
+CodTerm: TermNode = {
+    <l: @L> "cod" "(" <arg_mor: Term> ")" <r: @R> => {
+        let tm = eqlog.new_term_node();
+        eqlog.insert_cod_term_node(tm, arg_mor);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_node_loc(tm, loc);
+
+        tm
+    }
+}
+
 Term: TermNode = {
     <var: Variable> => var,
     <wildcard: Wildcard> => wildcard,
     <application: ApplicationTerm> => application,
+    <dom_term: DomTerm> => dom_term,
+    <cod_term: CodTerm> => cod_term,
 }
 
 TypeExpr: TypeExprNode = {

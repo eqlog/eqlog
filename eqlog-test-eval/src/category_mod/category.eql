@@ -1,24 +1,24 @@
 type Obj;
 type Morphism;
 
-func dom(Morphism) -> Obj;
-func cod(Morphism) -> Obj;
+func mor_dom(Morphism) -> Obj;
+func mor_cod(Morphism) -> Obj;
 func comp(Morphism, Morphism) -> Morphism;
 func id(Obj) -> Morphism;
 
 rule {
-    if cod(f) = dom(g);
+    if mor_cod(f) = mor_dom(g);
     then comp(g, f)!;
 }
 rule {
     if h = comp(_, f);
-    if d = dom(f);
-    then dom(h) = d;
+    if d = mor_dom(f);
+    then mor_dom(h) = d;
 }
 rule {
     if h = comp(g, _);
-    if c = cod(g);
-    then cod(h) = c;
+    if c = mor_cod(g);
+    then mor_cod(h) = c;
 }
 rule {
     if x: Obj;

@@ -1,8 +1,8 @@
 type Obj;
 type Morphism;
 
-func dom(Morphism) -> Obj;
-func cod(Morphism) -> Obj;
+func mor_dom(Morphism) -> Obj;
+func mor_cod(Morphism) -> Obj;
 func id(Obj) -> Morphism;
 func comp(Morphism, Morphism) -> Morphism;
 
@@ -19,8 +19,8 @@ func tuple(Prod, Morphism, Morphism) -> Morphism;
 // Every morphism has a domain and a codomain.
 rule {
     if f: Morphism;
-    then dom(f)!;
-    then cod(f)!;
+    then mor_dom(f)!;
+    then mor_cod(f)!;
 }
 
 // Every object has an identity.
@@ -31,56 +31,56 @@ rule {
 
 // Composition is defined if and only domain and codomain match.
 rule {
-    if cod(f) = dom(g);
+    if mor_cod(f) = mor_dom(g);
     then comp(g, f)!;
 }
 rule {
     if comp(g, f)!;
     if t_0 = f;
-    if to = dom(g);
-    then cod(t_0) = to;
+    if to = mor_dom(g);
+    then mor_cod(t_0) = to;
 }
 rule {
     if comp(g, f)!;
     if t_0 = g;
-    if to = cod(f);
-    then dom(t_0) = to;
+    if to = mor_cod(f);
+    then mor_dom(t_0) = to;
 }
 
 // Domains and codomains of identities.
 rule {
     if t_0 = id(x);
     if to = x;
-    then dom(t_0) = to;
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = id(x);
     if to = x;
-    then cod(t_0) = to;
+    then mor_cod(t_0) = to;
 }
 
 // Domains and codomains of compositions.
 rule {
     if t_0 = comp(_, f);
-    if to = dom(f);
-    then dom(t_0) = to;
+    if to = mor_dom(f);
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = comp(g, _);
-    if to = cod(g);
-    then cod(t_0) = to;
+    if to = mor_cod(g);
+    then mor_cod(t_0) = to;
 }
 
 // Identity morphisms are left and right identities.
 rule {
-    if t_0 = id(cod(f));
+    if t_0 = id(mor_cod(f));
     if t_1 = f;
     if to = f;
     then comp(t_0, t_1) = to;
 }
 rule {
     if t_0 = f;
-    if t_1 = id(dom(f));
+    if t_1 = id(mor_dom(f));
     if to = f;
     then comp(t_0, t_1) = to;
 }
@@ -123,58 +123,58 @@ rule {
 rule {
     if t_0 = left_proj(prod);
     if to = prod_obj(prod);
-    then dom(t_0) = to;
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = right_proj(prod);
     if to = prod_obj(prod);
-    then dom(t_0) = to;
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = left_proj(prod);
     if to = left(prod);
-    then cod(t_0) = to;
+    then mor_cod(t_0) = to;
 }
 rule {
     if t_0 = right_proj(prod);
     if to = right(prod);
-    then cod(t_0) = to;
+    then mor_cod(t_0) = to;
 }
 
 // Tuple(prod, _, _) is defined for pairs morphisms with appropriate signatures.
 rule {
-    if dom(l) = dom(r);
-    if cod(l) = left(prod);
-    if cod(r) = right(prod);
+    if mor_dom(l) = mor_dom(r);
+    if mor_cod(l) = left(prod);
+    if mor_cod(r) = right(prod);
     then tuple(prod, l, r)!;
 }
 rule {
     if tuple(prod, l, r)!;
-    if dom(l)!;
-    if dom(r)!;
-    if cod(l)!;
+    if mor_dom(l)!;
+    if mor_dom(r)!;
+    if mor_cod(l)!;
     if left(prod)!;
     if right(prod)!;
-    then dom(l) = dom(r);
-    then cod(l) = left(prod);
-    then cod(r) = right(prod);
+    then mor_dom(l) = mor_dom(r);
+    then mor_cod(l) = left(prod);
+    then mor_cod(r) = right(prod);
 }
 
 // Domain and codomain of tuple morphisms.
 rule {
     if t_0 = tuple(_, l, _);
-    if to = dom(l);
-    then dom(t_0) = to;
+    if to = mor_dom(l);
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = tuple(_, _, r);
-    if to = dom(r);
-    then dom(t_0) = to;
+    if to = mor_dom(r);
+    then mor_dom(t_0) = to;
 }
 rule {
     if t_0 = tuple(prod, _, _);
     if to = prod_obj(prod);
-    then cod(t_0) = to;
+    then mor_cod(t_0) = to;
 }
 
 // Compatibility of the tuple morphism with the projections.

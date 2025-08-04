@@ -71,6 +71,8 @@ pred some_term_node(OptTermNode, value: TermNode);
 pred var_term_node(TermNode, VirtIdent);
 pred wildcard_term_node(TermNode);
 pred app_term_node(TermNode, function: Ident, args: TermListNode);
+pred dom_term_node(TermNode, mor_arg: TermNode);
+pred cod_term_node(TermNode, mor_arg: TermNode);
 
 type MatchCaseNode;
 pred match_case(node: MatchCaseNode, pattern: TermNode, body: StmtListNode);

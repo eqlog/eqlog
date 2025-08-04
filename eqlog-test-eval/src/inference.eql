@@ -57,35 +57,35 @@ rule {
 func fun(Ty, Ty) -> Ty;
 
 // Domain and codomain of function types.
-func dom(Ty) -> Ty;
-func cod(Ty) -> Ty;
+func func_dom(Ty) -> Ty;
+func func_cod(Ty) -> Ty;
 
 // Fun and (Dom, Cod) form a bijection Ty * Ty <--> Ty. In particular, Fun(-, -) is injective.
 rule {
     if t_0 = fun(sigma, _);
     if to = sigma;
-    then dom(t_0) = to;
+    then func_dom(t_0) = to;
 }
 rule {
     if t_0 = fun(_, tau);
     if to = tau;
-    then cod(t_0) = to;
+    then func_cod(t_0) = to;
 }
 rule {
-    if t_0 = dom(kappa);
-    if t_1 = cod(kappa);
+    if t_0 = func_dom(kappa);
+    if t_1 = func_cod(kappa);
     if to = kappa;
     then fun(t_0, t_1) = to;
 }
 
 // Dom and Cod are define on the same set of types.
 rule {
-    if dom(kappa)!;
-    then cod(kappa)!;
+    if func_dom(kappa)!;
+    then func_cod(kappa)!;
 }
 rule {
-    if cod(kappa)!;
-    then dom(kappa)!;
+    if func_cod(kappa)!;
+    then func_dom(kappa)!;
 }
 
 // App(f, t) is the function application f(t).
@@ -98,12 +98,12 @@ rule {
     if app(s, t)!;
     if t_0 = tm_ty(s);
     if to = tm_ty(t);
-    then dom(t_0) = to;
+    then func_dom(t_0) = to;
 }
 rule {
     if t_0 = tm_ty(s);
     if to = tm_ty(app(s, _));
-    then cod(t_0) = to;
+    then func_cod(t_0) = to;
 }
 
 // The type of a lambda abstraction.
