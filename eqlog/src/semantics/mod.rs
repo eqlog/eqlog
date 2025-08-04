@@ -492,9 +492,9 @@ pub fn iter_illegal_rel_arg_errors<'a>(
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
     eqlog
-        .iter_illegal_member_type_expr_in_arg_decl()
-        .filter_map(move |(arg_decl_node, _type_expr_node)| {
-            let loc = eqlog.arg_decl_node_loc(arg_decl_node)?;
+        .iter_illegal_member_type_expr_in_signature()
+        .filter_map(move |type_expr_node| {
+            let loc = eqlog.type_expr_node_loc(type_expr_node)?;
             let location = *locations.get(&loc).unwrap();
             Some(CompileError::IllegalMemberTypeExprInArgDecl { location })
         })

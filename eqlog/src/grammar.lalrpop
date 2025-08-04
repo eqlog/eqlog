@@ -83,16 +83,28 @@ TypeExpr: TypeExprNode = {
     <l: @L> <ty_ident: Id> <r: @R> => {
         let node = eqlog.new_type_expr_node();
         eqlog.insert_ambient_type_expr(node, ty_ident);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_type_expr_node_loc(node, loc);
+
         node
     },
     <l: @L> <tm: Term> "." <ty_ident: Id> <r: @R> => {
         let node = eqlog.new_type_expr_node();
         eqlog.insert_member_type_expr(node, tm, ty_ident);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_type_expr_node_loc(node, loc);
+
         node
     },
     <l: @L> "Mor" "(" <ty_ident: Id> ")" <r: @R> => {
         let node = eqlog.new_type_expr_node();
         eqlog.insert_mor_type_expr(node, ty_ident);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_type_expr_node_loc(node, loc);
+
         node
     }
 }

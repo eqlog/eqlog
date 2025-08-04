@@ -152,6 +152,7 @@ func rule_decl_node_loc(RuleDeclNode) -> Loc;
 func decl_node_loc(DeclNode) -> Loc;
 func decl_list_node_loc(DeclListNode) -> Loc;
 func module_node_loc(ModuleNode) -> Loc;
+func type_expr_node_loc(TypeExprNode) -> Loc;
 
 // ### Descendant nodes of rules
 //
@@ -697,10 +698,9 @@ rule parent_model_func_domain {
     then flat_domain(parent_func) = typ_nil;
 }
 
+pred illegal_member_type_expr_in_signature(type_expr: TypeExprNode);
+
 func semantic_arg_type(arg: ArgDeclNode) -> Type;
-
-pred illegal_member_type_expr_in_arg_decl(arg: ArgDeclNode, type_expr: TypeExprNode);
-
 rule semantic_arg_type_def {
     if arg_decl_node_type(arg, type_expr);
     if loc = arg_decl_node_loc(arg);
@@ -715,7 +715,7 @@ rule semantic_arg_type_def {
         then semantic_arg_type(arg) = typ;
     } along {
         if member_type_expr(type_expr, _, _); 
-        then illegal_member_type_expr_in_arg_decl(arg, type_expr);
+        then illegal_member_type_expr_in_signature(type_expr);
     } along {
         if mor_type_expr(type_expr, model_ty_ident);
         if model_kind = ModelSymbol();
