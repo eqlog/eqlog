@@ -700,19 +700,19 @@ rule parent_model_func_domain {
 
 pred illegal_member_type_expr_in_signature(type_expr: TypeExprNode);
 
-func semantic_arg_type(arg: ArgDeclNode) -> Type;
-rule semantic_arg_type_def {
-    if arg_decl_node_type(arg, type_expr);
-    if loc = arg_decl_node_loc(arg);
-    if ss = arg_symbol_scope(arg);
+// This should be forced to be defined in case typ_expr is expected to be a
+// valid type in a pred/func signature (i.e., not dependent).
+func semantic_signature_type_expr(ss: SymbolScope, type_expr: TypeExprNode) -> Type;
+rule semantic_signature_type_expr_ambient {
+    if ty = semantic_signature_type_expr(ss, type_expr);
+    if loc = type_expr_node_loc(type_expr);
     branch {
         if ambient_type_expr(type_expr, ty_ident);
         if type_kind = TypeSymbol();
         if enum_kind = EnumSymbol();
         if model_kind = ModelSymbol();
         then should_be_symbol_3(ty_ident, type_kind, enum_kind, model_kind, ss, loc);
-        if typ = semantic_type(ss, ty_ident);
-        then semantic_arg_type(arg) = typ;
+        then ty = semantic_type(ss, ty_ident);
     } along {
         if member_type_expr(type_expr, _, _); 
         then illegal_member_type_expr_in_signature(type_expr);
@@ -721,9 +721,16 @@ rule semantic_arg_type_def {
         if model_kind = ModelSymbol();
         then should_be_symbol(model_ty_ident, model_kind, ss, loc);
         if model_ty = semantic_type(ss, model_ty_ident);
-        if mor_ty = mor_type(model_ty);
-        then semantic_arg_type(arg) = mor_ty;
+        then ty = mor_type(model_ty);
     }
+}
+
+func semantic_arg_type(arg: ArgDeclNode) -> Type;
+rule semantic_arg_type_def {
+    if arg_decl_node_type(arg, type_expr);
+    if ss = arg_symbol_scope(arg);
+    then ty := semantic_signature_type_expr(ss, type_expr)!;
+    then semantic_arg_type(arg) = ty;
 }
 
 func semantic_arg_types(ArgDeclListNode) -> TypeList;
