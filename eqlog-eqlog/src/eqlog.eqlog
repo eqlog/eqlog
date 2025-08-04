@@ -41,7 +41,7 @@ type PredDeclNode;
 pred pred_decl(PredDeclNode, name: Ident, args: ArgDeclListNode);
 
 type FuncDeclNode;
-pred func_decl(FuncDeclNode, name: Ident, args: ArgDeclListNode, result_type: Ident);
+pred func_decl(FuncDeclNode, name: Ident, args: ArgDeclListNode, result_type: TypeExprNode);
 
 type CtorDeclNode;
 pred ctor_decl(CtorDeclNode, name: Ident, args: ArgDeclListNode);
@@ -768,14 +768,14 @@ func codomain(Func) -> Type;
 
 rule semantic_decl_func {
     if decl_node_func(decl, func_decl);
-    if func_decl(func_decl, name, arg_decls, result_type_name);
+    if func_decl(func_decl, name, arg_decls, result_type_expr);
     if ss = decl_symbol_scope(decl);
     then function := semantic_func(ss, name)!;
     branch {
         if arg_types = semantic_arg_types(arg_decls);
         then domain(function) = arg_types;
     } along {
-        if result_type = semantic_type(ss, result_type_name);
+        then result_type := semantic_signature_type_expr(ss, result_type_expr)!;
         then codomain(function) = result_type;
     }
 }
@@ -1528,16 +1528,6 @@ pred should_be_symbol_2(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, sco
 // Three kinds of symbols are allowed, with `kind_1` being the typical one.
 pred should_be_symbol_3(name: Ident, kind_1: SymbolKind, kind_2: SymbolKind, kind_3: SymbolKind, scope_symbols: SymbolScope, loc: Loc);
 
-rule result_should_be_type {
-    if decl_node_func(decl, func_decl);
-    if func_decl(func_decl, _, _, result_type);
-    if scope = decl_symbol_scope(decl);
-    if type_kind = TypeSymbol();
-    if enum_kind = EnumSymbol();
-    if model_kind = EnumSymbol();
-    if loc = func_decl_node_loc(func_decl);
-    then should_be_symbol_3(result_type, type_kind, enum_kind, model_kind, scope, loc);
-}
 rule var_atom_should_be_type_ambient {
     if var_if_atom_node(atom, _, type_expr);
     if ambient_type_expr(type_expr, name);

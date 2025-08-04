@@ -1,4 +1,4 @@
-// src-digest: 442784848CCEFCD8989237A5D023D4C80AF4CE3AB3CC9F06987F9C84A28EE78D
+// src-digest: C984B1F44EF54AE75F7664B2AD55329B262D2D1B451C044F988211F330A506C7
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -1903,7 +1903,7 @@ impl fmt::Display for PredDeclTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct FuncDecl(pub FuncDeclNode, pub Ident, pub ArgDeclListNode, pub Ident);
+struct FuncDecl(pub FuncDeclNode, pub Ident, pub ArgDeclListNode, pub TypeExprNode);
 #[derive(Clone, Hash, Debug)]
 struct FuncDeclTable {
     index_new_0_1_2_3: BTreeSet<(u32, u32, u32, u32, )>,
@@ -1913,6 +1913,7 @@ struct FuncDeclTable {
     element_index_arg_decl_list_node: BTreeMap<ArgDeclListNode, Vec<FuncDecl>>,
     element_index_func_decl_node: BTreeMap<FuncDeclNode, Vec<FuncDecl>>,
     element_index_ident: BTreeMap<Ident, Vec<FuncDecl>>,
+    element_index_type_expr_node: BTreeMap<TypeExprNode, Vec<FuncDecl>>,
 }
 impl FuncDeclTable {
 #[allow(unused)]
@@ -1926,6 +1927,7 @@ fn new() -> Self {
     element_index_arg_decl_list_node: BTreeMap::new(),
     element_index_func_decl_node: BTreeMap::new(),
     element_index_ident: BTreeMap::new(),
+    element_index_type_expr_node: BTreeMap::new(),
     }
 }
 #[allow(dead_code)]
@@ -1957,9 +1959,9 @@ return false;
             };
         
 
-            match self.element_index_ident.get_mut(&t.3) {
+            match self.element_index_type_expr_node.get_mut(&t.3) {
                 Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_ident.insert(t.3, vec![t]); },
+                None => { self.element_index_type_expr_node.insert(t.3, vec![t]); },
             };
         
 true
@@ -2001,7 +2003,7 @@ fn permute_0_1_2_3(t: FuncDecl) -> (u32, u32, u32, u32, ) {
 }
 #[allow(unused)]
 fn permute_inverse_0_1_2_3(t: (u32, u32, u32, u32, )) -> FuncDecl {
-    FuncDecl(FuncDeclNode::from(t.0), Ident::from(t.1), ArgDeclListNode::from(t.2), Ident::from(t.3))
+    FuncDecl(FuncDeclNode::from(t.0), Ident::from(t.1), ArgDeclListNode::from(t.2), TypeExprNode::from(t.3))
 }
 #[allow(unused)]
 fn permute_0_2_1_3(t: FuncDecl) -> (u32, u32, u32, u32, ) {
@@ -2009,7 +2011,7 @@ fn permute_0_2_1_3(t: FuncDecl) -> (u32, u32, u32, u32, ) {
 }
 #[allow(unused)]
 fn permute_inverse_0_2_1_3(t: (u32, u32, u32, u32, )) -> FuncDecl {
-    FuncDecl(FuncDeclNode::from(t.0), Ident::from(t.2), ArgDeclListNode::from(t.1), Ident::from(t.3))
+    FuncDecl(FuncDeclNode::from(t.0), Ident::from(t.2), ArgDeclListNode::from(t.1), TypeExprNode::from(t.3))
 }
 #[allow(unused)]
 fn permute_0_3_1_2(t: FuncDecl) -> (u32, u32, u32, u32, ) {
@@ -2017,7 +2019,7 @@ fn permute_0_3_1_2(t: FuncDecl) -> (u32, u32, u32, u32, ) {
 }
 #[allow(unused)]
 fn permute_inverse_0_3_1_2(t: (u32, u32, u32, u32, )) -> FuncDecl {
-    FuncDecl(FuncDeclNode::from(t.0), Ident::from(t.2), ArgDeclListNode::from(t.3), Ident::from(t.1))
+    FuncDecl(FuncDeclNode::from(t.0), Ident::from(t.2), ArgDeclListNode::from(t.3), TypeExprNode::from(t.1))
 }
 #[allow(dead_code)]
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = FuncDecl> {
@@ -2090,7 +2092,7 @@ self.index_old_0_1_2_3
     .map(Self::permute_inverse_0_1_2_3)
 }
 #[allow(dead_code)]
-fn iter_all_0_1_2_3(&self, arg0: FuncDeclNode, arg1: Ident, arg2: ArgDeclListNode, arg3: Ident) -> impl '_ + Iterator<Item = FuncDecl> {
+fn iter_all_0_1_2_3(&self, arg0: FuncDeclNode, arg1: Ident, arg2: ArgDeclListNode, arg3: TypeExprNode) -> impl '_ + Iterator<Item = FuncDecl> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
     let arg2 = arg2.0;
@@ -2123,7 +2125,7 @@ self.index_old_0_2_1_3
     .map(Self::permute_inverse_0_2_1_3)
 }
 #[allow(dead_code)]
-fn iter_old_0_3(&self, arg0: FuncDeclNode, arg3: Ident) -> impl '_ + Iterator<Item = FuncDecl> {
+fn iter_old_0_3(&self, arg0: FuncDeclNode, arg3: TypeExprNode) -> impl '_ + Iterator<Item = FuncDecl> {
     let arg0 = arg0.0;
     let arg3 = arg3.0;
 self.index_old_0_3_1_2
@@ -2185,6 +2187,30 @@ self.index_old_0_3_1_2.remove(&Self::permute_0_3_1_2(t));
 #[allow(dead_code)]
 fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<FuncDecl> {
     let mut ts = match self.element_index_ident.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1_2_3.remove(&Self::permute_0_1_2_3(t)) {
+            self.index_old_0_2_1_3.remove(&Self::permute_0_2_1_3(t));
+self.index_old_0_3_1_2.remove(&Self::permute_0_3_1_2(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_type_expr_node(&mut self, tm: TypeExprNode) -> Vec<FuncDecl> {
+    let mut ts = match self.element_index_type_expr_node.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
     };
@@ -58448,7 +58474,6 @@ self.ctor_decl_defines_symbol_0(&mut delta);
 self.pred_definition_symbol_scope_rule_0(&mut delta);
 self.func_definition_symbol_scope_rule_0(&mut delta);
 self.rule_decl_defines_symbol_0(&mut delta);
-self.result_should_be_type_0(&mut delta);
 self.var_atom_should_be_type_ambient_0(&mut delta);
 self.var_atom_should_be_type_member_0(&mut delta);
 self.pred_if_atom_should_be_pred_0(&mut delta);
@@ -67160,27 +67185,27 @@ let weight2 = &mut self.arg_decl_list_node_weights[tm2.0 as usize];
 
 /// Returns `true` if `func_decl(arg0, arg1, arg2, arg3)` holds.
 #[allow(dead_code)]
-pub fn func_decl(&self, mut arg0: FuncDeclNode, mut arg1: Ident, mut arg2: ArgDeclListNode, mut arg3: Ident) -> bool {
+pub fn func_decl(&self, mut arg0: FuncDeclNode, mut arg1: Ident, mut arg2: ArgDeclListNode, mut arg3: TypeExprNode) -> bool {
     arg0 = self.root_func_decl_node(arg0);
 arg1 = self.root_ident(arg1);
 arg2 = self.root_arg_decl_list_node(arg2);
-arg3 = self.root_ident(arg3);
+arg3 = self.root_type_expr_node(arg3);
     self.func_decl.contains(FuncDecl(arg0, arg1, arg2, arg3))
 }
 /// Returns an iterator over tuples of elements satisfying the `func_decl` predicate.
 
 #[allow(dead_code)]
-pub fn iter_func_decl(&self) -> impl '_ + Iterator<Item=(FuncDeclNode, Ident, ArgDeclListNode, Ident)> {
+pub fn iter_func_decl(&self) -> impl '_ + Iterator<Item=(FuncDeclNode, Ident, ArgDeclListNode, TypeExprNode)> {
     self.func_decl.iter_all().map(|t| (t.0, t.1, t.2, t.3))
 }
 /// Makes `func_decl(tm0, tm1, tm2, tm3)` hold.
 
 #[allow(dead_code)]
-pub fn insert_func_decl(&mut self, mut tm0: FuncDeclNode, mut tm1: Ident, mut tm2: ArgDeclListNode, mut tm3: Ident) {
+pub fn insert_func_decl(&mut self, mut tm0: FuncDeclNode, mut tm1: Ident, mut tm2: ArgDeclListNode, mut tm3: TypeExprNode) {
     tm0 = self.func_decl_node_equalities.root(tm0);
 tm1 = self.ident_equalities.root(tm1);
 tm2 = self.arg_decl_list_node_equalities.root(tm2);
-tm3 = self.ident_equalities.root(tm3);
+tm3 = self.type_expr_node_equalities.root(tm3);
     if self.func_decl.insert(FuncDecl(tm0, tm1, tm2, tm3)) {
         let weight0 = &mut self.func_decl_node_weights[tm0.0 as usize];
 *weight0 = weight0.saturating_add(FuncDeclTable::WEIGHT);
@@ -67191,7 +67216,7 @@ let weight1 = &mut self.ident_weights[tm1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[tm2.0 as usize];
 *weight2 = weight2.saturating_add(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[tm3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[tm3.0 as usize];
 *weight3 = weight3.saturating_add(FuncDeclTable::WEIGHT);
 
     }
@@ -70606,13 +70631,13 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_sub(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[t.3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
 *weight3 = weight3.saturating_sub(FuncDeclTable::WEIGHT);
 
         t.0 = self.root_func_decl_node(t.0);
 t.1 = self.root_ident(t.1);
 t.2 = self.root_arg_decl_list_node(t.2);
-t.3 = self.root_ident(t.3);
+t.3 = self.root_type_expr_node(t.3);
         if self.func_decl.insert(t) {
             let weight0 = &mut self.func_decl_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_add(FuncDeclTable::WEIGHT);
@@ -70623,7 +70648,7 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_add(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[t.3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
 *weight3 = weight3.saturating_add(FuncDeclTable::WEIGHT);
 
         }
@@ -70641,13 +70666,13 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_sub(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[t.3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
 *weight3 = weight3.saturating_sub(FuncDeclTable::WEIGHT);
 
         t.0 = self.root_func_decl_node(t.0);
 t.1 = self.root_ident(t.1);
 t.2 = self.root_arg_decl_list_node(t.2);
-t.3 = self.root_ident(t.3);
+t.3 = self.root_type_expr_node(t.3);
         if self.func_decl.insert(t) {
             let weight0 = &mut self.func_decl_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_add(FuncDeclTable::WEIGHT);
@@ -70658,7 +70683,7 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_add(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[t.3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
 *weight3 = weight3.saturating_add(FuncDeclTable::WEIGHT);
 
         }
@@ -70676,13 +70701,13 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_sub(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[t.3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
 *weight3 = weight3.saturating_sub(FuncDeclTable::WEIGHT);
 
         t.0 = self.root_func_decl_node(t.0);
 t.1 = self.root_ident(t.1);
 t.2 = self.root_arg_decl_list_node(t.2);
-t.3 = self.root_ident(t.3);
+t.3 = self.root_type_expr_node(t.3);
         if self.func_decl.insert(t) {
             let weight0 = &mut self.func_decl_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_add(FuncDeclTable::WEIGHT);
@@ -70693,7 +70718,42 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
 let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_add(FuncDeclTable::WEIGHT);
 
-let weight3 = &mut self.ident_weights[t.3.0 as usize];
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
+*weight3 = weight3.saturating_add(FuncDeclTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.type_expr_node_uprooted.iter().copied() {
+    let ts = self.func_decl.drain_with_element_type_expr_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.func_decl_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(FuncDeclTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(FuncDeclTable::WEIGHT);
+
+let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_sub(FuncDeclTable::WEIGHT);
+
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
+*weight3 = weight3.saturating_sub(FuncDeclTable::WEIGHT);
+
+        t.0 = self.root_func_decl_node(t.0);
+t.1 = self.root_ident(t.1);
+t.2 = self.root_arg_decl_list_node(t.2);
+t.3 = self.root_type_expr_node(t.3);
+        if self.func_decl.insert(t) {
+            let weight0 = &mut self.func_decl_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(FuncDeclTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(FuncDeclTable::WEIGHT);
+
+let weight2 = &mut self.arg_decl_list_node_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_add(FuncDeclTable::WEIGHT);
+
+let weight3 = &mut self.type_expr_node_weights[t.3.0 as usize];
 *weight3 = weight3.saturating_add(FuncDeclTable::WEIGHT);
 
         }
@@ -94681,7 +94741,7 @@ self.semantic_decl_func_6(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
+fn semantic_decl_func_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode) {
 for _ in [()] {
 self.semantic_decl_func_7(delta, tm0, tm1, tm2, tm3, tm4);
 
@@ -94690,7 +94750,7 @@ self.semantic_decl_func_7(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
+fn semantic_decl_func_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclSymbolScope(_, tm5, ) in self.decl_symbol_scope.iter_all_0(tm0, ) {
@@ -94728,7 +94788,7 @@ self.semantic_decl_func_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
+fn semantic_decl_func_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope) {
 for _ in [()] {
 self.semantic_decl_func_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
@@ -94737,7 +94797,7 @@ self.semantic_decl_func_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_10(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
+fn semantic_decl_func_10(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope) {
 for _ in [()] {
 let tm6 = match self.semantic_func.iter_all_0_1(tm5, tm2).next() {
     Some(SemanticFunc(_, _,  res)) => res,
@@ -94784,7 +94844,7 @@ self.semantic_decl_func_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_12(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: Func) {
+fn semantic_decl_func_12(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: Func) {
 for _ in [()] {
 self.semantic_decl_func_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 self.semantic_decl_func_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
@@ -94795,7 +94855,7 @@ self.semantic_decl_func_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_13(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: Func) {
+fn semantic_decl_func_13(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: Func) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticArgTypes(_, tm7, ) in self.semantic_arg_types.iter_all_0(tm3, ) {
@@ -94843,7 +94903,7 @@ self.semantic_decl_func_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_15(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: Func, tm7: TypeList) {
+fn semantic_decl_func_15(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: Func, tm7: TypeList) {
 for _ in [()] {
 let exists_already = self.domain.iter_all_0_1(tm6, tm7).next().is_some();
 if !exists_already {
@@ -94856,15 +94916,19 @@ delta.new_domain.push(Domain(tm6, tm7));
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_16(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: Func) {
+fn semantic_decl_func_16(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: Func) {
 for _ in [()] {
-#[allow(unused_variables)]
-for SemanticType(_, _, tm8, ) in self.semantic_type.iter_all_0_1(tm5, tm4, ) {
+let tm8 = match self.semantic_signature_type_expr.iter_all_0_1(tm5, tm4).next() {
+    Some(SemanticSignatureTypeExpr(_, _,  res)) => res,
+    None => { 
+        delta.new_semantic_signature_type_expr_def.push(SemanticSignatureTypeExprArgs(tm5, tm4));
+        break;
+    },
+};
 
 self.semantic_decl_func_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm8);
 
 
-}
 
 }
 }
@@ -94873,7 +94937,7 @@ self.semantic_decl_func_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm8);
 fn semantic_decl_func_17(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for SemanticType(tm5, tm4, tm8, ) in self.semantic_type.iter_new() {
+for SemanticSignatureTypeExpr(tm5, tm4, tm8, ) in self.semantic_signature_type_expr.iter_new() {
 
 #[allow(unused_variables)]
 for DeclSymbolScope(tm0, _, ) in self.decl_symbol_scope.iter_old_1(tm5, ) {
@@ -94904,7 +94968,7 @@ self.semantic_decl_func_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm8);
 }
 
 #[allow(unused_variables)]
-fn semantic_decl_func_18(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: Func, tm8: Type) {
+fn semantic_decl_func_18(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: Func, tm8: Type) {
 for _ in [()] {
 let exists_already = self.codomain.iter_all_0_1(tm6, tm8).next().is_some();
 if !exists_already {
@@ -103440,7 +103504,7 @@ self.func_args_symbol_scope_6(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn func_args_symbol_scope_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
+fn func_args_symbol_scope_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode) {
 for _ in [()] {
 self.func_args_symbol_scope_7(delta, tm0, tm1, tm2, tm3, tm4);
 
@@ -103449,7 +103513,7 @@ self.func_args_symbol_scope_7(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn func_args_symbol_scope_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
+fn func_args_symbol_scope_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclSymbolScope(_, tm5, ) in self.decl_symbol_scope.iter_all_0(tm0, ) {
@@ -103487,7 +103551,7 @@ self.func_args_symbol_scope_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn func_args_symbol_scope_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
+fn func_args_symbol_scope_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope) {
 for _ in [()] {
 let exists_already = self.args_symbol_scope.iter_all_0_1(tm3, tm5).next().is_some();
 if !exists_already {
@@ -106096,7 +106160,7 @@ self.func_decl_defines_symbol_6(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
+fn func_decl_defines_symbol_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode) {
 for _ in [()] {
 self.func_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3, tm4);
 
@@ -106105,7 +106169,7 @@ self.func_decl_defines_symbol_7(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
+fn func_decl_defines_symbol_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclSymbolScope(_, tm5, ) in self.decl_symbol_scope.iter_all_0(tm0, ) {
@@ -106143,7 +106207,7 @@ self.func_decl_defines_symbol_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
+fn func_decl_defines_symbol_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope) {
 for _ in [()] {
 self.func_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
@@ -106152,7 +106216,7 @@ self.func_decl_defines_symbol_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_10(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
+fn func_decl_defines_symbol_10(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncSymbol(tm6, ) in self.func_symbol.iter_all() {
@@ -106195,7 +106259,7 @@ self.func_decl_defines_symbol_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_12(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind) {
+fn func_decl_defines_symbol_12(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: SymbolKind) {
 for _ in [()] {
 self.func_decl_defines_symbol_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
@@ -106204,7 +106268,7 @@ self.func_decl_defines_symbol_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_13(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind) {
+fn func_decl_defines_symbol_13(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: SymbolKind) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncDeclNodeLoc(_, tm7, ) in self.func_decl_node_loc.iter_all_0(tm1, ) {
@@ -106252,7 +106316,7 @@ self.func_decl_defines_symbol_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
 }
 
 #[allow(unused_variables)]
-fn func_decl_defines_symbol_15(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind, tm7: Loc) {
+fn func_decl_defines_symbol_15(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: TypeExprNode, tm5: SymbolScope, tm6: SymbolKind, tm7: Loc) {
 for _ in [()] {
 let exists_already = self.defined_symbol.iter_all_0_1_2_3(tm5, tm2, tm6, tm7).next().is_some();
 if !exists_already {
@@ -107044,340 +107108,6 @@ for _ in [()] {
 let exists_already = self.defined_symbol.iter_all_0_1_2_3(tm3, tm4, tm5, tm6).next().is_some();
 if !exists_already {
 delta.new_defined_symbol.push(DefinedSymbol(tm3, tm4, tm5, tm6));
-}
-
-
-
-}
-}
-
-
-#[allow(unused_variables)]
-fn result_should_be_type_0(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-self.result_should_be_type_1(delta, );
-self.result_should_be_type_2(delta, );
-self.result_should_be_type_5(delta, );
-self.result_should_be_type_8(delta, );
-self.result_should_be_type_11(delta, );
-self.result_should_be_type_14(delta, );
-self.result_should_be_type_19(delta, );
-
-
-
-
-
-
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_1(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_2(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for DeclNodeFunc(tm0, tm1, ) in self.decl_node_func.iter_new() {
-
-self.result_should_be_type_3(delta, tm0, tm1);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_3(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode) {
-for _ in [()] {
-self.result_should_be_type_4(delta, tm0, tm1);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_4(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode) {
-for _ in [()] {
-#[allow(unused_variables)]
-for FuncDecl(_, tm2, tm3, tm4, ) in self.func_decl.iter_all_0(tm1, ) {
-
-self.result_should_be_type_6(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_5(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for FuncDecl(tm1, tm2, tm3, tm4, ) in self.func_decl.iter_new() {
-
-#[allow(unused_variables)]
-for DeclNodeFunc(tm0, _, ) in self.decl_node_func.iter_old_1(tm1, ) {
-
-self.result_should_be_type_6(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_6(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
-for _ in [()] {
-self.result_should_be_type_7(delta, tm0, tm1, tm2, tm3, tm4);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_7(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident) {
-for _ in [()] {
-#[allow(unused_variables)]
-for DeclSymbolScope(_, tm5, ) in self.decl_symbol_scope.iter_all_0(tm0, ) {
-
-self.result_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_8(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for DeclSymbolScope(tm0, tm5, ) in self.decl_symbol_scope.iter_new() {
-
-#[allow(unused_variables)]
-for DeclNodeFunc(_, tm1, ) in self.decl_node_func.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for FuncDecl(_, tm2, tm3, tm4, ) in self.func_decl.iter_old_0(tm1, ) {
-
-self.result_should_be_type_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_9(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
-for _ in [()] {
-self.result_should_be_type_10(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_10(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope) {
-for _ in [()] {
-#[allow(unused_variables)]
-for TypeSymbol(tm6, ) in self.type_symbol.iter_all() {
-
-self.result_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_11(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for TypeSymbol(tm6, ) in self.type_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for DeclSymbolScope(tm0, tm5, ) in self.decl_symbol_scope.iter_old() {
-
-#[allow(unused_variables)]
-for DeclNodeFunc(_, tm1, ) in self.decl_node_func.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for FuncDecl(_, tm2, tm3, tm4, ) in self.func_decl.iter_old_0(tm1, ) {
-
-self.result_should_be_type_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_12(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind) {
-for _ in [()] {
-self.result_should_be_type_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_13(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind) {
-for _ in [()] {
-#[allow(unused_variables)]
-for EnumSymbol(tm7, ) in self.enum_symbol.iter_all() {
-
-self.result_should_be_type_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_14(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for EnumSymbol(tm7, ) in self.enum_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for TypeSymbol(tm6, ) in self.type_symbol.iter_old() {
-
-#[allow(unused_variables)]
-for DeclSymbolScope(tm0, tm5, ) in self.decl_symbol_scope.iter_old() {
-
-#[allow(unused_variables)]
-for DeclNodeFunc(_, tm1, ) in self.decl_node_func.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for FuncDecl(_, tm2, tm3, tm4, ) in self.func_decl.iter_old_0(tm1, ) {
-
-self.result_should_be_type_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_15(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind, tm7: SymbolKind) {
-for _ in [()] {
-self.result_should_be_type_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_16(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind, tm7: SymbolKind) {
-for _ in [()] {
-self.result_should_be_type_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_17(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind, tm7: SymbolKind) {
-for _ in [()] {
-self.result_should_be_type_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_18(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind, tm7: SymbolKind) {
-for _ in [()] {
-#[allow(unused_variables)]
-for FuncDeclNodeLoc(_, tm8, ) in self.func_decl_node_loc.iter_all_0(tm1, ) {
-
-self.result_should_be_type_20(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_19(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for FuncDeclNodeLoc(tm1, tm8, ) in self.func_decl_node_loc.iter_new() {
-
-#[allow(unused_variables)]
-for EnumSymbol(tm7, ) in self.enum_symbol.iter_old() {
-
-#[allow(unused_variables)]
-for TypeSymbol(tm6, ) in self.type_symbol.iter_old() {
-
-#[allow(unused_variables)]
-for DeclNodeFunc(tm0, _, ) in self.decl_node_func.iter_old_1(tm1, ) {
-
-#[allow(unused_variables)]
-for DeclSymbolScope(_, tm5, ) in self.decl_symbol_scope.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for FuncDecl(_, tm2, tm3, tm4, ) in self.func_decl.iter_old_0(tm1, ) {
-
-self.result_should_be_type_20(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn result_should_be_type_20(&self, delta: &mut ModelDelta, tm0: DeclNode, tm1: FuncDeclNode, tm2: Ident, tm3: ArgDeclListNode, tm4: Ident, tm5: SymbolScope, tm6: SymbolKind, tm7: SymbolKind, tm8: Loc) {
-for _ in [()] {
-let exists_already = self.should_be_symbol_3.iter_all_0_1_2_3_4_5(tm4, tm6, tm7, tm7, tm5, tm8).next().is_some();
-if !exists_already {
-delta.new_should_be_symbol_3.push(ShouldBeSymbol3(tm4, tm6, tm7, tm7, tm5, tm8));
 }
 
 

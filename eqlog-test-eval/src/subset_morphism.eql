@@ -1,0 +1,10 @@
+type Carrier;
+
+model Subs {
+    pred element(c: Carrier); 
+}
+
+func a() -> Subs;
+func b() -> Subs;
+
+func ab_inclusion() -> Mor(Subs);

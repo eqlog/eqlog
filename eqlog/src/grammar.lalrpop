@@ -313,7 +313,7 @@ PredDecl: PredDeclNode = {
 }
 
 FuncDecl: FuncDeclNode = {
-    <l: @L> "func" <name: Id> <arg_decls: ArgDeclList> "->" <result: Id> ";" <r: @R> => {
+    <l: @L> "func" <name: Id> <arg_decls: ArgDeclList> "->" <result: TypeExpr> ";" <r: @R> => {
         let func = eqlog.new_func_decl_node();
         eqlog.insert_func_decl(func, name, arg_decls, result);
 
