@@ -127,6 +127,9 @@ pub enum CompileError {
         match_location: Location,
         missing_ctor_decl_location: Location,
     },
+    IllegalMemberTypeExprInArgDecl {
+        location: Location,
+    },
 }
 
 impl CompileError {
@@ -168,6 +171,7 @@ impl CompileError {
             CompileError::MatchPatternCtorArgIsApp { location } => *location,
             CompileError::MatchPatternArgVarIsNotFresh { location } => *location,
             CompileError::MatchNotExhaustive { match_location, .. } => *match_location,
+            CompileError::IllegalMemberTypeExprInArgDecl { location } => *location,
         }
     }
 }
@@ -470,6 +474,13 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *match_location)?;
                 write!(f, "This constructor is not covered:\n")?;
                 write_loc(f, *missing_ctor_decl_location)?;
+            }
+            IllegalMemberTypeExprInArgDecl { location } => {
+                write!(
+                    f,
+                    "Member type expressions not allowed in function/predicate arguments\n"
+                )?;
+                write_loc(f, *location)?;
             }
         }
         Ok(())

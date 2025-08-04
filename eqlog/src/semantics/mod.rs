@@ -486,6 +486,20 @@ pub fn iter_enum_ctors_not_surjective_errors<'a>(
         })
 }
 
+pub fn iter_illegal_rel_arg_errors<'a>(
+    eqlog: &'a Eqlog,
+    _identifiers: &'a BTreeMap<Ident, String>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_illegal_member_type_expr_in_arg_decl()
+        .filter_map(move |(arg_decl_node, _type_expr_node)| {
+            let loc = eqlog.arg_decl_node_loc(arg_decl_node)?;
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::IllegalMemberTypeExprInArgDecl { location })
+        })
+}
+
 pub fn check_eqlog(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
@@ -524,6 +538,7 @@ pub fn check_eqlog(
             identifiers,
             locations,
         ))
+        .chain(iter_illegal_rel_arg_errors(eqlog, identifiers, locations))
         .min();
 
     if let Some(err) = first_error {
