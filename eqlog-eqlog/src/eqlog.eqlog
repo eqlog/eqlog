@@ -2121,6 +2121,8 @@ rule ambient_model_el_type {
 
 pred dom_must_be_applied_to_mor_type(Type, Loc);
 pred dom_must_result_in_model_type(Type, Loc);
+pred cod_must_be_applied_to_mor_type(Type, Loc);
+pred cod_must_result_in_model_type(Type, Loc);
 
 // #### Types of dom and cod terms.
 rule dom_el_type_down {
@@ -2141,6 +2143,27 @@ rule dom_el_type_down {
             // At the moment, this is necessarily an error, since model types
             // cannot be nested, so that member_type cannot be a model type.
             then dom_must_result_in_model_type(member_type, loc);
+        }
+    }
+}
+rule cod_el_type_down {
+    // The conclusion from the type of a term `cod(f)` to the type of `f`.
+    if cod_term_node(cod_term, mor_term);
+    if loc = term_node_loc(cod_term);
+    if cod_el = semantic_el(cod_term, structure);
+    if el_type(cod_el, codomain_type);
+    match codomain_type {
+        AmbientType(typ) => {
+            then cod_must_result_in_model_type(typ, loc);
+            // AmbientType is total though, no need to assert that it must be defined here.
+            if mor_typ = AmbientType(mor_type(typ));
+            if mor_el = semantic_el(mor_term, structure);
+            then el_type(mor_el, mor_typ);
+        }
+        InstantiatedType(_, member_type) => {
+            // At the moment, this is necessarily an error, since model types
+            // cannot be nested, so that member_type cannot be a model type.
+            then cod_must_result_in_model_type(member_type, loc);
         }
     }
 }
@@ -2165,11 +2188,27 @@ rule dom_el_type_up {
         }
     }
 }
-
-// TODO: Add analogous rules to dom_el_type_{up, down} for cod.
-
-// TODO: Add semantics of dom and cod terms, i.e. that they are given by a
-// function application.
+rule cod_el_type_up {
+    // The conclusion from the type of a term `f` to the type of `cod(f)`.
+    if cod_term_node(cod_term, mor_term);
+    if loc = term_node_loc(cod_term);
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, mor_type);
+    match mor_type {
+        AmbientType(typ) => {
+            then cod_must_be_applied_to_mor_type(typ, loc);
+            if typ = mor_type(model_type);
+            if model_el_type = AmbientType(model_type);
+            if cod_el = semantic_el(cod_term, structure);
+            then el_type(cod_el, model_el_type);
+        }
+        InstantiatedType(_, member_type) => {
+            // At the moment, this is necessarily an error, since model types
+            // cannot be nested, so that member_type cannot be a model type.
+            then cod_must_be_applied_to_mor_type(member_type, loc);
+        }
+    }
+}
 
 rule dom_term_semantics {
     if dom_term_node(dom_term, mor_term);
@@ -2185,6 +2224,21 @@ rule dom_term_semantics {
     then mor_el_dom_el := ConsElList(mor_el, dom_el_single)!;
 
     then rel_app(dom_func_rel, mor_el_dom_el);
+}
+rule cod_term_semantics {
+    if cod_term_node(cod_term, mor_term);
+    if cod_el = semantic_el(cod_term, structure);
+    if mor_el = semantic_el(mor_term, structure);
+
+    if el_type(mor_el, AmbientType(mor_type));
+    if cod_func = mor_type_cod_func(mor_type);
+    if cod_func_rel = FuncRel(cod_func);
+
+    then nil := NilElList(structure)!;
+    then cod_el_single := ConsElList(cod_el, nil)!;
+    then mor_el_cod_el := ConsElList(mor_el, cod_el_single)!;
+
+    then rel_app(cod_func_rel, mor_el_cod_el);
 }
 
 // #### Semantics of terms
