@@ -43,3 +43,21 @@ fn test_ab_inclusion_cod() {
     let a_b_cod = subset.subs_mor_cod(a_b).unwrap();
     assert!(subset.are_equal_subs(a_b_cod, b));
 }
+
+#[test]
+#[should_panic]
+fn test_singleton_subset_propagates() {
+    let mut subset = SubsetMorphism::new();
+
+    let a = subset.define_a();
+    let b = subset.define_b();
+    let a_b = subset.define_a_b();
+
+    let c0 = subset.new_carrier();
+
+    subset.insert_element(a, c0);
+
+    subset.close();
+
+    assert!(subset.element(b, c0));
+}
