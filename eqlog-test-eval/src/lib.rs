@@ -26,6 +26,7 @@ eqlog_mod!(indexed_pointed);
 eqlog_mod!(empty);
 eqlog_mod!(subset);
 eqlog_mod!(nested_model);
+eqlog_mod!(subset_morphism);
 
 mod category_mod;
 #[cfg(test)]
@@ -65,6 +66,8 @@ mod poset_test;
 mod product_category_test;
 #[cfg(test)]
 mod semilattice_test;
+#[cfg(test)]
+mod subset_morphism_test;
 #[cfg(test)]
 mod subset_test;
 #[cfg(test)]

@@ -432,6 +432,20 @@ rule scopes_term_app {
 
     then scope_single_child(args_descendant, tm_descendant);
 }
+rule scopes_term_dom {
+    if dom_term_node(tm, arg_tm);
+    if tm_descendant = rule_descendant_term(tm);
+    if arg_descendant = rule_descendant_term(arg_tm);
+
+    then scope_single_child(arg_descendant, tm_descendant);
+}
+rule scopes_term_cod {
+    if cod_term_node(tm, arg_tm);
+    if tm_descendant = rule_descendant_term(tm);
+    if arg_descendant = rule_descendant_term(arg_tm);
+
+    then scope_single_child(arg_descendant, tm_descendant);
+}
 rule scopes_term_var {
     if var_term_node(tm, virt_ident);
     if tm_descendant = rule_descendant_term(tm);
@@ -2029,6 +2043,17 @@ rule app_term_structure {
     then terms_structure(args, structure);
 }
 
+rule dom_term_structure {
+    if dom_term_node(term, arg_term);
+    if term_structure(term, structure);
+    then term_structure(arg_term, structure);
+}
+
+rule cod_term_structure {
+    if cod_term_node(term, arg_term);
+    if term_structure(term, structure);
+    then term_structure(arg_term, structure);
+}
 // ### Populate associated structures
 
 // #### Variables, scopes and named elements
@@ -2092,6 +2117,74 @@ rule ambient_model_el_type {
     if model_type = symbol_scope_model(member_scope);
     if model_el_type = AmbientType(model_type);
     then el_type(el, model_el_type);
+}
+
+pred dom_must_be_applied_to_mor_type(Type, Loc);
+pred dom_must_result_in_model_type(Type, Loc);
+
+// #### Types of dom and cod terms.
+rule dom_el_type_down {
+    // The conclusion from the type of a term `dom(f)` to the type of `f`.
+    if dom_term_node(dom_term, mor_term);
+    if loc = term_node_loc(dom_term);
+    if dom_el = semantic_el(dom_term, structure);
+    if el_type(dom_el, domain_type);
+    match domain_type {
+        AmbientType(typ) => {
+            then dom_must_result_in_model_type(typ, loc);
+            // AmbientType is total though, no need to assert that it must be defined here.
+            if mor_typ = AmbientType(mor_type(typ));
+            if mor_el = semantic_el(mor_term, structure);
+            then el_type(mor_el, mor_typ);
+        }
+        InstantiatedType(_, member_type) => {
+            // At the moment, this is necessarily an error, since model types
+            // cannot be nested, so that member_type cannot be a model type.
+            then dom_must_result_in_model_type(member_type, loc);
+        }
+    }
+}
+rule dom_el_type_up {
+    // The conclusion from the type of a term `f` to the type of `dom(f)`.
+    if dom_term_node(dom_term, mor_term);
+    if loc = term_node_loc(dom_term);
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, mor_type);
+    match mor_type {
+        AmbientType(typ) => {
+            then dom_must_be_applied_to_mor_type(typ, loc);
+            if typ = mor_type(model_type);
+            if model_el_type = AmbientType(model_type);
+            if dom_el = semantic_el(dom_term, structure);
+            then el_type(dom_el, model_el_type);
+        }
+        InstantiatedType(_, member_type) => {
+            // At the moment, this is necessarily an error, since model types
+            // cannot be nested, so that member_type cannot be a model type.
+            then dom_must_be_applied_to_mor_type(member_type, loc);
+        }
+    }
+}
+
+// TODO: Add analogous rules to dom_el_type_{up, down} for cod.
+
+// TODO: Add semantics of dom and cod terms, i.e. that they are given by a
+// function application.
+
+rule dom_term_semantics {
+    if dom_term_node(dom_term, mor_term);
+    if dom_el = semantic_el(dom_term, structure);
+    if mor_el = semantic_el(mor_term, structure);
+
+    if el_type(mor_el, AmbientType(mor_type));
+    if dom_func = mor_type_dom_func(mor_type);
+    if dom_func_rel = FuncRel(dom_func);
+
+    then nil := NilElList(structure)!;
+    then dom_el_single := ConsElList(dom_el, nil)!;
+    then mor_el_dom_el := ConsElList(mor_el, dom_el_single)!;
+
+    then rel_app(dom_func_rel, mor_el_dom_el);
 }
 
 // #### Semantics of terms
@@ -2288,11 +2381,18 @@ rule ctor_app_is_given_by_ctor {
 pred function_can_be_made_defined(Func);
 
 rule function_can_be_made_defined_if_codomain_normal_type {
-    if decl_node_type(decl, type_node);
-    if type_decl(type_node, ident);
-    if ss = decl_symbol_scope(decl);
-    if ty = semantic_type(ss, ident);
     if codomain(function) = ty;
+    if is_normal_type(ty);
+    then function_can_be_made_defined(function);
+}
+rule function_can_be_made_defined_if_codomain_model_type {
+    if codomain(function) = ty;
+    if is_model_type(ty);
+    then function_can_be_made_defined(function);
+}
+rule function_can_be_made_defined_if_codomain_mor_type {
+    if codomain(function) = ty;
+    if is_mor_type(ty);
     then function_can_be_made_defined(function);
 }
 rule function_can_be_defined_if_constructor {

@@ -27,16 +27,68 @@ impl From<usize> for ElVar {
     }
 }
 
-fn display_func_snake<'a>(
+fn display_func<'a>(
     func: Func,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
-    let ident = eqlog
+    if let Some(semantic_ident) = eqlog
         .iter_semantic_func()
         .find_map(|(_sym_scope, ident, func0)| eqlog.are_equal_func(func, func0).then_some(ident))
-        .expect("should be surjective");
-    format!("{}", identifiers.get(&ident).unwrap()).to_case(Snake)
+    {
+        return format!("{}", identifiers.get(&semantic_ident).unwrap()).to_case(Snake);
+    }
+
+    if let Some(mor_type) = eqlog
+        .iter_mor_type_dom_func()
+        .find_map(|(mor_type, dom_func)| {
+            if eqlog.are_equal_func(dom_func, func) {
+                Some(mor_type)
+            } else {
+                None
+            }
+        })
+    {
+        let mor_type = display_type(mor_type, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        return format!("{mor_type}_dom");
+    }
+
+    if let Some(mor_type) = eqlog
+        .iter_mor_type_cod_func()
+        .find_map(|(mor_type, cod_func)| {
+            if eqlog.are_equal_func(cod_func, func) {
+                Some(mor_type)
+            } else {
+                None
+            }
+        })
+    {
+        let mor_type = display_type(mor_type, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        return format!("{mor_type}_cod");
+    }
+
+    if let Some(member_type) =
+        eqlog
+            .iter_parent_model_func()
+            .find_map(|(member_type, parent_func)| {
+                if eqlog.are_equal_func(parent_func, func) {
+                    Some(member_type)
+                } else {
+                    None
+                }
+            })
+    {
+        let member_type = display_type(member_type, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        return format!("{member_type}_parent");
+    }
+
+    panic!("Unexpected func, neither a semantic_func or a mor_type_{{cod, dom}}_func")
 }
 
 fn display_imports() -> impl Display {
@@ -332,10 +384,9 @@ fn display_pub_function_eval_fn<'a>(
     FmtFn(move |f| {
         let rel = eqlog.func_rel(func).unwrap();
 
-        let relation = display_rel(rel, eqlog, identifiers)
+        let relation_snake = display_rel(rel, eqlog, identifiers)
             .to_string()
-            .to_case(UpperCamel);
-        let relation_snake = relation.to_case(Snake);
+            .to_case(Snake);
         let relation_snake = relation_snake.as_str();
 
         let flat_dom = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
@@ -1578,7 +1629,7 @@ fn display_model_delta_struct<'a>(
 
         let new_defines = eqlog
             .iter_func()
-            .filter(|func| eqlog.function_can_be_made_defined(*func))
+            .filter(|func| eqlog.function_can_be_made_defined(*func) && !eqlog.is_total_func(*func))
             .map(|func| {
                 FmtFn(move |f| {
                     let rel = eqlog.func_rel(func).unwrap();
@@ -1666,7 +1717,7 @@ fn display_model_delta_new_fn<'a>(
             .format("\n");
         let new_defines = eqlog
             .iter_func()
-            .filter(|&func| eqlog.function_can_be_made_defined(func))
+            .filter(|&func| eqlog.function_can_be_made_defined(func) && !eqlog.is_total_func(func))
             .map(|func| {
                 FmtFn(move |f| {
                     let rel = eqlog.func_rel(func).unwrap();
@@ -1792,13 +1843,16 @@ fn display_model_delta_apply_def_fn<'a>(
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let func_defs = eqlog
-            .iter_semantic_func()
-            .filter_map(|(_, ident, func)| {
+            .iter_func()
+            .filter_map(|func| {
                 if !eqlog.function_can_be_made_defined(func) {
                     return None;
                 }
+                if eqlog.is_total_func(func) {
+                    return None;
+                }
 
-                let func_name = identifiers.get(&ident).unwrap();
+                let func_name = display_func(func, eqlog, identifiers).to_string();
                 let func_snake = func_name.to_case(Snake);
 
                 let domain = type_list_vec(eqlog.flat_domain(func).unwrap(), eqlog);
@@ -2131,7 +2185,8 @@ fn display_define_fn<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let func_snake = display_func_snake(func, eqlog, identifiers);
+        let func_name = display_func(func, eqlog, identifiers);
+        let func_snake = func_name.to_string().to_case(Snake);
 
         let domain = type_list_vec(eqlog.flat_domain(func).expect("should be total"), eqlog);
         let codomain = eqlog.codomain(func).expect("should be total");
@@ -2491,7 +2546,7 @@ fn display_theory_impl<'a>(
         }
 
         for func in eqlog.iter_func() {
-            if eqlog.function_can_be_made_defined(func) {
+            if eqlog.function_can_be_made_defined(func) && !eqlog.is_total_func(func) {
                 let define_fn = display_define_fn(func, eqlog, identifiers);
                 write!(f, "{}", define_fn)?;
             }

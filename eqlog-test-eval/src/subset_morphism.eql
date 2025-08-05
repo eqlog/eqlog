@@ -7,4 +7,11 @@ model Subs {
 func a() -> Subs;
 func b() -> Subs;
 
-func ab_inclusion() -> Mor(Subs);
+func a_b() -> Mor(Subs);
+
+
+rule ab_inclusion_dom {
+    if a = a();
+    if a_b = a_b();
+    then dom(a_b) = a;
+}

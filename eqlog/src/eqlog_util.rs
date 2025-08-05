@@ -247,7 +247,7 @@ pub fn display_type<'a>(
 
         write!(
             f,
-            "{}Hom",
+            "{}Mor",
             identifiers.get(&model_type_ident).unwrap().as_str()
         )?;
         Ok(())
