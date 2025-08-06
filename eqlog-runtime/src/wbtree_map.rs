@@ -316,6 +316,192 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
 
+    /// Print the tree structure in ASCII art format for debugging
+    pub fn print_tree_debug<K, V>(node: &Option<Box<Node<K, V>>>)
+    where
+        K: std::fmt::Debug,
+        V: std::fmt::Debug,
+    {
+        print_tree_debug_helper(node, "", true, true);
+    }
+
+    fn print_tree_debug_helper<K, V>(
+        node: &Option<Box<Node<K, V>>>,
+        prefix: &str,
+        is_last: bool,
+        is_root: bool,
+    ) where
+        K: std::fmt::Debug,
+        V: std::fmt::Debug,
+    {
+        match node {
+            None => {
+                if !is_root {
+                    println!("{}{}∅", prefix, if is_last { "└── " } else { "├── " });
+                }
+            }
+            Some(n) => {
+                let node_symbol = if is_root {
+                    ""
+                } else if is_last {
+                    "└── "
+                } else {
+                    "├── "
+                };
+                println!(
+                    "{}{}({:?}: {:?}) [size: {}]",
+                    prefix, node_symbol, n.key, n.value, n.size
+                );
+
+                let new_prefix = format!(
+                    "{}{}",
+                    prefix,
+                    if is_root {
+                        ""
+                    } else if is_last {
+                        "    "
+                    } else {
+                        "│   "
+                    }
+                );
+
+                // Print children - left first, then right
+                let has_left = n.left.is_some();
+                let has_right = n.right.is_some();
+
+                if has_left || has_right {
+                    if has_left {
+                        print_tree_debug_helper(&n.left, &new_prefix, !has_right, false);
+                    }
+                    if has_right {
+                        print_tree_debug_helper(&n.right, &new_prefix, true, false);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Print a compact tree structure showing just keys and structure
+    pub fn print_tree_compact<K, V>(node: &Option<Box<Node<K, V>>>)
+    where
+        K: std::fmt::Debug,
+    {
+        print_tree_compact_helper(node, "", true, true);
+    }
+
+    fn print_tree_compact_helper<K, V>(
+        node: &Option<Box<Node<K, V>>>,
+        prefix: &str,
+        is_last: bool,
+        is_root: bool,
+    ) where
+        K: std::fmt::Debug,
+    {
+        match node {
+            None => {
+                if !is_root {
+                    println!("{}{}∅", prefix, if is_last { "└── " } else { "├── " });
+                }
+            }
+            Some(n) => {
+                let node_symbol = if is_root {
+                    ""
+                } else if is_last {
+                    "└── "
+                } else {
+                    "├── "
+                };
+                println!("{}{}{:?}", prefix, node_symbol, n.key);
+
+                let new_prefix = format!(
+                    "{}{}",
+                    prefix,
+                    if is_root {
+                        ""
+                    } else if is_last {
+                        "    "
+                    } else {
+                        "│   "
+                    }
+                );
+
+                let has_left = n.left.is_some();
+                let has_right = n.right.is_some();
+
+                if has_left || has_right {
+                    if has_left {
+                        print_tree_compact_helper(&n.left, &new_prefix, !has_right, false);
+                    }
+                    if has_right {
+                        print_tree_compact_helper(&n.right, &new_prefix, true, false);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Example test demonstrating the debug printing functionality
+    #[test]
+    fn test_debug_tree_visualization() {
+        let mut tree = WBTreeMap::new();
+
+        // Insert some values to create a non-trivial tree structure
+        let values = vec![5, 3, 7, 1, 4, 6, 8, 2];
+        for val in values {
+            tree.insert(val, format!("value_{}", val));
+        }
+
+        println!("\n=== Full Debug Tree Structure ===");
+        print_tree_debug(&tree.root);
+
+        println!("\n=== Compact Tree Structure (Keys Only) ===");
+        print_tree_compact(&tree.root);
+
+        // Verify the tree is still weight-balanced
+        assert!(is_weight_balanced(&tree.root));
+    }
+
+    /// Test the debug printing with an empty tree
+    #[test]
+    fn test_debug_empty_tree() {
+        let tree: WBTreeMap<i32, String> = WBTreeMap::new();
+
+        println!("\n=== Empty Tree Debug ===");
+        print_tree_debug(&tree.root);
+
+        println!("\n=== Empty Tree Compact ===");
+        print_tree_compact(&tree.root);
+    }
+
+    /// Test the debug printing with a single node
+    #[test]
+    fn test_debug_single_node() {
+        let mut tree = WBTreeMap::new();
+        tree.insert(42, "answer");
+
+        println!("\n=== Single Node Tree Debug ===");
+        print_tree_debug(&tree.root);
+
+        println!("\n=== Single Node Tree Compact ===");
+        print_tree_compact(&tree.root);
+    }
+
+    /// Test the debug printing with a linear tree (worst case)
+    #[test]
+    fn test_debug_sequential_tree() {
+        let mut tree = WBTreeMap::new();
+
+        // Insert sequential values (this will trigger rebalancing)
+        for i in 1..=7 {
+            tree.insert(i, format!("val_{}", i));
+        }
+
+        println!("\n=== Sequential Insertion Tree (Rebalanced) ===");
+        print_tree_debug(&tree.root);
+
+        assert!(is_weight_balanced(&tree.root));
+    }
+
     fn tree_height<K, V>(node: &Option<Box<Node<K, V>>>) -> usize {
         match node {
             None => 0,
