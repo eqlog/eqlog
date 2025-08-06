@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt;
 use std::mem;
 
 pub struct WBTreeMap<K, V> {
@@ -266,6 +267,24 @@ impl<K: Ord, V> WBTreeMap<K, V> {
             }
         }
         None
+    }
+}
+
+impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Node<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Node")
+            .field("key", &self.key)
+            .field("value", &self.value)
+            .field("left", &self.left)
+            .field("right", &self.right)
+            .field("size", &self.size)
+            .finish()
+    }
+}
+
+impl<K: fmt::Debug + Ord, V: fmt::Debug> fmt::Debug for WBTreeMap<K, V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
     }
 }
 
@@ -725,5 +744,99 @@ mod tests {
         point_map.insert(Point { x: 1, y: 2 }, "A".to_string());
         point_map.insert(Point { x: 0, y: 0 }, "Origin".to_string());
         assert_eq!(point_map.len(), 2);
+    }
+
+    #[test]
+    fn test_debug_output_matches_stdlib() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Empty maps should have same debug output
+        assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
+
+        // Single element
+        wb_map.insert(1, "one");
+        bt_map.insert(1, "one");
+        assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
+
+        // Multiple elements
+        wb_map.insert(2, "two");
+        wb_map.insert(0, "zero");
+        bt_map.insert(2, "two");
+        bt_map.insert(0, "zero");
+        assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
+
+        // Test with different types
+        let mut wb_int_map: WBTreeMap<i32, i32> = WBTreeMap::new();
+        let mut bt_int_map: BTreeMap<i32, i32> = BTreeMap::new();
+
+        for i in 0..5 {
+            wb_int_map.insert(i, i * 10);
+            bt_int_map.insert(i, i * 10);
+        }
+        assert_eq!(format!("{:?}", wb_int_map), format!("{:?}", bt_int_map));
+
+        // Test with string keys
+        let mut wb_str_map: WBTreeMap<String, i32> = WBTreeMap::new();
+        let mut bt_str_map: BTreeMap<String, i32> = BTreeMap::new();
+
+        wb_str_map.insert("a".to_string(), 1);
+        wb_str_map.insert("b".to_string(), 2);
+        wb_str_map.insert("c".to_string(), 3);
+        bt_str_map.insert("a".to_string(), 1);
+        bt_str_map.insert("b".to_string(), 2);
+        bt_str_map.insert("c".to_string(), 3);
+        assert_eq!(format!("{:?}", wb_str_map), format!("{:?}", bt_str_map));
+    }
+
+    #[test]
+    fn test_debug_output_format() {
+        let mut wb_map = WBTreeMap::new();
+        wb_map.insert(1, "one");
+        wb_map.insert(2, "two");
+
+        let debug_str = format!("{:?}", wb_map);
+
+        // Debug output should be a map format like {1: "one", 2: "two"}
+        assert!(debug_str.starts_with('{'));
+        assert!(debug_str.ends_with('}'));
+        assert!(debug_str.contains("1: \"one\""));
+        assert!(debug_str.contains("2: \"two\""));
+
+        // Should be sorted by key (like stdlib BTreeMap)
+        let key_1_pos = debug_str.find("1: \"one\"");
+        let key_2_pos = debug_str.find("2: \"two\"");
+        assert!(
+            key_1_pos < key_2_pos,
+            "Keys should be sorted in debug output"
+        );
+    }
+
+    #[test]
+    fn test_debug_with_complex_types() {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        struct ComplexKey {
+            id: i32,
+            name: String,
+        }
+
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        let key1 = ComplexKey {
+            id: 1,
+            name: "Alice".to_string(),
+        };
+        let key2 = ComplexKey {
+            id: 2,
+            name: "Bob".to_string(),
+        };
+
+        wb_map.insert(key1.clone(), vec![1, 2, 3]);
+        wb_map.insert(key2.clone(), vec![4, 5, 6]);
+        bt_map.insert(key1, vec![1, 2, 3]);
+        bt_map.insert(key2, vec![4, 5, 6]);
+
+        assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
     }
 }
