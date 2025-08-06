@@ -103,7 +103,7 @@ impl<K, V> Node<K, V> {
 }
 
 impl<K: Ord, V> WBTreeMap<K, V> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         WBTreeMap { root: None, len: 0 }
     }
 
@@ -196,6 +196,69 @@ impl<K: Ord, V> WBTreeMap<K, V> {
             Err(())
         }
     }
+
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let (new_root, removed_value) = Self::remove_node(self.root.take(), key);
+        self.root = new_root;
+        if removed_value.is_some() {
+            self.len -= 1;
+        }
+        removed_value
+    }
+
+    fn remove_node(node: Option<Box<Node<K, V>>>, key: &K) -> (Option<Box<Node<K, V>>>, Option<V>) {
+        match node {
+            None => (None, None),
+            Some(mut n) => {
+                match key.cmp(&n.key) {
+                    Ordering::Less => {
+                        let (new_left, removed) = Self::remove_node(n.left.take(), key);
+                        n.left = new_left;
+                        n.update_size();
+                        (Some(Node::balance(n)), removed)
+                    }
+                    Ordering::Greater => {
+                        let (new_right, removed) = Self::remove_node(n.right.take(), key);
+                        n.right = new_right;
+                        n.update_size();
+                        (Some(Node::balance(n)), removed)
+                    }
+                    Ordering::Equal => {
+                        let removed_value = n.value;
+                        match (n.left.take(), n.right.take()) {
+                            (None, None) => (None, Some(removed_value)),
+                            (Some(left), None) => (Some(left), Some(removed_value)),
+                            (None, Some(right)) => (Some(right), Some(removed_value)),
+                            (Some(left), Some(right)) => {
+                                // Find the minimum element in the right subtree to replace this node
+                                let (min_key, min_value, new_right) = Self::remove_min(right);
+                                let mut new_node = Node::new(min_key, min_value);
+                                new_node.left = Some(left);
+                                new_node.right = new_right;
+                                new_node.update_size();
+                                (Some(Node::balance(Box::new(new_node))), Some(removed_value))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn remove_min(mut node: Box<Node<K, V>>) -> (K, V, Option<Box<Node<K, V>>>) {
+        match node.left.take() {
+            None => {
+                // This is the minimum node
+                (node.key, node.value, node.right)
+            }
+            Some(left) => {
+                let (min_key, min_value, new_left) = Self::remove_min(left);
+                node.left = new_left;
+                node.update_size();
+                (min_key, min_value, Some(Node::balance(node)))
+            }
+        }
+    }
 }
 
 // Iterator implementation
@@ -220,6 +283,11 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
             }
         }
     }
+}
+
+// Entry API - Create a module structure similar to btree_map
+pub mod wbtree_map {
+    pub use super::{Entry, OccupiedEntry, VacantEntry};
 }
 
 // Entry API
@@ -257,6 +325,14 @@ impl<'a, K: Ord + Clone, V> Entry<'a, K, V> {
 impl<'a, K: Ord, V> OccupiedEntry<'a, K, V> {
     pub fn into_mut(self) -> &'a mut V {
         self.map.get_mut(&self.key).unwrap()
+    }
+
+    pub fn get_mut(&mut self) -> &mut V {
+        self.map.get_mut(&self.key).unwrap()
+    }
+
+    pub fn remove(self) -> V {
+        self.map.remove(&self.key).unwrap()
     }
 }
 
@@ -1112,5 +1188,81 @@ mod tests {
                 break;
             }
         }
+    }
+}
+
+// WBTreeSet implementation as a newtype wrapper around WBTreeMap<V, ()>
+pub struct WBTreeSet<V> {
+    map: WBTreeMap<V, ()>,
+}
+
+impl<V: Ord> WBTreeSet<V> {
+    pub const fn new() -> Self {
+        WBTreeSet {
+            map: WBTreeMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, value: V) -> bool {
+        self.map.insert(value, ()).is_none()
+    }
+
+    pub fn contains(&self, value: &V) -> bool {
+        self.map.contains_key(value)
+    }
+
+    pub fn remove(&mut self, value: &V) -> bool {
+        self.map.remove(value).is_some()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+
+    pub fn iter(&self) -> WBTreeSetIter<'_, V> {
+        WBTreeSetIter {
+            map_iter: self.map.iter(),
+        }
+    }
+}
+
+impl<V: Ord> Default for WBTreeSet<V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<V: Ord + Clone> Clone for WBTreeSet<V> {
+    fn clone(&self) -> Self {
+        WBTreeSet {
+            map: self.map.clone(),
+        }
+    }
+}
+
+impl<V: fmt::Debug + Ord> fmt::Debug for WBTreeSet<V> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_set().entries(self.iter()).finish()
+    }
+}
+
+// Iterator for WBTreeSet
+pub struct WBTreeSetIter<'a, V> {
+    map_iter: Iter<'a, V, ()>,
+}
+
+impl<'a, V> Iterator for WBTreeSetIter<'a, V> {
+    type Item = &'a V;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.map_iter.next().map(|(k, _)| k)
     }
 }

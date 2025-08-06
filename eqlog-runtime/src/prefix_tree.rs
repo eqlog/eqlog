@@ -1,42 +1,42 @@
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use crate::wbtree_map::{wbtree_map, WBTreeMap, WBTreeSet};
 
 // type definitions
 pub struct PrefixTree0(pub Option<()>);
 
 pub struct PrefixTree1 {
-    pub set: BTreeSet<u32>,
+    pub set: WBTreeSet<u32>,
 }
 
 pub struct PrefixTree2 {
-    pub map: BTreeMap<u32, PrefixTree1>,
+    pub map: WBTreeMap<u32, PrefixTree1>,
 }
 
 pub struct PrefixTree3 {
-    pub map: BTreeMap<u32, PrefixTree2>,
+    pub map: WBTreeMap<u32, PrefixTree2>,
 }
 
 pub struct PrefixTree4 {
-    pub map: BTreeMap<u32, PrefixTree3>,
+    pub map: WBTreeMap<u32, PrefixTree3>,
 }
 
 pub struct PrefixTree5 {
-    pub map: BTreeMap<u32, PrefixTree4>,
+    pub map: WBTreeMap<u32, PrefixTree4>,
 }
 
 pub struct PrefixTree6 {
-    pub map: BTreeMap<u32, PrefixTree5>,
+    pub map: WBTreeMap<u32, PrefixTree5>,
 }
 
 pub struct PrefixTree7 {
-    pub map: BTreeMap<u32, PrefixTree6>,
+    pub map: WBTreeMap<u32, PrefixTree6>,
 }
 
 pub struct PrefixTree8 {
-    pub map: BTreeMap<u32, PrefixTree7>,
+    pub map: WBTreeMap<u32, PrefixTree7>,
 }
 
 pub struct PrefixTree9 {
-    pub map: BTreeMap<u32, PrefixTree8>,
+    pub map: WBTreeMap<u32, PrefixTree8>,
 }
 
 // new methods
@@ -49,7 +49,7 @@ impl PrefixTree0 {
 impl PrefixTree1 {
     pub fn new() -> Self {
         Self {
-            set: BTreeSet::new(),
+            set: WBTreeSet::new(),
         }
     }
 }
@@ -57,7 +57,7 @@ impl PrefixTree1 {
 impl PrefixTree2 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -65,7 +65,7 @@ impl PrefixTree2 {
 impl PrefixTree3 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -73,7 +73,7 @@ impl PrefixTree3 {
 impl PrefixTree4 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -81,7 +81,7 @@ impl PrefixTree4 {
 impl PrefixTree5 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -89,7 +89,7 @@ impl PrefixTree5 {
 impl PrefixTree6 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -97,7 +97,7 @@ impl PrefixTree6 {
 impl PrefixTree7 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -105,7 +105,7 @@ impl PrefixTree7 {
 impl PrefixTree8 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -113,7 +113,7 @@ impl PrefixTree8 {
 impl PrefixTree9 {
     pub fn new() -> Self {
         Self {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         }
     }
 }
@@ -132,7 +132,7 @@ impl PrefixTree0 {
 impl PrefixTree1 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree1 = PrefixTree1 {
-            set: BTreeSet::new(),
+            set: WBTreeSet::new(),
         };
         return &EMPTY;
     }
@@ -140,7 +140,7 @@ impl PrefixTree1 {
 impl PrefixTree2 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree2 = PrefixTree2 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -148,7 +148,7 @@ impl PrefixTree2 {
 impl PrefixTree3 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree3 = PrefixTree3 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -156,7 +156,7 @@ impl PrefixTree3 {
 impl PrefixTree4 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree4 = PrefixTree4 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -164,7 +164,7 @@ impl PrefixTree4 {
 impl PrefixTree5 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree5 = PrefixTree5 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -172,7 +172,7 @@ impl PrefixTree5 {
 impl PrefixTree6 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree6 = PrefixTree6 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -180,7 +180,7 @@ impl PrefixTree6 {
 impl PrefixTree7 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree7 = PrefixTree7 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -188,7 +188,7 @@ impl PrefixTree7 {
 impl PrefixTree8 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree8 = PrefixTree8 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -196,7 +196,7 @@ impl PrefixTree8 {
 impl PrefixTree9 {
     pub fn empty() -> &'static Self {
         static EMPTY: PrefixTree9 = PrefixTree9 {
-            map: BTreeMap::new(),
+            map: WBTreeMap::new(),
         };
         return &EMPTY;
     }
@@ -381,7 +381,7 @@ impl PrefixTree1 {
 impl PrefixTree2 {
     pub fn remove(&mut self, [el0, el1]: [u32; 2]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1]);
                 if tree.is_empty() {
@@ -389,7 +389,7 @@ impl PrefixTree2 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -397,7 +397,7 @@ impl PrefixTree2 {
 impl PrefixTree3 {
     pub fn remove(&mut self, [el0, el1, el2]: [u32; 3]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2]);
                 if tree.is_empty() {
@@ -405,7 +405,7 @@ impl PrefixTree3 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -413,7 +413,7 @@ impl PrefixTree3 {
 impl PrefixTree4 {
     pub fn remove(&mut self, [el0, el1, el2, el3]: [u32; 4]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2, el3]);
                 if tree.is_empty() {
@@ -421,7 +421,7 @@ impl PrefixTree4 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -429,7 +429,7 @@ impl PrefixTree4 {
 impl PrefixTree5 {
     pub fn remove(&mut self, [el0, el1, el2, el3, el4]: [u32; 5]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2, el3, el4]);
                 if tree.is_empty() {
@@ -437,7 +437,7 @@ impl PrefixTree5 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -445,7 +445,7 @@ impl PrefixTree5 {
 impl PrefixTree6 {
     pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5]: [u32; 6]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2, el3, el4, el5]);
                 if tree.is_empty() {
@@ -453,7 +453,7 @@ impl PrefixTree6 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -461,7 +461,7 @@ impl PrefixTree6 {
 impl PrefixTree7 {
     pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6]: [u32; 7]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2, el3, el4, el5, el6]);
                 if tree.is_empty() {
@@ -469,7 +469,7 @@ impl PrefixTree7 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -477,7 +477,7 @@ impl PrefixTree7 {
 impl PrefixTree8 {
     pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7]: [u32; 8]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2, el3, el4, el5, el6, el7]);
                 if tree.is_empty() {
@@ -485,7 +485,7 @@ impl PrefixTree8 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }
@@ -493,7 +493,7 @@ impl PrefixTree8 {
 impl PrefixTree9 {
     pub fn remove(&mut self, [el0, el1, el2, el3, el4, el5, el6, el7, el8]: [u32; 9]) -> bool {
         match self.map.entry(el0) {
-            btree_map::Entry::Occupied(mut entry) => {
+            wbtree_map::Entry::Occupied(mut entry) => {
                 let tree = entry.get_mut();
                 let was_present = tree.remove([el1, el2, el3, el4, el5, el6, el7, el8]);
                 if tree.is_empty() {
@@ -501,7 +501,7 @@ impl PrefixTree9 {
                 }
                 was_present
             }
-            btree_map::Entry::Vacant(_) => false,
+            wbtree_map::Entry::Vacant(_) => false,
         }
     }
 }

@@ -51,7 +51,7 @@ fn test_singleton_subset_propagates() {
 
     let a = subset.define_a();
     let b = subset.define_b();
-    let a_b = subset.define_a_b();
+    let _a_b = subset.define_a_b();
 
     let c0 = subset.new_carrier();
 
