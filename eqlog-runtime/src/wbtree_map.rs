@@ -1,0 +1,729 @@
+use std::cmp::Ordering;
+use std::mem;
+
+pub struct WBTreeMap<K, V> {
+    root: Option<Box<Node<K, V>>>,
+    len: usize,
+}
+
+struct Node<K, V> {
+    key: K,
+    value: V,
+    left: Option<Box<Node<K, V>>>,
+    right: Option<Box<Node<K, V>>>,
+    size: usize, // Total number of nodes in this subtree
+}
+
+// Weight balance parameters
+const DELTA: usize = 3;
+const GAMMA: usize = 2;
+
+impl<K, V> Node<K, V> {
+    fn new(key: K, value: V) -> Self {
+        Node {
+            key,
+            value,
+            left: None,
+            right: None,
+            size: 1,
+        }
+    }
+
+    fn size(node: &Option<Box<Node<K, V>>>) -> usize {
+        node.as_ref().map_or(0, |n| n.size)
+    }
+
+    fn update_size(&mut self) {
+        self.size = 1 + Self::size(&self.left) + Self::size(&self.right);
+    }
+
+    fn rotate_left(mut node: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        let mut right = node.right.take().unwrap();
+        node.right = right.left.take();
+        node.update_size();
+        right.left = Some(node);
+        right.update_size();
+        right
+    }
+
+    fn rotate_right(mut node: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        let mut left = node.left.take().unwrap();
+        node.left = left.right.take();
+        node.update_size();
+        left.right = Some(node);
+        left.update_size();
+        left
+    }
+
+    fn balance(mut node: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        let left_size = Self::size(&node.left);
+        let right_size = Self::size(&node.right);
+
+        if left_size + right_size < 2 {
+            return node;
+        }
+
+        if right_size > DELTA * left_size {
+            // Right-heavy
+            let right = node.right.as_ref().unwrap();
+            let right_left_size = Self::size(&right.left);
+            let right_right_size = Self::size(&right.right);
+
+            if right_left_size > GAMMA * right_right_size {
+                node.right = Some(Self::rotate_right(node.right.take().unwrap()));
+            }
+            node = Self::rotate_left(node);
+        } else if left_size > DELTA * right_size {
+            // Left-heavy
+            let left = node.left.as_ref().unwrap();
+            let left_left_size = Self::size(&left.left);
+            let left_right_size = Self::size(&left.right);
+
+            if left_right_size > GAMMA * left_left_size {
+                node.left = Some(Self::rotate_left(node.left.take().unwrap()));
+            }
+            node = Self::rotate_right(node);
+        }
+
+        node
+    }
+}
+
+impl<K: Ord, V> WBTreeMap<K, V> {
+    pub fn new() -> Self {
+        WBTreeMap { root: None, len: 0 }
+    }
+
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let (new_root, old_value) = Self::insert_node(self.root.take(), key, value);
+        self.root = new_root;
+        if old_value.is_none() {
+            self.len += 1;
+        }
+        old_value
+    }
+
+    fn insert_node(
+        node: Option<Box<Node<K, V>>>,
+        key: K,
+        value: V,
+    ) -> (Option<Box<Node<K, V>>>, Option<V>) {
+        match node {
+            None => (Some(Box::new(Node::new(key, value))), None),
+            Some(mut n) => {
+                let old_value = match key.cmp(&n.key) {
+                    Ordering::Less => {
+                        let (new_left, old) = Self::insert_node(n.left.take(), key, value);
+                        n.left = new_left;
+                        old
+                    }
+                    Ordering::Greater => {
+                        let (new_right, old) = Self::insert_node(n.right.take(), key, value);
+                        n.right = new_right;
+                        old
+                    }
+                    Ordering::Equal => {
+                        let old = mem::replace(&mut n.value, value);
+                        return (Some(n), Some(old));
+                    }
+                };
+                n.update_size();
+                (Some(Node::balance(n)), old_value)
+            }
+        }
+    }
+
+    pub fn get(&self, key: &K) -> Option<&V> {
+        let mut current = &self.root;
+        while let Some(node) = current {
+            match key.cmp(&node.key) {
+                Ordering::Less => current = &node.left,
+                Ordering::Greater => current = &node.right,
+                Ordering::Equal => return Some(&node.value),
+            }
+        }
+        None
+    }
+
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.get(key).is_some()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn clear(&mut self) {
+        self.root = None;
+        self.len = 0;
+    }
+
+    pub fn iter(&self) -> Iter<'_, K, V> {
+        Iter {
+            stack: Vec::new(),
+            current: &self.root,
+        }
+    }
+
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+        match self.find_entry(&key) {
+            Ok(()) => Entry::Occupied(OccupiedEntry { key, map: self }),
+            Err(()) => Entry::Vacant(VacantEntry { key, map: self }),
+        }
+    }
+
+    fn find_entry(&self, key: &K) -> Result<(), ()> {
+        if self.contains_key(key) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+}
+
+// Iterator implementation
+pub struct Iter<'a, K, V> {
+    stack: Vec<&'a Node<K, V>>,
+    current: &'a Option<Box<Node<K, V>>>,
+}
+
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(node) = self.current {
+                self.stack.push(node);
+                self.current = &node.left;
+            } else if let Some(node) = self.stack.pop() {
+                self.current = &node.right;
+                return Some((&node.key, &node.value));
+            } else {
+                return None;
+            }
+        }
+    }
+}
+
+// Entry API
+pub enum Entry<'a, K, V> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+pub struct OccupiedEntry<'a, K, V> {
+    key: K,
+    map: &'a mut WBTreeMap<K, V>,
+}
+
+pub struct VacantEntry<'a, K, V> {
+    key: K,
+    map: &'a mut WBTreeMap<K, V>,
+}
+
+impl<'a, K: Ord + Clone, V> Entry<'a, K, V> {
+    pub fn or_insert(self, default: V) -> &'a mut V {
+        match self {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(default),
+        }
+    }
+
+    pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
+        match self {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(default()),
+        }
+    }
+}
+
+impl<'a, K: Ord, V> OccupiedEntry<'a, K, V> {
+    pub fn into_mut(self) -> &'a mut V {
+        self.map.get_mut(&self.key).unwrap()
+    }
+}
+
+impl<'a, K: Ord + Clone, V> VacantEntry<'a, K, V> {
+    pub fn insert(self, value: V) -> &'a mut V {
+        self.map.insert(self.key.clone(), value);
+        self.map.get_mut(&self.key).unwrap()
+    }
+}
+
+// Helper method for mutable access
+impl<K: Ord, V> WBTreeMap<K, V> {
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        let mut current = &mut self.root;
+        while let Some(node) = current {
+            match key.cmp(&node.key) {
+                Ordering::Less => current = &mut node.left,
+                Ordering::Greater => current = &mut node.right,
+                Ordering::Equal => return Some(&mut node.value),
+            }
+        }
+        None
+    }
+}
+
+impl<K: Ord, V> Default for WBTreeMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K: Ord + Clone, V> Clone for WBTreeMap<K, V>
+where
+    K: Clone,
+    V: Clone,
+{
+    fn clone(&self) -> Self {
+        let mut new_map = WBTreeMap::new();
+        for (k, v) in self.iter() {
+            new_map.insert(k.clone(), v.clone());
+        }
+        new_map
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
+
+    fn tree_height<K, V>(node: &Option<Box<Node<K, V>>>) -> usize {
+        match node {
+            None => 0,
+            Some(n) => 1 + tree_height(&n.left).max(tree_height(&n.right)),
+        }
+    }
+
+    fn is_weight_balanced<K, V>(node: &Option<Box<Node<K, V>>>) -> bool {
+        match node {
+            None => true,
+            Some(n) => {
+                let left_size = Node::size(&n.left);
+                let right_size = Node::size(&n.right);
+
+                // Check weight balance condition
+                if left_size + right_size >= 2 {
+                    if right_size > DELTA * left_size || left_size > DELTA * right_size {
+                        return false;
+                    }
+                }
+
+                // Check size is correct
+                if n.size != 1 + left_size + right_size {
+                    return false;
+                }
+
+                // Recursively check subtrees
+                is_weight_balanced(&n.left) && is_weight_balanced(&n.right)
+            }
+        }
+    }
+
+    #[test]
+    fn test_basic_operations() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Test insert
+        assert_eq!(wb_map.insert(5, "five"), bt_map.insert(5, "five"));
+        assert_eq!(wb_map.insert(3, "three"), bt_map.insert(3, "three"));
+        assert_eq!(wb_map.insert(7, "seven"), bt_map.insert(7, "seven"));
+        assert_eq!(wb_map.insert(1, "one"), bt_map.insert(1, "one"));
+        assert_eq!(wb_map.insert(9, "nine"), bt_map.insert(9, "nine"));
+
+        // Test len and is_empty
+        assert_eq!(wb_map.len(), bt_map.len());
+        assert_eq!(wb_map.is_empty(), bt_map.is_empty());
+
+        // Test get
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+        assert_eq!(wb_map.get(&3), bt_map.get(&3));
+        assert_eq!(wb_map.get(&10), bt_map.get(&10));
+
+        // Test contains_key
+        assert_eq!(wb_map.contains_key(&5), bt_map.contains_key(&5));
+        assert_eq!(wb_map.contains_key(&10), bt_map.contains_key(&10));
+
+        // Test update
+        assert_eq!(wb_map.insert(5, "FIVE"), bt_map.insert(5, "FIVE"));
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        let data = vec![
+            (5, "five"),
+            (3, "three"),
+            (7, "seven"),
+            (1, "one"),
+            (9, "nine"),
+        ];
+
+        for (k, v) in &data {
+            wb_map.insert(*k, *v);
+            bt_map.insert(*k, *v);
+        }
+
+        let wb_items: Vec<_> = wb_map.iter().collect();
+        let bt_items: Vec<_> = bt_map.iter().collect();
+
+        assert_eq!(wb_items.len(), bt_items.len());
+
+        // Both should iterate in sorted order
+        for (wb_item, bt_item) in wb_items.iter().zip(bt_items.iter()) {
+            assert_eq!(wb_item.0, bt_item.0);
+            assert_eq!(wb_item.1, bt_item.1);
+        }
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        for i in 0..10 {
+            wb_map.insert(i, i * 2);
+            bt_map.insert(i, i * 2);
+        }
+
+        wb_map.clear();
+        bt_map.clear();
+
+        assert_eq!(wb_map.len(), bt_map.len());
+        assert_eq!(wb_map.is_empty(), bt_map.is_empty());
+    }
+
+    #[test]
+    fn test_entry_api() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Test or_insert
+        *wb_map.entry(5).or_insert(10) += 5;
+        *bt_map.entry(5).or_insert(10) += 5;
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+
+        // Test or_insert_with
+        *wb_map.entry(7).or_insert_with(|| 20) += 3;
+        *bt_map.entry(7).or_insert_with(|| 20) += 3;
+        assert_eq!(wb_map.get(&7), bt_map.get(&7));
+
+        // Test modifying existing entry
+        *wb_map.entry(5).or_insert(0) *= 2;
+        *bt_map.entry(5).or_insert(0) *= 2;
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+    }
+
+    #[test]
+    fn test_sequential_insert_ascending() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Insert in ascending order - worst case for unbalanced trees
+        for i in 0..1000 {
+            assert_eq!(wb_map.insert(i, i * 2), bt_map.insert(i, i * 2));
+        }
+
+        assert_eq!(wb_map.len(), bt_map.len());
+
+        // Verify all values match
+        for i in 0..1000 {
+            assert_eq!(wb_map.get(&i), bt_map.get(&i));
+        }
+
+        // Check tree is balanced
+        assert!(is_weight_balanced(&wb_map.root));
+        let height = tree_height(&wb_map.root);
+        let expected_max_height = (1000f64.log2() * 2.0) as usize; // Rough upper bound
+        assert!(
+            height < expected_max_height,
+            "Tree height {} exceeds expected max {}",
+            height,
+            expected_max_height
+        );
+    }
+
+    #[test]
+    fn test_sequential_insert_descending() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Insert in descending order
+        for i in (0..1000).rev() {
+            assert_eq!(wb_map.insert(i, i * 3), bt_map.insert(i, i * 3));
+        }
+
+        assert_eq!(wb_map.len(), bt_map.len());
+
+        // Verify iteration order matches
+        let wb_items: Vec<_> = wb_map.iter().map(|(k, v)| (*k, *v)).collect();
+        let bt_items: Vec<_> = bt_map.iter().map(|(k, v)| (*k, *v)).collect();
+        assert_eq!(wb_items, bt_items);
+
+        assert!(is_weight_balanced(&wb_map.root));
+    }
+
+    #[test]
+    fn test_random_operations() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Random insertions
+        for _ in 0..1000 {
+            let key = rng.gen_range(0..500);
+            let value = rng.gen_range(0..10000);
+            assert_eq!(wb_map.insert(key, value), bt_map.insert(key, value));
+        }
+
+        // Random lookups
+        for _ in 0..500 {
+            let key = rng.gen_range(0..600);
+            assert_eq!(wb_map.get(&key), bt_map.get(&key));
+            assert_eq!(wb_map.contains_key(&key), bt_map.contains_key(&key));
+        }
+
+        // Verify all entries match
+        let wb_items: Vec<_> = wb_map.iter().map(|(k, v)| (*k, *v)).collect();
+        let bt_items: Vec<_> = bt_map.iter().map(|(k, v)| (*k, *v)).collect();
+        assert_eq!(wb_items, bt_items);
+
+        assert!(is_weight_balanced(&wb_map.root));
+    }
+
+    #[test]
+    fn test_alternating_pattern() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Insert alternating small and large values
+        for i in 0..500 {
+            let key = if i % 2 == 0 { i } else { 1000 - i };
+            assert_eq!(wb_map.insert(key, key * 2), bt_map.insert(key, key * 2));
+        }
+
+        assert_eq!(wb_map.len(), bt_map.len());
+        assert!(is_weight_balanced(&wb_map.root));
+
+        // Verify iteration order
+        let wb_keys: Vec<_> = wb_map.iter().map(|(k, _)| *k).collect();
+        let bt_keys: Vec<_> = bt_map.keys().copied().collect();
+        assert_eq!(wb_keys, bt_keys);
+    }
+
+    #[test]
+    fn test_get_mut() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        for i in 0..20 {
+            wb_map.insert(i, i * 10);
+            bt_map.insert(i, i * 10);
+        }
+
+        // Modify values
+        for i in (0..20).step_by(2) {
+            if let Some(wb_val) = wb_map.get_mut(&i) {
+                *wb_val += 100;
+            }
+            if let Some(bt_val) = bt_map.get_mut(&i) {
+                *bt_val += 100;
+            }
+        }
+
+        // Verify all values match
+        for i in 0..20 {
+            assert_eq!(wb_map.get(&i), bt_map.get(&i));
+        }
+    }
+
+    #[test]
+    fn test_clone() {
+        let mut original = WBTreeMap::new();
+        for i in 0..50 {
+            original.insert(i, format!("value_{}", i));
+        }
+
+        let cloned = original.clone();
+
+        assert_eq!(original.len(), cloned.len());
+        for (k, v) in original.iter() {
+            assert_eq!(cloned.get(k), Some(v));
+        }
+
+        // Verify clone is independent
+        original.insert(100, "new_value".to_string());
+        assert!(!cloned.contains_key(&100));
+    }
+
+    #[test]
+    fn test_empty_operations() {
+        let mut wb_map: WBTreeMap<i32, i32> = WBTreeMap::new();
+        let bt_map: BTreeMap<i32, i32> = BTreeMap::new();
+
+        assert_eq!(wb_map.is_empty(), bt_map.is_empty());
+        assert_eq!(wb_map.len(), bt_map.len());
+        assert_eq!(wb_map.get(&42), bt_map.get(&42));
+        assert_eq!(wb_map.contains_key(&42), bt_map.contains_key(&42));
+
+        let items: Vec<_> = wb_map.iter().collect();
+        assert!(items.is_empty());
+
+        wb_map.clear();
+        assert!(wb_map.is_empty());
+    }
+
+    #[test]
+    fn test_single_element() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        wb_map.insert(42, "answer");
+        bt_map.insert(42, "answer");
+
+        assert_eq!(wb_map.len(), bt_map.len());
+        assert_eq!(wb_map.get(&42), bt_map.get(&42));
+
+        let wb_items: Vec<_> = wb_map.iter().collect();
+        let bt_items: Vec<_> = bt_map.iter().collect();
+        assert_eq!(wb_items.len(), bt_items.len());
+        assert_eq!(wb_items[0].0, bt_items[0].0);
+        assert_eq!(wb_items[0].1, bt_items[0].1);
+    }
+
+    #[test]
+    fn test_duplicate_inserts() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // First insert
+        assert_eq!(wb_map.insert(5, "first"), bt_map.insert(5, "first"));
+
+        // Replace value
+        assert_eq!(wb_map.insert(5, "second"), bt_map.insert(5, "second"));
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+
+        // Replace again
+        assert_eq!(wb_map.insert(5, "third"), bt_map.insert(5, "third"));
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+
+        assert_eq!(wb_map.len(), bt_map.len());
+    }
+
+    #[test]
+    fn test_zigzag_pattern() {
+        let mut wb_map = WBTreeMap::new();
+
+        // Create a zigzag pattern: insert middle, then alternating left/right
+        let values = vec![
+            500, 250, 750, 125, 375, 625, 875, 62, 187, 312, 437, 562, 687, 812, 937,
+        ];
+        for val in values {
+            wb_map.insert(val, val);
+        }
+
+        assert!(is_weight_balanced(&wb_map.root));
+
+        // Verify in-order traversal gives sorted sequence
+        let keys: Vec<_> = wb_map.iter().map(|(k, _)| *k).collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(keys, sorted);
+    }
+
+    #[test]
+    fn test_balance_verification() {
+        // Test various insertion patterns
+        let patterns = vec![
+            // Sequential
+            (0..100).collect::<Vec<_>>(),
+            // Reverse sequential
+            (0..100).rev().collect::<Vec<_>>(),
+            // Random with seed
+            {
+                let mut rng = StdRng::seed_from_u64(12345);
+                let mut v: Vec<i32> = (0..100).collect();
+                use rand::seq::SliceRandom;
+                v.shuffle(&mut rng);
+                v
+            },
+        ];
+
+        for pattern in patterns {
+            let mut wb_map = WBTreeMap::new();
+            for (i, val) in pattern.iter().copied().enumerate() {
+                wb_map.insert(val, val);
+                // Check balance after each insertion
+                assert!(
+                    is_weight_balanced(&wb_map.root),
+                    "Tree became unbalanced after inserting the {i}th value {val}.\nIn pattern: {pattern:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_entry_api_advanced() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Test entry on empty map
+        wb_map.entry(5).or_insert(10);
+        bt_map.entry(5).or_insert(10);
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+
+        // Test entry on existing key
+        *wb_map.entry(5).or_insert(20) += 5;
+        *bt_map.entry(5).or_insert(20) += 5;
+        assert_eq!(wb_map.get(&5), bt_map.get(&5));
+
+        // Test or_insert_with with closure
+        let mut counter = 0;
+        wb_map.entry(10).or_insert_with(|| {
+            counter += 1;
+            counter * 100
+        });
+        assert_eq!(wb_map.get(&10), Some(&100));
+
+        // Closure shouldn't be called for existing key
+        wb_map.entry(10).or_insert_with(|| {
+            counter += 1;
+            counter * 100
+        });
+        assert_eq!(counter, 1); // Should still be 1
+    }
+
+    #[test]
+    fn test_types_compatibility() {
+        // Test with different types
+        let mut string_map: WBTreeMap<String, i32> = WBTreeMap::new();
+        string_map.insert("hello".to_string(), 1);
+        string_map.insert("world".to_string(), 2);
+        assert_eq!(string_map.get(&"hello".to_string()), Some(&1));
+
+        // Test with custom structs
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+        struct Point {
+            x: i32,
+            y: i32,
+        }
+
+        let mut point_map: WBTreeMap<Point, String> = WBTreeMap::new();
+        point_map.insert(Point { x: 1, y: 2 }, "A".to_string());
+        point_map.insert(Point { x: 0, y: 0 }, "Origin".to_string());
+        assert_eq!(point_map.len(), 2);
+    }
+}

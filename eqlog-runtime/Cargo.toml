@@ -8,3 +8,6 @@ description.workspace = true
 repository.workspace = true
 readme.workspace = true
 links = "eqlog-runtime-0.8"
+
+[dev-dependencies]
+rand = ">= 0.9"
