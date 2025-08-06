@@ -65,13 +65,14 @@ impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
     }
 
     fn balance(node: Box<Node<K, V>>) -> Box<Node<K, V>> {
-        let mut owned_node = node.into_owned();
-        let left_size = Self::size(&owned_node.left);
-        let right_size = Self::size(&owned_node.right);
+        let left_size = Self::size(&node.left);
+        let right_size = Self::size(&node.right);
 
         if left_size + right_size < 2 {
-            return Box::new(Cow::Owned(owned_node));
+            return node;
         }
+
+        let mut owned_node = node.into_owned();
 
         // Original WBT algorithm: use weights (size + 1) instead of just sizes
         let left_weight = left_size + 1;
