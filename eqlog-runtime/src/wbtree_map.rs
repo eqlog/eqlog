@@ -689,14 +689,14 @@ mod tests {
 
         // Random insertions
         for _ in 0..1000 {
-            let key = rng.gen_range(0..500);
-            let value = rng.gen_range(0..10000);
+            let key = rng.random_range(0..500);
+            let value = rng.random_range(0..10000);
             assert_eq!(wb_map.insert(key, value), bt_map.insert(key, value));
         }
 
         // Random lookups
         for _ in 0..500 {
-            let key = rng.gen_range(0..600);
+            let key = rng.random_range(0..600);
             assert_eq!(wb_map.get(&key), bt_map.get(&key));
             assert_eq!(wb_map.contains_key(&key), bt_map.contains_key(&key));
         }
@@ -867,15 +867,58 @@ mod tests {
             },
         ];
 
-        for pattern in patterns {
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            println!("\n=== Testing Pattern {} ===", pattern_idx);
             let mut wb_map = WBTreeMap::new();
             for (i, val) in pattern.iter().copied().enumerate() {
+                println!("\n--- Before inserting {}th value {} ---", i, val);
+                print_tree_compact(&wb_map.root);
+
                 wb_map.insert(val, val);
+
+                println!("\n--- After inserting {}th value {} ---", i, val);
+                print_tree_compact(&wb_map.root);
+
                 // Check balance after each insertion
+                let is_balanced = is_weight_balanced(&wb_map.root);
+                if !is_balanced {
+                    println!("\n!!! TREE BECAME UNBALANCED !!!");
+                    println!("Full tree structure:");
+                    print_tree_debug(&wb_map.root);
+
+                    // Print detailed balance information
+                    if let Some(ref root) = wb_map.root {
+                        let left_size = Node::size(&root.left);
+                        let right_size = Node::size(&root.right);
+                        println!("Root node: {:?}", root.key);
+                        println!("Left subtree size: {}", left_size);
+                        println!("Right subtree size: {}", right_size);
+                        println!("DELTA * left_size: {}", DELTA * left_size);
+                        println!("DELTA * right_size: {}", DELTA * right_size);
+                        println!(
+                            "Is right_size > DELTA * left_size? {} > {} = {}",
+                            right_size,
+                            DELTA * left_size,
+                            right_size > DELTA * left_size
+                        );
+                        println!(
+                            "Is left_size > DELTA * right_size? {} > {} = {}",
+                            left_size,
+                            DELTA * right_size,
+                            left_size > DELTA * right_size
+                        );
+                    }
+                }
+
                 assert!(
-                    is_weight_balanced(&wb_map.root),
+                    is_balanced,
                     "Tree became unbalanced after inserting the {i}th value {val}.\nIn pattern: {pattern:?}"
                 );
+
+                // Only print first few insertions to avoid too much output
+                if i >= 10 {
+                    break;
+                }
             }
         }
     }
@@ -1024,5 +1067,33 @@ mod tests {
         bt_map.insert(key2, vec![4, 5, 6]);
 
         assert_eq!(format!("{:?}", wb_map), format!("{:?}", bt_map));
+    }
+
+    /// Debug test to reproduce the exact failing sequence
+    #[test]
+    fn test_debug_failing_sequence() {
+        let mut wb_map = WBTreeMap::new();
+
+        // Reproduce the exact sequence that fails: [49, 26, 67, 48, 24, 41]
+        let sequence = vec![49, 26, 67, 48, 24, 41];
+
+        for (i, val) in sequence.iter().enumerate() {
+            println!("\n=== Step {}: Inserting {} ===", i + 1, val);
+            println!("Before insertion:");
+            print_tree_debug(&wb_map.root);
+
+            wb_map.insert(*val, *val);
+
+            println!("After insertion:");
+            print_tree_debug(&wb_map.root);
+
+            let is_balanced = is_weight_balanced(&wb_map.root);
+            println!("Is balanced: {}", is_balanced);
+
+            if !is_balanced {
+                println!("!!! BALANCE VIOLATION DETECTED !!!");
+                break;
+            }
+        }
     }
 }
