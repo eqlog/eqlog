@@ -1,27 +1,31 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem;
 
-pub struct WBTreeMap<K, V> {
-    root: Option<Box<Node<K, V>>>,
+pub struct WBTreeMap<'a, K: Clone, V: Clone> {
+    root: Option<Box<Node<'a, K, V>>>,
     len: usize,
 }
 
-struct Node<K, V> {
+#[derive(Clone)]
+struct OwnedNode<'a, K: Clone, V: Clone> {
     key: K,
     value: V,
-    left: Option<Box<Node<K, V>>>,
-    right: Option<Box<Node<K, V>>>,
+    left: Option<Box<Node<'a, K, V>>>,
+    right: Option<Box<Node<'a, K, V>>>,
     size: usize, // Total number of nodes in this subtree
 }
+
+type Node<'a, K, V> = Cow<'a, OwnedNode<'a, K, V>>;
 
 // Weight balance parameters
 const DELTA: usize = 3;
 const GAMMA: usize = 2;
 
-impl<K, V> Node<K, V> {
+impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
     fn new(key: K, value: V) -> Self {
-        Node {
+        OwnedNode {
             key,
             value,
             left: None,
@@ -38,30 +42,35 @@ impl<K, V> Node<K, V> {
         self.size = 1 + Self::size(&self.left) + Self::size(&self.right);
     }
 
-    fn rotate_left(mut node: Box<Node<K, V>>) -> Box<Node<K, V>> {
-        let mut right = node.right.take().unwrap();
-        node.right = right.left.take();
-        node.update_size();
-        right.left = Some(node);
-        right.update_size();
-        right
+    fn rotate_left(node: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        let mut owned_node = node.into_owned();
+        let right = owned_node.right.take().unwrap();
+        let mut owned_right = right.into_owned();
+        owned_node.right = owned_right.left.take();
+        owned_node.update_size();
+        owned_right.left = Some(Box::new(Cow::Owned(owned_node)));
+        owned_right.update_size();
+        Box::new(Cow::Owned(owned_right))
     }
 
-    fn rotate_right(mut node: Box<Node<K, V>>) -> Box<Node<K, V>> {
-        let mut left = node.left.take().unwrap();
-        node.left = left.right.take();
-        node.update_size();
-        left.right = Some(node);
-        left.update_size();
-        left
+    fn rotate_right(node: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        let mut owned_node = node.into_owned();
+        let left = owned_node.left.take().unwrap();
+        let mut owned_left = left.into_owned();
+        owned_node.left = owned_left.right.take();
+        owned_node.update_size();
+        owned_left.right = Some(Box::new(Cow::Owned(owned_node)));
+        owned_left.update_size();
+        Box::new(Cow::Owned(owned_left))
     }
 
-    fn balance(mut node: Box<Node<K, V>>) -> Box<Node<K, V>> {
-        let left_size = Self::size(&node.left);
-        let right_size = Self::size(&node.right);
+    fn balance(node: Box<Node<K, V>>) -> Box<Node<K, V>> {
+        let mut owned_node = node.into_owned();
+        let left_size = Self::size(&owned_node.left);
+        let right_size = Self::size(&owned_node.right);
 
         if left_size + right_size < 2 {
-            return node;
+            return Box::new(Cow::Owned(owned_node));
         }
 
         // Original WBT algorithm: use weights (size + 1) instead of just sizes
@@ -70,7 +79,7 @@ impl<K, V> Node<K, V> {
 
         if right_weight > DELTA * left_weight {
             // Right-heavy
-            let right = node.right.as_ref().unwrap();
+            let right = owned_node.right.as_ref().unwrap();
             let right_left_size = Self::size(&right.left);
             let right_right_size = Self::size(&right.right);
 
@@ -79,12 +88,13 @@ impl<K, V> Node<K, V> {
             let right_right_weight = right_right_size + 1;
 
             if right_left_weight >= GAMMA * right_right_weight {
-                node.right = Some(Self::rotate_right(node.right.take().unwrap()));
+                owned_node.right = Some(Self::rotate_right(owned_node.right.take().unwrap()));
             }
-            node = Self::rotate_left(node);
+            let node_with_owned = Box::new(Cow::Owned(owned_node));
+            Self::rotate_left(node_with_owned)
         } else if left_weight > DELTA * right_weight {
             // Left-heavy
-            let left = node.left.as_ref().unwrap();
+            let left = owned_node.left.as_ref().unwrap();
             let left_left_size = Self::size(&left.left);
             let left_right_size = Self::size(&left.right);
 
@@ -93,16 +103,17 @@ impl<K, V> Node<K, V> {
             let left_right_weight = left_right_size + 1;
 
             if left_right_weight >= GAMMA * left_left_weight {
-                node.left = Some(Self::rotate_left(node.left.take().unwrap()));
+                owned_node.left = Some(Self::rotate_left(owned_node.left.take().unwrap()));
             }
-            node = Self::rotate_right(node);
+            let node_with_owned = Box::new(Cow::Owned(owned_node));
+            Self::rotate_right(node_with_owned)
+        } else {
+            Box::new(Cow::Owned(owned_node))
         }
-
-        node
     }
 }
 
-impl<K: Ord, V> WBTreeMap<K, V> {
+impl<'a, K: Ord + Clone, V: Clone> WBTreeMap<'a, K, V> {
     pub const fn new() -> Self {
         WBTreeMap { root: None, len: 0 }
     }
@@ -122,26 +133,30 @@ impl<K: Ord, V> WBTreeMap<K, V> {
         value: V,
     ) -> (Option<Box<Node<K, V>>>, Option<V>) {
         match node {
-            None => (Some(Box::new(Node::new(key, value))), None),
-            Some(mut n) => {
-                let old_value = match key.cmp(&n.key) {
+            None => (Some(Box::new(Cow::Owned(OwnedNode::new(key, value)))), None),
+            Some(n) => {
+                let mut owned_n = n.into_owned();
+                let old_value = match key.cmp(&owned_n.key) {
                     Ordering::Less => {
-                        let (new_left, old) = Self::insert_node(n.left.take(), key, value);
-                        n.left = new_left;
+                        let (new_left, old) = Self::insert_node(owned_n.left.take(), key, value);
+                        owned_n.left = new_left;
                         old
                     }
                     Ordering::Greater => {
-                        let (new_right, old) = Self::insert_node(n.right.take(), key, value);
-                        n.right = new_right;
+                        let (new_right, old) = Self::insert_node(owned_n.right.take(), key, value);
+                        owned_n.right = new_right;
                         old
                     }
                     Ordering::Equal => {
-                        let old = mem::replace(&mut n.value, value);
-                        return (Some(n), Some(old));
+                        let old = mem::replace(&mut owned_n.value, value);
+                        return (Some(Box::new(Cow::Owned(owned_n))), Some(old));
                     }
                 };
-                n.update_size();
-                (Some(Node::balance(n)), old_value)
+                owned_n.update_size();
+                (
+                    Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                    old_value,
+                )
             }
         }
     }
@@ -175,14 +190,14 @@ impl<K: Ord, V> WBTreeMap<K, V> {
         self.len = 0;
     }
 
-    pub fn iter(&self) -> Iter<'_, K, V> {
+    pub fn iter<'b>(&'b self) -> Iter<'b, 'a, K, V> {
         Iter {
             stack: Vec::new(),
             current: &self.root,
         }
     }
 
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+    pub fn entry<'cow>(&'cow mut self, key: K) -> Entry<'cow, 'a, K, V> {
         match self.find_entry(&key) {
             Ok(()) => Entry::Occupied(OccupiedEntry { key, map: self }),
             Err(()) => Entry::Vacant(VacantEntry { key, map: self }),
@@ -206,37 +221,50 @@ impl<K: Ord, V> WBTreeMap<K, V> {
         removed_value
     }
 
-    fn remove_node(node: Option<Box<Node<K, V>>>, key: &K) -> (Option<Box<Node<K, V>>>, Option<V>) {
+    fn remove_node(
+        node: Option<Box<Node<'a, K, V>>>,
+        key: &K,
+    ) -> (Option<Box<Node<'a, K, V>>>, Option<V>) {
         match node {
             None => (None, None),
-            Some(mut n) => {
-                match key.cmp(&n.key) {
+            Some(n) => {
+                let mut owned_n = n.into_owned();
+                match key.cmp(&owned_n.key) {
                     Ordering::Less => {
-                        let (new_left, removed) = Self::remove_node(n.left.take(), key);
-                        n.left = new_left;
-                        n.update_size();
-                        (Some(Node::balance(n)), removed)
+                        let (new_left, removed) = Self::remove_node(owned_n.left.take(), key);
+                        owned_n.left = new_left;
+                        owned_n.update_size();
+                        (
+                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                            removed,
+                        )
                     }
                     Ordering::Greater => {
-                        let (new_right, removed) = Self::remove_node(n.right.take(), key);
-                        n.right = new_right;
-                        n.update_size();
-                        (Some(Node::balance(n)), removed)
+                        let (new_right, removed) = Self::remove_node(owned_n.right.take(), key);
+                        owned_n.right = new_right;
+                        owned_n.update_size();
+                        (
+                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                            removed,
+                        )
                     }
                     Ordering::Equal => {
-                        let removed_value = n.value;
-                        match (n.left.take(), n.right.take()) {
+                        let removed_value = owned_n.value;
+                        match (owned_n.left.take(), owned_n.right.take()) {
                             (None, None) => (None, Some(removed_value)),
                             (Some(left), None) => (Some(left), Some(removed_value)),
                             (None, Some(right)) => (Some(right), Some(removed_value)),
                             (Some(left), Some(right)) => {
                                 // Find the minimum element in the right subtree to replace this node
                                 let (min_key, min_value, new_right) = Self::remove_min(right);
-                                let mut new_node = Node::new(min_key, min_value);
+                                let mut new_node = OwnedNode::new(min_key, min_value);
                                 new_node.left = Some(left);
                                 new_node.right = new_right;
                                 new_node.update_size();
-                                (Some(Node::balance(Box::new(new_node))), Some(removed_value))
+                                (
+                                    Some(OwnedNode::balance(Box::new(Cow::Owned(new_node)))),
+                                    Some(removed_value),
+                                )
                             }
                         }
                     }
@@ -245,35 +273,40 @@ impl<K: Ord, V> WBTreeMap<K, V> {
         }
     }
 
-    fn remove_min(mut node: Box<Node<K, V>>) -> (K, V, Option<Box<Node<K, V>>>) {
-        match node.left.take() {
+    fn remove_min(node: Box<Node<K, V>>) -> (K, V, Option<Box<Node<K, V>>>) {
+        let mut owned_node = node.into_owned();
+        match owned_node.left.take() {
             None => {
                 // This is the minimum node
-                (node.key, node.value, node.right)
+                (owned_node.key, owned_node.value, owned_node.right)
             }
             Some(left) => {
                 let (min_key, min_value, new_left) = Self::remove_min(left);
-                node.left = new_left;
-                node.update_size();
-                (min_key, min_value, Some(Node::balance(node)))
+                owned_node.left = new_left;
+                owned_node.update_size();
+                (
+                    min_key,
+                    min_value,
+                    Some(OwnedNode::balance(Box::new(Cow::Owned(owned_node)))),
+                )
             }
         }
     }
 }
 
 // Iterator implementation
-pub struct Iter<'a, K, V> {
-    stack: Vec<&'a Node<K, V>>,
-    current: &'a Option<Box<Node<K, V>>>,
+pub struct Iter<'cow, 'base, K: Clone, V: Clone> {
+    stack: Vec<&'cow Node<'base, K, V>>,
+    current: &'cow Option<Box<Node<'base, K, V>>>,
 }
 
-impl<'a, K, V> Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
+impl<'cow, 'base, K: Clone, V: Clone> Iterator for Iter<'cow, 'base, K, V> {
+    type Item = (&'cow K, &'cow V);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(node) = self.current {
-                self.stack.push(node);
+                self.stack.push(&**node);
                 self.current = &node.left;
             } else if let Some(node) = self.stack.pop() {
                 self.current = &node.right;
@@ -286,22 +319,22 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
 }
 
 // Entry API
-pub enum Entry<'a, K, V> {
-    Occupied(OccupiedEntry<'a, K, V>),
-    Vacant(VacantEntry<'a, K, V>),
+pub enum Entry<'a, 'base, K: Clone, V: Clone> {
+    Occupied(OccupiedEntry<'a, 'base, K, V>),
+    Vacant(VacantEntry<'a, 'base, K, V>),
 }
 
-pub struct OccupiedEntry<'a, K, V> {
+pub struct OccupiedEntry<'a, 'base, K: Clone, V: Clone> {
     key: K,
-    map: &'a mut WBTreeMap<K, V>,
+    map: &'a mut WBTreeMap<'base, K, V>,
 }
 
-pub struct VacantEntry<'a, K, V> {
+pub struct VacantEntry<'a, 'base, K: Clone, V: Clone> {
     key: K,
-    map: &'a mut WBTreeMap<K, V>,
+    map: &'a mut WBTreeMap<'base, K, V>,
 }
 
-impl<'a, K: Ord + Clone, V> Entry<'a, K, V> {
+impl<'a, 'base, K: Ord + Clone, V: Clone> Entry<'a, 'base, K, V> {
     pub fn or_insert(self, default: V) -> &'a mut V {
         match self {
             Entry::Occupied(entry) => entry.into_mut(),
@@ -317,8 +350,8 @@ impl<'a, K: Ord + Clone, V> Entry<'a, K, V> {
     }
 }
 
-impl<'a, K: Ord, V> OccupiedEntry<'a, K, V> {
-    pub fn into_mut(self) -> &'a mut V {
+impl<'cow, 'base, K: Ord + Clone, V: Clone> OccupiedEntry<'cow, 'base, K, V> {
+    pub fn into_mut(self) -> &'cow mut V {
         self.map.get_mut(&self.key).unwrap()
     }
 
@@ -331,31 +364,31 @@ impl<'a, K: Ord, V> OccupiedEntry<'a, K, V> {
     }
 }
 
-impl<'a, K: Ord + Clone, V> VacantEntry<'a, K, V> {
-    pub fn insert(self, value: V) -> &'a mut V {
+impl<'cow, 'base, K: Ord + Clone, V: Clone> VacantEntry<'cow, 'base, K, V> {
+    pub fn insert(self, value: V) -> &'cow mut V {
         self.map.insert(self.key.clone(), value);
         self.map.get_mut(&self.key).unwrap()
     }
 }
 
 // Helper method for mutable access
-impl<K: Ord, V> WBTreeMap<K, V> {
+impl<'a, K: Ord + Clone, V: Clone> WBTreeMap<'a, K, V> {
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
         let mut current = &mut self.root;
         while let Some(node) = current {
             match key.cmp(&node.key) {
-                Ordering::Less => current = &mut node.left,
-                Ordering::Greater => current = &mut node.right,
-                Ordering::Equal => return Some(&mut node.value),
+                Ordering::Less => current = &mut node.to_mut().left,
+                Ordering::Greater => current = &mut node.to_mut().right,
+                Ordering::Equal => return Some(&mut node.to_mut().value),
             }
         }
         None
     }
 }
 
-impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Node<K, V> {
+impl<'a, K: fmt::Debug + Clone, V: fmt::Debug + Clone> fmt::Debug for OwnedNode<'a, K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Node")
+        f.debug_struct("OwnedNode")
             .field("key", &self.key)
             .field("value", &self.value)
             .field("left", &self.left)
@@ -365,19 +398,19 @@ impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Node<K, V> {
     }
 }
 
-impl<K: fmt::Debug + Ord, V: fmt::Debug> fmt::Debug for WBTreeMap<K, V> {
+impl<'a, K: fmt::Debug + Ord + Clone, V: fmt::Debug + Clone> fmt::Debug for WBTreeMap<'a, K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
 }
 
-impl<K: Ord, V> Default for WBTreeMap<K, V> {
+impl<'a, K: Ord + Clone, V: Clone> Default for WBTreeMap<'a, K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: Ord + Clone, V> Clone for WBTreeMap<K, V>
+impl<'a, K: Ord + Clone, V> Clone for WBTreeMap<'a, K, V>
 where
     K: Clone,
     V: Clone,
@@ -400,10 +433,10 @@ mod tests {
     use rand::{Rng, SeedableRng};
 
     /// Print the tree structure in ASCII art format for debugging
-    pub fn print_tree_debug<K, V>(node: &Option<Box<Node<K, V>>>)
+    pub fn print_tree_debug<'base, K, V>(node: &Option<Box<Node<'base, K, V>>>)
     where
-        K: std::fmt::Debug,
-        V: std::fmt::Debug,
+        K: std::fmt::Debug + Clone,
+        V: std::fmt::Debug + Clone,
     {
         print_tree_debug_helper(node, "", true, true);
     }
@@ -414,8 +447,8 @@ mod tests {
         is_last: bool,
         is_root: bool,
     ) where
-        K: std::fmt::Debug,
-        V: std::fmt::Debug,
+        K: std::fmt::Debug + Clone,
+        V: std::fmt::Debug + Clone,
     {
         match node {
             None => {
@@ -467,7 +500,8 @@ mod tests {
     /// Print a compact tree structure showing just keys and structure
     pub fn print_tree_compact<K, V>(node: &Option<Box<Node<K, V>>>)
     where
-        K: std::fmt::Debug,
+        K: std::fmt::Debug + Clone,
+        V: Clone,
     {
         print_tree_compact_helper(node, "", true, true);
     }
@@ -478,7 +512,8 @@ mod tests {
         is_last: bool,
         is_root: bool,
     ) where
-        K: std::fmt::Debug,
+        K: std::fmt::Debug + Clone,
+        V: Clone,
     {
         match node {
             None => {
@@ -585,19 +620,27 @@ mod tests {
         assert!(is_weight_balanced(&tree.root));
     }
 
-    fn tree_height<K, V>(node: &Option<Box<Node<K, V>>>) -> usize {
+    fn tree_height<K, V>(node: &Option<Box<Node<K, V>>>) -> usize
+    where
+        K: Clone,
+        V: Clone,
+    {
         match node {
             None => 0,
             Some(n) => 1 + tree_height(&n.left).max(tree_height(&n.right)),
         }
     }
 
-    fn is_weight_balanced<K, V>(node: &Option<Box<Node<K, V>>>) -> bool {
+    fn is_weight_balanced<K, V>(node: &Option<Box<Node<K, V>>>) -> bool
+    where
+        K: Clone,
+        V: Clone,
+    {
         match node {
             None => true,
             Some(n) => {
-                let left_size = Node::size(&n.left);
-                let right_size = Node::size(&n.right);
+                let left_size = OwnedNode::size(&n.left);
+                let right_size = OwnedNode::size(&n.right);
 
                 // Check weight balance condition using original WBT algorithm
                 if left_size + right_size >= 2 {
@@ -976,8 +1019,8 @@ mod tests {
 
                     // Print detailed balance information
                     if let Some(ref root) = wb_map.root {
-                        let left_size = Node::size(&root.left);
-                        let right_size = Node::size(&root.right);
+                        let left_size = OwnedNode::size(&root.left);
+                        let right_size = OwnedNode::size(&root.right);
                         println!("Root node: {:?}", root.key);
                         println!("Left subtree size: {}", left_size);
                         println!("Right subtree size: {}", right_size);

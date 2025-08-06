@@ -1,42 +1,52 @@
 use crate::wbtree::{map, map::WBTreeMap, set::WBTreeSet};
 
 // type definitions
+#[derive(Clone)]
 pub struct PrefixTree0(pub Option<()>);
 
+#[derive(Clone)]
 pub struct PrefixTree1 {
-    pub set: WBTreeSet<u32>,
+    pub set: WBTreeSet<'static, u32>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree2 {
-    pub map: WBTreeMap<u32, PrefixTree1>,
+    pub map: WBTreeMap<'static, u32, PrefixTree1>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree3 {
-    pub map: WBTreeMap<u32, PrefixTree2>,
+    pub map: WBTreeMap<'static, u32, PrefixTree2>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree4 {
-    pub map: WBTreeMap<u32, PrefixTree3>,
+    pub map: WBTreeMap<'static, u32, PrefixTree3>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree5 {
-    pub map: WBTreeMap<u32, PrefixTree4>,
+    pub map: WBTreeMap<'static, u32, PrefixTree4>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree6 {
-    pub map: WBTreeMap<u32, PrefixTree5>,
+    pub map: WBTreeMap<'static, u32, PrefixTree5>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree7 {
-    pub map: WBTreeMap<u32, PrefixTree6>,
+    pub map: WBTreeMap<'static, u32, PrefixTree6>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree8 {
-    pub map: WBTreeMap<u32, PrefixTree7>,
+    pub map: WBTreeMap<'static, u32, PrefixTree7>,
 }
 
+#[derive(Clone)]
 pub struct PrefixTree9 {
-    pub map: WBTreeMap<u32, PrefixTree8>,
+    pub map: WBTreeMap<'static, u32, PrefixTree8>,
 }
 
 // new methods
