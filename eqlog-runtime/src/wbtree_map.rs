@@ -64,23 +64,35 @@ impl<K, V> Node<K, V> {
             return node;
         }
 
-        if right_size > DELTA * left_size {
+        // Original WBT algorithm: use weights (size + 1) instead of just sizes
+        let left_weight = left_size + 1;
+        let right_weight = right_size + 1;
+
+        if right_weight > DELTA * left_weight {
             // Right-heavy
             let right = node.right.as_ref().unwrap();
             let right_left_size = Self::size(&right.left);
             let right_right_size = Self::size(&right.right);
 
-            if right_left_size > GAMMA * right_right_size {
+            // Use weights for gamma comparison too
+            let right_left_weight = right_left_size + 1;
+            let right_right_weight = right_right_size + 1;
+
+            if right_left_weight >= GAMMA * right_right_weight {
                 node.right = Some(Self::rotate_right(node.right.take().unwrap()));
             }
             node = Self::rotate_left(node);
-        } else if left_size > DELTA * right_size {
+        } else if left_weight > DELTA * right_weight {
             // Left-heavy
             let left = node.left.as_ref().unwrap();
             let left_left_size = Self::size(&left.left);
             let left_right_size = Self::size(&left.right);
 
-            if left_right_size > GAMMA * left_left_size {
+            // Use weights for gamma comparison too
+            let left_left_weight = left_left_size + 1;
+            let left_right_weight = left_right_size + 1;
+
+            if left_right_weight >= GAMMA * left_left_weight {
                 node.left = Some(Self::rotate_left(node.left.take().unwrap()));
             }
             node = Self::rotate_right(node);
@@ -516,9 +528,14 @@ mod tests {
                 let left_size = Node::size(&n.left);
                 let right_size = Node::size(&n.right);
 
-                // Check weight balance condition
+                // Check weight balance condition using original WBT algorithm
                 if left_size + right_size >= 2 {
-                    if right_size > DELTA * left_size || left_size > DELTA * right_size {
+                    // Original WBT: use weights (size + 1) instead of just sizes
+                    let left_weight = left_size + 1;
+                    let right_weight = right_size + 1;
+
+                    // Balance condition: delta * left_weight >= right_weight AND delta * right_weight >= left_weight
+                    if right_weight > DELTA * left_weight || left_weight > DELTA * right_weight {
                         return false;
                     }
                 }
