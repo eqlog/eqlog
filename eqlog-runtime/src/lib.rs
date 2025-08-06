@@ -24,7 +24,7 @@ static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 mod prefix_tree;
 mod unification;
 #[doc(hidden)]
-pub mod wbtree_map;
+pub mod wbtree;
 
 #[doc(hidden)]
 pub use crate::prefix_tree::{
