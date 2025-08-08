@@ -42,8 +42,7 @@ impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
         self.size = 1 + Self::size(&self.left) + Self::size(&self.right);
     }
 
-    fn rotate_left(node: Box<Node<K, V>>) -> Box<Node<K, V>> {
-        let mut owned_node = node.into_owned();
+    fn rotate_left(mut owned_node: OwnedNode<K, V>) -> Box<Node<K, V>> {
         let right = owned_node.right.take().unwrap();
         let mut owned_right = right.into_owned();
         owned_node.right = owned_right.left.take();
@@ -53,8 +52,7 @@ impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
         Box::new(Cow::Owned(owned_right))
     }
 
-    fn rotate_right(node: Box<Node<K, V>>) -> Box<Node<K, V>> {
-        let mut owned_node = node.into_owned();
+    fn rotate_right(mut owned_node: OwnedNode<K, V>) -> Box<Node<K, V>> {
         let left = owned_node.left.take().unwrap();
         let mut owned_left = left.into_owned();
         owned_node.left = owned_left.right.take();
@@ -72,13 +70,13 @@ impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
             return node;
         }
 
-        let mut owned_node = node.into_owned();
-
         // Original WBT algorithm: use weights (size + 1) instead of just sizes
         let left_weight = left_size + 1;
         let right_weight = right_size + 1;
 
         if right_weight > DELTA * left_weight {
+            let mut owned_node = node.into_owned();
+
             // Right-heavy
             let right = owned_node.right.as_ref().unwrap();
             let right_left_size = Self::size(&right.left);
@@ -89,11 +87,13 @@ impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
             let right_right_weight = right_right_size + 1;
 
             if right_left_weight >= GAMMA * right_right_weight {
-                owned_node.right = Some(Self::rotate_right(owned_node.right.take().unwrap()));
+                owned_node.right = Some(Self::rotate_right(
+                    owned_node.right.take().unwrap().into_owned(),
+                ));
             }
-            let node_with_owned = Box::new(Cow::Owned(owned_node));
-            Self::rotate_left(node_with_owned)
+            Self::rotate_left(owned_node)
         } else if left_weight > DELTA * right_weight {
+            let mut owned_node = node.into_owned();
             // Left-heavy
             let left = owned_node.left.as_ref().unwrap();
             let left_left_size = Self::size(&left.left);
@@ -104,12 +104,13 @@ impl<'a, K: Clone, V: Clone> OwnedNode<'a, K, V> {
             let left_right_weight = left_right_size + 1;
 
             if left_right_weight >= GAMMA * left_left_weight {
-                owned_node.left = Some(Self::rotate_left(owned_node.left.take().unwrap()));
+                owned_node.left = Some(Self::rotate_left(
+                    owned_node.left.take().unwrap().into_owned(),
+                ));
             }
-            let node_with_owned = Box::new(Cow::Owned(owned_node));
-            Self::rotate_right(node_with_owned)
+            Self::rotate_right(owned_node)
         } else {
-            Box::new(Cow::Owned(owned_node))
+            node
         }
     }
 }
