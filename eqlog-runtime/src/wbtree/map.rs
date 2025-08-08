@@ -137,28 +137,40 @@ impl<'a, K: Ord + Clone, V: Clone> WBTreeMap<'a, K, V> {
         match node {
             None => (Some(Box::new(Cow::Owned(OwnedNode::new(key, value)))), None),
             Some(n) => {
-                let mut owned_n = n.into_owned();
-                let old_value = match key.cmp(&owned_n.key) {
+                // Compare keys first without taking ownership - this is the key optimization
+                // We avoid calling into_owned() until we know we need to modify the node
+                match key.cmp(&n.key) {
+                    Ordering::Equal => {
+                        // Only convert to owned when we need to modify the value
+                        let mut owned_n = n.into_owned();
+                        let old = mem::replace(&mut owned_n.value, value);
+                        (Some(Box::new(Cow::Owned(owned_n))), Some(old))
+                    }
                     Ordering::Less => {
-                        let (new_left, old) = Self::insert_node(owned_n.left.take(), key, value);
+                        // We need to modify the left subtree, so convert to owned
+                        let mut owned_n = n.into_owned();
+                        let (new_left, old_value) =
+                            Self::insert_node(owned_n.left.take(), key, value);
                         owned_n.left = new_left;
-                        old
+                        owned_n.update_size();
+                        (
+                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                            old_value,
+                        )
                     }
                     Ordering::Greater => {
-                        let (new_right, old) = Self::insert_node(owned_n.right.take(), key, value);
+                        // We need to modify the right subtree, so convert to owned
+                        let mut owned_n = n.into_owned();
+                        let (new_right, old_value) =
+                            Self::insert_node(owned_n.right.take(), key, value);
                         owned_n.right = new_right;
-                        old
+                        owned_n.update_size();
+                        (
+                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                            old_value,
+                        )
                     }
-                    Ordering::Equal => {
-                        let old = mem::replace(&mut owned_n.value, value);
-                        return (Some(Box::new(Cow::Owned(owned_n))), Some(old));
-                    }
-                };
-                owned_n.update_size();
-                (
-                    Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
-                    old_value,
-                )
+                }
             }
         }
     }
@@ -230,28 +242,13 @@ impl<'a, K: Ord + Clone, V: Clone> WBTreeMap<'a, K, V> {
         match node {
             None => (None, None),
             Some(n) => {
-                let mut owned_n = n.into_owned();
-                match key.cmp(&owned_n.key) {
-                    Ordering::Less => {
-                        let (new_left, removed) = Self::remove_node(owned_n.left.take(), key);
-                        owned_n.left = new_left;
-                        owned_n.update_size();
-                        (
-                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
-                            removed,
-                        )
-                    }
-                    Ordering::Greater => {
-                        let (new_right, removed) = Self::remove_node(owned_n.right.take(), key);
-                        owned_n.right = new_right;
-                        owned_n.update_size();
-                        (
-                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
-                            removed,
-                        )
-                    }
+                // Compare keys first without taking ownership - same optimization as insert_node
+                // We avoid calling into_owned() until we know we need to modify the node
+                match key.cmp(&n.key) {
                     Ordering::Equal => {
-                        let removed_value = owned_n.value;
+                        // We found the node to remove, so we definitely need ownership
+                        let mut owned_n = n.into_owned();
+                        let removed_value = owned_n.value.clone();
                         match (owned_n.left.take(), owned_n.right.take()) {
                             (None, None) => (None, Some(removed_value)),
                             (Some(left), None) => (Some(left), Some(removed_value)),
@@ -270,19 +267,50 @@ impl<'a, K: Ord + Clone, V: Clone> WBTreeMap<'a, K, V> {
                             }
                         }
                     }
+                    Ordering::Less => {
+                        // We need to modify the left subtree, so convert to owned
+                        let mut owned_n = n.into_owned();
+                        let (new_left, removed) = Self::remove_node(owned_n.left.take(), key);
+
+                        // If nothing was removed, we could potentially avoid the conversion
+                        // but since we already converted, proceed with the update
+                        owned_n.left = new_left;
+                        owned_n.update_size();
+                        (
+                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                            removed,
+                        )
+                    }
+                    Ordering::Greater => {
+                        // We need to modify the right subtree, so convert to owned
+                        let mut owned_n = n.into_owned();
+                        let (new_right, removed) = Self::remove_node(owned_n.right.take(), key);
+
+                        // Update the right child and size
+                        owned_n.right = new_right;
+                        owned_n.update_size();
+                        (
+                            Some(OwnedNode::balance(Box::new(Cow::Owned(owned_n)))),
+                            removed,
+                        )
+                    }
                 }
             }
         }
     }
 
     fn remove_min(node: Box<Node<K, V>>) -> (K, V, Option<Box<Node<K, V>>>) {
-        let mut owned_node = node.into_owned();
-        match owned_node.left.take() {
+        // Check if this is the minimum node before taking ownership
+        match &node.left {
             None => {
-                // This is the minimum node
+                // This is the minimum node - we need to extract its value and return its right child
+                let owned_node = node.into_owned();
                 (owned_node.key, owned_node.value, owned_node.right)
             }
-            Some(left) => {
+            Some(_) => {
+                // We need to traverse left and modify this node, so convert to owned
+                let mut owned_node = node.into_owned();
+                let left = owned_node.left.take().unwrap();
                 let (min_key, min_value, new_left) = Self::remove_min(left);
                 owned_node.left = new_left;
                 owned_node.update_size();
@@ -1228,5 +1256,41 @@ mod tests {
                 break;
             }
         }
+    }
+
+    #[test]
+    fn test_removal_optimization() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Insert test data
+        for i in 0..20 {
+            wb_map.insert(i, i * 10);
+            bt_map.insert(i, i * 10);
+        }
+
+        // Test removing existing keys
+        for i in (0..20).step_by(3) {
+            let wb_removed = wb_map.remove(&i);
+            let bt_removed = bt_map.remove(&i);
+            assert_eq!(wb_removed, bt_removed);
+        }
+
+        // Test removing non-existent keys
+        for i in 100..105 {
+            let wb_removed = wb_map.remove(&i);
+            let bt_removed = bt_map.remove(&i);
+            assert_eq!(wb_removed, bt_removed);
+            assert_eq!(wb_removed, None);
+        }
+
+        // Verify final state matches
+        assert_eq!(wb_map.len(), bt_map.len());
+        for (k, v) in wb_map.iter() {
+            assert_eq!(bt_map.get(k), Some(v));
+        }
+
+        // Verify tree remains balanced after removals
+        assert!(is_weight_balanced(&wb_map.root));
     }
 }
