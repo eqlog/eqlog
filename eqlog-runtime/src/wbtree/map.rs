@@ -42,11 +42,11 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
     }
 
     fn rotate_left(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
-        let mut right = node
-            .right
-            .clone()
-            .expect("rotate_left requires right child");
         let node_mut = Rc::make_mut(&mut node);
+        let mut right = node_mut
+            .right
+            .take()
+            .expect("rotate_left requires right child");
         let right_mut = Rc::make_mut(&mut right);
 
         node_mut.right = right_mut.left.take();
@@ -59,8 +59,11 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
     }
 
     fn rotate_right(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
-        let mut left = node.left.clone().expect("rotate_right requires left child");
         let node_mut = Rc::make_mut(&mut node);
+        let mut left = node_mut
+            .left
+            .take()
+            .expect("rotate_right requires left child");
         let left_mut = Rc::make_mut(&mut left);
 
         node_mut.left = left_mut.right.take();
