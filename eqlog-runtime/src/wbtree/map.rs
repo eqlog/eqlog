@@ -96,11 +96,15 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             let right_left_weight = right_left_size + 1;
             let right_right_weight = right_right_size + 1;
 
-            if right_left_weight >= GAMMA * right_right_weight {
-                let node = Rc::make_mut(&mut node);
-                node.right = node.right.take().map(Self::rotate_right);
+            if right_left_weight < GAMMA * right_right_weight {
+                // Single rotation
+                Self::rotate_left(node)
+            } else {
+                // Double rotation
+                let node_mut = Rc::make_mut(&mut node);
+                node_mut.right = node_mut.right.take().map(Self::rotate_right);
+                Self::rotate_left(node)
             }
-            Self::rotate_left(node)
         } else if left_weight > DELTA * right_weight {
             // Left-heavy
             let left = node.left.as_ref().unwrap();
@@ -110,11 +114,15 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             let left_left_weight = left_left_size + 1;
             let left_right_weight = left_right_size + 1;
 
-            if left_right_weight >= GAMMA * left_left_weight {
-                let node = Rc::make_mut(&mut node);
-                node.left = node.left.take().map(Self::rotate_left);
+            if left_right_weight < GAMMA * left_left_weight {
+                // Single rotation
+                Self::rotate_right(node)
+            } else {
+                // Double rotation
+                let node_mut = Rc::make_mut(&mut node);
+                node_mut.left = node_mut.left.take().map(Self::rotate_left);
+                Self::rotate_right(node)
             }
-            Self::rotate_right(node)
         } else {
             node
         }
