@@ -41,14 +41,35 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
         self.size = 1 + Self::size(&self.left) + Self::size(&self.right);
     }
 
-    fn rotate_left(node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
-        // TODO
-        node
+    fn rotate_left(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
+        let mut right = node
+            .right
+            .clone()
+            .expect("rotate_left requires right child");
+        let node_mut = Rc::make_mut(&mut node);
+        let right_mut = Rc::make_mut(&mut right);
+
+        node_mut.right = right_mut.left.take();
+        node_mut.update_size();
+
+        right_mut.left = Some(node);
+        right_mut.update_size();
+
+        right
     }
 
-    fn rotate_right(node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
-        // TODO
-        node
+    fn rotate_right(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
+        let mut left = node.left.clone().expect("rotate_right requires left child");
+        let node_mut = Rc::make_mut(&mut node);
+        let left_mut = Rc::make_mut(&mut left);
+
+        node_mut.left = left_mut.right.take();
+        node_mut.update_size();
+
+        left_mut.right = Some(node);
+        left_mut.update_size();
+
+        left
     }
 
     fn balance(mut node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
@@ -130,7 +151,14 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             }
         };
 
-        (Some(node), old_value)
+        let balanced_node = if old_value.is_none() {
+            // Only balance if we actually inserted a new node
+            Self::balance(node)
+        } else {
+            node
+        };
+
+        (Some(balanced_node), old_value)
     }
 
     fn remove_min(mut node: Rc<Node<K, V>>) -> (K, V, Option<Rc<Node<K, V>>>) {
@@ -150,8 +178,9 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
         let (min_key, min_value, new_left) = Self::remove_min(left);
         node_mut.left = new_left;
         node_mut.update_size();
-        // TODO: Balance node.
-        (min_key, min_value, Some(node))
+
+        let balanced_node = Self::balance(node);
+        (min_key, min_value, Some(balanced_node))
     }
 
     fn remove_existing_node(mut node: Rc<Node<K, V>>, key: &K) -> (Option<Rc<Node<K, V>>>, V) {
@@ -179,10 +208,7 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                             size: 0,
                         };
                         new_node.update_size();
-                        // TODO: Balance the new node.
-                        // TODO: Do we really need a new allocation here? Why not reuse the node
-                        // we've just removed?
-                        Some(Rc::new(new_node))
+                        Some(Self::balance(Rc::new(new_node)))
                     }
                 };
                 (new_node, value)
@@ -197,8 +223,10 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                 let (new_left, value) = Self::remove_existing_node(left, key);
 
                 node_mut.left = new_left;
-                // TODO: Balance.
-                (Some(node), value)
+                node_mut.update_size();
+
+                let balanced_node = Self::balance(node);
+                (Some(balanced_node), value)
             }
             Ordering::Greater => {
                 let node_mut = Rc::make_mut(&mut node);
@@ -210,8 +238,10 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                 let (new_right, value) = Self::remove_existing_node(right, key);
 
                 node_mut.right = new_right;
-                // TODO: Balance.
-                (Some(node), value)
+                node_mut.update_size();
+
+                let balanced_node = Self::balance(node);
+                (Some(balanced_node), value)
             }
         }
     }
@@ -607,34 +637,33 @@ mod tests {
         K: Clone + Ord,
         V: Clone,
     {
-        true
-        //match node {
-        //    None => true,
-        //    Some(n) => {
-        //        let left_size = Node::size(&n.left);
-        //        let right_size = Node::size(&n.right);
+        match node {
+            None => true,
+            Some(n) => {
+                let left_size = Node::size(&n.left);
+                let right_size = Node::size(&n.right);
 
-        //        // Check weight balance condition using original WBT algorithm
-        //        if left_size + right_size >= 2 {
-        //            // Original WBT: use weights (size + 1) instead of just sizes
-        //            let left_weight = left_size + 1;
-        //            let right_weight = right_size + 1;
+                // Check weight balance condition using original WBT algorithm
+                if left_size + right_size >= 2 {
+                    // Original WBT: use weights (size + 1) instead of just sizes
+                    let left_weight = left_size + 1;
+                    let right_weight = right_size + 1;
 
-        //            // Balance condition: delta * left_weight >= right_weight AND delta * right_weight >= left_weight
-        //            if right_weight > DELTA * left_weight || left_weight > DELTA * right_weight {
-        //                return false;
-        //            }
-        //        }
+                    // Balance condition: delta * left_weight >= right_weight AND delta * right_weight >= left_weight
+                    if right_weight > DELTA * left_weight || left_weight > DELTA * right_weight {
+                        return false;
+                    }
+                }
 
-        //        // Check size is correct
-        //        if n.size != 1 + left_size + right_size {
-        //            return false;
-        //        }
+                // Check size is correct
+                if n.size != 1 + left_size + right_size {
+                    return false;
+                }
 
-        //        // Recursively check subtrees
-        //        is_weight_balanced(&n.left) && is_weight_balanced(&n.right)
-        //    }
-        //}
+                // Recursively check subtrees
+                is_weight_balanced(&n.left) && is_weight_balanced(&n.right)
+            }
+        }
     }
 
     #[test]
@@ -758,8 +787,7 @@ mod tests {
         let expected_max_height = (1000f64.log2() * 2.0) as usize; // Rough upper bound
                                                                    //
         assert!(
-            // TODO: Invert this once we're properly balancing trees.
-            !(height < expected_max_height),
+            height < expected_max_height,
             "Tree height {} exceeds expected max {}",
             height,
             expected_max_height
