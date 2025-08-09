@@ -418,6 +418,61 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             Some(Node::balance(Rc::new(new_node)))
         }
     }
+
+    fn union<F>(
+        left: Option<Rc<Node<K, V>>>,
+        right: Option<Rc<Node<K, V>>>,
+        merge: &mut F,
+    ) -> Option<Rc<Node<K, V>>>
+    where
+        F: FnMut(&K, V, V) -> V,
+    {
+        match (left, right) {
+            (None, None) => None,
+            (Some(t), None) | (None, Some(t)) => Some(t),
+            (Some(l), Some(r)) => {
+                if l.size >= r.size {
+                    // Use left tree as base, split right tree on left root's key
+                    let Node {
+                        key: l_key,
+                        value: l_value,
+                        left: l_left,
+                        right: l_right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(l);
+                    let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
+
+                    let new_value = match r_value_opt {
+                        Some(r_value) => merge(&l_key, l_value, r_value),
+                        None => l_value,
+                    };
+
+                    let new_left = Self::union(l_left, r_left, merge);
+                    let new_right = Self::union(l_right, r_right, merge);
+                    Self::join_trees_with_key(new_left, l_key, new_value, new_right)
+                } else {
+                    // Use right tree as base, split left tree on right root's key
+                    let Node {
+                        key: r_key,
+                        value: r_value,
+                        left: r_left,
+                        right: r_right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(r);
+                    let (l_left, l_value_opt, l_right) = Self::split(Some(l), &r_key);
+
+                    let new_value = match l_value_opt {
+                        Some(l_value) => merge(&r_key, l_value, r_value),
+                        None => r_value,
+                    };
+
+                    let new_left = Self::union(l_left, r_left, merge);
+                    let new_right = Self::union(l_right, r_right, merge);
+                    Self::join_trees_with_key(new_left, r_key, new_value, new_right)
+                }
+            }
+        }
+    }
 }
 
 impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
@@ -500,6 +555,18 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         self.root = new_root;
         self.len -= 1;
         Some(value)
+    }
+
+    pub fn union<F>(&self, other: &Self, mut merge: F) -> Self
+    where
+        F: FnMut(&K, V, V) -> V,
+    {
+        let new_root = Node::union(self.root.clone(), other.root.clone(), &mut merge);
+        let new_len = new_root.as_ref().map_or(0, |root| root.size);
+        WBTreeMap {
+            root: new_root,
+            len: new_len,
+        }
     }
 }
 
@@ -1437,5 +1504,203 @@ mod tests {
 
         // Verify tree remains balanced after removals
         assert!(is_weight_balanced(&wb_map.root));
+    }
+
+    #[test]
+    fn test_union_empty_maps() {
+        let map1: WBTreeMap<i32, String> = WBTreeMap::new();
+        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+
+        let result = map1.union(&map2, |_, v1, _| v1);
+        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_union_one_empty() {
+        let mut map1 = WBTreeMap::new();
+        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+
+        map1.insert(1, "one".to_string());
+        map1.insert(2, "two".to_string());
+
+        // Union with empty map
+        let result = map1.union(&map2, |_, v1, _| v1);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get(&1), Some(&"one".to_string()));
+        assert_eq!(result.get(&2), Some(&"two".to_string()));
+
+        // Empty map union with non-empty
+        let result2 = map2.union(&map1, |_, v1, _| v1);
+        assert_eq!(result2.len(), 2);
+        assert_eq!(result2.get(&1), Some(&"one".to_string()));
+        assert_eq!(result2.get(&2), Some(&"two".to_string()));
+    }
+
+    #[test]
+    fn test_union_disjoint_sets() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Map 1: 1, 3, 5
+        map1.insert(1, "one".to_string());
+        map1.insert(3, "three".to_string());
+        map1.insert(5, "five".to_string());
+
+        // Map 2: 2, 4, 6
+        map2.insert(2, "two".to_string());
+        map2.insert(4, "four".to_string());
+        map2.insert(6, "six".to_string());
+
+        let result = map1.union(&map2, |_, v1, _| v1);
+        assert_eq!(result.len(), 6);
+
+        // Check all values are present
+        assert_eq!(result.get(&1), Some(&"one".to_string()));
+        assert_eq!(result.get(&2), Some(&"two".to_string()));
+        assert_eq!(result.get(&3), Some(&"three".to_string()));
+        assert_eq!(result.get(&4), Some(&"four".to_string()));
+        assert_eq!(result.get(&5), Some(&"five".to_string()));
+        assert_eq!(result.get(&6), Some(&"six".to_string()));
+
+        // Verify tree is balanced
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_union_overlapping_sets() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Map 1
+        map1.insert(1, 10);
+        map1.insert(2, 20);
+        map1.insert(3, 30);
+        map1.insert(4, 40);
+
+        // Map 2 with some overlapping keys
+        map2.insert(2, 200);
+        map2.insert(3, 300);
+        map2.insert(5, 500);
+        map2.insert(6, 600);
+
+        // Test with merge function that takes first value
+        let result1 = map1.union(&map2, |_, v1, _| v1);
+        assert_eq!(result1.len(), 6);
+        assert_eq!(result1.get(&1), Some(&10));
+        assert_eq!(result1.get(&2), Some(&20)); // From map1
+        assert_eq!(result1.get(&3), Some(&30)); // From map1
+        assert_eq!(result1.get(&4), Some(&40));
+        assert_eq!(result1.get(&5), Some(&500));
+        assert_eq!(result1.get(&6), Some(&600));
+
+        // Test with merge function that takes second value
+        let result2 = map1.union(&map2, |_, _, v2| v2);
+        assert_eq!(result2.len(), 6);
+        assert_eq!(result2.get(&1), Some(&10));
+        assert_eq!(result2.get(&2), Some(&200)); // From map2
+        assert_eq!(result2.get(&3), Some(&300)); // From map2
+        assert_eq!(result2.get(&4), Some(&40));
+        assert_eq!(result2.get(&5), Some(&500));
+        assert_eq!(result2.get(&6), Some(&600));
+
+        // Test with merge function that sums values
+        let result3 = map1.union(&map2, |_, v1, v2| v1 + v2);
+        assert_eq!(result3.len(), 6);
+        assert_eq!(result3.get(&1), Some(&10));
+        assert_eq!(result3.get(&2), Some(&220)); // 20 + 200
+        assert_eq!(result3.get(&3), Some(&330)); // 30 + 300
+        assert_eq!(result3.get(&4), Some(&40));
+        assert_eq!(result3.get(&5), Some(&500));
+        assert_eq!(result3.get(&6), Some(&600));
+
+        // Verify all results are balanced
+        assert!(is_weight_balanced(&result1.root));
+        assert!(is_weight_balanced(&result2.root));
+        assert!(is_weight_balanced(&result3.root));
+    }
+
+    #[test]
+    fn test_union_large_maps() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+        // Create two large maps with some overlap
+        for i in 0..1000 {
+            map1.insert(i * 2, format!("map1_{}", i));
+        }
+
+        for i in 0..1000 {
+            map2.insert(i * 3, format!("map2_{}", i));
+        }
+
+        let result = map1.union(&map2, |_key, v1, v2| format!("merged_{}_{}", v1, v2));
+
+        // Check size - should have all unique keys from both maps
+        let mut expected_keys = std::collections::HashSet::new();
+        for i in 0..1000 {
+            expected_keys.insert(i * 2);
+            expected_keys.insert(i * 3);
+        }
+        assert_eq!(result.len(), expected_keys.len());
+
+        // Verify some specific values
+        assert_eq!(result.get(&0), Some(&"merged_map1_0_map2_0".to_string()));
+        assert_eq!(result.get(&2), Some(&"map1_1".to_string()));
+        assert_eq!(result.get(&3), Some(&"map2_1".to_string()));
+        assert_eq!(result.get(&6), Some(&"merged_map1_3_map2_2".to_string()));
+
+        // Verify tree is balanced
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_union_with_complex_merge() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Using vectors as values
+        map1.insert(1, vec![1, 2, 3]);
+        map1.insert(2, vec![4, 5]);
+        map1.insert(3, vec![6]);
+
+        map2.insert(2, vec![7, 8]);
+        map2.insert(3, vec![9, 10, 11]);
+        map2.insert(4, vec![12]);
+
+        // Merge by concatenating vectors
+        let result = map1.union(&map2, |_, mut v1, mut v2| {
+            v1.append(&mut v2);
+            v1
+        });
+
+        assert_eq!(result.len(), 4);
+        assert_eq!(result.get(&1), Some(&vec![1, 2, 3]));
+        assert_eq!(result.get(&2), Some(&vec![4, 5, 7, 8]));
+        assert_eq!(result.get(&3), Some(&vec![6, 9, 10, 11]));
+        assert_eq!(result.get(&4), Some(&vec![12]));
+
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_union_identical_maps() {
+        let mut map1 = WBTreeMap::new();
+
+        for i in 0..50 {
+            map1.insert(i, i * 100);
+        }
+
+        // Clone map1 to create identical map
+        let map2 = map1.clone();
+
+        // Union with max merge
+        let result = map1.union(&map2, |_, v1, v2| v1.max(v2));
+
+        assert_eq!(result.len(), 50);
+        for i in 0..50 {
+            assert_eq!(result.get(&i), Some(&(i * 100)));
+        }
+
+        assert!(is_weight_balanced(&result.root));
     }
 }
