@@ -128,6 +128,9 @@ impl PrefixTree9 {
     }
 }
 
+// This is here because our WBTreeSet uses Rcs internally, which are not Sync, hence statics of
+// this types are not allowed. But empty WBTreeSets don't actually contain Rcs, so those can be
+// shared across threads.
 struct UnsafeSync<T>(T);
 unsafe impl<T> Sync for UnsafeSync<T> {}
 
