@@ -283,8 +283,7 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                         size: _,
                     } = Rc::unwrap_or_clone(n);
                     let (new_left, found_value, new_right) = Self::split(left, key);
-                    let joined_right =
-                        Self::join_trees_with_key(new_right, node_key, node_value, right);
+                    let joined_right = Self::join(new_right, node_key, node_value, right);
                     (new_left, found_value, joined_right)
                 }
                 Ordering::Greater => {
@@ -296,70 +295,14 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                         size: _,
                     } = Rc::unwrap_or_clone(n);
                     let (new_left, found_value, new_right) = Self::split(right, key);
-                    let joined_left =
-                        Self::join_trees_with_key(left, node_key, node_value, new_left);
+                    let joined_left = Self::join(left, node_key, node_value, new_left);
                     (joined_left, found_value, new_right)
                 }
             },
         }
     }
 
-    fn join(left: Option<Rc<Node<K, V>>>, right: Option<Rc<Node<K, V>>>) -> Option<Rc<Node<K, V>>> {
-        match (left, right) {
-            (None, None) => None,
-            (Some(l), None) => Some(l),
-            (None, Some(r)) => Some(r),
-            (Some(l), Some(r)) => {
-                let left_size = l.size;
-                let right_size = r.size;
-
-                if right_size > DELTA * left_size {
-                    let Node {
-                        key,
-                        value,
-                        left: r_left,
-                        right: r_right,
-                        size: _,
-                    } = Rc::unwrap_or_clone(r);
-                    let new_left = Self::join(Some(l), r_left);
-                    let mut new_node = Node {
-                        key,
-                        value,
-                        left: new_left,
-                        right: r_right,
-                        size: 0,
-                    };
-                    new_node.update_size();
-                    Some(Node::balance(Rc::new(new_node)))
-                } else if left_size > DELTA * right_size {
-                    // Left tree is much larger, use it as the base
-                    let Node {
-                        key,
-                        value,
-                        left: l_left,
-                        right: l_right,
-                        size: _,
-                    } = Rc::unwrap_or_clone(l);
-                    let new_right = Self::join(l_right, Some(r));
-                    let mut new_node = Node {
-                        key,
-                        value,
-                        left: l_left,
-                        right: new_right,
-                        size: 0,
-                    };
-                    new_node.update_size();
-                    Some(Node::balance(Rc::new(new_node)))
-                } else {
-                    // Trees are relatively balanced, extract min from right and use as root
-                    let (min_key, min_value, new_right) = Node::remove_min(r);
-                    Self::join_trees_with_key(Some(l), min_key, min_value, new_right)
-                }
-            }
-        }
-    }
-
-    fn join_trees_with_key(
+    fn join(
         left: Option<Rc<Node<K, V>>>,
         key: K,
         value: V,
@@ -379,7 +322,7 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                         right: r_right,
                         size: _,
                     } = Rc::unwrap_or_clone(r);
-                    let new_left = Self::join_trees_with_key(left, key, value, r_left);
+                    let new_left = Self::join(left, key, value, r_left);
                     let mut new_node = Node {
                         key: r_key,
                         value: r_value,
@@ -402,7 +345,7 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                         right: l_right,
                         size: _,
                     } = Rc::unwrap_or_clone(l);
-                    let new_right = Self::join_trees_with_key(l_right, key, value, right);
+                    let new_right = Self::join(l_right, key, value, right);
                     let mut new_node = Node {
                         key: l_key,
                         value: l_value,
@@ -457,7 +400,7 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
 
                     let new_left = Self::union(l_left, r_left, merge);
                     let new_right = Self::union(l_right, r_right, merge);
-                    Self::join_trees_with_key(new_left, l_key, new_value, new_right)
+                    Self::join(new_left, l_key, new_value, new_right)
                 } else {
                     // Use right tree as base, split left tree on right root's key
                     let Node {
@@ -476,7 +419,7 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
 
                     let new_left = Self::union(l_left, r_left, merge);
                     let new_right = Self::union(l_right, r_right, merge);
-                    Self::join_trees_with_key(new_left, r_key, new_value, new_right)
+                    Self::join(new_left, r_key, new_value, new_right)
                 }
             }
         }
