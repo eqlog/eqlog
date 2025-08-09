@@ -248,6 +248,176 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             }
         }
     }
+
+    fn split(
+        node: Option<Rc<Node<K, V>>>,
+        key: &K,
+    ) -> (Option<Rc<Node<K, V>>>, Option<V>, Option<Rc<Node<K, V>>>) {
+        match node {
+            None => (None, None, None),
+            Some(n) => match key.cmp(&n.key) {
+                Ordering::Equal => {
+                    let Node {
+                        key: _,
+                        value,
+                        left,
+                        right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(n);
+                    (left, Some(value), right)
+                }
+                Ordering::Less => {
+                    let Node {
+                        key: node_key,
+                        value: node_value,
+                        left,
+                        right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(n);
+                    let (new_left, found_value, new_right) = Self::split(left, key);
+                    let joined_right =
+                        Self::join_trees_with_key(new_right, node_key, node_value, right);
+                    (new_left, found_value, joined_right)
+                }
+                Ordering::Greater => {
+                    let Node {
+                        key: node_key,
+                        value: node_value,
+                        left,
+                        right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(n);
+                    let (new_left, found_value, new_right) = Self::split(right, key);
+                    let joined_left =
+                        Self::join_trees_with_key(left, node_key, node_value, new_left);
+                    (joined_left, found_value, new_right)
+                }
+            },
+        }
+    }
+
+    fn join(left: Option<Rc<Node<K, V>>>, right: Option<Rc<Node<K, V>>>) -> Option<Rc<Node<K, V>>> {
+        match (left, right) {
+            (None, None) => None,
+            (Some(l), None) => Some(l),
+            (None, Some(r)) => Some(r),
+            (Some(l), Some(r)) => {
+                let left_size = l.size;
+                let right_size = r.size;
+
+                if right_size > DELTA * left_size {
+                    let Node {
+                        key,
+                        value,
+                        left: r_left,
+                        right: r_right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(r);
+                    let new_left = Self::join(Some(l), r_left);
+                    let mut new_node = Node {
+                        key,
+                        value,
+                        left: new_left,
+                        right: r_right,
+                        size: 0,
+                    };
+                    new_node.update_size();
+                    Some(Node::balance(Rc::new(new_node)))
+                } else if left_size > DELTA * right_size {
+                    // Left tree is much larger, use it as the base
+                    let Node {
+                        key,
+                        value,
+                        left: l_left,
+                        right: l_right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(l);
+                    let new_right = Self::join(l_right, Some(r));
+                    let mut new_node = Node {
+                        key,
+                        value,
+                        left: l_left,
+                        right: new_right,
+                        size: 0,
+                    };
+                    new_node.update_size();
+                    Some(Node::balance(Rc::new(new_node)))
+                } else {
+                    // Trees are relatively balanced, extract min from right and use as root
+                    let (min_key, min_value, new_right) = Node::remove_min(r);
+                    Self::join_trees_with_key(Some(l), min_key, min_value, new_right)
+                }
+            }
+        }
+    }
+
+    fn join_trees_with_key(
+        left: Option<Rc<Node<K, V>>>,
+        key: K,
+        value: V,
+        right: Option<Rc<Node<K, V>>>,
+    ) -> Option<Rc<Node<K, V>>> {
+        let left_size = Self::size(&left);
+        let right_size = Self::size(&right);
+
+        if right_size > DELTA * left_size {
+            match right {
+                None => unreachable!("right should not be None when right_size > left_size"),
+                Some(r) => {
+                    let Node {
+                        key: r_key,
+                        value: r_value,
+                        left: r_left,
+                        right: r_right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(r);
+                    let new_left = Self::join_trees_with_key(left, key, value, r_left);
+                    let mut new_node = Node {
+                        key: r_key,
+                        value: r_value,
+                        left: new_left,
+                        right: r_right,
+                        size: 0,
+                    };
+                    new_node.update_size();
+                    Some(Node::balance(Rc::new(new_node)))
+                }
+            }
+        } else if left_size > DELTA * right_size {
+            match left {
+                None => unreachable!("left should not be None when left_size > right_size"),
+                Some(l) => {
+                    let Node {
+                        key: l_key,
+                        value: l_value,
+                        left: l_left,
+                        right: l_right,
+                        size: _,
+                    } = Rc::unwrap_or_clone(l);
+                    let new_right = Self::join_trees_with_key(l_right, key, value, right);
+                    let mut new_node = Node {
+                        key: l_key,
+                        value: l_value,
+                        left: l_left,
+                        right: new_right,
+                        size: 0,
+                    };
+                    new_node.update_size();
+                    Some(Node::balance(Rc::new(new_node)))
+                }
+            }
+        } else {
+            let mut new_node = Node {
+                key,
+                value,
+                left,
+                right,
+                size: 0,
+            };
+            new_node.update_size();
+            Some(Node::balance(Rc::new(new_node)))
+        }
+    }
 }
 
 impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
