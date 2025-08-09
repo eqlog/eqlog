@@ -1,11 +1,12 @@
 use super::map::*;
 use std::fmt;
 
-pub struct WBTreeSet<'a, V: Clone> {
-    map: WBTreeMap<'a, V, ()>,
+#[derive(Clone)]
+pub struct WBTreeSet<V: Clone> {
+    map: WBTreeMap<V, ()>,
 }
 
-impl<'a, V: Ord + Clone> WBTreeSet<'a, V> {
+impl<V: Ord + Clone> WBTreeSet<V> {
     pub const fn new() -> Self {
         WBTreeSet {
             map: WBTreeMap::new(),
@@ -36,40 +37,26 @@ impl<'a, V: Ord + Clone> WBTreeSet<'a, V> {
         self.map.clear();
     }
 
-    pub fn iter<'cow>(&'cow self) -> WBTreeSetIter<'cow, 'a, V> {
+    pub fn iter<'a>(&'a self) -> WBTreeSetIter<'a, V> {
         WBTreeSetIter {
             map_iter: self.map.iter(),
         }
     }
 }
 
-impl<'a, V: Ord + Clone> Default for WBTreeSet<'a, V> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<'a, V: Ord + Clone> Clone for WBTreeSet<'a, V> {
-    fn clone(&self) -> Self {
-        WBTreeSet {
-            map: self.map.clone(),
-        }
-    }
-}
-
-impl<'a, V: fmt::Debug + Ord + Clone> fmt::Debug for WBTreeSet<'a, V> {
+impl<V: fmt::Debug + Ord + Clone> fmt::Debug for WBTreeSet<V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.iter()).finish()
     }
 }
 
 // Iterator for WBTreeSet
-pub struct WBTreeSetIter<'cow, 'base, V: Clone> {
-    map_iter: Iter<'cow, 'base, V, ()>,
+pub struct WBTreeSetIter<'a, V: Clone> {
+    map_iter: Iter<'a, V, ()>,
 }
 
-impl<'cow, 'base, V: Clone> Iterator for WBTreeSetIter<'cow, 'base, V> {
-    type Item = &'cow V;
+impl<'a, V: Clone> Iterator for WBTreeSetIter<'a, V> {
+    type Item = &'a V;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.map_iter.next().map(|(k, _)| k)

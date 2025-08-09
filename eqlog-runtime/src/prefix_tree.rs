@@ -6,47 +6,47 @@ pub struct PrefixTree0(pub Option<()>);
 
 #[derive(Clone)]
 pub struct PrefixTree1 {
-    pub set: WBTreeSet<'static, u32>,
+    pub set: WBTreeSet<u32>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree2 {
-    pub map: WBTreeMap<'static, u32, PrefixTree1>,
+    pub map: WBTreeMap<u32, PrefixTree1>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree3 {
-    pub map: WBTreeMap<'static, u32, PrefixTree2>,
+    pub map: WBTreeMap<u32, PrefixTree2>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree4 {
-    pub map: WBTreeMap<'static, u32, PrefixTree3>,
+    pub map: WBTreeMap<u32, PrefixTree3>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree5 {
-    pub map: WBTreeMap<'static, u32, PrefixTree4>,
+    pub map: WBTreeMap<u32, PrefixTree4>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree6 {
-    pub map: WBTreeMap<'static, u32, PrefixTree5>,
+    pub map: WBTreeMap<u32, PrefixTree5>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree7 {
-    pub map: WBTreeMap<'static, u32, PrefixTree6>,
+    pub map: WBTreeMap<u32, PrefixTree6>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree8 {
-    pub map: WBTreeMap<'static, u32, PrefixTree7>,
+    pub map: WBTreeMap<u32, PrefixTree7>,
 }
 
 #[derive(Clone)]
 pub struct PrefixTree9 {
-    pub map: WBTreeMap<'static, u32, PrefixTree8>,
+    pub map: WBTreeMap<u32, PrefixTree8>,
 }
 
 // new methods
@@ -128,6 +128,9 @@ impl PrefixTree9 {
     }
 }
 
+struct UnsafeSync<T>(T);
+unsafe impl<T> Sync for UnsafeSync<T> {}
+
 // empty() methods
 impl PrefixTree0 {
     fn non_empty() -> &'static Self {
@@ -141,74 +144,74 @@ impl PrefixTree0 {
 }
 impl PrefixTree1 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree1 = PrefixTree1 {
+        static EMPTY: UnsafeSync<PrefixTree1> = UnsafeSync(PrefixTree1 {
             set: WBTreeSet::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree2 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree2 = PrefixTree2 {
+        static EMPTY: UnsafeSync<PrefixTree2> = UnsafeSync(PrefixTree2 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree3 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree3 = PrefixTree3 {
+        static EMPTY: UnsafeSync<PrefixTree3> = UnsafeSync(PrefixTree3 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree4 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree4 = PrefixTree4 {
+        static EMPTY: UnsafeSync<PrefixTree4> = UnsafeSync(PrefixTree4 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree5 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree5 = PrefixTree5 {
+        static EMPTY: UnsafeSync<PrefixTree5> = UnsafeSync(PrefixTree5 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree6 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree6 = PrefixTree6 {
+        static EMPTY: UnsafeSync<PrefixTree6> = UnsafeSync(PrefixTree6 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree7 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree7 = PrefixTree7 {
+        static EMPTY: UnsafeSync<PrefixTree7> = UnsafeSync(PrefixTree7 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree8 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree8 = PrefixTree8 {
+        static EMPTY: UnsafeSync<PrefixTree8> = UnsafeSync(PrefixTree8 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 impl PrefixTree9 {
     pub fn empty() -> &'static Self {
-        static EMPTY: PrefixTree9 = PrefixTree9 {
+        static EMPTY: UnsafeSync<PrefixTree9> = UnsafeSync(PrefixTree9 {
             map: WBTreeMap::new(),
-        };
-        return &EMPTY;
+        });
+        return &EMPTY.0;
     }
 }
 
