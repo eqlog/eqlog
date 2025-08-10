@@ -2069,6 +2069,99 @@ fn display_close_until_fn<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
+        let declare_ordered_mor_vars = eqlog
+            .iter_type()
+            .filter(|typ| eqlog.is_model_type(*typ))
+            .map(|typ| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    write!(
+                        f,
+                        "let mut ordered_{type_snake}_mor: Option<Vec<u32>> = None;"
+                    )
+                })
+            })
+            .format("\n");
+
+        let compute_ordered_mor_vars = eqlog
+            .iter_type()
+            .filter(|typ| eqlog.is_model_type(*typ))
+            .map(|typ| {
+                FmtFn(move |f: &mut Formatter| -> Result {
+                    let mor_type = eqlog.mor_type(typ).expect("typ is model type");
+                    let type_snake = display_type(typ, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+
+                    let dom_rel = eqlog.func_rel(eqlog.mor_type_dom_func(mor_type).expect("typ is model type")).unwrap();
+                    let cod_rel = eqlog.func_rel(eqlog.mor_type_cod_func(mor_type).expect("typ is model type")).unwrap();
+
+                    let dom_rel =
+                        FlatInRel::EqlogRel(dom_rel);
+                    let cod_rel =
+                        FlatInRel::EqlogRel(cod_rel);
+                    let set_rel = FlatInRel::TypeSet(typ);
+
+                    let new_order_1_0 = IndexSpec {
+                        age: IndexAge::New,
+                        order: vec![1, 0].into(),
+                    };
+                    let old_order_1_0 = IndexSpec {
+                        age: IndexAge::Old,
+                        order: vec![1, 0].into(),
+                    };
+
+                    let dom_new_order_1_0 =
+                        display_index_field_name(&dom_rel, &new_order_1_0, eqlog, identifiers);
+                    let dom_old_order_1_0 =
+                        display_index_field_name(&dom_rel, &old_order_1_0, eqlog, identifiers);
+
+                    let new_order_0_1 = IndexSpec {
+                        age: IndexAge::New,
+                        order: vec![0, 1].into(),
+                    };
+                    let old_order_0_1 = IndexSpec {
+                        age: IndexAge::Old,
+                        order: vec![0, 1].into(),
+                    };
+
+                    let cod_new_order_0_1 =
+                        display_index_field_name(&cod_rel, &new_order_0_1, eqlog, identifiers);
+                    let cod_old_order_0_1 =
+                        display_index_field_name(&cod_rel, &old_order_0_1, eqlog, identifiers);
+
+                    let new_order_0 = IndexSpec {
+                        age: IndexAge::New,
+                        order: vec![0].into(),
+                    };
+                    let old_order_0 = IndexSpec {
+                        age: IndexAge::New,
+                        order: vec![0].into(),
+                    };
+
+                    let obj_new_order_0 = display_index_field_name(&set_rel, &new_order_0, eqlog, identifiers);
+                    let obj_old_order_0 = display_index_field_name(&set_rel, &old_order_0, eqlog, identifiers);
+
+                    writedoc! {f, r#"
+                        let ordered_{type_snake}_mor: &[u32] =
+                        ordered_{type_snake}_mor.get_or_insert_with(|| {{
+                        eqlog_runtime::morphism_toposort(
+                            &self.{dom_new_order_1_0},
+                            &self.{dom_old_order_1_0},
+                            &self.{cod_new_order_0_1},
+                            &self.{cod_old_order_0_1},
+                            &self.{obj_new_order_0},
+                            &self.{obj_old_order_0},
+                        )
+                        .expect("TODO: Return error about a cycle being present in the morphism category")
+                        }}).as_slice();
+                    "#}
+                })
+            })
+            .format("\n");
+
         let module_calls = ram_modules
             .iter()
             .map(|ram_module| {
@@ -2098,8 +2191,13 @@ fn display_close_until_fn<'a>(
                     return true;
                 }}
 
+            {declare_ordered_mor_vars}
+
                 while self.is_dirty() {{
                     loop {{
+
+            {compute_ordered_mor_vars}
+
             {module_calls}
 
                         self.move_new_to_old();

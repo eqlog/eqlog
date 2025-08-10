@@ -22,6 +22,7 @@
 static TAG: &'static str = concat!("EQLOG_RUNTIME_TAG_", env!("OUT_DIR"));
 
 mod prefix_tree;
+mod toposort;
 mod unification;
 #[doc(hidden)]
 pub mod wbtree;
@@ -33,6 +34,9 @@ pub use crate::prefix_tree::{
 };
 #[doc(hidden)]
 pub use crate::unification::Unification;
+
+#[doc(hidden)]
+pub use crate::toposort::{morphism_toposort, ToposortError};
 
 /// Declare an eqlog module.
 ///

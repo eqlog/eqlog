@@ -7,6 +7,7 @@ use super::ast::*;
 use crate::eqlog_util::*;
 use eqlog_eqlog::*;
 use itertools::Itertools as _;
+use maplit::btreeset;
 use std::sync::Arc;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -215,6 +216,47 @@ pub fn select_indices<'a>(
     query_specs.extend(eqlog.iter_func().map(|func| {
         let rel = eqlog.func_rel(func).unwrap();
         (FlatInRel::EqlogRel(rel), QuerySpec::eval_func(func, eqlog))
+    }));
+
+    // The query specs needed for topological sorting of the model morphism graph.
+    query_specs.extend(eqlog.iter_is_model_type().flat_map(|model_type| {
+        let mor_type = eqlog.mor_type(model_type).unwrap();
+        let dom = eqlog
+            .func_rel(eqlog.mor_type_dom_func(mor_type).unwrap())
+            .unwrap();
+        let cod = eqlog
+            .func_rel(eqlog.mor_type_cod_func(mor_type).unwrap())
+            .unwrap();
+
+        let mor_type = FlatInRel::TypeSet(mor_type);
+        let dom = FlatInRel::EqlogRel(dom);
+        let cod = FlatInRel::EqlogRel(cod);
+
+        [
+            // Given an object, look up the set of outgoing morphisms.
+            (
+                dom,
+                QuerySpec {
+                    age: QueryAge::All,
+                    projections: btreeset! {1},
+                },
+            ),
+            // Given a morphism, look up the codomain.
+            (
+                cod,
+                QuerySpec {
+                    age: QueryAge::All,
+                    projections: btreeset! {0},
+                },
+            ),
+            (
+                mor_type,
+                QuerySpec {
+                    age: QueryAge::All,
+                    projections: btreeset! {0},
+                },
+            ),
+        ]
     }));
 
     query_specs

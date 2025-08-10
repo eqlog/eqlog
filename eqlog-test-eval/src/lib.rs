@@ -25,7 +25,6 @@ eqlog_mod!(indexed_set);
 eqlog_mod!(indexed_pointed);
 eqlog_mod!(empty);
 eqlog_mod!(subset);
-eqlog_mod!(nested_model);
 eqlog_mod!(subset_morphism);
 
 mod category_mod;
