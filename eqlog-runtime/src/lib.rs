@@ -36,7 +36,7 @@ pub use crate::prefix_tree::{
 pub use crate::unification::Unification;
 
 #[doc(hidden)]
-pub use crate::toposort::{morphism_toposort, ToposortError};
+pub use crate::toposort::{morphism_toposort, MorphismWithSignature, ToposortError};
 
 /// Declare an eqlog module.
 ///

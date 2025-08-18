@@ -2079,7 +2079,7 @@ fn display_close_until_fn<'a>(
                         .to_case(Snake);
                     write!(
                         f,
-                        "let mut ordered_{type_snake}_mor: Option<Vec<u32>> = None;"
+                        "let mut ordered_{type_snake}_mor: Option<Vec<eqlog_runtime::MorphismWithSignature>> = None;"
                     )
                 })
             })
@@ -2145,7 +2145,7 @@ fn display_close_until_fn<'a>(
                     let obj_old_order_0 = display_index_field_name(&set_rel, &old_order_0, eqlog, identifiers);
 
                     writedoc! {f, r#"
-                        let ordered_{type_snake}_mor: &[u32] =
+                        let ordered_{type_snake}_mor: &[eqlog_runtime::MorphismWithSignature] =
                         ordered_{type_snake}_mor.get_or_insert_with(|| {{
                         eqlog_runtime::morphism_toposort(
                             &self.{dom_new_order_1_0},
