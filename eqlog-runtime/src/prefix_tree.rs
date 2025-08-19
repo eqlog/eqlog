@@ -218,6 +218,104 @@ impl PrefixTree9 {
     }
 }
 
+// insert_restriction methods.
+impl PrefixTree2 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree1) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree3 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree2) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree4 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree3) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree5 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree4) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree6 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree5) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree7 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree6) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree8 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree7) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+impl PrefixTree9 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree8) {
+        match self.map.entry(el0) {
+            map::Entry::Occupied(mut occupied_entry) => {
+                *occupied_entry.get_mut() = occupied_entry.get_mut().union(&restriction);
+            }
+            map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(restriction);
+            }
+        }
+    }
+}
+
 // insert methods.
 impl PrefixTree0 {
     pub fn insert(&mut self, []: [u32; 0]) -> bool {
