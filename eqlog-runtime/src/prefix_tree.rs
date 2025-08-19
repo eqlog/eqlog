@@ -836,3 +836,90 @@ impl PrefixTree9 {
         self.map.get(&first_el)
     }
 }
+
+// union methods
+impl PrefixTree0 {
+    pub fn union(&self, other: &PrefixTree0) -> PrefixTree0 {
+        PrefixTree0(self.0.or(other.0))
+    }
+}
+
+impl PrefixTree1 {
+    pub fn union(&self, other: &Self) -> Self {
+        Self {
+            set: self.set.union(&other.set),
+        }
+    }
+}
+
+impl PrefixTree2 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree3 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree4 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree5 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree6 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree7 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree8 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}
+
+impl PrefixTree9 {
+    pub fn union(&self, other: &Self) -> Self {
+        let map = self
+            .map
+            .union(&other.map, |_key, val1, val2| val1.union(&val2));
+        Self { map }
+    }
+}

@@ -42,6 +42,12 @@ impl<V: Ord + Clone> WBTreeSet<V> {
             map_iter: self.map.iter(),
         }
     }
+
+    pub fn union(&self, other: &Self) -> Self {
+        WBTreeSet {
+            map: self.map.union(&other.map, |_element, (), ()| ()),
+        }
+    }
 }
 
 impl<V: fmt::Debug + Ord + Clone> fmt::Debug for WBTreeSet<V> {
