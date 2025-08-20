@@ -38,6 +38,30 @@ impl FlatInRel {
             }
         }
     }
+
+    pub fn parent_model_type(&self, eqlog: &Eqlog) -> Option<Type> {
+        let eqlog_rel = match self {
+            FlatInRel::EqlogRel(rel) => *rel,
+            FlatInRel::EqlogRelWithDiagonals { rel, equalities: _ } => *rel,
+            FlatInRel::Equality(_) => {
+                return None;
+            }
+            FlatInRel::TypeSet(_) => {
+                return None;
+            }
+        };
+
+        let parent_symbol_scope: SymbolScope =
+            eqlog.rel_definition_symbol_scope(eqlog_rel).unwrap();
+        let parent_model_type: Type = match eqlog.symbol_scope_model(parent_symbol_scope) {
+            None => {
+                return None;
+            }
+            Some(parent_model_type) => parent_model_type,
+        };
+
+        Some(parent_model_type)
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]

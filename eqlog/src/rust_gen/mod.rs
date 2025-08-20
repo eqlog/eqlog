@@ -277,7 +277,8 @@ fn display_is_dirty_fn<'a>(
                         "Expected exactly one index for dirty tuples"
                     );
 
-                    let field_name = display_index_field_name(&rel, &index[0], eqlog, identifiers);
+                    let field_name =
+                        display_own_index_field_name(&rel, &index[0], eqlog, identifiers);
                     write!(f, "|| !self.{field_name}.is_empty()")
                 })
             })
@@ -352,13 +353,13 @@ fn display_pub_predicate_holds_fn<'a>(
         let checks = indices
             .into_iter()
             .map(|index_spec| {
-                let index = display_index_field_name(rel, &index_spec, eqlog, identifiers);
+                let index_expr = display_index_expr(rel, &index_spec, eqlog, identifiers);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order
                     .iter()
                     .map(|i| FmtFn(move |f| write!(f, "arg{i}.0")))
                     .format(", ");
-                FmtFn(move |f| write!(f, "|| self.{index}.contains([{row_args}])"))
+                FmtFn(move |f| write!(f, "|| {index_expr}.contains([{row_args}])"))
             })
             .format("\n");
 
@@ -452,7 +453,7 @@ fn display_pub_function_eval_fn<'a>(
             .into_iter()
             .map(move |index| {
                 FmtFn(move |f| {
-                    let field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                    let index_expr = display_index_expr(&flat_in_rel, &index, eqlog, identifiers);
                     assert_eq!(*index.order.last().unwrap(), flat_dom_len);
 
                     let gets = index.order[0..index.order.len() - 1]
@@ -461,7 +462,8 @@ fn display_pub_function_eval_fn<'a>(
                         .format("\n");
                     writedoc! {f, "
                         .or_else(move || -> Option<u32> {{
-                            let set = &self.{field};
+                            #[allow(unused_parens)]
+                            let set = {index_expr};
                             {gets}
                             let [result] = set.iter().next()?;
                             Some(result)
@@ -569,8 +571,8 @@ fn display_pub_iter_fn<'a>(
             .map(move |(i, index)| {
                 let flat_in_rel = flat_in_rel.clone();
                 FmtFn(move |f| {
-                    let index_field =
-                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                    let flat_in_rel = flat_in_rel.clone();
+                    let index_expr = display_index_expr(&flat_in_rel, &index, eqlog, identifiers);
                     let row_unpack_args = index
                         .order
                         .iter()
@@ -598,7 +600,7 @@ fn display_pub_iter_fn<'a>(
                     });
                     writedoc! {f, "
                         let index_it{i} =
-                        self.{index_field}
+                        {index_expr}
                         .iter()
                         .map(|[{row_unpack_args}]| {{
                         {row}
@@ -676,18 +678,45 @@ fn display_insert_row_block<'a>(
                         .order
                         .iter()
                         .map(|i| relevant_args[*i].clone())
-                        .format(", ");
+                        .format(", ")
+                        .to_string();
 
-                    writedoc! {f, "
-                        if {checks} {{
-                        self.{index_name}.insert([{args}]);
-                        }}
-                    "}
+                    if flat_in_rel.parent_model_type(eqlog).is_some() {
+                        writedoc! {f, "
+                            if {checks} {{
+                            self.{index_name}_own.insert([{args}]);
+                            if let Some(all_set) = self.{index_name}_all.as_mut() {{
+                            all_set.insert([{args}]);
+                            }}
+                            }}
+                        "}
+                    } else {
+                        writedoc! {f, "
+                            if {checks} {{
+                            self.{index_name}.insert([{args}]);
+                            }}
+                        "}
+                    }
                 } else {
-                    let args = index.order.iter().map(|i| args[*i].clone()).format(", ");
-                    writedoc! {f, "
-                        self.{index_name}.insert([{args}]);
-                    "}
+                    // No diagonals.
+                    let args = index
+                        .order
+                        .iter()
+                        .map(|i| args[*i].clone())
+                        .format(", ")
+                        .to_string();
+                    if flat_in_rel.parent_model_type(eqlog).is_some() {
+                        writedoc! {f, "
+                            self.{index_name}_own.insert([{args}]);
+                            if let Some(all_set) = self.{index_name}_all.as_mut() {{
+                            all_set.insert([{args}]);
+                            }}
+                        "}
+                    } else {
+                        writedoc! {f, "
+                            self.{index_name}.insert([{args}]);
+                        "}
+                    }
                 }
             })
         })
@@ -804,12 +833,12 @@ fn display_pub_insert_relation<'a>(
         let contains_checks = contains_indices
             .into_iter()
             .map(|index_spec| {
-                let index = display_index_field_name(flat_rel, &index_spec, eqlog, identifiers);
+                let index_expr = display_index_expr(flat_rel, &index_spec, eqlog, identifiers);
                 let IndexSpec { order, age: _ } = index_spec;
                 let row_args = order.iter().map(|i| rel_args[*i].clone()).format(", ");
                 FmtFn(move |f| {
                     writedoc! {f, "
-                        if self.{index}.contains([{row_args}]) {{
+                        if {index_expr}.contains([{row_args}]) {{
                         return;
                         }}
                     "}
@@ -1310,7 +1339,7 @@ fn display_remove_from_index_expr<'a>(
             .map(|i| row_args[*i].clone())
             .format(", ");
 
-        let field_name = display_index_field_name(&rel, &index, eqlog, identifiers);
+        let field_name = display_own_index_field_name(&rel, &index, eqlog, identifiers);
 
         write!(f, "self.{field_name}.remove([{permuted_row_args}])")
     })
@@ -1522,7 +1551,17 @@ fn display_canonicalize_fn<'a>(
     FmtFn(move |f| {
         let rel_blocks = eqlog
             .iter_rel()
-            .map(|rel| display_canonicalize_rel_block(rel, eqlog, identifiers, index_selection))
+            .map(|rel| {
+                FmtFn(move |f| {
+                    let block =
+                        display_canonicalize_rel_block(rel, eqlog, identifiers, index_selection);
+                    let rel = display_rel(rel, eqlog, identifiers);
+                    writedoc! {f, "
+                        // Canonicalize {rel}.
+                        {block}
+                    "}
+                })
+            })
             .format("\n");
 
         let clear_uprooted_vecs = eqlog
@@ -1931,8 +1970,12 @@ fn display_move_new_to_old_fn<'a>(
                         .map(|i| args[*i].clone())
                         .format(", ");
 
-                    let primary_new_index =
-                        display_index_field_name(&flat_rel, &primary_index_new, eqlog, identifiers);
+                    let primary_new_index = display_own_index_field_name(
+                        &flat_rel,
+                        &primary_index_new,
+                        eqlog,
+                        identifiers,
+                    );
 
                     let old_inserts = display_insert_row_block(
                         args.as_slice(),
@@ -1962,7 +2005,7 @@ fn display_move_new_to_old_fn<'a>(
                         })
                         .map(move |(flat_in_rel, index)| {
                             FmtFn(move |f| {
-                                let field_name = display_index_field_name(
+                                let field_name = display_own_index_field_name(
                                     &flat_in_rel,
                                     &index,
                                     eqlog,
@@ -2025,66 +2068,12 @@ fn display_move_new_to_old_fn<'a>(
     })
 }
 
-fn display_module_env_var<'a>(
-    ram_module: &'a RamModule,
+fn display_recompute_model_indices_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
-        let env_struct_name = display_module_env_struct_name(ram_module);
-        let in_set_fields = module_env_in_rels(ram_module)
-            .into_iter()
-            .map(|(flat_in_rel, index)| {
-                FmtFn(move |f| {
-                    let field_name =
-                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
-                    write!(f, "{field_name}: &self.{field_name},")
-                })
-            })
-            .format("\n");
-
-        let out_set_fields = module_env_out_rels(ram_module)
-            .into_iter()
-            .map(|flat_out_rel| {
-                FmtFn(move |f| {
-                    let field_name = display_out_set_field_name(&flat_out_rel, eqlog, identifiers);
-                    write!(f, "{field_name}: &mut delta.{field_name},")
-                })
-            })
-            .format("\n");
-
-        writedoc! {f, "
-            let env = {env_struct_name} {{
-                phantom: std::marker::PhantomData,
-                {in_set_fields}
-                {out_set_fields}
-            }};
-        "}
-    })
-}
-
-fn display_close_until_fn<'a>(
-    ram_modules: &'a [RamModule],
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl Display + 'a {
-    FmtFn(move |f| {
-        let declare_ordered_mor_vars = eqlog
-            .iter_type()
-            .filter(|typ| eqlog.is_model_type(*typ))
-            .map(|typ| {
-                FmtFn(move |f: &mut Formatter| -> Result {
-                    let type_snake = display_type(typ, eqlog, identifiers)
-                        .to_string()
-                        .to_case(Snake);
-                    write!(
-                        f,
-                        "let mut ordered_{type_snake}_mor: Option<Vec<eqlog_runtime::MorphismWithSignature>> = None;"
-                    )
-                })
-            })
-            .format("\n");
-
         let compute_ordered_mor_vars = eqlog
             .iter_type()
             .filter(|typ| eqlog.is_model_type(*typ))
@@ -2137,7 +2126,7 @@ fn display_close_until_fn<'a>(
                         order: vec![0].into(),
                     };
                     let old_order_0 = IndexSpec {
-                        age: IndexAge::New,
+                        age: IndexAge::Old,
                         order: vec![0].into(),
                     };
 
@@ -2145,23 +2134,133 @@ fn display_close_until_fn<'a>(
                     let obj_old_order_0 = display_index_field_name(&set_rel, &old_order_0, eqlog, identifiers);
 
                     writedoc! {f, r#"
-                        let ordered_{type_snake}_mor: &[eqlog_runtime::MorphismWithSignature] =
-                        ordered_{type_snake}_mor.get_or_insert_with(|| {{
+                        let ordered_{type_snake}_mor: Vec<eqlog_runtime::MorphismWithSignature> =
                         eqlog_runtime::morphism_toposort(
-                            &self.{dom_new_order_1_0},
-                            &self.{dom_old_order_1_0},
-                            &self.{cod_new_order_0_1},
-                            &self.{cod_old_order_0_1},
-                            &self.{obj_new_order_0},
-                            &self.{obj_old_order_0},
+                        &self.{dom_new_order_1_0},
+                        &self.{dom_old_order_1_0},
+                        &self.{cod_new_order_0_1},
+                        &self.{cod_old_order_0_1},
+                        &self.{obj_new_order_0},
+                        &self.{obj_old_order_0},
                         )
-                        .expect("TODO: Return error about a cycle being present in the morphism category")
-                        }}).as_slice();
+                        .expect("TODO: Return error about a cycle being present in the morphism category");
                     "#}
                 })
             })
             .format("\n");
 
+        let compute_rel_sets =
+            index_set(index_selection)
+            .into_iter()
+            .filter_map(|(flat_in_rel, index_spec)| {
+                let parent_model_type = flat_in_rel.parent_model_type(eqlog)?;
+                Some((flat_in_rel, index_spec, parent_model_type))
+            })
+            .map(|(flat_in_rel, index_spec, parent_model_type)| {
+                FmtFn(move |f| {
+                    let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, eqlog, identifiers).to_string();
+                    let index_field_name = index_field_name.as_str();
+
+                    // The model el is, semantically, always the 0th argument, but due to the
+                    // permutation described by the index field it might be further back.
+                    let parent_el_pos =
+                        index_spec.order.iter().position(|p| *p == 0).expect("Index orders should be permutations");
+
+                    let before_model_els_loop_headers =
+                        (0..parent_el_pos).map(|_| {
+                            FmtFn(move |f| {
+                                writedoc!{f, "
+                                    for (_, {index_field_name}_all)
+                                    in {index_field_name}_all.iter_restrictions_mut()
+                                    {{
+                                "}
+                            })
+                        }).format("");
+                    let before_model_els_loop_footers =
+                        (0..parent_el_pos).map(|_| {
+                            FmtFn(move |f| {
+                                write!(f, "}}")
+                            })
+                        }).format("\n");
+
+                    let parent_model_type_snake =
+                        display_type(parent_model_type, eqlog, identifiers).to_string().to_case(Snake);
+
+                    writedoc!{f, r#"
+                        let mut {index_field_name}_all = self.{index_field_name}_own.clone();
+                        for MorphismWithSignature {{ morph: _, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
+                        {before_model_els_loop_headers}
+                        let dom_set = match {index_field_name}_all.get(*dom) {{
+                        Some(dom_set) => dom_set.clone(),
+                        None => {{ continue; }},
+                        }};
+                        {index_field_name}_all.insert_restriction(*cod, dom_set);
+                        {before_model_els_loop_footers}
+                        }}
+                        self.{index_field_name}_all = Some({index_field_name}_all);
+                    "#}
+                })
+            })
+            .format("\n");
+        writedoc! {f, "
+            fn recompute_model_indices(&mut self) {{
+            {compute_ordered_mor_vars}
+            {compute_rel_sets}
+            }}
+        "}
+    })
+}
+
+fn display_module_env_var<'a>(
+    ram_module: &'a RamModule,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
+        let env_struct_name = display_module_env_struct_name(ram_module);
+        let in_set_fields = module_env_in_rels(ram_module)
+            .into_iter()
+            .map(|(flat_in_rel, index)| {
+                FmtFn(move |f| {
+                    let field_name =
+                        display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+                    if flat_in_rel.parent_model_type(eqlog).is_some() {
+                        // Module env vars created during the close loop, where the _all fields are
+                        // always set.
+                        write!(f, "{field_name}: &self.{field_name}_all.as_ref().unwrap(),")
+                    } else {
+                        write!(f, "{field_name}: &self.{field_name},")
+                    }
+                })
+            })
+            .format("\n");
+
+        let out_set_fields = module_env_out_rels(ram_module)
+            .into_iter()
+            .map(|flat_out_rel| {
+                FmtFn(move |f| {
+                    let field_name = display_out_set_field_name(&flat_out_rel, eqlog, identifiers);
+                    write!(f, "{field_name}: &mut delta.{field_name},")
+                })
+            })
+            .format("\n");
+
+        writedoc! {f, "
+            let env = {env_struct_name} {{
+                phantom: std::marker::PhantomData,
+                {in_set_fields}
+                {out_set_fields}
+            }};
+        "}
+    })
+}
+
+fn display_close_until_fn<'a>(
+    ram_modules: &'a [RamModule],
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl Display + 'a {
+    FmtFn(move |f| {
         let module_calls = ram_modules
             .iter()
             .map(|ram_module| {
@@ -2184,19 +2283,16 @@ fn display_close_until_fn<'a>(
             #[allow(dead_code)]
             pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
             {{
-                let mut delta = ModelDelta::new();
+            let mut delta = ModelDelta::new();
 
-                self.canonicalize();
-                if condition(self) {{
-                    return true;
-                }}
+            self.canonicalize();
+            if condition(self) {{
+            return true;
+            }}
 
-            {declare_ordered_mor_vars}
-
-                while self.is_dirty() {{
-                    loop {{
-
-            {compute_ordered_mor_vars}
+            while self.is_dirty() {{
+            loop {{
+            self.recompute_model_indices();
 
             {module_calls}
 
@@ -2259,7 +2355,12 @@ fn display_new_fn<'a>(
         for (flat_rel, index) in index_set(index_selection) {
             let field_name = display_index_field_name(&flat_rel, &index, eqlog, identifiers);
             let index_type = display_index_type(&flat_rel, eqlog);
-            writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
+            if flat_rel.parent_model_type(eqlog).is_some() {
+                writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
+                writeln!(f, "{field_name}_all: None,").unwrap();
+            } else {
+                writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
+            }
         }
         for rel in eqlog.iter_rel() {
             let type_set: BTreeSet<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
@@ -2397,6 +2498,42 @@ fn display_index_field_name<'a>(
     })
 }
 
+fn display_own_index_field_name<'a>(
+    flat_in_rel: &'a FlatInRel,
+    index: &'a IndexSpec,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+        if flat_in_rel.parent_model_type(eqlog).is_some() {
+            write!(f, "{index_field}_own")
+        } else {
+            write!(f, "{index_field}")
+        }
+    })
+}
+
+fn display_index_expr<'a>(
+    flat_in_rel: &'a FlatInRel,
+    index: &'a IndexSpec,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+        if flat_in_rel.parent_model_type(eqlog).is_some() {
+            write!(
+                f,
+                "self.{index_field}_all.as_ref().unwrap_or(&self.{index_field}_own)"
+            )
+        } else {
+            let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
+            write!(f, "(&self.{index_field})")
+        }
+    })
+}
+
 fn display_element_index_field_name<'a>(
     rel: Rel,
     typ: Type,
@@ -2509,7 +2646,14 @@ fn display_theory_struct<'a>(
                 FmtFn(move |f| {
                     let index_name = display_index_field_name(&rel, &index, eqlog, identifiers);
                     let index_type = display_index_type(&rel, eqlog);
-                    write!(f, "{index_name}: {index_type},")
+                    if rel.parent_model_type(eqlog).is_some() {
+                        writedoc! {f, "
+                            {index_name}_own: {index_type},
+                            {index_name}_all: Option<{index_type}>,
+                        "}
+                    } else {
+                        write!(f, "{index_name}: {index_type},")
+                    }
                 })
             })
             .format("\n");
@@ -2682,6 +2826,10 @@ fn display_theory_impl<'a>(
         write!(f, "{}", is_dirty_fn)?;
 
         writeln!(f, "")?;
+
+        let recompute_model_indices_fn =
+            display_recompute_model_indices_fn(eqlog, identifiers, index_selection);
+        write!(f, "{}", recompute_model_indices_fn)?;
 
         let move_new_to_old_fn = display_move_new_to_old_fn(eqlog, identifiers, index_selection);
         write!(f, "{move_new_to_old_fn}")?;

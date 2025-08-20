@@ -45,7 +45,6 @@ fn test_ab_inclusion_cod() {
 }
 
 #[test]
-#[should_panic]
 fn test_singleton_subset_propagates() {
     let mut subset = SubsetMorphism::new();
 

@@ -1,50 +1,50 @@
 use crate::wbtree::{map, map::WBTreeMap, set::WBTreeSet};
 
 // type definitions
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree0(pub Option<()>);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree1 {
     pub set: WBTreeSet<u32>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree2 {
     pub map: WBTreeMap<u32, PrefixTree1>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree3 {
     pub map: WBTreeMap<u32, PrefixTree2>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree4 {
     pub map: WBTreeMap<u32, PrefixTree3>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree5 {
     pub map: WBTreeMap<u32, PrefixTree4>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree6 {
     pub map: WBTreeMap<u32, PrefixTree5>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree7 {
     pub map: WBTreeMap<u32, PrefixTree6>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree8 {
     pub map: WBTreeMap<u32, PrefixTree7>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixTree9 {
     pub map: WBTreeMap<u32, PrefixTree8>,
 }
@@ -219,6 +219,15 @@ impl PrefixTree9 {
 }
 
 // insert_restriction methods.
+impl PrefixTree1 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree0) {
+        if restriction.0.is_none() {
+            return;
+        }
+
+        self.set.insert(el0);
+    }
+}
 impl PrefixTree2 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree1) {
         match self.map.entry(el0) {
