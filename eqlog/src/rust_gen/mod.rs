@@ -2067,6 +2067,7 @@ fn display_close_until_fn<'a>(
     ram_modules: &'a [RamModule],
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
+    index_selection: &'a IndexSelection,
 ) -> impl Display + 'a {
     FmtFn(move |f| {
         let declare_ordered_mor_vars = eqlog
@@ -2162,6 +2163,50 @@ fn display_close_until_fn<'a>(
             })
             .format("\n");
 
+        let compute_rel_sets =
+            index_set(index_selection)
+            .into_iter()
+            .map(|(flat_in_rel, index_spec)| {
+                FmtFn(move |f| {
+                    let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, eqlog, identifiers).to_string();
+
+                    let rel = match flat_in_rel {
+                        FlatInRel::EqlogRel(rel) => rel,
+                        FlatInRel::EqlogRelWithDiagonals { rel, equalities: _ } => rel,
+                        FlatInRel::Equality(_) => { panic!("Should have been eliminated in the equality pass on flat eqlog") },
+                        FlatInRel::TypeSet(_) => {
+                            write!(f, "let {index_field_name} = &self.{index_field_name};")?;
+                            return Ok(());
+                        },
+                    };
+
+                    let parent_symbol_scope: SymbolScope = eqlog.rel_definition_symbol_scope(rel).unwrap();
+                    let parent_model_type: Type = match eqlog.symbol_scope_model(parent_symbol_scope) {
+                        None => {
+                            write!(f, "let {index_field_name} = &self.{index_field_name};")?;
+                            return Ok(());
+                        }
+                        Some(parent_model_type) => parent_model_type,
+                    };
+                    let parent_model_type_snake =
+                        display_type(parent_model_type, eqlog, identifiers).to_string().to_case(Snake);
+
+                    // TODO: This works only if the model element is the first argument of the
+                    // relation index, but that's not always a given.
+                    writedoc!{f, r#"
+                        let mut {index_field_name} = self.{index_field_name}.clone();
+                        for MorphismWithSignature {{ morph: _, dom, cod }} in ordered_{parent_model_type_snake}_mor {{
+                        let dom_set = match {index_field_name}.get(*dom) {{
+                        Some(dom_set) => dom_set.clone(),
+                        None => {{ continue; }},
+                        }};
+                        {index_field_name}.insert_restriction(*cod, dom_set);
+                        }}
+                    "#}
+                })
+            })
+            .format("\n");
+
         let module_calls = ram_modules
             .iter()
             .map(|ram_module| {
@@ -2197,6 +2242,8 @@ fn display_close_until_fn<'a>(
                     loop {{
 
             {compute_ordered_mor_vars}
+
+            {compute_rel_sets}
 
             {module_calls}
 
@@ -2572,7 +2619,8 @@ fn display_theory_impl<'a>(
         let close_fn = display_close_fn();
         write!(f, "{}", close_fn)?;
 
-        let close_until_fn = display_close_until_fn(ram_modules, eqlog, identifiers);
+        let close_until_fn =
+            display_close_until_fn(ram_modules, eqlog, identifiers, index_selection);
         write!(f, "{}", close_until_fn)?;
 
         for typ in eqlog.iter_type() {

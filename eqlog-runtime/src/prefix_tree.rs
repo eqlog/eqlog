@@ -219,6 +219,15 @@ impl PrefixTree9 {
 }
 
 // insert_restriction methods.
+impl PrefixTree1 {
+    pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree0) {
+        if restriction.0.is_none() {
+            return;
+        }
+
+        self.set.insert(el0);
+    }
+}
 impl PrefixTree2 {
     pub fn insert_restriction(&mut self, el0: u32, restriction: PrefixTree1) {
         match self.map.entry(el0) {
