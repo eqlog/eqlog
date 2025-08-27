@@ -424,6 +424,53 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
             }
         }
     }
+
+    fn difference(
+        left: Option<Rc<Node<K, V>>>,
+        right: Option<Rc<Node<K, V>>>,
+    ) -> Option<Rc<Node<K, V>>> {
+        match (left, right) {
+            (None, _) => None,
+            (Some(l), None) => Some(l),
+            (Some(l), Some(r)) => {
+                // Use left tree as base, split right tree on left root's key
+                let Node {
+                    key: l_key,
+                    value: l_value,
+                    left: l_left,
+                    right: l_right,
+                    size: _,
+                } = Rc::unwrap_or_clone(l);
+                let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
+
+                let new_left = Self::difference(l_left, r_left);
+                let new_right = Self::difference(l_right, r_right);
+
+                match r_value_opt {
+                    // Key exists in right tree, exclude it from result
+                    Some(_) => {
+                        match (new_left, new_right) {
+                            (None, None) => None,
+                            (Some(left), None) => Some(left),
+                            (None, Some(right)) => Some(right),
+                            (Some(left), Some(right)) => {
+                                // Need to join the subtrees without the current key
+                                Self::join_without_key(left, right)
+                            }
+                        }
+                    }
+                    // Key doesn't exist in right tree, include it in result
+                    None => Self::join(new_left, l_key, l_value, new_right),
+                }
+            }
+        }
+    }
+
+    fn join_without_key(left: Rc<Node<K, V>>, right: Rc<Node<K, V>>) -> Option<Rc<Node<K, V>>> {
+        // Remove the minimum element from the right subtree to use as the new root
+        let (min_key, min_value, new_right) = Self::remove_min(right);
+        Self::join(Some(left), min_key, min_value, new_right)
+    }
 }
 
 impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
@@ -513,6 +560,15 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         F: FnMut(&K, V, V) -> V,
     {
         let new_root = Node::union(self.root.clone(), other.root.clone(), &mut merge);
+        let new_len = new_root.as_ref().map_or(0, |root| root.size);
+        WBTreeMap {
+            root: new_root,
+            len: new_len,
+        }
+    }
+
+    pub fn difference(&self, other: &Self) -> Self {
+        let new_root = Node::difference(self.root.clone(), other.root.clone());
         let new_len = new_root.as_ref().map_or(0, |root| root.size);
         WBTreeMap {
             root: new_root,
@@ -1653,5 +1709,224 @@ mod tests {
         }
 
         assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_difference_empty_maps() {
+        let map1: WBTreeMap<i32, String> = WBTreeMap::new();
+        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+
+        let result = map1.difference(&map2);
+        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_difference_one_empty() {
+        let mut map1 = WBTreeMap::new();
+        let map2: WBTreeMap<i32, String> = WBTreeMap::new();
+
+        map1.insert(1, "one".to_string());
+        map1.insert(2, "two".to_string());
+
+        // Non-empty - empty = original map
+        let result = map1.difference(&map2);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get(&1), Some(&"one".to_string()));
+        assert_eq!(result.get(&2), Some(&"two".to_string()));
+
+        // Empty - non-empty = empty
+        let result2 = map2.difference(&map1);
+        assert!(result2.is_empty());
+        assert_eq!(result2.len(), 0);
+    }
+
+    #[test]
+    fn test_difference_disjoint_sets() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Map 1: 1, 3, 5
+        map1.insert(1, "one".to_string());
+        map1.insert(3, "three".to_string());
+        map1.insert(5, "five".to_string());
+
+        // Map 2: 2, 4, 6
+        map2.insert(2, "two".to_string());
+        map2.insert(4, "four".to_string());
+        map2.insert(6, "six".to_string());
+
+        let result = map1.difference(&map2);
+        assert_eq!(result.len(), 3);
+
+        // All values from map1 should be present since they don't overlap
+        assert_eq!(result.get(&1), Some(&"one".to_string()));
+        assert_eq!(result.get(&3), Some(&"three".to_string()));
+        assert_eq!(result.get(&5), Some(&"five".to_string()));
+
+        // Values from map2 should not be present
+        assert_eq!(result.get(&2), None);
+        assert_eq!(result.get(&4), None);
+        assert_eq!(result.get(&6), None);
+
+        // Verify tree is balanced
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_difference_overlapping_sets() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Map 1
+        map1.insert(1, 10);
+        map1.insert(2, 20);
+        map1.insert(3, 30);
+        map1.insert(4, 40);
+
+        // Map 2 with some overlapping keys
+        map2.insert(2, 200);
+        map2.insert(3, 300);
+        map2.insert(5, 500);
+        map2.insert(6, 600);
+
+        let result = map1.difference(&map2);
+        assert_eq!(result.len(), 2);
+
+        // Only non-overlapping keys from map1 should remain
+        assert_eq!(result.get(&1), Some(&10));
+        assert_eq!(result.get(&4), Some(&40));
+
+        // Overlapping keys should be removed
+        assert_eq!(result.get(&2), None);
+        assert_eq!(result.get(&3), None);
+
+        // Keys only in map2 should not be in result
+        assert_eq!(result.get(&5), None);
+        assert_eq!(result.get(&6), None);
+
+        // Verify tree is balanced
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_difference_identical_maps() {
+        let mut map1 = WBTreeMap::new();
+
+        for i in 0..50 {
+            map1.insert(i, i * 100);
+        }
+
+        // Clone map1 to create identical map
+        let map2 = map1.clone();
+
+        // Difference of identical maps should be empty
+        let result = map1.difference(&map2);
+        assert!(result.is_empty());
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_difference_subset() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Map 1: 1, 2, 3, 4, 5
+        for i in 1..=5 {
+            map1.insert(i, i * 10);
+        }
+
+        // Map 2 is subset: 2, 4
+        map2.insert(2, 200);
+        map2.insert(4, 400);
+
+        let result = map1.difference(&map2);
+        assert_eq!(result.len(), 3);
+
+        // Only non-subset elements should remain
+        assert_eq!(result.get(&1), Some(&10));
+        assert_eq!(result.get(&3), Some(&30));
+        assert_eq!(result.get(&5), Some(&50));
+
+        // Subset elements should be removed
+        assert_eq!(result.get(&2), None);
+        assert_eq!(result.get(&4), None);
+
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_difference_large_maps() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Create two large maps with some overlap
+        for i in 0..1000 {
+            map1.insert(i * 2, format!("map1_{}", i));
+        }
+
+        for i in 0..500 {
+            map2.insert(i * 4, format!("map2_{}", i));
+        }
+
+        let result = map1.difference(&map2);
+
+        // Check that overlapping keys are removed
+        for i in 0..500 {
+            assert_eq!(result.get(&(i * 4)), None);
+        }
+
+        // Check that some non-overlapping keys remain
+        assert!(result.get(&2).is_some());
+        assert!(result.get(&6).is_some());
+        assert!(result.get(&10).is_some());
+
+        // Verify tree is balanced
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_difference_with_complex_types() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        // Using vectors as values
+        map1.insert(1, vec![1, 2, 3]);
+        map1.insert(2, vec![4, 5]);
+        map1.insert(3, vec![6]);
+        map1.insert(4, vec![7, 8, 9]);
+
+        map2.insert(2, vec![10, 11]);
+        map2.insert(3, vec![12]);
+
+        let result = map1.difference(&map2);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get(&1), Some(&vec![1, 2, 3]));
+        assert_eq!(result.get(&4), Some(&vec![7, 8, 9]));
+        assert_eq!(result.get(&2), None);
+        assert_eq!(result.get(&3), None);
+
+        assert!(is_weight_balanced(&result.root));
+    }
+
+    #[test]
+    fn test_difference_single_elements() {
+        let mut map1 = WBTreeMap::new();
+        let mut map2 = WBTreeMap::new();
+
+        map1.insert(42, "answer");
+        map2.insert(24, "not_answer");
+
+        // No overlap
+        let result1 = map1.difference(&map2);
+        assert_eq!(result1.len(), 1);
+        assert_eq!(result1.get(&42), Some(&"answer"));
+
+        // Total overlap
+        map2.clear();
+        map2.insert(42, "different_answer");
+        let result2 = map1.difference(&map2);
+        assert!(result2.is_empty());
     }
 }
