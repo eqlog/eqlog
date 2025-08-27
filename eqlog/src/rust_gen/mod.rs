@@ -685,9 +685,7 @@ fn display_insert_row_block<'a>(
                         writedoc! {f, "
                             if {checks} {{
                             self.{index_name}_own.insert([{args}]);
-                            if let Some(all_set) = self.{index_name}_all.as_mut() {{
-                            all_set.insert([{args}]);
-                            }}
+                            self.{index_name}_all.insert([{args}]);
                             }}
                         "}
                     } else {
@@ -708,9 +706,7 @@ fn display_insert_row_block<'a>(
                     if flat_in_rel.parent_model_type(eqlog).is_some() {
                         writedoc! {f, "
                             self.{index_name}_own.insert([{args}]);
-                            if let Some(all_set) = self.{index_name}_all.as_mut() {{
-                            all_set.insert([{args}]);
-                            }}
+                            self.{index_name}_all.insert([{args}]);
                         "}
                     } else {
                         writedoc! {f, "
@@ -2170,7 +2166,7 @@ fn display_recompute_model_indices_fn<'a>(
                         {index_field_name}_all.insert_restriction(*cod, dom_set);
                         {before_model_els_loop_footers}
                         }}
-                        self.{index_field_name}_all = Some({index_field_name}_all);
+                        self.{index_field_name}_all = {index_field_name}_all;
                     "#}
                 })
             })
@@ -2198,9 +2194,7 @@ fn display_module_env_var<'a>(
                     let field_name =
                         display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
                     if flat_in_rel.parent_model_type(eqlog).is_some() {
-                        // Module env vars created during the close loop, where the _all fields are
-                        // always set.
-                        write!(f, "{field_name}: &self.{field_name}_all.as_ref().unwrap(),")
+                        write!(f, "{field_name}: &self.{field_name}_all,")
                     } else {
                         write!(f, "{field_name}: &self.{field_name},")
                     }
@@ -2327,7 +2321,7 @@ fn display_new_fn<'a>(
             let index_type = display_index_type(&flat_rel, eqlog);
             if flat_rel.parent_model_type(eqlog).is_some() {
                 writeln!(f, "{field_name}_own: {index_type}::new(),").unwrap();
-                writeln!(f, "{field_name}_all: None,").unwrap();
+                writeln!(f, "{field_name}_all: {index_type}::new(),").unwrap();
             } else {
                 writeln!(f, "{field_name}: {index_type}::new(),").unwrap();
             }
@@ -2493,10 +2487,7 @@ fn display_index_expr<'a>(
     FmtFn(move |f| {
         let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
         if flat_in_rel.parent_model_type(eqlog).is_some() {
-            write!(
-                f,
-                "self.{index_field}_all.as_ref().unwrap_or(&self.{index_field}_own)"
-            )
+            write!(f, "(&self.{index_field}_all)")
         } else {
             let index_field = display_index_field_name(&flat_in_rel, &index, eqlog, identifiers);
             write!(f, "(&self.{index_field})")
@@ -2619,7 +2610,7 @@ fn display_theory_struct<'a>(
                     if rel.parent_model_type(eqlog).is_some() {
                         writedoc! {f, "
                             {index_name}_own: {index_type},
-                            {index_name}_all: Option<{index_type}>,
+                            {index_name}_all: {index_type},
                         "}
                     } else {
                         write!(f, "{index_name}: {index_type},")
