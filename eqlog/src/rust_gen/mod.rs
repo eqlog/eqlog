@@ -2302,16 +2302,16 @@ fn display_close_until_fn<'a>(
             #[allow(dead_code)]
             pub fn close_until(&mut self, condition: impl Fn(&Self) -> bool) -> bool
             {{
-            let mut delta = ModelDelta::new();
-
             self.canonicalize();
+            self.recompute_model_indices();
             if condition(self) {{
             return true;
             }}
 
-            while self.is_dirty() {{
+            let mut delta = ModelDelta::new();
+
+
             loop {{
-            self.recompute_model_indices();
 
             {module_calls}
 
@@ -2320,26 +2320,19 @@ fn display_close_until_fn<'a>(
             self.canonicalize();
             delta.apply_category_tuples(self);
             delta.apply_non_category_tuples(self);
+            self.recompute_model_indices();
 
             if condition(self) {{
-            self.recompute_model_indices();
             return true;
             }}
 
             if !self.is_dirty() {{
-            break;
-            }}
-            }}
-
             delta.apply_func_defs (self);
-            if condition(self) {{
-            self.recompute_model_indices();
-            return true;
+            if !self.is_dirty() {{
+            return false;
             }}
             }}
-
-            self.recompute_model_indices();
-            false
+            }}
             }}
         "}
     })
