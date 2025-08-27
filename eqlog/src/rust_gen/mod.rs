@@ -1705,9 +1705,6 @@ fn display_model_delta_impl<'a>(
         let new_fn = display_model_delta_new_fn(eqlog, identifiers);
         write!(f, "{}", new_fn).unwrap();
 
-        let apply_surjective_fn = display_model_delta_apply_surjective_fn();
-        write!(f, "{}", apply_surjective_fn).unwrap();
-
         let apply_non_surjective_fn = display_model_delta_apply_non_surjective_fn();
         write!(f, "{}", apply_non_surjective_fn).unwrap();
 
@@ -1775,17 +1772,6 @@ fn display_model_delta_new_fn<'a>(
             {new_equalities}
             {new_defines}
                 }}
-            }}
-        "}
-    })
-}
-
-fn display_model_delta_apply_surjective_fn() -> impl Display {
-    FmtFn(|f| {
-        writedoc! {f, "
-            fn apply_surjective(&mut self, model: &mut Model) {{
-                self.apply_equalities(model);
-                self.apply_tuples(model);
             }}
         "}
     })
@@ -2297,8 +2283,9 @@ fn display_close_until_fn<'a>(
             {module_calls}
 
                         self.move_new_to_old();
-                        delta.apply_surjective(self);
+                        delta.apply_equalities(self);
                         self.canonicalize();
+                        delta.apply_tuples(self);
 
                         if condition(self) {{
                             self.recompute_model_indices();
