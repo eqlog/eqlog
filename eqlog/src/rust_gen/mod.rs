@@ -2282,30 +2282,30 @@ fn display_close_until_fn<'a>(
 
             {module_calls}
 
-                        self.move_new_to_old();
-                        delta.apply_equalities(self);
-                        self.canonicalize();
-                        delta.apply_tuples(self);
+            self.move_new_to_old();
+            delta.apply_equalities(self);
+            self.canonicalize();
+            delta.apply_tuples(self);
 
-                        if condition(self) {{
-                            self.recompute_model_indices();
-                            return true;
-                        }}
+            if condition(self) {{
+            self.recompute_model_indices();
+            return true;
+            }}
 
-                        if !self.is_dirty() {{
-                            break;
-                        }}
-                    }}
+            if !self.is_dirty() {{
+            break;
+            }}
+            }}
 
-                    delta.apply_non_surjective (self);
-                    if condition(self) {{
-                        self.recompute_model_indices();
-                        return true;
-                    }}
-                }}
+            delta.apply_non_surjective (self);
+            if condition(self) {{
+            self.recompute_model_indices();
+            return true;
+            }}
+            }}
 
-                self.recompute_model_indices();
-                false
+            self.recompute_model_indices();
+            false
             }}
         "}
     })
