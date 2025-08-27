@@ -2301,6 +2301,7 @@ fn display_close_until_fn<'a>(
                         self.canonicalize();
 
                         if condition(self) {{
+                            self.recompute_model_indices();
                             return true;
                         }}
 
@@ -2311,10 +2312,12 @@ fn display_close_until_fn<'a>(
 
                     delta.apply_non_surjective (self);
                     if condition(self) {{
+                        self.recompute_model_indices();
                         return true;
                     }}
                 }}
 
+                self.recompute_model_indices();
                 false
             }}
         "}
