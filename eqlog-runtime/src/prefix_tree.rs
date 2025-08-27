@@ -1030,3 +1030,134 @@ impl PrefixTree9 {
         Self { map }
     }
 }
+
+// difference methods
+impl PrefixTree0 {
+    pub fn difference(&self, other: &PrefixTree0) -> PrefixTree0 {
+        match (self.0, other.0) {
+            (Some(()), Some(())) => PrefixTree0(None), // Both have element, remove it
+            (Some(()), None) => PrefixTree0(Some(())), // Only self has element, keep it
+            (None, _) => PrefixTree0(None),            // Self doesn't have element, nothing to keep
+        }
+    }
+}
+
+impl PrefixTree1 {
+    pub fn difference(&self, other: &Self) -> Self {
+        Self {
+            set: self.set.difference(&other.set),
+        }
+    }
+}
+
+impl PrefixTree2 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree3 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree4 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree5 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree6 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree7 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree8 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
+
+impl PrefixTree9 {
+    pub fn difference(&self, other: &Self) -> Self {
+        let map = self.map.difference(&other.map, |_key, val1, val2| {
+            let diff_result = val1.difference(&val2);
+            if diff_result.is_empty() {
+                None
+            } else {
+                Some(diff_result)
+            }
+        });
+        Self { map }
+    }
+}
