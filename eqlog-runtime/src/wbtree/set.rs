@@ -48,6 +48,12 @@ impl<V: Ord + Clone> WBTreeSet<V> {
             map: self.map.union(&other.map, |_element, (), ()| ()),
         }
     }
+
+    pub fn difference(&self, other: &Self) -> Self {
+        WBTreeSet {
+            map: self.map.difference(&other.map),
+        }
+    }
 }
 
 impl<V: fmt::Debug + Ord + Clone> fmt::Debug for WBTreeSet<V> {
