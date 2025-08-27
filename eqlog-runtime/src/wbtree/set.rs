@@ -51,7 +51,7 @@ impl<V: Ord + Clone> WBTreeSet<V> {
 
     pub fn difference(&self, other: &Self) -> Self {
         WBTreeSet {
-            map: self.map.difference(&other.map),
+            map: self.map.difference(&other.map, |_element, (), ()| None),
         }
     }
 }

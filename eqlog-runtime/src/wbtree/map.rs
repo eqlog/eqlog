@@ -425,10 +425,14 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
         }
     }
 
-    fn difference(
+    fn difference<F>(
         left: Option<Rc<Node<K, V>>>,
         right: Option<Rc<Node<K, V>>>,
-    ) -> Option<Rc<Node<K, V>>> {
+        diff: &mut F,
+    ) -> Option<Rc<Node<K, V>>>
+    where
+        F: FnMut(&K, V, V) -> Option<V>,
+    {
         match (left, right) {
             (None, _) => None,
             (Some(l), None) => Some(l),
@@ -443,20 +447,27 @@ impl<K: Clone + Ord, V: Clone> Node<K, V> {
                 } = Rc::unwrap_or_clone(l);
                 let (r_left, r_value_opt, r_right) = Self::split(Some(r), &l_key);
 
-                let new_left = Self::difference(l_left, r_left);
-                let new_right = Self::difference(l_right, r_right);
+                let new_left = Self::difference(l_left, r_left, diff);
+                let new_right = Self::difference(l_right, r_right, diff);
 
                 match r_value_opt {
-                    // Key exists in right tree, exclude it from result
-                    Some(_) => {
-                        match (new_left, new_right) {
-                            (None, None) => None,
-                            (Some(left), None) => Some(left),
-                            (None, Some(right)) => Some(right),
-                            (Some(left), Some(right)) => {
-                                // Need to join the subtrees without the current key
-                                Self::join_without_key(left, right)
+                    // Key exists in both trees, call diff function
+                    Some(r_value) => {
+                        match diff(&l_key, l_value, r_value) {
+                            // diff returned None, exclude this key from result
+                            None => {
+                                match (new_left, new_right) {
+                                    (None, None) => None,
+                                    (Some(left), None) => Some(left),
+                                    (None, Some(right)) => Some(right),
+                                    (Some(left), Some(right)) => {
+                                        // Need to join the subtrees without the current key
+                                        Self::join_without_key(left, right)
+                                    }
+                                }
                             }
+                            // diff returned Some(value), keep this key with the new value
+                            Some(new_value) => Self::join(new_left, l_key, new_value, new_right),
                         }
                     }
                     // Key doesn't exist in right tree, include it in result
@@ -567,8 +578,11 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         }
     }
 
-    pub fn difference(&self, other: &Self) -> Self {
-        let new_root = Node::difference(self.root.clone(), other.root.clone());
+    pub fn difference<F>(&self, other: &Self, mut diff: F) -> Self
+    where
+        F: FnMut(&K, V, V) -> Option<V>,
+    {
+        let new_root = Node::difference(self.root.clone(), other.root.clone(), &mut diff);
         let new_len = new_root.as_ref().map_or(0, |root| root.size);
         WBTreeMap {
             root: new_root,
@@ -1716,7 +1730,7 @@ mod tests {
         let map1: WBTreeMap<i32, String> = WBTreeMap::new();
         let map2: WBTreeMap<i32, String> = WBTreeMap::new();
 
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert!(result.is_empty());
         assert_eq!(result.len(), 0);
     }
@@ -1730,13 +1744,13 @@ mod tests {
         map1.insert(2, "two".to_string());
 
         // Non-empty - empty = original map
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert_eq!(result.len(), 2);
         assert_eq!(result.get(&1), Some(&"one".to_string()));
         assert_eq!(result.get(&2), Some(&"two".to_string()));
 
         // Empty - non-empty = empty
-        let result2 = map2.difference(&map1);
+        let result2 = map2.difference(&map1, |_k, _v1, _v2| None);
         assert!(result2.is_empty());
         assert_eq!(result2.len(), 0);
     }
@@ -1756,7 +1770,7 @@ mod tests {
         map2.insert(4, "four".to_string());
         map2.insert(6, "six".to_string());
 
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert_eq!(result.len(), 3);
 
         // All values from map1 should be present since they don't overlap
@@ -1790,7 +1804,7 @@ mod tests {
         map2.insert(5, 500);
         map2.insert(6, 600);
 
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert_eq!(result.len(), 2);
 
         // Only non-overlapping keys from map1 should remain
@@ -1821,7 +1835,7 @@ mod tests {
         let map2 = map1.clone();
 
         // Difference of identical maps should be empty
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert!(result.is_empty());
         assert_eq!(result.len(), 0);
     }
@@ -1840,7 +1854,7 @@ mod tests {
         map2.insert(2, 200);
         map2.insert(4, 400);
 
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
         assert_eq!(result.len(), 3);
 
         // Only non-subset elements should remain
@@ -1869,7 +1883,7 @@ mod tests {
             map2.insert(i * 4, format!("map2_{}", i));
         }
 
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
 
         // Check that overlapping keys are removed
         for i in 0..500 {
@@ -1899,7 +1913,7 @@ mod tests {
         map2.insert(2, vec![10, 11]);
         map2.insert(3, vec![12]);
 
-        let result = map1.difference(&map2);
+        let result = map1.difference(&map2, |_k, _v1, _v2| None);
 
         assert_eq!(result.len(), 2);
         assert_eq!(result.get(&1), Some(&vec![1, 2, 3]));
@@ -1919,14 +1933,14 @@ mod tests {
         map2.insert(24, "not_answer");
 
         // No overlap
-        let result1 = map1.difference(&map2);
+        let result1 = map1.difference(&map2, |_k, _v1, _v2| None);
         assert_eq!(result1.len(), 1);
         assert_eq!(result1.get(&42), Some(&"answer"));
 
         // Total overlap
         map2.clear();
         map2.insert(42, "different_answer");
-        let result2 = map1.difference(&map2);
+        let result2 = map1.difference(&map2, |_k, _v1, _v2| None);
         assert!(result2.is_empty());
     }
 }
