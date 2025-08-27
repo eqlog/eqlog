@@ -1708,14 +1708,8 @@ fn display_model_delta_impl<'a>(
         let apply_equalities_fn = display_model_delta_apply_equalities_fn(eqlog, identifiers);
         write!(f, "{}", apply_equalities_fn).unwrap();
 
-        let apply_non_category_tuples_fn =
-            display_model_delta_apply_non_category_tuples_fn(eqlog, identifiers);
-        let apply_category_tuples_fn =
-            display_model_delta_apply_category_tuples_fn(eqlog, identifiers);
-        writedoc! {f, "
-            {apply_non_category_tuples_fn}
-            {apply_category_tuples_fn}
-        "}?;
+        let apply_tuples_fn = display_model_delta_apply_tuples_fn(eqlog, identifiers);
+        write!(f, "{}", apply_tuples_fn).unwrap();
 
         let apply_def_fn = display_model_delta_apply_def_fn(eqlog, identifiers);
         write!(f, "{}", apply_def_fn).unwrap();
@@ -1810,86 +1804,46 @@ fn display_model_delta_apply_equalities_fn<'a>(
     })
 }
 
-fn display_apply_tuples_block<'a>(
-    rel: Rel,
+fn display_model_delta_apply_tuples_fn<'a>(
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
 ) -> impl 'a + Display {
     FmtFn(move |f| {
-        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
-        let rel_snake = display_rel(rel, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        let args_destructure = (0..arity.len())
-            .map(ElVar::from)
-            .map(display_var)
-            .format(", ");
-        let insert_args = (0..arity.len())
-            .map(|i| {
+        let relations = eqlog
+            .iter_rel()
+            .map(|rel| {
                 FmtFn(move |f| {
-                    let var = ElVar::from(i);
-                    write!(f, "{var}.into()")
+                    let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+                    let rel_snake = display_rel(rel, eqlog, identifiers)
+                        .to_string()
+                        .to_case(Snake);
+                    let args_destructure = (0..arity.len())
+                        .map(ElVar::from)
+                        .map(display_var)
+                        .format(", ");
+                    let insert_args = (0..arity.len())
+                        .map(|i| {
+                            FmtFn(move |f| {
+                                let var = ElVar::from(i);
+                                write!(f, "{var}.into()")
+                            })
+                        })
+                        .format(", ");
+
+                    writedoc! {f, "
+                    for [{args_destructure}] in self.new_{rel_snake}.drain(..) {{
+                        model.insert_{rel_snake}({insert_args});
+                    }}
+                "}
                 })
             })
-            .format(", ");
-
-        writedoc! {f, "
-            for [{args_destructure}] in self.new_{rel_snake}.drain(..) {{
-                model.insert_{rel_snake}({insert_args});
-            }}
-        "}
-    })
-}
-
-fn category_rels(eqlog: &Eqlog) -> BTreeSet<Rel> {
-    eqlog
-        .iter_mor_type()
-        .flat_map(|(_model_type, mor_type)| {
-            let dom_func = eqlog.mor_type_dom_func(mor_type).unwrap();
-            let cod_func = eqlog.mor_type_cod_func(mor_type).unwrap();
-
-            let dom_rel = eqlog.func_rel(dom_func).unwrap();
-            let cod_rel = eqlog.func_rel(cod_func).unwrap();
-            [dom_rel, cod_rel]
-        })
-        .collect()
-}
-
-fn display_model_delta_apply_category_tuples_fn<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let blocks = category_rels(eqlog)
-            .into_iter()
-            .map(|rel| display_apply_tuples_block(rel, eqlog, identifiers))
             .format("\n");
 
+        // allow(unused_variables) is there for theories without relations.
         writedoc! {f, "
             #[allow(unused_variables)]
-            fn apply_category_tuples(&mut self, model: &mut Model) {{
-                {blocks}
-            }}
-        "}
-    })
-}
-
-fn display_model_delta_apply_non_category_tuples_fn<'a>(
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    FmtFn(move |f| {
-        let category_rels = category_rels(eqlog);
-        let blocks = eqlog
-            .iter_rel()
-            .filter(|rel| !category_rels.contains(rel))
-            .map(|rel| display_apply_tuples_block(rel, eqlog, identifiers))
-            .format("\n");
-
-        writedoc! {f, "
-            #[allow(unused_variables)]
-            fn apply_non_category_tuples(&mut self, model: &mut Model) {{
-                {blocks}
+            fn apply_tuples(&mut self, model: &mut Model) {{
+                {relations}
             }}
         "}
     })
@@ -2318,8 +2272,7 @@ fn display_close_until_fn<'a>(
             self.move_new_to_old();
             delta.apply_equalities(self);
             self.canonicalize();
-            delta.apply_category_tuples(self);
-            delta.apply_non_category_tuples(self);
+            delta.apply_tuples(self);
             self.recompute_model_indices();
 
             if condition(self) {{
