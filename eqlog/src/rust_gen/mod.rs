@@ -2163,6 +2163,7 @@ fn display_recompute_model_indices_fn<'a>(
                         Some(dom_set) => dom_set.clone(),
                         None => {{ continue; }},
                         }};
+                        self.{index_field_name}_own.remove_restriction(*cod, &dom_set);
                         {index_field_name}_all.insert_restriction(*cod, dom_set);
                         {before_model_els_loop_footers}
                         }}
