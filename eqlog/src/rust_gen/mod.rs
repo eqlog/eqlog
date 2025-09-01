@@ -2157,13 +2157,14 @@ fn display_recompute_model_indices_fn<'a>(
 
                     writedoc!{f, r#"
                         let mut {index_field_name}_all = self.{index_field_name}_own.clone();
+                        let {index_field_name}_own = &mut self.{index_field_name}_own;
                         for MorphismWithSignature {{ morph: _, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
                         {before_model_els_loop_headers}
                         let dom_set = match {index_field_name}_all.get(*dom) {{
                         Some(dom_set) => dom_set.clone(),
                         None => {{ continue; }},
                         }};
-                        self.{index_field_name}_own.remove_restriction(*cod, &dom_set);
+                        {index_field_name}_own.remove_restriction(*cod, &dom_set);
                         {index_field_name}_all.insert_restriction(*cod, dom_set);
                         {before_model_els_loop_footers}
                         }}
