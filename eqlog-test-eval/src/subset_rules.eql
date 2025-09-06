@@ -20,3 +20,11 @@ rule ab_inclusion_cod {
     if a_b = a_b();
     then cod(a_b) = b;
 }
+
+pred ab_element(Carrier);
+
+rule ab_elements_rule {
+    if a().element(x);
+    if b().element(x);
+    then ab_element(x);
+}

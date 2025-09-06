@@ -64,6 +64,10 @@ pred ambient_type_expr(node: TypeExprNode, ty_ident: Ident);
 pred member_type_expr(node: TypeExprNode, tm: TermNode, ty_ident: Ident);
 pred mor_type_expr(node: TypeExprNode, ty_ident: Ident);
 
+type PredExprNode;
+pred ambient_pred_expr(node: PredExprNode, pred_ident: Ident);
+pred member_pred_expr(node: PredExprNode, tm: TermNode, pred_ident: Ident);
+
 type OptTermNode;
 pred none_term_node(OptTermNode);
 pred some_term_node(OptTermNode, value: TermNode);
@@ -84,7 +88,7 @@ pred cons_match_case_list_node(node: MatchCaseListNode, head: MatchCaseNode, tai
 type IfAtomNode;
 pred equal_if_atom_node(IfAtomNode, lhs: TermNode, rhs: TermNode);
 pred defined_if_atom_node(IfAtomNode, term: TermNode);
-pred pred_if_atom_node(IfAtomNode, predicate: Ident, args: TermListNode);
+pred pred_if_atom_node(IfAtomNode, predicate: PredExprNode, args: TermListNode);
 pred var_if_atom_node(IfAtomNode, var: TermNode, type_expr: TypeExprNode);
 
 type ThenAtomNode;
@@ -155,6 +159,7 @@ func decl_node_loc(DeclNode) -> Loc;
 func decl_list_node_loc(DeclListNode) -> Loc;
 func module_node_loc(ModuleNode) -> Loc;
 func type_expr_node_loc(TypeExprNode) -> Loc;
+func pred_expr_node_loc(PredExprNode) -> Loc;
 
 // ### Descendant nodes of rules
 //
@@ -1567,7 +1572,14 @@ rule var_atom_should_be_type_member {
     then should_be_symbol_3(name, type_kind, enum_kind, model_kind, member_scope, loc);
 }
 rule pred_if_atom_should_be_pred {
-    if pred_if_atom_node(atom, pred_name, _);
+    if pred_if_atom_node(atom, pred_node, _);
+    branch {
+        // pass
+    } along {
+        if member_pred_expr(pred_node, _, _);
+        then absurd();
+    }
+    if ambient_pred_expr(pred_node, pred_name);
     if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if kind = PredSymbol();
     if loc = if_atom_node_loc(atom);
@@ -1647,7 +1659,14 @@ pred func_arg_num_should_match(
 );
 
 rule pred_if_atom_arg_num_should_match {
-    if pred_if_atom_node(atom, name, args);
+    if pred_if_atom_node(atom, pred_expr, args);
+    branch {
+        // pass
+    } along {
+        if member_pred_expr(pred_expr, _, _);
+        then absurd();
+    }
+    if ambient_pred_expr(pred_expr, name);
     if got_len = term_list_len(args);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if expected_len = type_list_len(pred_arity(semantic_pred(ss, name)));
@@ -2281,7 +2300,14 @@ rule equal_if_atom_semantics {
 }
 // No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
 rule pred_if_atom_semantics {
-    if pred_if_atom_node(atom, predicate_name, arg_terms);
+    if pred_if_atom_node(atom, pred_expr, arg_terms);
+    branch {
+        // pass
+    } along {
+        if member_pred_expr(pred_expr, _, _);
+        then absurd();
+    }
+    if ambient_pred_expr(pred_expr, predicate_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if rel = PredRel(semantic_pred(ss, predicate_name));
     if arg_els = semantic_els(arg_terms, _);

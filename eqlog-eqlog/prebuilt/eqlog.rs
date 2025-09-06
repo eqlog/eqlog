@@ -1,4 +1,4 @@
-// src-digest: 956906912883D2D04A10086DB974FA0501A95396300E1747FA42F7CA755BBAF7
+// src-digest: F164206FEC38E68B298D123B304234690E5120938D2DF905F004EB308F54FB07
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -133,6 +133,16 @@ pub struct TermListNode(pub u32);
 impl Into<u32> for TermListNode { fn into(self) -> u32 { self.0 } }
 impl From<u32> for TermListNode { fn from(x: u32) -> Self { TermListNode(x) } }
 impl fmt::Display for TermListNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+#[allow(dead_code)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct PredExprNode(pub u32);
+impl Into<u32> for PredExprNode { fn into(self) -> u32 { self.0 } }
+impl From<u32> for PredExprNode { fn from(x: u32) -> Self { PredExprNode(x) } }
+impl fmt::Display for PredExprNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
@@ -566,6 +576,17 @@ fn permute_inverse(t: ()) -> Absurd {
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = Absurd> {
 
 self.index_new
+    .range((
+        Bound::Included(&( )),
+        Bound::Included(&( ))
+    ))
+    .copied()
+    .map(Self::permute_inverse)
+}
+#[allow(dead_code)]
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = Absurd> {
+
+self.index_old
     .range((
         Bound::Included(&( )),
         Bound::Included(&( ))
@@ -4434,6 +4455,494 @@ impl fmt::Display for MorTypeExprTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct AmbientPredExpr(pub PredExprNode, pub Ident);
+#[derive(Clone, Hash, Debug)]
+struct AmbientPredExprTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    index_old_1_0: BTreeSet<(u32, u32, )>,
+    element_index_ident: BTreeMap<Ident, Vec<AmbientPredExpr>>,
+    element_index_pred_expr_node: BTreeMap<PredExprNode, Vec<AmbientPredExpr>>,
+}
+impl AmbientPredExprTable {
+#[allow(unused)]
+const WEIGHT: usize = 8;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+        index_old_1_0: BTreeSet::new(),
+    element_index_ident: BTreeMap::new(),
+    element_index_pred_expr_node: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: AmbientPredExpr) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_pred_expr_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_pred_expr_node.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_ident.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_ident.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: AmbientPredExpr) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_old_1_0.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_1_0(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: AmbientPredExpr) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> AmbientPredExpr {
+    AmbientPredExpr(PredExprNode::from(t.0), Ident::from(t.1))
+}
+#[allow(unused)]
+fn permute_1_0(t: AmbientPredExpr) -> (u32, u32, ) {
+    (t.1.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_0(t: (u32, u32, )) -> AmbientPredExpr {
+    AmbientPredExpr(PredExprNode::from(t.1), Ident::from(t.0))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+
+self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: PredExprNode) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+    let arg0 = arg0.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: PredExprNode) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: PredExprNode, arg1: Ident) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: Ident) -> impl '_ + Iterator<Item = AmbientPredExpr> {
+    let arg1 = arg1.0;
+self.index_old_1_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_0)
+}
+#[allow(dead_code)]
+fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<AmbientPredExpr> {
+    let mut ts = match self.element_index_ident.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_pred_expr_node(&mut self, tm: PredExprNode) -> Vec<AmbientPredExpr> {
+    let mut ts = match self.element_index_pred_expr_node.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            self.index_old_1_0.remove(&Self::permute_1_0(t));
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for AmbientPredExprTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("ambient_pred_expr"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct MemberPredExpr(pub PredExprNode, pub TermNode, pub Ident);
+#[derive(Clone, Hash, Debug)]
+struct MemberPredExprTable {
+    index_new_0_1_2: BTreeSet<(u32, u32, u32, )>,
+    index_old_0_1_2: BTreeSet<(u32, u32, u32, )>,
+    element_index_ident: BTreeMap<Ident, Vec<MemberPredExpr>>,
+    element_index_pred_expr_node: BTreeMap<PredExprNode, Vec<MemberPredExpr>>,
+    element_index_term_node: BTreeMap<TermNode, Vec<MemberPredExpr>>,
+}
+impl MemberPredExprTable {
+#[allow(unused)]
+const WEIGHT: usize = 9;
+fn new() -> Self {
+    Self {
+        index_new_0_1_2: BTreeSet::new(),
+        index_old_0_1_2: BTreeSet::new(),
+    element_index_ident: BTreeMap::new(),
+    element_index_pred_expr_node: BTreeMap::new(),
+    element_index_term_node: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: MemberPredExpr) -> bool {
+if self.index_old_0_1_2.contains(&Self::permute_0_1_2(t)) {
+return false;
+}
+if !self.index_new_0_1_2.insert(Self::permute_0_1_2(t)) {
+return false;
+}
+
+
+
+            match self.element_index_pred_expr_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_pred_expr_node.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_term_node.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_term_node.insert(t.1, vec![t]); },
+            };
+        
+
+            match self.element_index_ident.get_mut(&t.2) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_ident.insert(t.2, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: MemberPredExpr) -> bool {
+    self.index_new_0_1_2.contains(&Self::permute_0_1_2(t))
+ || self.index_old_0_1_2.contains(&Self::permute_0_1_2(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1_2.extend(
+    self.index_new_0_1_2
+    .iter().copied()
+    .map(|t| Self::permute_0_1_2(Self::permute_inverse_0_1_2(t)))
+);
+
+self.index_new_0_1_2.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1_2.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1_2(t: MemberPredExpr) -> (u32, u32, u32, ) {
+    (t.0.into(), t.1.into(), t.2.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1_2(t: (u32, u32, u32, )) -> MemberPredExpr {
+    MemberPredExpr(PredExprNode::from(t.0), TermNode::from(t.1), Ident::from(t.2))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = MemberPredExpr> {
+
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = MemberPredExpr> {
+
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn iter_old_0(&self, arg0: PredExprNode) -> impl '_ + Iterator<Item = MemberPredExpr> {
+    let arg0 = arg0.0;
+self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: PredExprNode) -> impl '_ + Iterator<Item = MemberPredExpr> {
+    let arg0 = arg0.0;
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1_2(&self, arg0: PredExprNode, arg1: TermNode, arg2: Ident) -> impl '_ + Iterator<Item = MemberPredExpr> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+    let arg2 = arg2.0;
+self.index_new_0_1_2
+    .range((
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+.chain(self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0, arg1, arg2,  )),
+        Bound::Included(&(arg0, arg1, arg2,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+)}
+#[allow(dead_code)]
+fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<MemberPredExpr> {
+    let mut ts = match self.element_index_ident.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_pred_expr_node(&mut self, tm: PredExprNode) -> Vec<MemberPredExpr> {
+    let mut ts = match self.element_index_pred_expr_node.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<MemberPredExpr> {
+    let mut ts = match self.element_index_term_node.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for MemberPredExprTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("member_pred_expr"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct NoneTermNode(pub OptTermNode);
 #[derive(Clone, Hash, Debug)]
 struct NoneTermNodeTable {
@@ -7199,15 +7708,15 @@ impl fmt::Display for DefinedIfAtomNodeTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
-struct PredIfAtomNode(pub IfAtomNode, pub Ident, pub TermListNode);
+struct PredIfAtomNode(pub IfAtomNode, pub PredExprNode, pub TermListNode);
 #[derive(Clone, Hash, Debug)]
 struct PredIfAtomNodeTable {
     index_new_0_1_2: BTreeSet<(u32, u32, u32, )>,
     index_old_0_1_2: BTreeSet<(u32, u32, u32, )>,
     index_old_1_2_0: BTreeSet<(u32, u32, u32, )>,
     index_old_2_0_1: BTreeSet<(u32, u32, u32, )>,
-    element_index_ident: BTreeMap<Ident, Vec<PredIfAtomNode>>,
     element_index_if_atom_node: BTreeMap<IfAtomNode, Vec<PredIfAtomNode>>,
+    element_index_pred_expr_node: BTreeMap<PredExprNode, Vec<PredIfAtomNode>>,
     element_index_term_list_node: BTreeMap<TermListNode, Vec<PredIfAtomNode>>,
 }
 impl PredIfAtomNodeTable {
@@ -7219,8 +7728,8 @@ fn new() -> Self {
         index_old_0_1_2: BTreeSet::new(),
         index_old_1_2_0: BTreeSet::new(),
         index_old_2_0_1: BTreeSet::new(),
-    element_index_ident: BTreeMap::new(),
     element_index_if_atom_node: BTreeMap::new(),
+    element_index_pred_expr_node: BTreeMap::new(),
     element_index_term_list_node: BTreeMap::new(),
     }
 }
@@ -7241,9 +7750,9 @@ return false;
             };
         
 
-            match self.element_index_ident.get_mut(&t.1) {
+            match self.element_index_pred_expr_node.get_mut(&t.1) {
                 Some(tuple_vec) => tuple_vec.push(t),
-                None => { self.element_index_ident.insert(t.1, vec![t]); },
+                None => { self.element_index_pred_expr_node.insert(t.1, vec![t]); },
             };
         
 
@@ -7291,7 +7800,7 @@ fn permute_0_1_2(t: PredIfAtomNode) -> (u32, u32, u32, ) {
 }
 #[allow(unused)]
 fn permute_inverse_0_1_2(t: (u32, u32, u32, )) -> PredIfAtomNode {
-    PredIfAtomNode(IfAtomNode::from(t.0), Ident::from(t.1), TermListNode::from(t.2))
+    PredIfAtomNode(IfAtomNode::from(t.0), PredExprNode::from(t.1), TermListNode::from(t.2))
 }
 #[allow(unused)]
 fn permute_1_2_0(t: PredIfAtomNode) -> (u32, u32, u32, ) {
@@ -7299,7 +7808,7 @@ fn permute_1_2_0(t: PredIfAtomNode) -> (u32, u32, u32, ) {
 }
 #[allow(unused)]
 fn permute_inverse_1_2_0(t: (u32, u32, u32, )) -> PredIfAtomNode {
-    PredIfAtomNode(IfAtomNode::from(t.2), Ident::from(t.0), TermListNode::from(t.1))
+    PredIfAtomNode(IfAtomNode::from(t.2), PredExprNode::from(t.0), TermListNode::from(t.1))
 }
 #[allow(unused)]
 fn permute_2_0_1(t: PredIfAtomNode) -> (u32, u32, u32, ) {
@@ -7307,7 +7816,7 @@ fn permute_2_0_1(t: PredIfAtomNode) -> (u32, u32, u32, ) {
 }
 #[allow(unused)]
 fn permute_inverse_2_0_1(t: (u32, u32, u32, )) -> PredIfAtomNode {
-    PredIfAtomNode(IfAtomNode::from(t.1), Ident::from(t.2), TermListNode::from(t.0))
+    PredIfAtomNode(IfAtomNode::from(t.1), PredExprNode::from(t.2), TermListNode::from(t.0))
 }
 #[allow(dead_code)]
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = PredIfAtomNode> {
@@ -7350,7 +7859,7 @@ self.index_old_0_1_2
     .map(Self::permute_inverse_0_1_2)
 }
 #[allow(dead_code)]
-fn iter_old_0_1(&self, arg0: IfAtomNode, arg1: Ident) -> impl '_ + Iterator<Item = PredIfAtomNode> {
+fn iter_old_0_1(&self, arg0: IfAtomNode, arg1: PredExprNode) -> impl '_ + Iterator<Item = PredIfAtomNode> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
 self.index_old_0_1_2
@@ -7362,7 +7871,7 @@ self.index_old_0_1_2
     .map(Self::permute_inverse_0_1_2)
 }
 #[allow(dead_code)]
-fn iter_all_0_1_2(&self, arg0: IfAtomNode, arg1: Ident, arg2: TermListNode) -> impl '_ + Iterator<Item = PredIfAtomNode> {
+fn iter_all_0_1_2(&self, arg0: IfAtomNode, arg1: PredExprNode, arg2: TermListNode) -> impl '_ + Iterator<Item = PredIfAtomNode> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
     let arg2 = arg2.0;
@@ -7394,7 +7903,18 @@ self.index_old_2_0_1
     .map(Self::permute_inverse_2_0_1)
 }
 #[allow(dead_code)]
-fn iter_old_1_2(&self, arg1: Ident, arg2: TermListNode) -> impl '_ + Iterator<Item = PredIfAtomNode> {
+fn iter_old_1(&self, arg1: PredExprNode) -> impl '_ + Iterator<Item = PredIfAtomNode> {
+    let arg1 = arg1.0;
+self.index_old_1_2_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_2_0)
+}
+#[allow(dead_code)]
+fn iter_old_1_2(&self, arg1: PredExprNode, arg2: TermListNode) -> impl '_ + Iterator<Item = PredIfAtomNode> {
     let arg1 = arg1.0;
     let arg2 = arg2.0;
 self.index_old_1_2_0
@@ -7417,8 +7937,8 @@ self.index_old_2_0_1
     .map(Self::permute_inverse_2_0_1)
 }
 #[allow(dead_code)]
-fn drain_with_element_ident(&mut self, tm: Ident) -> Vec<PredIfAtomNode> {
-    let mut ts = match self.element_index_ident.remove(&tm) {
+fn drain_with_element_if_atom_node(&mut self, tm: IfAtomNode) -> Vec<PredIfAtomNode> {
+    let mut ts = match self.element_index_if_atom_node.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
     };
@@ -7441,8 +7961,8 @@ self.index_old_2_0_1.remove(&Self::permute_2_0_1(t));
     ts
 }
 #[allow(dead_code)]
-fn drain_with_element_if_atom_node(&mut self, tm: IfAtomNode) -> Vec<PredIfAtomNode> {
-    let mut ts = match self.element_index_if_atom_node.remove(&tm) {
+fn drain_with_element_pred_expr_node(&mut self, tm: PredExprNode) -> Vec<PredIfAtomNode> {
+    let mut ts = match self.element_index_pred_expr_node.remove(&tm) {
         None => Vec::new(),
         Some(tuples) => tuples,
     };
@@ -31294,6 +31814,204 @@ impl fmt::Display for TypeExprNodeLocTable {
     }
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct PredExprNodeLoc(pub PredExprNode, pub Loc);
+#[derive(Clone, Hash, Debug)]
+struct PredExprNodeLocTable {
+    index_new_0_1: BTreeSet<(u32, u32, )>,
+    index_old_0_1: BTreeSet<(u32, u32, )>,
+    element_index_loc: BTreeMap<Loc, Vec<PredExprNodeLoc>>,
+    element_index_pred_expr_node: BTreeMap<PredExprNode, Vec<PredExprNodeLoc>>,
+}
+impl PredExprNodeLocTable {
+#[allow(unused)]
+const WEIGHT: usize = 6;
+fn new() -> Self {
+    Self {
+        index_new_0_1: BTreeSet::new(),
+        index_old_0_1: BTreeSet::new(),
+    element_index_loc: BTreeMap::new(),
+    element_index_pred_expr_node: BTreeMap::new(),
+    }
+}
+#[allow(dead_code)]
+fn insert(&mut self, t: PredExprNodeLoc) -> bool {
+if self.index_old_0_1.contains(&Self::permute_0_1(t)) {
+return false;
+}
+if !self.index_new_0_1.insert(Self::permute_0_1(t)) {
+return false;
+}
+
+
+
+            match self.element_index_pred_expr_node.get_mut(&t.0) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_pred_expr_node.insert(t.0, vec![t]); },
+            };
+        
+
+            match self.element_index_loc.get_mut(&t.1) {
+                Some(tuple_vec) => tuple_vec.push(t),
+                None => { self.element_index_loc.insert(t.1, vec![t]); },
+            };
+        
+true
+}
+#[allow(dead_code)]
+fn contains(&self, t: PredExprNodeLoc) -> bool {
+    self.index_new_0_1.contains(&Self::permute_0_1(t))
+ || self.index_old_0_1.contains(&Self::permute_0_1(t))
+
+}
+fn drop_dirt(&mut self) {
+self.index_old_0_1.extend(
+    self.index_new_0_1
+    .iter().copied()
+    .map(|t| Self::permute_0_1(Self::permute_inverse_0_1(t)))
+);
+
+self.index_new_0_1.clear();
+
+}
+fn is_dirty(&self) -> bool {
+    !self.index_new_0_1.is_empty()
+}
+#[allow(unused)]
+fn permute_0_1(t: PredExprNodeLoc) -> (u32, u32, ) {
+    (t.0.into(), t.1.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_0_1(t: (u32, u32, )) -> PredExprNodeLoc {
+    PredExprNodeLoc(PredExprNode::from(t.0), Loc::from(t.1))
+}
+#[allow(dead_code)]
+fn iter_new(&self, ) -> impl '_ + Iterator<Item = PredExprNodeLoc> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_all(&self, ) -> impl '_ + Iterator<Item = PredExprNodeLoc> {
+
+self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0(&self, arg0: PredExprNode) -> impl '_ + Iterator<Item = PredExprNodeLoc> {
+    let arg0 = arg0.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn iter_all_0_1(&self, arg0: PredExprNode, arg1: Loc) -> impl '_ + Iterator<Item = PredExprNodeLoc> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_new_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+.chain(self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+)}
+#[allow(dead_code)]
+fn drain_with_element_loc(&mut self, tm: Loc) -> Vec<PredExprNodeLoc> {
+    let mut ts = match self.element_index_loc.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+#[allow(dead_code)]
+fn drain_with_element_pred_expr_node(&mut self, tm: PredExprNode) -> Vec<PredExprNodeLoc> {
+    let mut ts = match self.element_index_pred_expr_node.remove(&tm) {
+        None => Vec::new(),
+        Some(tuples) => tuples,
+    };
+
+    let mut i = 0;
+    while i < ts.len() {
+        let t = ts[i];
+        if self.index_new_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else if self.index_old_0_1.remove(&Self::permute_0_1(t)) {
+            
+            i += 1;
+        } else {
+            ts.swap_remove(i);
+        }
+    }
+
+    ts
+}
+}
+impl fmt::Display for PredExprNodeLocTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Table::new(self.iter_all())
+            .with(Extract::segment(1.., ..))
+            .with(Header("pred_expr_node_loc"))
+            .with(Modify::new(Segment::all()).with(Alignment::center()))
+            .with(
+                Style::modern()
+                    .top_intersection('─')
+                    .header_intersection('┬')
+            )
+            .fmt(f)
+    }
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RuleDescendantRule(pub RuleDeclNode, pub RuleDescendantNode);
 #[derive(Clone, Hash, Debug)]
 struct RuleDescendantRuleTable {
@@ -34294,6 +35012,18 @@ self.index_new_0_1
     .copied()
     .map(Self::permute_inverse_0_1)
 )}
+#[allow(dead_code)]
+fn iter_old_0_1(&self, arg0: RuleDescendantNode, arg1: Scope) -> impl '_ + Iterator<Item = EntryScope> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1
+    .range((
+        Bound::Included(&(arg0, arg1,  )),
+        Bound::Included(&(arg0, arg1,  ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
 #[allow(dead_code)]
 fn iter_all_0_1(&self, arg0: RuleDescendantNode, arg1: Scope) -> impl '_ + Iterator<Item = EntryScope> {
     let arg0 = arg0.0;
@@ -56081,6 +56811,9 @@ struct ModuleNodeLocArgs(pub ModuleNode);
 struct TypeExprNodeLocArgs(pub TypeExprNode);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
+struct PredExprNodeLocArgs(pub PredExprNode);
+#[allow(unused)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
 struct RuleDescendantRuleArgs(pub RuleDeclNode);
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord, Tabled)]
@@ -56408,6 +57141,8 @@ struct ModelDelta {
     new_ambient_type_expr: Vec<AmbientTypeExpr>,
     new_member_type_expr: Vec<MemberTypeExpr>,
     new_mor_type_expr: Vec<MorTypeExpr>,
+    new_ambient_pred_expr: Vec<AmbientPredExpr>,
+    new_member_pred_expr: Vec<MemberPredExpr>,
     new_none_term_node: Vec<NoneTermNode>,
     new_some_term_node: Vec<SomeTermNode>,
     new_var_term_node: Vec<VarTermNode>,
@@ -56537,6 +57272,7 @@ struct ModelDelta {
     new_decl_list_node_loc: Vec<DeclListNodeLoc>,
     new_module_node_loc: Vec<ModuleNodeLoc>,
     new_type_expr_node_loc: Vec<TypeExprNodeLoc>,
+    new_pred_expr_node_loc: Vec<PredExprNodeLoc>,
     new_rule_descendant_rule: Vec<RuleDescendantRule>,
     new_rule_descendant_term: Vec<RuleDescendantTerm>,
     new_rule_descendant_term_list: Vec<RuleDescendantTermList>,
@@ -56653,6 +57389,7 @@ struct ModelDelta {
     new_enum_decl_node_equalities: Vec<(EnumDeclNode, EnumDeclNode)>,
     new_term_node_equalities: Vec<(TermNode, TermNode)>,
     new_term_list_node_equalities: Vec<(TermListNode, TermListNode)>,
+    new_pred_expr_node_equalities: Vec<(PredExprNode, PredExprNode)>,
     new_opt_term_node_equalities: Vec<(OptTermNode, OptTermNode)>,
     new_match_case_node_equalities: Vec<(MatchCaseNode, MatchCaseNode)>,
     new_stmt_list_node_equalities: Vec<(StmtListNode, StmtListNode)>,
@@ -56710,6 +57447,7 @@ new_decl_node_loc_def: Vec<DeclNodeLocArgs>,
 new_decl_list_node_loc_def: Vec<DeclListNodeLocArgs>,
 new_module_node_loc_def: Vec<ModuleNodeLocArgs>,
 new_type_expr_node_loc_def: Vec<TypeExprNodeLocArgs>,
+new_pred_expr_node_loc_def: Vec<PredExprNodeLocArgs>,
 new_rule_descendant_rule_def: Vec<RuleDescendantRuleArgs>,
 new_rule_descendant_term_def: Vec<RuleDescendantTermArgs>,
 new_rule_descendant_term_list_def: Vec<RuleDescendantTermListArgs>,
@@ -56886,6 +57624,12 @@ term_list_node_old: BTreeSet<TermListNode>,
 term_list_node_new: BTreeSet<TermListNode>,
 term_list_node_weights: Vec<usize>,
 term_list_node_uprooted: Vec<TermListNode>,
+
+pred_expr_node_equalities: Unification<PredExprNode>,
+pred_expr_node_old: BTreeSet<PredExprNode>,
+pred_expr_node_new: BTreeSet<PredExprNode>,
+pred_expr_node_weights: Vec<usize>,
+pred_expr_node_uprooted: Vec<PredExprNode>,
 
 opt_term_node_equalities: Unification<OptTermNode>,
 opt_term_node_old: BTreeSet<OptTermNode>,
@@ -57073,7 +57817,7 @@ nat_new: BTreeSet<Nat>,
 nat_weights: Vec<usize>,
 nat_uprooted: Vec<Nat>,
 
-  absurd: AbsurdTable,  type_decl: TypeDeclTable,  arg_decl_node_name: ArgDeclNodeNameTable,  arg_decl_node_type: ArgDeclNodeTypeTable,  nil_arg_decl_list_node: NilArgDeclListNodeTable,  cons_arg_decl_list_node: ConsArgDeclListNodeTable,  pred_decl: PredDeclTable,  func_decl: FuncDeclTable,  ctor_decl: CtorDeclTable,  nil_ctor_decl_list_node: NilCtorDeclListNodeTable,  cons_ctor_decl_list_node: ConsCtorDeclListNodeTable,  enum_decl: EnumDeclTable,  nil_term_list_node: NilTermListNodeTable,  cons_term_list_node: ConsTermListNodeTable,  ambient_type_expr: AmbientTypeExprTable,  member_type_expr: MemberTypeExprTable,  mor_type_expr: MorTypeExprTable,  none_term_node: NoneTermNodeTable,  some_term_node: SomeTermNodeTable,  var_term_node: VarTermNodeTable,  wildcard_term_node: WildcardTermNodeTable,  app_term_node: AppTermNodeTable,  dom_term_node: DomTermNodeTable,  cod_term_node: CodTermNodeTable,  match_case: MatchCaseTable,  nil_match_case_list_node: NilMatchCaseListNodeTable,  cons_match_case_list_node: ConsMatchCaseListNodeTable,  equal_if_atom_node: EqualIfAtomNodeTable,  defined_if_atom_node: DefinedIfAtomNodeTable,  pred_if_atom_node: PredIfAtomNodeTable,  var_if_atom_node: VarIfAtomNodeTable,  equal_then_atom_node: EqualThenAtomNodeTable,  defined_then_atom_node: DefinedThenAtomNodeTable,  pred_then_atom_node: PredThenAtomNodeTable,  if_stmt_node: IfStmtNodeTable,  then_stmt_node: ThenStmtNodeTable,  branch_stmt_node: BranchStmtNodeTable,  match_stmt_node: MatchStmtNodeTable,  nil_stmt_list_node: NilStmtListNodeTable,  cons_stmt_list_node: ConsStmtListNodeTable,  nil_stmt_block_list_node: NilStmtBlockListNodeTable,  cons_stmt_block_list_node: ConsStmtBlockListNodeTable,  rule_decl: RuleDeclTable,  model_decl: ModelDeclTable,  decl_node_type: DeclNodeTypeTable,  decl_node_pred: DeclNodePredTable,  decl_node_func: DeclNodeFuncTable,  decl_node_rule: DeclNodeRuleTable,  decl_node_enum: DeclNodeEnumTable,  decl_node_model: DeclNodeModelTable,  nil_decl_list_node: NilDeclListNodeTable,  cons_decl_list_node: ConsDeclListNodeTable,  decls_module_node: DeclsModuleNodeTable,  var_in_scope: VarInScopeTable,  scope_extension: ScopeExtensionTable,  scope_single_child: ScopeSingleChildTable,  scope_extension_siblings: ScopeExtensionSiblingsTable,  is_normal_type: IsNormalTypeTable,  is_enum_type: IsEnumTypeTable,  is_model_type: IsModelTypeTable,  is_mor_type: IsMorTypeTable,  illegal_member_type_expr_in_signature: IllegalMemberTypeExprInSignatureTable,  is_total_func: IsTotalFuncTable,  rel_app: RelAppTable,  el_type: ElTypeTable,  el_types: ElTypesTable,  constrained_el: ConstrainedElTable,  constrained_els: ConstrainedElsTable,  in_ker: InKerTable,  el_in_img: ElInImgTable,  rel_tuple_in_img: RelTupleInImgTable,  symbol_scope_extension: SymbolScopeExtensionTable,  symbol_scope_ancestor: SymbolScopeAncestorTable,  element_member_symbol_scope: ElementMemberSymbolScopeTable,  defined_symbol: DefinedSymbolTable,  accessible_symbol: AccessibleSymbolTable,  should_be_symbol: ShouldBeSymbolTable,  should_be_symbol_2: ShouldBeSymbol2Table,  should_be_symbol_3: ShouldBeSymbol3Table,  pred_arg_num_should_match: PredArgNumShouldMatchTable,  func_arg_num_should_match: FuncArgNumShouldMatchTable,  cfg_edge: CfgEdgeTable,  cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,  cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,  cfg_edge_fork: CfgEdgeForkTable,  cfg_edge_join: CfgEdgeJoinTable,  before_stmt_structure: BeforeStmtStructureTable,  stmt_morphism: StmtMorphismTable,  if_morphism: IfMorphismTable,  surj_then_morphism: SurjThenMorphismTable,  non_surj_then_morphism: NonSurjThenMorphismTable,  noop_morphism: NoopMorphismTable,  stmt_structure: StmtStructureTable,  if_atom_structure: IfAtomStructureTable,  then_atom_structure: ThenAtomStructureTable,  term_structure: TermStructureTable,  terms_structure: TermsStructureTable,  opt_term_structure: OptTermStructureTable,  type_expr_structure: TypeExprStructureTable,  dom_must_be_applied_to_mor_type: DomMustBeAppliedToMorTypeTable,  dom_must_result_in_model_type: DomMustResultInModelTypeTable,  cod_must_be_applied_to_mor_type: CodMustBeAppliedToMorTypeTable,  cod_must_result_in_model_type: CodMustResultInModelTypeTable,  term_should_be_epic_ok: TermShouldBeEpicOkTable,  terms_should_be_epic_ok: TermsShouldBeEpicOkTable,  el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,  el_is_surjective_ok: ElIsSurjectiveOkTable,  should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,  is_given_by_ctor: IsGivenByCtorTable,  function_can_be_made_defined: FunctionCanBeMadeDefinedTable,  case_pattern_is_variable: CasePatternIsVariableTable,  case_pattern_is_wildcard: CasePatternIsWildcardTable,  is_pattern_ctor_arg: IsPatternCtorArgTable,  are_pattern_ctor_args: ArePatternCtorArgsTable,  pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,  pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,  cases_contain_ctor: CasesContainCtorTable,  match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,  match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,  match_stmt_contains_ctor: MatchStmtContainsCtorTable,  real_virt_ident: RealVirtIdentTable,  virt_real_ident: VirtRealIdentTable,  var: VarTable,  rule_name: RuleNameTable,  module_name: ModuleNameTable,  type_decl_node_loc: TypeDeclNodeLocTable,  arg_decl_node_loc: ArgDeclNodeLocTable,  arg_decl_list_node_loc: ArgDeclListNodeLocTable,  pred_decl_node_loc: PredDeclNodeLocTable,  func_decl_node_loc: FuncDeclNodeLocTable,  ctor_decl_node_loc: CtorDeclNodeLocTable,  enum_decl_node_loc: EnumDeclNodeLocTable,  model_decl_node_loc: ModelDeclNodeLocTable,  term_node_loc: TermNodeLocTable,  term_list_node_loc: TermListNodeLocTable,  match_case_node_loc: MatchCaseNodeLocTable,  opt_term_node_loc: OptTermNodeLocTable,  if_atom_node_loc: IfAtomNodeLocTable,  then_atom_node_loc: ThenAtomNodeLocTable,  stmt_node_loc: StmtNodeLocTable,  stmt_list_node_loc: StmtListNodeLocTable,  rule_decl_node_loc: RuleDeclNodeLocTable,  decl_node_loc: DeclNodeLocTable,  decl_list_node_loc: DeclListNodeLocTable,  module_node_loc: ModuleNodeLocTable,  type_expr_node_loc: TypeExprNodeLocTable,  rule_descendant_rule: RuleDescendantRuleTable,  rule_descendant_term: RuleDescendantTermTable,  rule_descendant_term_list: RuleDescendantTermListTable,  rule_descendant_opt_term: RuleDescendantOptTermTable,  rule_descendant_if_atom: RuleDescendantIfAtomTable,  rule_descendant_then_atom: RuleDescendantThenAtomTable,  rule_descendant_match_case: RuleDescendantMatchCaseTable,  rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,  rule_descendant_stmt: RuleDescendantStmtTable,  rule_descendant_stmt_list: RuleDescendantStmtListTable,  rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,  rule_descendant_type_expr: RuleDescendantTypeExprTable,  entry_scope: EntryScopeTable,  exit_scope: ExitScopeTable,  ctor_enum: CtorEnumTable,  ctors_enum: CtorsEnumTable,  cases_discriminee: CasesDiscrimineeTable,  case_discriminee: CaseDiscrimineeTable,  desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,  desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,  desugared_case_block: DesugaredCaseBlockTable,  desugared_case_block_list: DesugaredCaseBlockListTable,  nil_type_list: NilTypeListTable,  cons_type_list: ConsTypeListTable,  snoc_type_list: SnocTypeListTable,  semantic_type: SemanticTypeTable,  decl_symbol_scope: DeclSymbolScopeTable,  mor_type: MorTypeTable,  mor_type_dom_func: MorTypeDomFuncTable,  mor_type_cod_func: MorTypeCodFuncTable,  type_definition_symbol_scope: TypeDefinitionSymbolScopeTable,  func_rel: FuncRelTable,  rel_definition_symbol_scope: RelDefinitionSymbolScopeTable,  domain: DomainTable,  codomain: CodomainTable,  type_name: TypeNameTable,  virtual_symbol_scope: VirtualSymbolScopeTable,  parent_model_func: ParentModelFuncTable,  symbol_scope_model: SymbolScopeModelTable,  flat_domain: FlatDomainTable,  semantic_signature_type_expr: SemanticSignatureTypeExprTable,  type_symbol: TypeSymbolTable,  enum_symbol: EnumSymbolTable,  model_symbol: ModelSymbolTable,  semantic_arg_type: SemanticArgTypeTable,  arg_symbol_scope: ArgSymbolScopeTable,  semantic_arg_types: SemanticArgTypesTable,  semantic_pred: SemanticPredTable,  pred_arity: PredArityTable,  semantic_func: SemanticFuncTable,  ctor_symbol_scope: CtorSymbolScopeTable,  pred_rel: PredRelTable,  rel_name: RelNameTable,  arity: ArityTable,  dom: DomTable,  cod: CodTable,  flat_arity: FlatArityTable,  module_symbol_scope: ModuleSymbolScopeTable,  nil_el_list: NilElListTable,  cons_el_list: ConsElListTable,  snoc_el_list: SnocElListTable,  el_structure: ElStructureTable,  els_structure: ElsStructureTable,  ambient_type: AmbientTypeTable,  instantiated_type: InstantiatedTypeTable,  underlying_type: UnderlyingTypeTable,  nil_element_type_list: NilElementTypeListTable,  cons_element_type_list: ConsElementTypeListTable,  snoc_element_type_list: SnocElementTypeListTable,  ambient_el_type_list: AmbientElTypeListTable,  func_app: FuncAppTable,  map_el: MapElTable,  map_els: MapElsTable,  ambient_model_el: AmbientModelElTable,  pred_symbol: PredSymbolTable,  func_symbol: FuncSymbolTable,  rule_symbol: RuleSymbolTable,  ctor_symbol: CtorSymbolTable,  symbol_scope_parent: SymbolScopeParentTable,  decls_symbol_scope: DeclsSymbolScopeTable,  args_symbol_scope: ArgsSymbolScopeTable,  ctors_symbol_scope: CtorsSymbolScopeTable,  model_member_symbol_scope: ModelMemberSymbolScopeTable,  symbol_scope_name: SymbolScopeNameTable,  scope_symbols: ScopeSymbolsTable,  semantic_el: SemanticElTable,  zero: ZeroTable,  succ: SuccTable,  type_list_len: TypeListLenTable,  term_list_len: TermListLenTable,  before_rule_structure: BeforeRuleStructureTable,  ambient_model_el_structure: AmbientModelElStructureTable,  ambient_model_el_morphism: AmbientModelElMorphismTable,  if_atom_morphism: IfAtomMorphismTable,  then_atom_morphism: ThenAtomMorphismTable,  branch_stmt_morphism: BranchStmtMorphismTable,  match_stmt_morphism: MatchStmtMorphismTable,  semantic_name: SemanticNameTable,  semantic_els: SemanticElsTable,  wildcard_name: WildcardNameTable,  rel_app_parent_model_el: RelAppParentModelElTable,  match_case_pattern_ctor: MatchCasePatternCtorTable,  cases_determined_enum: CasesDeterminedEnumTable,empty_join_is_dirty: bool,
+  absurd: AbsurdTable,  type_decl: TypeDeclTable,  arg_decl_node_name: ArgDeclNodeNameTable,  arg_decl_node_type: ArgDeclNodeTypeTable,  nil_arg_decl_list_node: NilArgDeclListNodeTable,  cons_arg_decl_list_node: ConsArgDeclListNodeTable,  pred_decl: PredDeclTable,  func_decl: FuncDeclTable,  ctor_decl: CtorDeclTable,  nil_ctor_decl_list_node: NilCtorDeclListNodeTable,  cons_ctor_decl_list_node: ConsCtorDeclListNodeTable,  enum_decl: EnumDeclTable,  nil_term_list_node: NilTermListNodeTable,  cons_term_list_node: ConsTermListNodeTable,  ambient_type_expr: AmbientTypeExprTable,  member_type_expr: MemberTypeExprTable,  mor_type_expr: MorTypeExprTable,  ambient_pred_expr: AmbientPredExprTable,  member_pred_expr: MemberPredExprTable,  none_term_node: NoneTermNodeTable,  some_term_node: SomeTermNodeTable,  var_term_node: VarTermNodeTable,  wildcard_term_node: WildcardTermNodeTable,  app_term_node: AppTermNodeTable,  dom_term_node: DomTermNodeTable,  cod_term_node: CodTermNodeTable,  match_case: MatchCaseTable,  nil_match_case_list_node: NilMatchCaseListNodeTable,  cons_match_case_list_node: ConsMatchCaseListNodeTable,  equal_if_atom_node: EqualIfAtomNodeTable,  defined_if_atom_node: DefinedIfAtomNodeTable,  pred_if_atom_node: PredIfAtomNodeTable,  var_if_atom_node: VarIfAtomNodeTable,  equal_then_atom_node: EqualThenAtomNodeTable,  defined_then_atom_node: DefinedThenAtomNodeTable,  pred_then_atom_node: PredThenAtomNodeTable,  if_stmt_node: IfStmtNodeTable,  then_stmt_node: ThenStmtNodeTable,  branch_stmt_node: BranchStmtNodeTable,  match_stmt_node: MatchStmtNodeTable,  nil_stmt_list_node: NilStmtListNodeTable,  cons_stmt_list_node: ConsStmtListNodeTable,  nil_stmt_block_list_node: NilStmtBlockListNodeTable,  cons_stmt_block_list_node: ConsStmtBlockListNodeTable,  rule_decl: RuleDeclTable,  model_decl: ModelDeclTable,  decl_node_type: DeclNodeTypeTable,  decl_node_pred: DeclNodePredTable,  decl_node_func: DeclNodeFuncTable,  decl_node_rule: DeclNodeRuleTable,  decl_node_enum: DeclNodeEnumTable,  decl_node_model: DeclNodeModelTable,  nil_decl_list_node: NilDeclListNodeTable,  cons_decl_list_node: ConsDeclListNodeTable,  decls_module_node: DeclsModuleNodeTable,  var_in_scope: VarInScopeTable,  scope_extension: ScopeExtensionTable,  scope_single_child: ScopeSingleChildTable,  scope_extension_siblings: ScopeExtensionSiblingsTable,  is_normal_type: IsNormalTypeTable,  is_enum_type: IsEnumTypeTable,  is_model_type: IsModelTypeTable,  is_mor_type: IsMorTypeTable,  illegal_member_type_expr_in_signature: IllegalMemberTypeExprInSignatureTable,  is_total_func: IsTotalFuncTable,  rel_app: RelAppTable,  el_type: ElTypeTable,  el_types: ElTypesTable,  constrained_el: ConstrainedElTable,  constrained_els: ConstrainedElsTable,  in_ker: InKerTable,  el_in_img: ElInImgTable,  rel_tuple_in_img: RelTupleInImgTable,  symbol_scope_extension: SymbolScopeExtensionTable,  symbol_scope_ancestor: SymbolScopeAncestorTable,  element_member_symbol_scope: ElementMemberSymbolScopeTable,  defined_symbol: DefinedSymbolTable,  accessible_symbol: AccessibleSymbolTable,  should_be_symbol: ShouldBeSymbolTable,  should_be_symbol_2: ShouldBeSymbol2Table,  should_be_symbol_3: ShouldBeSymbol3Table,  pred_arg_num_should_match: PredArgNumShouldMatchTable,  func_arg_num_should_match: FuncArgNumShouldMatchTable,  cfg_edge: CfgEdgeTable,  cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable,  cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable,  cfg_edge_fork: CfgEdgeForkTable,  cfg_edge_join: CfgEdgeJoinTable,  before_stmt_structure: BeforeStmtStructureTable,  stmt_morphism: StmtMorphismTable,  if_morphism: IfMorphismTable,  surj_then_morphism: SurjThenMorphismTable,  non_surj_then_morphism: NonSurjThenMorphismTable,  noop_morphism: NoopMorphismTable,  stmt_structure: StmtStructureTable,  if_atom_structure: IfAtomStructureTable,  then_atom_structure: ThenAtomStructureTable,  term_structure: TermStructureTable,  terms_structure: TermsStructureTable,  opt_term_structure: OptTermStructureTable,  type_expr_structure: TypeExprStructureTable,  dom_must_be_applied_to_mor_type: DomMustBeAppliedToMorTypeTable,  dom_must_result_in_model_type: DomMustResultInModelTypeTable,  cod_must_be_applied_to_mor_type: CodMustBeAppliedToMorTypeTable,  cod_must_result_in_model_type: CodMustResultInModelTypeTable,  term_should_be_epic_ok: TermShouldBeEpicOkTable,  terms_should_be_epic_ok: TermsShouldBeEpicOkTable,  el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable,  el_is_surjective_ok: ElIsSurjectiveOkTable,  should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable,  is_given_by_ctor: IsGivenByCtorTable,  function_can_be_made_defined: FunctionCanBeMadeDefinedTable,  case_pattern_is_variable: CasePatternIsVariableTable,  case_pattern_is_wildcard: CasePatternIsWildcardTable,  is_pattern_ctor_arg: IsPatternCtorArgTable,  are_pattern_ctor_args: ArePatternCtorArgsTable,  pattern_ctor_arg_is_app: PatternCtorArgIsAppTable,  pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable,  cases_contain_ctor: CasesContainCtorTable,  match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable,  match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable,  match_stmt_contains_ctor: MatchStmtContainsCtorTable,  real_virt_ident: RealVirtIdentTable,  virt_real_ident: VirtRealIdentTable,  var: VarTable,  rule_name: RuleNameTable,  module_name: ModuleNameTable,  type_decl_node_loc: TypeDeclNodeLocTable,  arg_decl_node_loc: ArgDeclNodeLocTable,  arg_decl_list_node_loc: ArgDeclListNodeLocTable,  pred_decl_node_loc: PredDeclNodeLocTable,  func_decl_node_loc: FuncDeclNodeLocTable,  ctor_decl_node_loc: CtorDeclNodeLocTable,  enum_decl_node_loc: EnumDeclNodeLocTable,  model_decl_node_loc: ModelDeclNodeLocTable,  term_node_loc: TermNodeLocTable,  term_list_node_loc: TermListNodeLocTable,  match_case_node_loc: MatchCaseNodeLocTable,  opt_term_node_loc: OptTermNodeLocTable,  if_atom_node_loc: IfAtomNodeLocTable,  then_atom_node_loc: ThenAtomNodeLocTable,  stmt_node_loc: StmtNodeLocTable,  stmt_list_node_loc: StmtListNodeLocTable,  rule_decl_node_loc: RuleDeclNodeLocTable,  decl_node_loc: DeclNodeLocTable,  decl_list_node_loc: DeclListNodeLocTable,  module_node_loc: ModuleNodeLocTable,  type_expr_node_loc: TypeExprNodeLocTable,  pred_expr_node_loc: PredExprNodeLocTable,  rule_descendant_rule: RuleDescendantRuleTable,  rule_descendant_term: RuleDescendantTermTable,  rule_descendant_term_list: RuleDescendantTermListTable,  rule_descendant_opt_term: RuleDescendantOptTermTable,  rule_descendant_if_atom: RuleDescendantIfAtomTable,  rule_descendant_then_atom: RuleDescendantThenAtomTable,  rule_descendant_match_case: RuleDescendantMatchCaseTable,  rule_descendant_match_case_list: RuleDescendantMatchCaseListTable,  rule_descendant_stmt: RuleDescendantStmtTable,  rule_descendant_stmt_list: RuleDescendantStmtListTable,  rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable,  rule_descendant_type_expr: RuleDescendantTypeExprTable,  entry_scope: EntryScopeTable,  exit_scope: ExitScopeTable,  ctor_enum: CtorEnumTable,  ctors_enum: CtorsEnumTable,  cases_discriminee: CasesDiscrimineeTable,  case_discriminee: CaseDiscrimineeTable,  desugared_case_equality_atom: DesugaredCaseEqualityAtomTable,  desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable,  desugared_case_block: DesugaredCaseBlockTable,  desugared_case_block_list: DesugaredCaseBlockListTable,  nil_type_list: NilTypeListTable,  cons_type_list: ConsTypeListTable,  snoc_type_list: SnocTypeListTable,  semantic_type: SemanticTypeTable,  decl_symbol_scope: DeclSymbolScopeTable,  mor_type: MorTypeTable,  mor_type_dom_func: MorTypeDomFuncTable,  mor_type_cod_func: MorTypeCodFuncTable,  type_definition_symbol_scope: TypeDefinitionSymbolScopeTable,  func_rel: FuncRelTable,  rel_definition_symbol_scope: RelDefinitionSymbolScopeTable,  domain: DomainTable,  codomain: CodomainTable,  type_name: TypeNameTable,  virtual_symbol_scope: VirtualSymbolScopeTable,  parent_model_func: ParentModelFuncTable,  symbol_scope_model: SymbolScopeModelTable,  flat_domain: FlatDomainTable,  semantic_signature_type_expr: SemanticSignatureTypeExprTable,  type_symbol: TypeSymbolTable,  enum_symbol: EnumSymbolTable,  model_symbol: ModelSymbolTable,  semantic_arg_type: SemanticArgTypeTable,  arg_symbol_scope: ArgSymbolScopeTable,  semantic_arg_types: SemanticArgTypesTable,  semantic_pred: SemanticPredTable,  pred_arity: PredArityTable,  semantic_func: SemanticFuncTable,  ctor_symbol_scope: CtorSymbolScopeTable,  pred_rel: PredRelTable,  rel_name: RelNameTable,  arity: ArityTable,  dom: DomTable,  cod: CodTable,  flat_arity: FlatArityTable,  module_symbol_scope: ModuleSymbolScopeTable,  nil_el_list: NilElListTable,  cons_el_list: ConsElListTable,  snoc_el_list: SnocElListTable,  el_structure: ElStructureTable,  els_structure: ElsStructureTable,  ambient_type: AmbientTypeTable,  instantiated_type: InstantiatedTypeTable,  underlying_type: UnderlyingTypeTable,  nil_element_type_list: NilElementTypeListTable,  cons_element_type_list: ConsElementTypeListTable,  snoc_element_type_list: SnocElementTypeListTable,  ambient_el_type_list: AmbientElTypeListTable,  func_app: FuncAppTable,  map_el: MapElTable,  map_els: MapElsTable,  ambient_model_el: AmbientModelElTable,  pred_symbol: PredSymbolTable,  func_symbol: FuncSymbolTable,  rule_symbol: RuleSymbolTable,  ctor_symbol: CtorSymbolTable,  symbol_scope_parent: SymbolScopeParentTable,  decls_symbol_scope: DeclsSymbolScopeTable,  args_symbol_scope: ArgsSymbolScopeTable,  ctors_symbol_scope: CtorsSymbolScopeTable,  model_member_symbol_scope: ModelMemberSymbolScopeTable,  symbol_scope_name: SymbolScopeNameTable,  scope_symbols: ScopeSymbolsTable,  semantic_el: SemanticElTable,  zero: ZeroTable,  succ: SuccTable,  type_list_len: TypeListLenTable,  term_list_len: TermListLenTable,  before_rule_structure: BeforeRuleStructureTable,  ambient_model_el_structure: AmbientModelElStructureTable,  ambient_model_el_morphism: AmbientModelElMorphismTable,  if_atom_morphism: IfAtomMorphismTable,  then_atom_morphism: ThenAtomMorphismTable,  branch_stmt_morphism: BranchStmtMorphismTable,  match_stmt_morphism: MatchStmtMorphismTable,  semantic_name: SemanticNameTable,  semantic_els: SemanticElsTable,  wildcard_name: WildcardNameTable,  rel_app_parent_model_el: RelAppParentModelElTable,  match_case_pattern_ctor: MatchCasePatternCtorTable,  cases_determined_enum: CasesDeterminedEnumTable,empty_join_is_dirty: bool,
 }
 type Model = Eqlog;impl ModelDelta {
 fn new() -> ModelDelta {
@@ -57095,6 +57839,8 @@ fn new() -> ModelDelta {
     new_ambient_type_expr: Vec::new(),
     new_member_type_expr: Vec::new(),
     new_mor_type_expr: Vec::new(),
+    new_ambient_pred_expr: Vec::new(),
+    new_member_pred_expr: Vec::new(),
     new_none_term_node: Vec::new(),
     new_some_term_node: Vec::new(),
     new_var_term_node: Vec::new(),
@@ -57224,6 +57970,7 @@ fn new() -> ModelDelta {
     new_decl_list_node_loc: Vec::new(),
     new_module_node_loc: Vec::new(),
     new_type_expr_node_loc: Vec::new(),
+    new_pred_expr_node_loc: Vec::new(),
     new_rule_descendant_rule: Vec::new(),
     new_rule_descendant_term: Vec::new(),
     new_rule_descendant_term_list: Vec::new(),
@@ -57340,6 +58087,7 @@ fn new() -> ModelDelta {
     new_enum_decl_node_equalities: Vec::new(),
     new_term_node_equalities: Vec::new(),
     new_term_list_node_equalities: Vec::new(),
+    new_pred_expr_node_equalities: Vec::new(),
     new_opt_term_node_equalities: Vec::new(),
     new_match_case_node_equalities: Vec::new(),
     new_stmt_list_node_equalities: Vec::new(),
@@ -57422,6 +58170,8 @@ new_decl_list_node_loc_def: Vec::new(),
 new_module_node_loc_def: Vec::new(),
 
 new_type_expr_node_loc_def: Vec::new(),
+
+new_pred_expr_node_loc_def: Vec::new(),
 
 new_rule_descendant_rule_def: Vec::new(),
 
@@ -57674,6 +58424,10 @@ for (lhs, rhs) in self.new_type_expr_node_equalities.iter().copied() {
     model.equate_type_expr_node(lhs, rhs);
 }
 
+for (lhs, rhs) in self.new_pred_expr_node_equalities.iter().copied() {
+    model.equate_pred_expr_node(lhs, rhs);
+}
+
 for (lhs, rhs) in self.new_opt_term_node_equalities.iter().copied() {
     model.equate_opt_term_node(lhs, rhs);
 }
@@ -57866,6 +58620,14 @@ for MemberTypeExpr(tm0, tm1, tm2) in self.new_member_type_expr.drain(..) {
 
 for MorTypeExpr(tm0, tm1) in self.new_mor_type_expr.drain(..) {
     model.insert_mor_type_expr(tm0, tm1);
+}
+
+for AmbientPredExpr(tm0, tm1) in self.new_ambient_pred_expr.drain(..) {
+    model.insert_ambient_pred_expr(tm0, tm1);
+}
+
+for MemberPredExpr(tm0, tm1, tm2) in self.new_member_pred_expr.drain(..) {
+    model.insert_member_pred_expr(tm0, tm1, tm2);
 }
 
 for NoneTermNode(tm0) in self.new_none_term_node.drain(..) {
@@ -58382,6 +59144,10 @@ for ModuleNodeLoc(tm0, tm1) in self.new_module_node_loc.drain(..) {
 
 for TypeExprNodeLoc(tm0, tm1) in self.new_type_expr_node_loc.drain(..) {
     model.insert_type_expr_node_loc(tm0, tm1);
+}
+
+for PredExprNodeLoc(tm0, tm1) in self.new_pred_expr_node_loc.drain(..) {
+    model.insert_pred_expr_node_loc(tm0, tm1);
 }
 
 for RuleDescendantRule(tm0, tm1) in self.new_rule_descendant_rule.drain(..) {
@@ -58903,6 +59669,10 @@ for TypeExprNodeLocArgs(tm0) in self.new_type_expr_node_loc_def.drain(..) {
     model.define_type_expr_node_loc(tm0);
 }
 
+for PredExprNodeLocArgs(tm0) in self.new_pred_expr_node_loc_def.drain(..) {
+    model.define_pred_expr_node_loc(tm0);
+}
+
 for RuleDescendantRuleArgs(tm0) in self.new_rule_descendant_rule_def.drain(..) {
     model.define_rule_descendant_rule(tm0);
 }
@@ -59352,6 +60122,11 @@ term_list_node_weights: Vec::new(),
 term_list_node_new: BTreeSet::new(),
 term_list_node_old: BTreeSet::new(),
 term_list_node_uprooted: Vec::new(),
+pred_expr_node_equalities: Unification::new(),
+pred_expr_node_weights: Vec::new(),
+pred_expr_node_new: BTreeSet::new(),
+pred_expr_node_old: BTreeSet::new(),
+pred_expr_node_uprooted: Vec::new(),
 opt_term_node_equalities: Unification::new(),
 opt_term_node_weights: Vec::new(),
 opt_term_node_new: BTreeSet::new(),
@@ -59507,7 +60282,7 @@ nat_weights: Vec::new(),
 nat_new: BTreeSet::new(),
 nat_old: BTreeSet::new(),
 nat_uprooted: Vec::new(),
-absurd: AbsurdTable::new(),type_decl: TypeDeclTable::new(),arg_decl_node_name: ArgDeclNodeNameTable::new(),arg_decl_node_type: ArgDeclNodeTypeTable::new(),nil_arg_decl_list_node: NilArgDeclListNodeTable::new(),cons_arg_decl_list_node: ConsArgDeclListNodeTable::new(),pred_decl: PredDeclTable::new(),func_decl: FuncDeclTable::new(),ctor_decl: CtorDeclTable::new(),nil_ctor_decl_list_node: NilCtorDeclListNodeTable::new(),cons_ctor_decl_list_node: ConsCtorDeclListNodeTable::new(),enum_decl: EnumDeclTable::new(),nil_term_list_node: NilTermListNodeTable::new(),cons_term_list_node: ConsTermListNodeTable::new(),ambient_type_expr: AmbientTypeExprTable::new(),member_type_expr: MemberTypeExprTable::new(),mor_type_expr: MorTypeExprTable::new(),none_term_node: NoneTermNodeTable::new(),some_term_node: SomeTermNodeTable::new(),var_term_node: VarTermNodeTable::new(),wildcard_term_node: WildcardTermNodeTable::new(),app_term_node: AppTermNodeTable::new(),dom_term_node: DomTermNodeTable::new(),cod_term_node: CodTermNodeTable::new(),match_case: MatchCaseTable::new(),nil_match_case_list_node: NilMatchCaseListNodeTable::new(),cons_match_case_list_node: ConsMatchCaseListNodeTable::new(),equal_if_atom_node: EqualIfAtomNodeTable::new(),defined_if_atom_node: DefinedIfAtomNodeTable::new(),pred_if_atom_node: PredIfAtomNodeTable::new(),var_if_atom_node: VarIfAtomNodeTable::new(),equal_then_atom_node: EqualThenAtomNodeTable::new(),defined_then_atom_node: DefinedThenAtomNodeTable::new(),pred_then_atom_node: PredThenAtomNodeTable::new(),if_stmt_node: IfStmtNodeTable::new(),then_stmt_node: ThenStmtNodeTable::new(),branch_stmt_node: BranchStmtNodeTable::new(),match_stmt_node: MatchStmtNodeTable::new(),nil_stmt_list_node: NilStmtListNodeTable::new(),cons_stmt_list_node: ConsStmtListNodeTable::new(),nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),rule_decl: RuleDeclTable::new(),model_decl: ModelDeclTable::new(),decl_node_type: DeclNodeTypeTable::new(),decl_node_pred: DeclNodePredTable::new(),decl_node_func: DeclNodeFuncTable::new(),decl_node_rule: DeclNodeRuleTable::new(),decl_node_enum: DeclNodeEnumTable::new(),decl_node_model: DeclNodeModelTable::new(),nil_decl_list_node: NilDeclListNodeTable::new(),cons_decl_list_node: ConsDeclListNodeTable::new(),decls_module_node: DeclsModuleNodeTable::new(),var_in_scope: VarInScopeTable::new(),scope_extension: ScopeExtensionTable::new(),scope_single_child: ScopeSingleChildTable::new(),scope_extension_siblings: ScopeExtensionSiblingsTable::new(),is_normal_type: IsNormalTypeTable::new(),is_enum_type: IsEnumTypeTable::new(),is_model_type: IsModelTypeTable::new(),is_mor_type: IsMorTypeTable::new(),illegal_member_type_expr_in_signature: IllegalMemberTypeExprInSignatureTable::new(),is_total_func: IsTotalFuncTable::new(),rel_app: RelAppTable::new(),el_type: ElTypeTable::new(),el_types: ElTypesTable::new(),constrained_el: ConstrainedElTable::new(),constrained_els: ConstrainedElsTable::new(),in_ker: InKerTable::new(),el_in_img: ElInImgTable::new(),rel_tuple_in_img: RelTupleInImgTable::new(),symbol_scope_extension: SymbolScopeExtensionTable::new(),symbol_scope_ancestor: SymbolScopeAncestorTable::new(),element_member_symbol_scope: ElementMemberSymbolScopeTable::new(),defined_symbol: DefinedSymbolTable::new(),accessible_symbol: AccessibleSymbolTable::new(),should_be_symbol: ShouldBeSymbolTable::new(),should_be_symbol_2: ShouldBeSymbol2Table::new(),should_be_symbol_3: ShouldBeSymbol3Table::new(),pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),cfg_edge: CfgEdgeTable::new(),cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),cfg_edge_fork: CfgEdgeForkTable::new(),cfg_edge_join: CfgEdgeJoinTable::new(),before_stmt_structure: BeforeStmtStructureTable::new(),stmt_morphism: StmtMorphismTable::new(),if_morphism: IfMorphismTable::new(),surj_then_morphism: SurjThenMorphismTable::new(),non_surj_then_morphism: NonSurjThenMorphismTable::new(),noop_morphism: NoopMorphismTable::new(),stmt_structure: StmtStructureTable::new(),if_atom_structure: IfAtomStructureTable::new(),then_atom_structure: ThenAtomStructureTable::new(),term_structure: TermStructureTable::new(),terms_structure: TermsStructureTable::new(),opt_term_structure: OptTermStructureTable::new(),type_expr_structure: TypeExprStructureTable::new(),dom_must_be_applied_to_mor_type: DomMustBeAppliedToMorTypeTable::new(),dom_must_result_in_model_type: DomMustResultInModelTypeTable::new(),cod_must_be_applied_to_mor_type: CodMustBeAppliedToMorTypeTable::new(),cod_must_result_in_model_type: CodMustResultInModelTypeTable::new(),term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),el_is_surjective_ok: ElIsSurjectiveOkTable::new(),should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),is_given_by_ctor: IsGivenByCtorTable::new(),function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),case_pattern_is_variable: CasePatternIsVariableTable::new(),case_pattern_is_wildcard: CasePatternIsWildcardTable::new(),is_pattern_ctor_arg: IsPatternCtorArgTable::new(),are_pattern_ctor_args: ArePatternCtorArgsTable::new(),pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),cases_contain_ctor: CasesContainCtorTable::new(),match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),real_virt_ident: RealVirtIdentTable::new(),virt_real_ident: VirtRealIdentTable::new(),var: VarTable::new(),rule_name: RuleNameTable::new(),module_name: ModuleNameTable::new(),type_decl_node_loc: TypeDeclNodeLocTable::new(),arg_decl_node_loc: ArgDeclNodeLocTable::new(),arg_decl_list_node_loc: ArgDeclListNodeLocTable::new(),pred_decl_node_loc: PredDeclNodeLocTable::new(),func_decl_node_loc: FuncDeclNodeLocTable::new(),ctor_decl_node_loc: CtorDeclNodeLocTable::new(),enum_decl_node_loc: EnumDeclNodeLocTable::new(),model_decl_node_loc: ModelDeclNodeLocTable::new(),term_node_loc: TermNodeLocTable::new(),term_list_node_loc: TermListNodeLocTable::new(),match_case_node_loc: MatchCaseNodeLocTable::new(),opt_term_node_loc: OptTermNodeLocTable::new(),if_atom_node_loc: IfAtomNodeLocTable::new(),then_atom_node_loc: ThenAtomNodeLocTable::new(),stmt_node_loc: StmtNodeLocTable::new(),stmt_list_node_loc: StmtListNodeLocTable::new(),rule_decl_node_loc: RuleDeclNodeLocTable::new(),decl_node_loc: DeclNodeLocTable::new(),decl_list_node_loc: DeclListNodeLocTable::new(),module_node_loc: ModuleNodeLocTable::new(),type_expr_node_loc: TypeExprNodeLocTable::new(),rule_descendant_rule: RuleDescendantRuleTable::new(),rule_descendant_term: RuleDescendantTermTable::new(),rule_descendant_term_list: RuleDescendantTermListTable::new(),rule_descendant_opt_term: RuleDescendantOptTermTable::new(),rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),rule_descendant_stmt: RuleDescendantStmtTable::new(),rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),rule_descendant_type_expr: RuleDescendantTypeExprTable::new(),entry_scope: EntryScopeTable::new(),exit_scope: ExitScopeTable::new(),ctor_enum: CtorEnumTable::new(),ctors_enum: CtorsEnumTable::new(),cases_discriminee: CasesDiscrimineeTable::new(),case_discriminee: CaseDiscrimineeTable::new(),desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),desugared_case_block: DesugaredCaseBlockTable::new(),desugared_case_block_list: DesugaredCaseBlockListTable::new(),nil_type_list: NilTypeListTable::new(),cons_type_list: ConsTypeListTable::new(),snoc_type_list: SnocTypeListTable::new(),semantic_type: SemanticTypeTable::new(),decl_symbol_scope: DeclSymbolScopeTable::new(),mor_type: MorTypeTable::new(),mor_type_dom_func: MorTypeDomFuncTable::new(),mor_type_cod_func: MorTypeCodFuncTable::new(),type_definition_symbol_scope: TypeDefinitionSymbolScopeTable::new(),func_rel: FuncRelTable::new(),rel_definition_symbol_scope: RelDefinitionSymbolScopeTable::new(),domain: DomainTable::new(),codomain: CodomainTable::new(),type_name: TypeNameTable::new(),virtual_symbol_scope: VirtualSymbolScopeTable::new(),parent_model_func: ParentModelFuncTable::new(),symbol_scope_model: SymbolScopeModelTable::new(),flat_domain: FlatDomainTable::new(),semantic_signature_type_expr: SemanticSignatureTypeExprTable::new(),type_symbol: TypeSymbolTable::new(),enum_symbol: EnumSymbolTable::new(),model_symbol: ModelSymbolTable::new(),semantic_arg_type: SemanticArgTypeTable::new(),arg_symbol_scope: ArgSymbolScopeTable::new(),semantic_arg_types: SemanticArgTypesTable::new(),semantic_pred: SemanticPredTable::new(),pred_arity: PredArityTable::new(),semantic_func: SemanticFuncTable::new(),ctor_symbol_scope: CtorSymbolScopeTable::new(),pred_rel: PredRelTable::new(),rel_name: RelNameTable::new(),arity: ArityTable::new(),dom: DomTable::new(),cod: CodTable::new(),flat_arity: FlatArityTable::new(),module_symbol_scope: ModuleSymbolScopeTable::new(),nil_el_list: NilElListTable::new(),cons_el_list: ConsElListTable::new(),snoc_el_list: SnocElListTable::new(),el_structure: ElStructureTable::new(),els_structure: ElsStructureTable::new(),ambient_type: AmbientTypeTable::new(),instantiated_type: InstantiatedTypeTable::new(),underlying_type: UnderlyingTypeTable::new(),nil_element_type_list: NilElementTypeListTable::new(),cons_element_type_list: ConsElementTypeListTable::new(),snoc_element_type_list: SnocElementTypeListTable::new(),ambient_el_type_list: AmbientElTypeListTable::new(),func_app: FuncAppTable::new(),map_el: MapElTable::new(),map_els: MapElsTable::new(),ambient_model_el: AmbientModelElTable::new(),pred_symbol: PredSymbolTable::new(),func_symbol: FuncSymbolTable::new(),rule_symbol: RuleSymbolTable::new(),ctor_symbol: CtorSymbolTable::new(),symbol_scope_parent: SymbolScopeParentTable::new(),decls_symbol_scope: DeclsSymbolScopeTable::new(),args_symbol_scope: ArgsSymbolScopeTable::new(),ctors_symbol_scope: CtorsSymbolScopeTable::new(),model_member_symbol_scope: ModelMemberSymbolScopeTable::new(),symbol_scope_name: SymbolScopeNameTable::new(),scope_symbols: ScopeSymbolsTable::new(),semantic_el: SemanticElTable::new(),zero: ZeroTable::new(),succ: SuccTable::new(),type_list_len: TypeListLenTable::new(),term_list_len: TermListLenTable::new(),before_rule_structure: BeforeRuleStructureTable::new(),ambient_model_el_structure: AmbientModelElStructureTable::new(),ambient_model_el_morphism: AmbientModelElMorphismTable::new(),if_atom_morphism: IfAtomMorphismTable::new(),then_atom_morphism: ThenAtomMorphismTable::new(),branch_stmt_morphism: BranchStmtMorphismTable::new(),match_stmt_morphism: MatchStmtMorphismTable::new(),semantic_name: SemanticNameTable::new(),semantic_els: SemanticElsTable::new(),wildcard_name: WildcardNameTable::new(),rel_app_parent_model_el: RelAppParentModelElTable::new(),match_case_pattern_ctor: MatchCasePatternCtorTable::new(),cases_determined_enum: CasesDeterminedEnumTable::new(),empty_join_is_dirty: true,
+absurd: AbsurdTable::new(),type_decl: TypeDeclTable::new(),arg_decl_node_name: ArgDeclNodeNameTable::new(),arg_decl_node_type: ArgDeclNodeTypeTable::new(),nil_arg_decl_list_node: NilArgDeclListNodeTable::new(),cons_arg_decl_list_node: ConsArgDeclListNodeTable::new(),pred_decl: PredDeclTable::new(),func_decl: FuncDeclTable::new(),ctor_decl: CtorDeclTable::new(),nil_ctor_decl_list_node: NilCtorDeclListNodeTable::new(),cons_ctor_decl_list_node: ConsCtorDeclListNodeTable::new(),enum_decl: EnumDeclTable::new(),nil_term_list_node: NilTermListNodeTable::new(),cons_term_list_node: ConsTermListNodeTable::new(),ambient_type_expr: AmbientTypeExprTable::new(),member_type_expr: MemberTypeExprTable::new(),mor_type_expr: MorTypeExprTable::new(),ambient_pred_expr: AmbientPredExprTable::new(),member_pred_expr: MemberPredExprTable::new(),none_term_node: NoneTermNodeTable::new(),some_term_node: SomeTermNodeTable::new(),var_term_node: VarTermNodeTable::new(),wildcard_term_node: WildcardTermNodeTable::new(),app_term_node: AppTermNodeTable::new(),dom_term_node: DomTermNodeTable::new(),cod_term_node: CodTermNodeTable::new(),match_case: MatchCaseTable::new(),nil_match_case_list_node: NilMatchCaseListNodeTable::new(),cons_match_case_list_node: ConsMatchCaseListNodeTable::new(),equal_if_atom_node: EqualIfAtomNodeTable::new(),defined_if_atom_node: DefinedIfAtomNodeTable::new(),pred_if_atom_node: PredIfAtomNodeTable::new(),var_if_atom_node: VarIfAtomNodeTable::new(),equal_then_atom_node: EqualThenAtomNodeTable::new(),defined_then_atom_node: DefinedThenAtomNodeTable::new(),pred_then_atom_node: PredThenAtomNodeTable::new(),if_stmt_node: IfStmtNodeTable::new(),then_stmt_node: ThenStmtNodeTable::new(),branch_stmt_node: BranchStmtNodeTable::new(),match_stmt_node: MatchStmtNodeTable::new(),nil_stmt_list_node: NilStmtListNodeTable::new(),cons_stmt_list_node: ConsStmtListNodeTable::new(),nil_stmt_block_list_node: NilStmtBlockListNodeTable::new(),cons_stmt_block_list_node: ConsStmtBlockListNodeTable::new(),rule_decl: RuleDeclTable::new(),model_decl: ModelDeclTable::new(),decl_node_type: DeclNodeTypeTable::new(),decl_node_pred: DeclNodePredTable::new(),decl_node_func: DeclNodeFuncTable::new(),decl_node_rule: DeclNodeRuleTable::new(),decl_node_enum: DeclNodeEnumTable::new(),decl_node_model: DeclNodeModelTable::new(),nil_decl_list_node: NilDeclListNodeTable::new(),cons_decl_list_node: ConsDeclListNodeTable::new(),decls_module_node: DeclsModuleNodeTable::new(),var_in_scope: VarInScopeTable::new(),scope_extension: ScopeExtensionTable::new(),scope_single_child: ScopeSingleChildTable::new(),scope_extension_siblings: ScopeExtensionSiblingsTable::new(),is_normal_type: IsNormalTypeTable::new(),is_enum_type: IsEnumTypeTable::new(),is_model_type: IsModelTypeTable::new(),is_mor_type: IsMorTypeTable::new(),illegal_member_type_expr_in_signature: IllegalMemberTypeExprInSignatureTable::new(),is_total_func: IsTotalFuncTable::new(),rel_app: RelAppTable::new(),el_type: ElTypeTable::new(),el_types: ElTypesTable::new(),constrained_el: ConstrainedElTable::new(),constrained_els: ConstrainedElsTable::new(),in_ker: InKerTable::new(),el_in_img: ElInImgTable::new(),rel_tuple_in_img: RelTupleInImgTable::new(),symbol_scope_extension: SymbolScopeExtensionTable::new(),symbol_scope_ancestor: SymbolScopeAncestorTable::new(),element_member_symbol_scope: ElementMemberSymbolScopeTable::new(),defined_symbol: DefinedSymbolTable::new(),accessible_symbol: AccessibleSymbolTable::new(),should_be_symbol: ShouldBeSymbolTable::new(),should_be_symbol_2: ShouldBeSymbol2Table::new(),should_be_symbol_3: ShouldBeSymbol3Table::new(),pred_arg_num_should_match: PredArgNumShouldMatchTable::new(),func_arg_num_should_match: FuncArgNumShouldMatchTable::new(),cfg_edge: CfgEdgeTable::new(),cfg_edge_stmts_stmt: CfgEdgeStmtsStmtTable::new(),cfg_edge_stmt_stmts: CfgEdgeStmtStmtsTable::new(),cfg_edge_fork: CfgEdgeForkTable::new(),cfg_edge_join: CfgEdgeJoinTable::new(),before_stmt_structure: BeforeStmtStructureTable::new(),stmt_morphism: StmtMorphismTable::new(),if_morphism: IfMorphismTable::new(),surj_then_morphism: SurjThenMorphismTable::new(),non_surj_then_morphism: NonSurjThenMorphismTable::new(),noop_morphism: NoopMorphismTable::new(),stmt_structure: StmtStructureTable::new(),if_atom_structure: IfAtomStructureTable::new(),then_atom_structure: ThenAtomStructureTable::new(),term_structure: TermStructureTable::new(),terms_structure: TermsStructureTable::new(),opt_term_structure: OptTermStructureTable::new(),type_expr_structure: TypeExprStructureTable::new(),dom_must_be_applied_to_mor_type: DomMustBeAppliedToMorTypeTable::new(),dom_must_result_in_model_type: DomMustResultInModelTypeTable::new(),cod_must_be_applied_to_mor_type: CodMustBeAppliedToMorTypeTable::new(),cod_must_result_in_model_type: CodMustResultInModelTypeTable::new(),term_should_be_epic_ok: TermShouldBeEpicOkTable::new(),terms_should_be_epic_ok: TermsShouldBeEpicOkTable::new(),el_should_be_surjective_ok: ElShouldBeSurjectiveOkTable::new(),el_is_surjective_ok: ElIsSurjectiveOkTable::new(),should_be_obtained_by_ctor: ShouldBeObtainedByCtorTable::new(),is_given_by_ctor: IsGivenByCtorTable::new(),function_can_be_made_defined: FunctionCanBeMadeDefinedTable::new(),case_pattern_is_variable: CasePatternIsVariableTable::new(),case_pattern_is_wildcard: CasePatternIsWildcardTable::new(),is_pattern_ctor_arg: IsPatternCtorArgTable::new(),are_pattern_ctor_args: ArePatternCtorArgsTable::new(),pattern_ctor_arg_is_app: PatternCtorArgIsAppTable::new(),pattern_ctor_arg_var_is_not_fresh: PatternCtorArgVarIsNotFreshTable::new(),cases_contain_ctor: CasesContainCtorTable::new(),match_stmt_contains_ctor_of_enum: MatchStmtContainsCtorOfEnumTable::new(),match_stmt_should_contain_ctor: MatchStmtShouldContainCtorTable::new(),match_stmt_contains_ctor: MatchStmtContainsCtorTable::new(),real_virt_ident: RealVirtIdentTable::new(),virt_real_ident: VirtRealIdentTable::new(),var: VarTable::new(),rule_name: RuleNameTable::new(),module_name: ModuleNameTable::new(),type_decl_node_loc: TypeDeclNodeLocTable::new(),arg_decl_node_loc: ArgDeclNodeLocTable::new(),arg_decl_list_node_loc: ArgDeclListNodeLocTable::new(),pred_decl_node_loc: PredDeclNodeLocTable::new(),func_decl_node_loc: FuncDeclNodeLocTable::new(),ctor_decl_node_loc: CtorDeclNodeLocTable::new(),enum_decl_node_loc: EnumDeclNodeLocTable::new(),model_decl_node_loc: ModelDeclNodeLocTable::new(),term_node_loc: TermNodeLocTable::new(),term_list_node_loc: TermListNodeLocTable::new(),match_case_node_loc: MatchCaseNodeLocTable::new(),opt_term_node_loc: OptTermNodeLocTable::new(),if_atom_node_loc: IfAtomNodeLocTable::new(),then_atom_node_loc: ThenAtomNodeLocTable::new(),stmt_node_loc: StmtNodeLocTable::new(),stmt_list_node_loc: StmtListNodeLocTable::new(),rule_decl_node_loc: RuleDeclNodeLocTable::new(),decl_node_loc: DeclNodeLocTable::new(),decl_list_node_loc: DeclListNodeLocTable::new(),module_node_loc: ModuleNodeLocTable::new(),type_expr_node_loc: TypeExprNodeLocTable::new(),pred_expr_node_loc: PredExprNodeLocTable::new(),rule_descendant_rule: RuleDescendantRuleTable::new(),rule_descendant_term: RuleDescendantTermTable::new(),rule_descendant_term_list: RuleDescendantTermListTable::new(),rule_descendant_opt_term: RuleDescendantOptTermTable::new(),rule_descendant_if_atom: RuleDescendantIfAtomTable::new(),rule_descendant_then_atom: RuleDescendantThenAtomTable::new(),rule_descendant_match_case: RuleDescendantMatchCaseTable::new(),rule_descendant_match_case_list: RuleDescendantMatchCaseListTable::new(),rule_descendant_stmt: RuleDescendantStmtTable::new(),rule_descendant_stmt_list: RuleDescendantStmtListTable::new(),rule_descendant_stmt_block_list: RuleDescendantStmtBlockListTable::new(),rule_descendant_type_expr: RuleDescendantTypeExprTable::new(),entry_scope: EntryScopeTable::new(),exit_scope: ExitScopeTable::new(),ctor_enum: CtorEnumTable::new(),ctors_enum: CtorsEnumTable::new(),cases_discriminee: CasesDiscrimineeTable::new(),case_discriminee: CaseDiscrimineeTable::new(),desugared_case_equality_atom: DesugaredCaseEqualityAtomTable::new(),desugared_case_equality_stmt: DesugaredCaseEqualityStmtTable::new(),desugared_case_block: DesugaredCaseBlockTable::new(),desugared_case_block_list: DesugaredCaseBlockListTable::new(),nil_type_list: NilTypeListTable::new(),cons_type_list: ConsTypeListTable::new(),snoc_type_list: SnocTypeListTable::new(),semantic_type: SemanticTypeTable::new(),decl_symbol_scope: DeclSymbolScopeTable::new(),mor_type: MorTypeTable::new(),mor_type_dom_func: MorTypeDomFuncTable::new(),mor_type_cod_func: MorTypeCodFuncTable::new(),type_definition_symbol_scope: TypeDefinitionSymbolScopeTable::new(),func_rel: FuncRelTable::new(),rel_definition_symbol_scope: RelDefinitionSymbolScopeTable::new(),domain: DomainTable::new(),codomain: CodomainTable::new(),type_name: TypeNameTable::new(),virtual_symbol_scope: VirtualSymbolScopeTable::new(),parent_model_func: ParentModelFuncTable::new(),symbol_scope_model: SymbolScopeModelTable::new(),flat_domain: FlatDomainTable::new(),semantic_signature_type_expr: SemanticSignatureTypeExprTable::new(),type_symbol: TypeSymbolTable::new(),enum_symbol: EnumSymbolTable::new(),model_symbol: ModelSymbolTable::new(),semantic_arg_type: SemanticArgTypeTable::new(),arg_symbol_scope: ArgSymbolScopeTable::new(),semantic_arg_types: SemanticArgTypesTable::new(),semantic_pred: SemanticPredTable::new(),pred_arity: PredArityTable::new(),semantic_func: SemanticFuncTable::new(),ctor_symbol_scope: CtorSymbolScopeTable::new(),pred_rel: PredRelTable::new(),rel_name: RelNameTable::new(),arity: ArityTable::new(),dom: DomTable::new(),cod: CodTable::new(),flat_arity: FlatArityTable::new(),module_symbol_scope: ModuleSymbolScopeTable::new(),nil_el_list: NilElListTable::new(),cons_el_list: ConsElListTable::new(),snoc_el_list: SnocElListTable::new(),el_structure: ElStructureTable::new(),els_structure: ElsStructureTable::new(),ambient_type: AmbientTypeTable::new(),instantiated_type: InstantiatedTypeTable::new(),underlying_type: UnderlyingTypeTable::new(),nil_element_type_list: NilElementTypeListTable::new(),cons_element_type_list: ConsElementTypeListTable::new(),snoc_element_type_list: SnocElementTypeListTable::new(),ambient_el_type_list: AmbientElTypeListTable::new(),func_app: FuncAppTable::new(),map_el: MapElTable::new(),map_els: MapElsTable::new(),ambient_model_el: AmbientModelElTable::new(),pred_symbol: PredSymbolTable::new(),func_symbol: FuncSymbolTable::new(),rule_symbol: RuleSymbolTable::new(),ctor_symbol: CtorSymbolTable::new(),symbol_scope_parent: SymbolScopeParentTable::new(),decls_symbol_scope: DeclsSymbolScopeTable::new(),args_symbol_scope: ArgsSymbolScopeTable::new(),ctors_symbol_scope: CtorsSymbolScopeTable::new(),model_member_symbol_scope: ModelMemberSymbolScopeTable::new(),symbol_scope_name: SymbolScopeNameTable::new(),scope_symbols: ScopeSymbolsTable::new(),semantic_el: SemanticElTable::new(),zero: ZeroTable::new(),succ: SuccTable::new(),type_list_len: TypeListLenTable::new(),term_list_len: TermListLenTable::new(),before_rule_structure: BeforeRuleStructureTable::new(),ambient_model_el_structure: AmbientModelElStructureTable::new(),ambient_model_el_morphism: AmbientModelElMorphismTable::new(),if_atom_morphism: IfAtomMorphismTable::new(),then_atom_morphism: ThenAtomMorphismTable::new(),branch_stmt_morphism: BranchStmtMorphismTable::new(),match_stmt_morphism: MatchStmtMorphismTable::new(),semantic_name: SemanticNameTable::new(),semantic_els: SemanticElsTable::new(),wildcard_name: WildcardNameTable::new(),rel_app_parent_model_el: RelAppParentModelElTable::new(),match_case_pattern_ctor: MatchCasePatternCtorTable::new(),cases_determined_enum: CasesDeterminedEnumTable::new(),empty_join_is_dirty: true,
 }
 }
 
@@ -59662,6 +60437,7 @@ self.implicit_functionality_125_0(&mut delta);
 self.implicit_functionality_126_0(&mut delta);
 self.implicit_functionality_127_0(&mut delta);
 self.implicit_functionality_128_0(&mut delta);
+self.implicit_functionality_129_0(&mut delta);
 self.real_virt_ident_total_0(&mut delta);
 self.virt_real_ident_retraction_0(&mut delta);
 self.rule_descendant_rule_total_0(&mut delta);
@@ -60243,6 +61019,27 @@ pub fn root_term_list_node(&self, el: TermListNode) -> TermListNode {
 #[allow(dead_code)]
 pub fn are_equal_term_list_node(&self, lhs: TermListNode, rhs: TermListNode) -> bool {
     self.root_term_list_node(lhs) == self.root_term_list_node(rhs)
+}
+
+/// Returns and iterator over elements of sort `PredExprNode`.
+/// The iterator yields canonical representatives only.
+#[allow(dead_code)]
+pub fn iter_pred_expr_node(&self) -> impl '_ + Iterator<Item=PredExprNode> {
+    self.pred_expr_node_new.iter().chain(self.pred_expr_node_old.iter()).copied()
+}
+/// Returns the canonical representative of the equivalence class of `el`.
+#[allow(dead_code)]
+pub fn root_pred_expr_node(&self, el: PredExprNode) -> PredExprNode {
+    if el.0 as usize >= self.pred_expr_node_equalities.len() {
+        el
+    } else {
+        self.pred_expr_node_equalities.root_const(el)
+    }
+}
+/// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
+#[allow(dead_code)]
+pub fn are_equal_pred_expr_node(&self, lhs: PredExprNode, rhs: PredExprNode) -> bool {
+    self.root_pred_expr_node(lhs) == self.root_pred_expr_node(rhs)
 }
 
 /// Returns and iterator over elements of sort `OptTermNode`.
@@ -61389,6 +62186,44 @@ pub fn equate_type_expr_node(&mut self, mut lhs: TypeExprNode, mut rhs: TypeExpr
     self.type_expr_node_old.remove(&child);
     self.type_expr_node_new.remove(&child);
     self.type_expr_node_uprooted.push(child);
+}
+/// Adjoins a new element of type [PredExprNode].
+#[allow(dead_code)]
+fn new_pred_expr_node_internal(&mut self) -> PredExprNode {
+    let old_len = self.pred_expr_node_equalities.len();
+    self.pred_expr_node_equalities.increase_size_to(old_len + 1);
+    let el = PredExprNode::from(u32::try_from(old_len).unwrap());
+
+    self.pred_expr_node_new.insert(el);
+
+    assert!(self.pred_expr_node_weights.len() == old_len);
+    self.pred_expr_node_weights.push(0);
+
+    el
+}
+/// Enforces the equality `lhs = rhs`.
+#[allow(dead_code)]
+pub fn equate_pred_expr_node(&mut self, mut lhs: PredExprNode, mut rhs: PredExprNode) {
+    lhs = self.pred_expr_node_equalities.root(lhs);
+    rhs = self.pred_expr_node_equalities.root(rhs);
+    if lhs == rhs {
+        return;
+    }
+
+    let lhs_weight = self.pred_expr_node_weights[lhs.0 as usize];
+    let rhs_weight = self.pred_expr_node_weights[rhs.0 as usize];
+    let (root, child) =
+        if lhs_weight >= rhs_weight {
+            (lhs, rhs)
+        } else {
+            (rhs, lhs)
+        };
+
+    self.pred_expr_node_equalities.union_roots_into(child, root);
+    
+    self.pred_expr_node_old.remove(&child);
+    self.pred_expr_node_new.remove(&child);
+    self.pred_expr_node_uprooted.push(child);
 }
 /// Adjoins a new element of type [OptTermNode].
 #[allow(dead_code)]
@@ -62633,6 +63468,11 @@ pub fn new_term_list_node(&mut self) -> TermListNode {
 pub fn new_type_expr_node(&mut self) -> TypeExprNode {
     self.new_type_expr_node_internal()
 }
+/// Adjoins a new element of type [PredExprNode].
+#[allow(dead_code)]
+pub fn new_pred_expr_node(&mut self) -> PredExprNode {
+    self.new_pred_expr_node_internal()
+}
 /// Adjoins a new element of type [OptTermNode].
 #[allow(dead_code)]
 pub fn new_opt_term_node(&mut self) -> OptTermNode {
@@ -63847,6 +64687,35 @@ tm1 = self.loc_equalities.root(tm1);
 
 let weight1 = &mut self.loc_weights[tm1.0 as usize];
 *weight1 = weight1.saturating_add(TypeExprNodeLocTable::WEIGHT);
+
+    }
+}
+
+/// Evaluates `pred_expr_node_loc(arg0)`.
+#[allow(dead_code)]
+pub fn pred_expr_node_loc(&self, mut arg0: PredExprNode) -> Option<Loc> {
+    arg0 = self.root_pred_expr_node(arg0);
+    self.pred_expr_node_loc.iter_all_0(arg0).next().map(|t| t.1)
+}
+/// Returns an iterator over tuples in the graph of the `pred_expr_node_loc` function.
+/// The relation yielded by the iterator need not be functional if the model is not closed.
+
+#[allow(dead_code)]
+pub fn iter_pred_expr_node_loc(&self) -> impl '_ + Iterator<Item=(PredExprNode, Loc)> {
+    self.pred_expr_node_loc.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes the equation `pred_expr_node_loc(tm0) = tm1` hold.
+
+#[allow(dead_code)]
+pub fn insert_pred_expr_node_loc(&mut self, mut tm0: PredExprNode, mut tm1: Loc) {
+    tm0 = self.pred_expr_node_equalities.root(tm0);
+tm1 = self.loc_equalities.root(tm1);
+    if self.pred_expr_node_loc.insert(PredExprNodeLoc(tm0, tm1)) {
+        let weight0 = &mut self.pred_expr_node_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(PredExprNodeLocTable::WEIGHT);
+
+let weight1 = &mut self.loc_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(PredExprNodeLocTable::WEIGHT);
 
     }
 }
@@ -67209,6 +68078,18 @@ pub fn define_type_expr_node_loc(&mut self, tm0: TypeExprNode) -> Loc {
         }
     }
 }
+/// Enforces that `pred_expr_node_loc(tm0)` is defined, adjoining a new element if necessary.
+#[allow(dead_code)]
+pub fn define_pred_expr_node_loc(&mut self, tm0: PredExprNode) -> Loc {
+    match self.pred_expr_node_loc(tm0) {
+        Some(result) => result,
+        None => {
+            let tm1 = self.new_loc_internal();
+            self.insert_pred_expr_node_loc(tm0, tm1);
+            tm1
+        }
+    }
+}
 /// Enforces that `rule_descendant_rule(tm0)` is defined, adjoining a new element if necessary.
 #[allow(dead_code)]
 pub fn define_rule_descendant_rule(&mut self, tm0: RuleDeclNode) -> RuleDescendantNode {
@@ -68859,6 +69740,69 @@ let weight1 = &mut self.ident_weights[tm1.0 as usize];
     }
 }
 
+/// Returns `true` if `ambient_pred_expr(arg0, arg1)` holds.
+#[allow(dead_code)]
+pub fn ambient_pred_expr(&self, mut arg0: PredExprNode, mut arg1: Ident) -> bool {
+    arg0 = self.root_pred_expr_node(arg0);
+arg1 = self.root_ident(arg1);
+    self.ambient_pred_expr.contains(AmbientPredExpr(arg0, arg1))
+}
+/// Returns an iterator over tuples of elements satisfying the `ambient_pred_expr` predicate.
+
+#[allow(dead_code)]
+pub fn iter_ambient_pred_expr(&self) -> impl '_ + Iterator<Item=(PredExprNode, Ident)> {
+    self.ambient_pred_expr.iter_all().map(|t| (t.0, t.1))
+}
+/// Makes `ambient_pred_expr(tm0, tm1)` hold.
+
+#[allow(dead_code)]
+pub fn insert_ambient_pred_expr(&mut self, mut tm0: PredExprNode, mut tm1: Ident) {
+    tm0 = self.pred_expr_node_equalities.root(tm0);
+tm1 = self.ident_equalities.root(tm1);
+    if self.ambient_pred_expr.insert(AmbientPredExpr(tm0, tm1)) {
+        let weight0 = &mut self.pred_expr_node_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(AmbientPredExprTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(AmbientPredExprTable::WEIGHT);
+
+    }
+}
+
+/// Returns `true` if `member_pred_expr(arg0, arg1, arg2)` holds.
+#[allow(dead_code)]
+pub fn member_pred_expr(&self, mut arg0: PredExprNode, mut arg1: TermNode, mut arg2: Ident) -> bool {
+    arg0 = self.root_pred_expr_node(arg0);
+arg1 = self.root_term_node(arg1);
+arg2 = self.root_ident(arg2);
+    self.member_pred_expr.contains(MemberPredExpr(arg0, arg1, arg2))
+}
+/// Returns an iterator over tuples of elements satisfying the `member_pred_expr` predicate.
+
+#[allow(dead_code)]
+pub fn iter_member_pred_expr(&self) -> impl '_ + Iterator<Item=(PredExprNode, TermNode, Ident)> {
+    self.member_pred_expr.iter_all().map(|t| (t.0, t.1, t.2))
+}
+/// Makes `member_pred_expr(tm0, tm1, tm2)` hold.
+
+#[allow(dead_code)]
+pub fn insert_member_pred_expr(&mut self, mut tm0: PredExprNode, mut tm1: TermNode, mut tm2: Ident) {
+    tm0 = self.pred_expr_node_equalities.root(tm0);
+tm1 = self.term_node_equalities.root(tm1);
+tm2 = self.ident_equalities.root(tm2);
+    if self.member_pred_expr.insert(MemberPredExpr(tm0, tm1, tm2)) {
+        let weight0 = &mut self.pred_expr_node_weights[tm0.0 as usize];
+*weight0 = weight0.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[tm1.0 as usize];
+*weight1 = weight1.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[tm2.0 as usize];
+*weight2 = weight2.saturating_add(MemberPredExprTable::WEIGHT);
+
+    }
+}
+
 /// Returns `true` if `none_term_node(arg0)` holds.
 #[allow(dead_code)]
 pub fn none_term_node(&self, mut arg0: OptTermNode) -> bool {
@@ -69214,30 +70158,30 @@ let weight1 = &mut self.term_node_weights[tm1.0 as usize];
 
 /// Returns `true` if `pred_if_atom_node(arg0, arg1, arg2)` holds.
 #[allow(dead_code)]
-pub fn pred_if_atom_node(&self, mut arg0: IfAtomNode, mut arg1: Ident, mut arg2: TermListNode) -> bool {
+pub fn pred_if_atom_node(&self, mut arg0: IfAtomNode, mut arg1: PredExprNode, mut arg2: TermListNode) -> bool {
     arg0 = self.root_if_atom_node(arg0);
-arg1 = self.root_ident(arg1);
+arg1 = self.root_pred_expr_node(arg1);
 arg2 = self.root_term_list_node(arg2);
     self.pred_if_atom_node.contains(PredIfAtomNode(arg0, arg1, arg2))
 }
 /// Returns an iterator over tuples of elements satisfying the `pred_if_atom_node` predicate.
 
 #[allow(dead_code)]
-pub fn iter_pred_if_atom_node(&self) -> impl '_ + Iterator<Item=(IfAtomNode, Ident, TermListNode)> {
+pub fn iter_pred_if_atom_node(&self) -> impl '_ + Iterator<Item=(IfAtomNode, PredExprNode, TermListNode)> {
     self.pred_if_atom_node.iter_all().map(|t| (t.0, t.1, t.2))
 }
 /// Makes `pred_if_atom_node(tm0, tm1, tm2)` hold.
 
 #[allow(dead_code)]
-pub fn insert_pred_if_atom_node(&mut self, mut tm0: IfAtomNode, mut tm1: Ident, mut tm2: TermListNode) {
+pub fn insert_pred_if_atom_node(&mut self, mut tm0: IfAtomNode, mut tm1: PredExprNode, mut tm2: TermListNode) {
     tm0 = self.if_atom_node_equalities.root(tm0);
-tm1 = self.ident_equalities.root(tm1);
+tm1 = self.pred_expr_node_equalities.root(tm1);
 tm2 = self.term_list_node_equalities.root(tm2);
     if self.pred_if_atom_node.insert(PredIfAtomNode(tm0, tm1, tm2)) {
         let weight0 = &mut self.if_atom_node_weights[tm0.0 as usize];
 *weight0 = weight0.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[tm1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[tm1.0 as usize];
 *weight1 = weight1.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[tm2.0 as usize];
@@ -72780,6 +73724,134 @@ let weight1 = &mut self.ident_weights[t.1.0 as usize];
     }
 }
 
+for el in self.ident_uprooted.iter().copied() {
+    let ts = self.ambient_pred_expr.drain_with_element_ident(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(AmbientPredExprTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(AmbientPredExprTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_ident(t.1);
+        if self.ambient_pred_expr.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(AmbientPredExprTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(AmbientPredExprTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.pred_expr_node_uprooted.iter().copied() {
+    let ts = self.ambient_pred_expr.drain_with_element_pred_expr_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(AmbientPredExprTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(AmbientPredExprTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_ident(t.1);
+        if self.ambient_pred_expr.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(AmbientPredExprTable::WEIGHT);
+
+let weight1 = &mut self.ident_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(AmbientPredExprTable::WEIGHT);
+
+        }
+    }
+}
+
+for el in self.ident_uprooted.iter().copied() {
+    let ts = self.member_pred_expr.drain_with_element_ident(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_sub(MemberPredExprTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_term_node(t.1);
+t.2 = self.root_ident(t.2);
+        if self.member_pred_expr.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_add(MemberPredExprTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.pred_expr_node_uprooted.iter().copied() {
+    let ts = self.member_pred_expr.drain_with_element_pred_expr_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_sub(MemberPredExprTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_term_node(t.1);
+t.2 = self.root_ident(t.2);
+        if self.member_pred_expr.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_add(MemberPredExprTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.term_node_uprooted.iter().copied() {
+    let ts = self.member_pred_expr.drain_with_element_term_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_sub(MemberPredExprTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_term_node(t.1);
+t.2 = self.root_ident(t.2);
+        if self.member_pred_expr.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight1 = &mut self.term_node_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(MemberPredExprTable::WEIGHT);
+
+let weight2 = &mut self.ident_weights[t.2.0 as usize];
+*weight2 = weight2.saturating_add(MemberPredExprTable::WEIGHT);
+
+        }
+    }
+}
+
 for el in self.opt_term_node_uprooted.iter().copied() {
     let ts = self.none_term_node.drain_with_element_opt_term_node(el);
     for mut t in ts {
@@ -73282,26 +74354,26 @@ let weight1 = &mut self.term_node_weights[t.1.0 as usize];
     }
 }
 
-for el in self.ident_uprooted.iter().copied() {
-    let ts = self.pred_if_atom_node.drain_with_element_ident(el);
+for el in self.if_atom_node_uprooted.iter().copied() {
+    let ts = self.pred_if_atom_node.drain_with_element_if_atom_node(el);
     for mut t in ts {
         let weight0 = &mut self.if_atom_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[t.1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
         t.0 = self.root_if_atom_node(t.0);
-t.1 = self.root_ident(t.1);
+t.1 = self.root_pred_expr_node(t.1);
 t.2 = self.root_term_list_node(t.2);
         if self.pred_if_atom_node.insert(t) {
             let weight0 = &mut self.if_atom_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[t.1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
@@ -73310,26 +74382,26 @@ let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
         }
     }
 }
-for el in self.if_atom_node_uprooted.iter().copied() {
-    let ts = self.pred_if_atom_node.drain_with_element_if_atom_node(el);
+for el in self.pred_expr_node_uprooted.iter().copied() {
+    let ts = self.pred_if_atom_node.drain_with_element_pred_expr_node(el);
     for mut t in ts {
         let weight0 = &mut self.if_atom_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[t.1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
         t.0 = self.root_if_atom_node(t.0);
-t.1 = self.root_ident(t.1);
+t.1 = self.root_pred_expr_node(t.1);
 t.2 = self.root_term_list_node(t.2);
         if self.pred_if_atom_node.insert(t) {
             let weight0 = &mut self.if_atom_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[t.1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
@@ -73344,20 +74416,20 @@ for el in self.term_list_node_uprooted.iter().copied() {
         let weight0 = &mut self.if_atom_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[t.1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
 *weight2 = weight2.saturating_sub(PredIfAtomNodeTable::WEIGHT);
 
         t.0 = self.root_if_atom_node(t.0);
-t.1 = self.root_ident(t.1);
+t.1 = self.root_pred_expr_node(t.1);
 t.2 = self.root_term_list_node(t.2);
         if self.pred_if_atom_node.insert(t) {
             let weight0 = &mut self.if_atom_node_weights[t.0.0 as usize];
 *weight0 = weight0.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
-let weight1 = &mut self.ident_weights[t.1.0 as usize];
+let weight1 = &mut self.pred_expr_node_weights[t.1.0 as usize];
 *weight1 = weight1.saturating_add(PredIfAtomNodeTable::WEIGHT);
 
 let weight2 = &mut self.term_list_node_weights[t.2.0 as usize];
@@ -78516,6 +79588,49 @@ let weight1 = &mut self.loc_weights[t.1.0 as usize];
     }
 }
 
+for el in self.loc_uprooted.iter().copied() {
+    let ts = self.pred_expr_node_loc.drain_with_element_loc(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(PredExprNodeLocTable::WEIGHT);
+
+let weight1 = &mut self.loc_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(PredExprNodeLocTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_loc(t.1);
+        if self.pred_expr_node_loc.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(PredExprNodeLocTable::WEIGHT);
+
+let weight1 = &mut self.loc_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(PredExprNodeLocTable::WEIGHT);
+
+        }
+    }
+}
+for el in self.pred_expr_node_uprooted.iter().copied() {
+    let ts = self.pred_expr_node_loc.drain_with_element_pred_expr_node(el);
+    for mut t in ts {
+        let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_sub(PredExprNodeLocTable::WEIGHT);
+
+let weight1 = &mut self.loc_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_sub(PredExprNodeLocTable::WEIGHT);
+
+        t.0 = self.root_pred_expr_node(t.0);
+t.1 = self.root_loc(t.1);
+        if self.pred_expr_node_loc.insert(t) {
+            let weight0 = &mut self.pred_expr_node_weights[t.0.0 as usize];
+*weight0 = weight0.saturating_add(PredExprNodeLocTable::WEIGHT);
+
+let weight1 = &mut self.loc_weights[t.1.0 as usize];
+*weight1 = weight1.saturating_add(PredExprNodeLocTable::WEIGHT);
+
+        }
+    }
+}
+
 for el in self.rule_decl_node_uprooted.iter().copied() {
     let ts = self.rule_descendant_rule.drain_with_element_rule_decl_node(el);
     for mut t in ts {
@@ -83330,6 +84445,7 @@ self.enum_decl_node_uprooted.clear();
 self.term_node_uprooted.clear();
 self.term_list_node_uprooted.clear();
 self.type_expr_node_uprooted.clear();
+self.pred_expr_node_uprooted.clear();
 self.opt_term_node_uprooted.clear();
 self.match_case_node_uprooted.clear();
 self.match_case_list_node_uprooted.clear();
@@ -83363,7 +84479,7 @@ self.element_type_list_uprooted.clear();
 self.symbol_kind_uprooted.clear();
 }
 fn is_dirty(&self) -> bool {
-    self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.ambient_type_expr.is_dirty() || self.member_type_expr.is_dirty() || self.mor_type_expr.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.dom_term_node.is_dirty() || self.cod_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.is_mor_type.is_dirty() || self.illegal_member_type_expr_in_signature.is_dirty() || self.is_total_func.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.symbol_scope_ancestor.is_dirty() || self.element_member_symbol_scope.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.should_be_symbol_3.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.type_expr_structure.is_dirty() || self.dom_must_be_applied_to_mor_type.is_dirty() || self.dom_must_result_in_model_type.is_dirty() || self.cod_must_be_applied_to_mor_type.is_dirty() || self.cod_must_result_in_model_type.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.type_expr_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.rule_descendant_type_expr.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.mor_type.is_dirty() || self.mor_type_dom_func.is_dirty() || self.mor_type_cod_func.is_dirty() || self.type_definition_symbol_scope.is_dirty() || self.func_rel.is_dirty() || self.rel_definition_symbol_scope.is_dirty() || self.domain.is_dirty() || self.codomain.is_dirty() || self.type_name.is_dirty() || self.virtual_symbol_scope.is_dirty() || self.parent_model_func.is_dirty() || self.symbol_scope_model.is_dirty() || self.flat_domain.is_dirty() || self.semantic_signature_type_expr.is_dirty() || self.type_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.model_symbol.is_dirty() || self.semantic_arg_type.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_arg_types.is_dirty() || self.semantic_pred.is_dirty() || self.pred_arity.is_dirty() || self.semantic_func.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.flat_arity.is_dirty() || self.module_symbol_scope.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.ambient_type.is_dirty() || self.instantiated_type.is_dirty() || self.underlying_type.is_dirty() || self.nil_element_type_list.is_dirty() || self.cons_element_type_list.is_dirty() || self.snoc_element_type_list.is_dirty() || self.ambient_el_type_list.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.ambient_model_el.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.symbol_scope_parent.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.semantic_el.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.ambient_model_el_structure.is_dirty() || self.ambient_model_el_morphism.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.rel_app_parent_model_el.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.type_expr_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.func_new.is_empty() || !self.pred_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.element_type_new.is_empty() || !self.element_type_list_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.type_expr_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.element_type_uprooted.is_empty() || !self.element_type_list_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
+    self.empty_join_is_dirty  || self.absurd.is_dirty() || self.type_decl.is_dirty() || self.arg_decl_node_name.is_dirty() || self.arg_decl_node_type.is_dirty() || self.nil_arg_decl_list_node.is_dirty() || self.cons_arg_decl_list_node.is_dirty() || self.pred_decl.is_dirty() || self.func_decl.is_dirty() || self.ctor_decl.is_dirty() || self.nil_ctor_decl_list_node.is_dirty() || self.cons_ctor_decl_list_node.is_dirty() || self.enum_decl.is_dirty() || self.nil_term_list_node.is_dirty() || self.cons_term_list_node.is_dirty() || self.ambient_type_expr.is_dirty() || self.member_type_expr.is_dirty() || self.mor_type_expr.is_dirty() || self.ambient_pred_expr.is_dirty() || self.member_pred_expr.is_dirty() || self.none_term_node.is_dirty() || self.some_term_node.is_dirty() || self.var_term_node.is_dirty() || self.wildcard_term_node.is_dirty() || self.app_term_node.is_dirty() || self.dom_term_node.is_dirty() || self.cod_term_node.is_dirty() || self.match_case.is_dirty() || self.nil_match_case_list_node.is_dirty() || self.cons_match_case_list_node.is_dirty() || self.equal_if_atom_node.is_dirty() || self.defined_if_atom_node.is_dirty() || self.pred_if_atom_node.is_dirty() || self.var_if_atom_node.is_dirty() || self.equal_then_atom_node.is_dirty() || self.defined_then_atom_node.is_dirty() || self.pred_then_atom_node.is_dirty() || self.if_stmt_node.is_dirty() || self.then_stmt_node.is_dirty() || self.branch_stmt_node.is_dirty() || self.match_stmt_node.is_dirty() || self.nil_stmt_list_node.is_dirty() || self.cons_stmt_list_node.is_dirty() || self.nil_stmt_block_list_node.is_dirty() || self.cons_stmt_block_list_node.is_dirty() || self.rule_decl.is_dirty() || self.model_decl.is_dirty() || self.decl_node_type.is_dirty() || self.decl_node_pred.is_dirty() || self.decl_node_func.is_dirty() || self.decl_node_rule.is_dirty() || self.decl_node_enum.is_dirty() || self.decl_node_model.is_dirty() || self.nil_decl_list_node.is_dirty() || self.cons_decl_list_node.is_dirty() || self.decls_module_node.is_dirty() || self.var_in_scope.is_dirty() || self.scope_extension.is_dirty() || self.scope_single_child.is_dirty() || self.scope_extension_siblings.is_dirty() || self.is_normal_type.is_dirty() || self.is_enum_type.is_dirty() || self.is_model_type.is_dirty() || self.is_mor_type.is_dirty() || self.illegal_member_type_expr_in_signature.is_dirty() || self.is_total_func.is_dirty() || self.rel_app.is_dirty() || self.el_type.is_dirty() || self.el_types.is_dirty() || self.constrained_el.is_dirty() || self.constrained_els.is_dirty() || self.in_ker.is_dirty() || self.el_in_img.is_dirty() || self.rel_tuple_in_img.is_dirty() || self.symbol_scope_extension.is_dirty() || self.symbol_scope_ancestor.is_dirty() || self.element_member_symbol_scope.is_dirty() || self.defined_symbol.is_dirty() || self.accessible_symbol.is_dirty() || self.should_be_symbol.is_dirty() || self.should_be_symbol_2.is_dirty() || self.should_be_symbol_3.is_dirty() || self.pred_arg_num_should_match.is_dirty() || self.func_arg_num_should_match.is_dirty() || self.cfg_edge.is_dirty() || self.cfg_edge_stmts_stmt.is_dirty() || self.cfg_edge_stmt_stmts.is_dirty() || self.cfg_edge_fork.is_dirty() || self.cfg_edge_join.is_dirty() || self.before_stmt_structure.is_dirty() || self.stmt_morphism.is_dirty() || self.if_morphism.is_dirty() || self.surj_then_morphism.is_dirty() || self.non_surj_then_morphism.is_dirty() || self.noop_morphism.is_dirty() || self.stmt_structure.is_dirty() || self.if_atom_structure.is_dirty() || self.then_atom_structure.is_dirty() || self.term_structure.is_dirty() || self.terms_structure.is_dirty() || self.opt_term_structure.is_dirty() || self.type_expr_structure.is_dirty() || self.dom_must_be_applied_to_mor_type.is_dirty() || self.dom_must_result_in_model_type.is_dirty() || self.cod_must_be_applied_to_mor_type.is_dirty() || self.cod_must_result_in_model_type.is_dirty() || self.term_should_be_epic_ok.is_dirty() || self.terms_should_be_epic_ok.is_dirty() || self.el_should_be_surjective_ok.is_dirty() || self.el_is_surjective_ok.is_dirty() || self.should_be_obtained_by_ctor.is_dirty() || self.is_given_by_ctor.is_dirty() || self.function_can_be_made_defined.is_dirty() || self.case_pattern_is_variable.is_dirty() || self.case_pattern_is_wildcard.is_dirty() || self.is_pattern_ctor_arg.is_dirty() || self.are_pattern_ctor_args.is_dirty() || self.pattern_ctor_arg_is_app.is_dirty() || self.pattern_ctor_arg_var_is_not_fresh.is_dirty() || self.cases_contain_ctor.is_dirty() || self.match_stmt_contains_ctor_of_enum.is_dirty() || self.match_stmt_should_contain_ctor.is_dirty() || self.match_stmt_contains_ctor.is_dirty() || self.real_virt_ident.is_dirty() || self.virt_real_ident.is_dirty() || self.var.is_dirty() || self.rule_name.is_dirty() || self.module_name.is_dirty() || self.type_decl_node_loc.is_dirty() || self.arg_decl_node_loc.is_dirty() || self.arg_decl_list_node_loc.is_dirty() || self.pred_decl_node_loc.is_dirty() || self.func_decl_node_loc.is_dirty() || self.ctor_decl_node_loc.is_dirty() || self.enum_decl_node_loc.is_dirty() || self.model_decl_node_loc.is_dirty() || self.term_node_loc.is_dirty() || self.term_list_node_loc.is_dirty() || self.match_case_node_loc.is_dirty() || self.opt_term_node_loc.is_dirty() || self.if_atom_node_loc.is_dirty() || self.then_atom_node_loc.is_dirty() || self.stmt_node_loc.is_dirty() || self.stmt_list_node_loc.is_dirty() || self.rule_decl_node_loc.is_dirty() || self.decl_node_loc.is_dirty() || self.decl_list_node_loc.is_dirty() || self.module_node_loc.is_dirty() || self.type_expr_node_loc.is_dirty() || self.pred_expr_node_loc.is_dirty() || self.rule_descendant_rule.is_dirty() || self.rule_descendant_term.is_dirty() || self.rule_descendant_term_list.is_dirty() || self.rule_descendant_opt_term.is_dirty() || self.rule_descendant_if_atom.is_dirty() || self.rule_descendant_then_atom.is_dirty() || self.rule_descendant_match_case.is_dirty() || self.rule_descendant_match_case_list.is_dirty() || self.rule_descendant_stmt.is_dirty() || self.rule_descendant_stmt_list.is_dirty() || self.rule_descendant_stmt_block_list.is_dirty() || self.rule_descendant_type_expr.is_dirty() || self.entry_scope.is_dirty() || self.exit_scope.is_dirty() || self.ctor_enum.is_dirty() || self.ctors_enum.is_dirty() || self.cases_discriminee.is_dirty() || self.case_discriminee.is_dirty() || self.desugared_case_equality_atom.is_dirty() || self.desugared_case_equality_stmt.is_dirty() || self.desugared_case_block.is_dirty() || self.desugared_case_block_list.is_dirty() || self.nil_type_list.is_dirty() || self.cons_type_list.is_dirty() || self.snoc_type_list.is_dirty() || self.semantic_type.is_dirty() || self.decl_symbol_scope.is_dirty() || self.mor_type.is_dirty() || self.mor_type_dom_func.is_dirty() || self.mor_type_cod_func.is_dirty() || self.type_definition_symbol_scope.is_dirty() || self.func_rel.is_dirty() || self.rel_definition_symbol_scope.is_dirty() || self.domain.is_dirty() || self.codomain.is_dirty() || self.type_name.is_dirty() || self.virtual_symbol_scope.is_dirty() || self.parent_model_func.is_dirty() || self.symbol_scope_model.is_dirty() || self.flat_domain.is_dirty() || self.semantic_signature_type_expr.is_dirty() || self.type_symbol.is_dirty() || self.enum_symbol.is_dirty() || self.model_symbol.is_dirty() || self.semantic_arg_type.is_dirty() || self.arg_symbol_scope.is_dirty() || self.semantic_arg_types.is_dirty() || self.semantic_pred.is_dirty() || self.pred_arity.is_dirty() || self.semantic_func.is_dirty() || self.ctor_symbol_scope.is_dirty() || self.pred_rel.is_dirty() || self.rel_name.is_dirty() || self.arity.is_dirty() || self.dom.is_dirty() || self.cod.is_dirty() || self.flat_arity.is_dirty() || self.module_symbol_scope.is_dirty() || self.nil_el_list.is_dirty() || self.cons_el_list.is_dirty() || self.snoc_el_list.is_dirty() || self.el_structure.is_dirty() || self.els_structure.is_dirty() || self.ambient_type.is_dirty() || self.instantiated_type.is_dirty() || self.underlying_type.is_dirty() || self.nil_element_type_list.is_dirty() || self.cons_element_type_list.is_dirty() || self.snoc_element_type_list.is_dirty() || self.ambient_el_type_list.is_dirty() || self.func_app.is_dirty() || self.map_el.is_dirty() || self.map_els.is_dirty() || self.ambient_model_el.is_dirty() || self.pred_symbol.is_dirty() || self.func_symbol.is_dirty() || self.rule_symbol.is_dirty() || self.ctor_symbol.is_dirty() || self.symbol_scope_parent.is_dirty() || self.decls_symbol_scope.is_dirty() || self.args_symbol_scope.is_dirty() || self.ctors_symbol_scope.is_dirty() || self.model_member_symbol_scope.is_dirty() || self.symbol_scope_name.is_dirty() || self.scope_symbols.is_dirty() || self.semantic_el.is_dirty() || self.zero.is_dirty() || self.succ.is_dirty() || self.type_list_len.is_dirty() || self.term_list_len.is_dirty() || self.before_rule_structure.is_dirty() || self.ambient_model_el_structure.is_dirty() || self.ambient_model_el_morphism.is_dirty() || self.if_atom_morphism.is_dirty() || self.then_atom_morphism.is_dirty() || self.branch_stmt_morphism.is_dirty() || self.match_stmt_morphism.is_dirty() || self.semantic_name.is_dirty() || self.semantic_els.is_dirty() || self.wildcard_name.is_dirty() || self.rel_app_parent_model_el.is_dirty() || self.match_case_pattern_ctor.is_dirty() || self.cases_determined_enum.is_dirty()  || !self.ident_new.is_empty() || !self.virt_ident_new.is_empty() || !self.type_decl_node_new.is_empty() || !self.arg_decl_node_new.is_empty() || !self.type_expr_node_new.is_empty() || !self.arg_decl_list_node_new.is_empty() || !self.pred_decl_node_new.is_empty() || !self.func_decl_node_new.is_empty() || !self.ctor_decl_node_new.is_empty() || !self.ctor_decl_list_node_new.is_empty() || !self.enum_decl_node_new.is_empty() || !self.term_node_new.is_empty() || !self.term_list_node_new.is_empty() || !self.pred_expr_node_new.is_empty() || !self.opt_term_node_new.is_empty() || !self.match_case_node_new.is_empty() || !self.stmt_list_node_new.is_empty() || !self.match_case_list_node_new.is_empty() || !self.if_atom_node_new.is_empty() || !self.then_atom_node_new.is_empty() || !self.stmt_node_new.is_empty() || !self.stmt_block_list_node_new.is_empty() || !self.rule_decl_node_new.is_empty() || !self.model_decl_node_new.is_empty() || !self.decl_list_node_new.is_empty() || !self.decl_node_new.is_empty() || !self.module_node_new.is_empty() || !self.loc_new.is_empty() || !self.rule_descendant_node_new.is_empty() || !self.scope_new.is_empty() || !self.type_new.is_empty() || !self.type_list_new.is_empty() || !self.symbol_scope_new.is_empty() || !self.func_new.is_empty() || !self.pred_new.is_empty() || !self.rel_new.is_empty() || !self.structure_new.is_empty() || !self.el_new.is_empty() || !self.el_list_new.is_empty() || !self.el_name_new.is_empty() || !self.element_type_new.is_empty() || !self.element_type_list_new.is_empty() || !self.morphism_new.is_empty() || !self.symbol_kind_new.is_empty() || !self.nat_new.is_empty()  || !self.ident_uprooted.is_empty() || !self.virt_ident_uprooted.is_empty() || !self.type_decl_node_uprooted.is_empty() || !self.arg_decl_node_uprooted.is_empty() || !self.type_expr_node_uprooted.is_empty() || !self.arg_decl_list_node_uprooted.is_empty() || !self.pred_decl_node_uprooted.is_empty() || !self.func_decl_node_uprooted.is_empty() || !self.ctor_decl_node_uprooted.is_empty() || !self.ctor_decl_list_node_uprooted.is_empty() || !self.enum_decl_node_uprooted.is_empty() || !self.term_node_uprooted.is_empty() || !self.term_list_node_uprooted.is_empty() || !self.pred_expr_node_uprooted.is_empty() || !self.opt_term_node_uprooted.is_empty() || !self.match_case_node_uprooted.is_empty() || !self.stmt_list_node_uprooted.is_empty() || !self.match_case_list_node_uprooted.is_empty() || !self.if_atom_node_uprooted.is_empty() || !self.then_atom_node_uprooted.is_empty() || !self.stmt_node_uprooted.is_empty() || !self.stmt_block_list_node_uprooted.is_empty() || !self.rule_decl_node_uprooted.is_empty() || !self.model_decl_node_uprooted.is_empty() || !self.decl_list_node_uprooted.is_empty() || !self.decl_node_uprooted.is_empty() || !self.module_node_uprooted.is_empty() || !self.loc_uprooted.is_empty() || !self.rule_descendant_node_uprooted.is_empty() || !self.scope_uprooted.is_empty() || !self.type_uprooted.is_empty() || !self.type_list_uprooted.is_empty() || !self.symbol_scope_uprooted.is_empty() || !self.func_uprooted.is_empty() || !self.pred_uprooted.is_empty() || !self.rel_uprooted.is_empty() || !self.structure_uprooted.is_empty() || !self.el_uprooted.is_empty() || !self.el_list_uprooted.is_empty() || !self.el_name_uprooted.is_empty() || !self.element_type_uprooted.is_empty() || !self.element_type_list_uprooted.is_empty() || !self.morphism_uprooted.is_empty() || !self.symbol_kind_uprooted.is_empty() || !self.nat_uprooted.is_empty()
 }
 
 #[allow(unused_variables)]
@@ -83895,6 +85011,27 @@ delta.new_loc_equalities.push((tm1, tm2));
 fn implicit_functionality_25_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
+for PredExprNodeLoc(tm0, tm1, ) in self.pred_expr_node_loc.iter_new() {
+
+#[allow(unused_variables)]
+for PredExprNodeLoc(_, tm2, ) in self.pred_expr_node_loc.iter_all_0(tm0, ) {
+
+delta.new_loc_equalities.push((tm1, tm2));
+
+
+
+}
+
+}
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn implicit_functionality_26_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
 for RuleDescendantRule(tm0, tm1, ) in self.rule_descendant_rule.iter_new() {
 
 #[allow(unused_variables)]
@@ -83913,7 +85050,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_26_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_27_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantTerm(tm0, tm1, ) in self.rule_descendant_term.iter_new() {
@@ -83934,7 +85071,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_27_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_28_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantTermList(tm0, tm1, ) in self.rule_descendant_term_list.iter_new() {
@@ -83955,7 +85092,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_28_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_29_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantOptTerm(tm0, tm1, ) in self.rule_descendant_opt_term.iter_new() {
@@ -83976,7 +85113,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_29_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_30_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantIfAtom(tm0, tm1, ) in self.rule_descendant_if_atom.iter_new() {
@@ -83997,7 +85134,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_30_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_31_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantThenAtom(tm0, tm1, ) in self.rule_descendant_then_atom.iter_new() {
@@ -84018,7 +85155,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_31_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_32_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantMatchCase(tm0, tm1, ) in self.rule_descendant_match_case.iter_new() {
@@ -84039,7 +85176,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_32_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_33_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantMatchCaseList(tm0, tm1, ) in self.rule_descendant_match_case_list.iter_new() {
@@ -84060,7 +85197,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_33_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_34_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantStmt(tm0, tm1, ) in self.rule_descendant_stmt.iter_new() {
@@ -84081,7 +85218,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_34_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_35_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantStmtList(tm0, tm1, ) in self.rule_descendant_stmt_list.iter_new() {
@@ -84102,7 +85239,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_35_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_36_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantStmtBlockList(tm0, tm1, ) in self.rule_descendant_stmt_block_list.iter_new() {
@@ -84123,7 +85260,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_36_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_37_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantTypeExpr(tm0, tm1, ) in self.rule_descendant_type_expr.iter_new() {
@@ -84144,7 +85281,7 @@ delta.new_rule_descendant_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_37_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_38_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for EntryScope(tm0, tm1, ) in self.entry_scope.iter_new() {
@@ -84165,7 +85302,7 @@ delta.new_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_38_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_39_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ExitScope(tm0, tm1, ) in self.exit_scope.iter_new() {
@@ -84186,7 +85323,7 @@ delta.new_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_39_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_40_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorEnum(tm0, tm1, ) in self.ctor_enum.iter_new() {
@@ -84207,7 +85344,7 @@ delta.new_enum_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_40_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_41_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorsEnum(tm0, tm1, ) in self.ctors_enum.iter_new() {
@@ -84228,7 +85365,7 @@ delta.new_enum_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_41_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_42_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CasesDiscriminee(tm0, tm1, ) in self.cases_discriminee.iter_new() {
@@ -84249,7 +85386,7 @@ delta.new_term_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_42_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_43_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CaseDiscriminee(tm0, tm1, ) in self.case_discriminee.iter_new() {
@@ -84270,7 +85407,7 @@ delta.new_term_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_43_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_44_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DesugaredCaseEqualityAtom(tm0, tm1, ) in self.desugared_case_equality_atom.iter_new() {
@@ -84291,7 +85428,7 @@ delta.new_if_atom_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_44_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_45_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DesugaredCaseEqualityStmt(tm0, tm1, ) in self.desugared_case_equality_stmt.iter_new() {
@@ -84312,7 +85449,7 @@ delta.new_stmt_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_45_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_46_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DesugaredCaseBlock(tm0, tm1, ) in self.desugared_case_block.iter_new() {
@@ -84333,7 +85470,7 @@ delta.new_stmt_list_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_46_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_47_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DesugaredCaseBlockList(tm0, tm1, ) in self.desugared_case_block_list.iter_new() {
@@ -84354,7 +85491,7 @@ delta.new_stmt_block_list_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_47_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_48_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticType(tm0, tm1, tm2, ) in self.semantic_type.iter_new() {
@@ -84375,7 +85512,7 @@ delta.new_type_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_48_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_49_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MorType(tm0, tm1, ) in self.mor_type.iter_new() {
@@ -84396,7 +85533,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_49_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_50_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MorTypeDomFunc(tm0, tm1, ) in self.mor_type_dom_func.iter_new() {
@@ -84417,7 +85554,7 @@ delta.new_func_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_50_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_51_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MorTypeCodFunc(tm0, tm1, ) in self.mor_type_cod_func.iter_new() {
@@ -84438,7 +85575,7 @@ delta.new_func_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_51_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_52_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeName(tm0, tm1, ) in self.type_name.iter_new() {
@@ -84459,7 +85596,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_52_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_53_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for VirtualSymbolScope(tm0, ) in self.virtual_symbol_scope.iter_new() {
@@ -84480,7 +85617,7 @@ delta.new_symbol_scope_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_53_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_54_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ParentModelFunc(tm0, tm1, ) in self.parent_model_func.iter_new() {
@@ -84501,7 +85638,7 @@ delta.new_func_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_54_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_55_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticSignatureTypeExpr(tm0, tm1, tm2, ) in self.semantic_signature_type_expr.iter_new() {
@@ -84522,7 +85659,7 @@ delta.new_type_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_55_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_56_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticArgType(tm0, tm1, ) in self.semantic_arg_type.iter_new() {
@@ -84543,7 +85680,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_56_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_57_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticArgTypes(tm0, tm1, ) in self.semantic_arg_types.iter_new() {
@@ -84564,7 +85701,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_57_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_58_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticPred(tm0, tm1, tm2, ) in self.semantic_pred.iter_new() {
@@ -84585,7 +85722,7 @@ delta.new_pred_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_58_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_59_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredArity(tm0, tm1, ) in self.pred_arity.iter_new() {
@@ -84606,7 +85743,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_59_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_60_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticFunc(tm0, tm1, tm2, ) in self.semantic_func.iter_new() {
@@ -84627,7 +85764,7 @@ delta.new_func_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_60_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_61_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Domain(tm0, tm1, ) in self.domain.iter_new() {
@@ -84648,7 +85785,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_61_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_62_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Codomain(tm0, tm1, ) in self.codomain.iter_new() {
@@ -84669,7 +85806,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_62_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_63_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RelName(tm0, tm1, ) in self.rel_name.iter_new() {
@@ -84690,7 +85827,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_63_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_64_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Arity(tm0, tm1, ) in self.arity.iter_new() {
@@ -84711,7 +85848,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_64_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_65_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FlatArity(tm0, tm1, ) in self.flat_arity.iter_new() {
@@ -84732,7 +85869,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_65_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_66_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FlatDomain(tm0, tm1, ) in self.flat_domain.iter_new() {
@@ -84753,7 +85890,7 @@ delta.new_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_66_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_67_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Var(tm0, tm1, tm2, ) in self.var.iter_new() {
@@ -84774,7 +85911,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_67_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_68_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ElStructure(tm0, tm1, ) in self.el_structure.iter_new() {
@@ -84795,7 +85932,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_68_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_69_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ElsStructure(tm0, tm1, ) in self.els_structure.iter_new() {
@@ -84816,7 +85953,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_69_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_70_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for UnderlyingType(tm0, tm1, ) in self.underlying_type.iter_new() {
@@ -84837,7 +85974,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_70_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_71_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientElTypeList(tm0, tm1, ) in self.ambient_el_type_list.iter_new() {
@@ -84858,7 +85995,7 @@ delta.new_element_type_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_71_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_72_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncApp(tm0, tm1, tm2, ) in self.func_app.iter_new() {
@@ -84879,7 +86016,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_72_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_73_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Dom(tm0, tm1, ) in self.dom.iter_new() {
@@ -84900,7 +86037,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_73_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_74_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Cod(tm0, tm1, ) in self.cod.iter_new() {
@@ -84921,7 +86058,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_74_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_75_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MapEl(tm0, tm1, tm2, ) in self.map_el.iter_new() {
@@ -84942,7 +86079,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_75_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_76_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MapEls(tm0, tm1, tm2, ) in self.map_els.iter_new() {
@@ -84963,7 +86100,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_76_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_77_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeParent(tm0, tm1, ) in self.symbol_scope_parent.iter_new() {
@@ -84984,7 +86121,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_77_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_78_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModuleSymbolScope(tm0, tm1, ) in self.module_symbol_scope.iter_new() {
@@ -85005,7 +86142,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_78_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_79_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclSymbolScope(tm0, tm1, ) in self.decl_symbol_scope.iter_new() {
@@ -85026,7 +86163,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_79_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_80_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for DeclsSymbolScope(tm0, tm1, ) in self.decls_symbol_scope.iter_new() {
@@ -85047,7 +86184,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_80_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_81_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ArgSymbolScope(tm0, tm1, ) in self.arg_symbol_scope.iter_new() {
@@ -85068,7 +86205,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_81_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_82_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ArgsSymbolScope(tm0, tm1, ) in self.args_symbol_scope.iter_new() {
@@ -85089,7 +86226,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_82_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_83_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbolScope(tm0, tm1, ) in self.ctor_symbol_scope.iter_new() {
@@ -85110,7 +86247,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_83_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_84_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorsSymbolScope(tm0, tm1, ) in self.ctors_symbol_scope.iter_new() {
@@ -85131,7 +86268,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_84_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_85_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelMemberSymbolScope(tm0, tm1, ) in self.model_member_symbol_scope.iter_new() {
@@ -85152,7 +86289,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_85_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_86_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeModel(tm0, tm1, ) in self.symbol_scope_model.iter_new() {
@@ -85173,7 +86310,7 @@ delta.new_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_86_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_87_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SymbolScopeName(tm0, tm1, ) in self.symbol_scope_name.iter_new() {
@@ -85194,7 +86331,7 @@ delta.new_ident_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_87_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_88_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ScopeSymbols(tm0, tm1, ) in self.scope_symbols.iter_new() {
@@ -85215,7 +86352,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_88_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_89_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeDefinitionSymbolScope(tm0, tm1, ) in self.type_definition_symbol_scope.iter_new() {
@@ -85236,7 +86373,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_89_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_90_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RelDefinitionSymbolScope(tm0, tm1, ) in self.rel_definition_symbol_scope.iter_new() {
@@ -85257,7 +86394,7 @@ delta.new_symbol_scope_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_90_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_91_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Zero(tm0, ) in self.zero.iter_new() {
@@ -85278,7 +86415,7 @@ delta.new_nat_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_91_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_92_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for Succ(tm0, tm1, ) in self.succ.iter_new() {
@@ -85299,7 +86436,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_92_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_93_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeListLen(tm0, tm1, ) in self.type_list_len.iter_new() {
@@ -85320,7 +86457,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_93_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_94_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TermListLen(tm0, tm1, ) in self.term_list_len.iter_new() {
@@ -85341,7 +86478,7 @@ delta.new_nat_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_94_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_95_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for BeforeRuleStructure(tm0, tm1, ) in self.before_rule_structure.iter_new() {
@@ -85362,7 +86499,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_95_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_96_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientModelElStructure(tm0, tm1, ) in self.ambient_model_el_structure.iter_new() {
@@ -85383,7 +86520,7 @@ delta.new_structure_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_96_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_97_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientModelElMorphism(tm0, tm1, ) in self.ambient_model_el_morphism.iter_new() {
@@ -85404,7 +86541,7 @@ delta.new_morphism_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_97_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_98_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for IfAtomMorphism(tm0, tm1, tm2, ) in self.if_atom_morphism.iter_new() {
@@ -85425,7 +86562,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_98_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_99_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ThenAtomMorphism(tm0, tm1, tm2, ) in self.then_atom_morphism.iter_new() {
@@ -85446,7 +86583,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_99_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_100_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for BranchStmtMorphism(tm0, tm1, tm2, ) in self.branch_stmt_morphism.iter_new() {
@@ -85467,7 +86604,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_100_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_101_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MatchStmtMorphism(tm0, tm1, tm2, ) in self.match_stmt_morphism.iter_new() {
@@ -85488,7 +86625,7 @@ delta.new_morphism_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_101_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_102_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticName(tm0, tm1, tm2, ) in self.semantic_name.iter_new() {
@@ -85509,7 +86646,7 @@ delta.new_el_name_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_102_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_103_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticEl(tm0, tm1, tm2, ) in self.semantic_el.iter_new() {
@@ -85530,7 +86667,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_103_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_104_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SemanticEls(tm0, tm1, tm2, ) in self.semantic_els.iter_new() {
@@ -85551,7 +86688,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_104_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_105_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientModelEl(tm0, tm1, tm2, ) in self.ambient_model_el.iter_new() {
@@ -85572,7 +86709,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_105_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_106_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for WildcardName(tm0, tm1, ) in self.wildcard_name.iter_new() {
@@ -85593,7 +86730,7 @@ delta.new_el_name_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_106_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_107_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RelAppParentModelEl(tm0, tm1, tm2, ) in self.rel_app_parent_model_el.iter_new() {
@@ -85614,7 +86751,7 @@ delta.new_el_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_107_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_108_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for MatchCasePatternCtor(tm0, tm1, ) in self.match_case_pattern_ctor.iter_new() {
@@ -85635,7 +86772,7 @@ delta.new_ctor_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_108_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_109_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CasesDeterminedEnum(tm0, tm1, ) in self.cases_determined_enum.iter_new() {
@@ -85656,7 +86793,7 @@ delta.new_enum_decl_node_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_109_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_110_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilTypeList(tm0, ) in self.nil_type_list.iter_new() {
@@ -85677,7 +86814,7 @@ delta.new_type_list_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_110_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_111_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsTypeList(tm0, tm1, tm2, ) in self.cons_type_list.iter_new() {
@@ -85698,7 +86835,7 @@ delta.new_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_111_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_112_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocTypeList(tm0, tm1, tm2, ) in self.snoc_type_list.iter_new() {
@@ -85719,7 +86856,7 @@ delta.new_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_112_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_113_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredRel(tm0, tm1, ) in self.pred_rel.iter_new() {
@@ -85740,7 +86877,7 @@ delta.new_rel_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_113_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_114_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncRel(tm0, tm1, ) in self.func_rel.iter_new() {
@@ -85761,7 +86898,7 @@ delta.new_rel_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_114_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_115_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilElList(tm0, tm1, ) in self.nil_el_list.iter_new() {
@@ -85782,7 +86919,7 @@ delta.new_el_list_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_115_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_116_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsElList(tm0, tm1, tm2, ) in self.cons_el_list.iter_new() {
@@ -85803,7 +86940,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_116_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_117_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocElList(tm0, tm1, tm2, ) in self.snoc_el_list.iter_new() {
@@ -85824,7 +86961,7 @@ delta.new_el_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_117_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_118_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for AmbientType(tm0, tm1, ) in self.ambient_type.iter_new() {
@@ -85845,7 +86982,7 @@ delta.new_element_type_equalities.push((tm1, tm2));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_118_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_119_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for InstantiatedType(tm0, tm1, tm2, ) in self.instantiated_type.iter_new() {
@@ -85866,7 +87003,7 @@ delta.new_element_type_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_119_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_120_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for NilElementTypeList(tm0, ) in self.nil_element_type_list.iter_new() {
@@ -85887,7 +87024,7 @@ delta.new_element_type_list_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_120_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_121_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ConsElementTypeList(tm0, tm1, tm2, ) in self.cons_element_type_list.iter_new() {
@@ -85908,7 +87045,7 @@ delta.new_element_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_121_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_122_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for SnocElementTypeList(tm0, tm1, tm2, ) in self.snoc_element_type_list.iter_new() {
@@ -85929,7 +87066,7 @@ delta.new_element_type_list_equalities.push((tm2, tm3));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_122_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_123_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_new() {
@@ -85950,7 +87087,7 @@ delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_123_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_124_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredSymbol(tm0, ) in self.pred_symbol.iter_new() {
@@ -85971,7 +87108,7 @@ delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_124_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_125_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncSymbol(tm0, ) in self.func_symbol.iter_new() {
@@ -85992,7 +87129,7 @@ delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_125_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_126_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleSymbol(tm0, ) in self.rule_symbol.iter_new() {
@@ -86013,7 +87150,7 @@ delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_126_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_127_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for EnumSymbol(tm0, ) in self.enum_symbol.iter_new() {
@@ -86034,7 +87171,7 @@ delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_127_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_128_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbol(tm0, ) in self.ctor_symbol.iter_new() {
@@ -86055,7 +87192,7 @@ delta.new_symbol_kind_equalities.push((tm0, tm1));
 
 
 #[allow(unused_variables)]
-fn implicit_functionality_128_0(&self, delta: &mut ModelDelta, ) {
+fn implicit_functionality_129_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelSymbol(tm0, ) in self.model_symbol.iter_new() {
@@ -89534,7 +90671,7 @@ self.scopes_if_atom_pred_3(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn scopes_if_atom_pred_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn scopes_if_atom_pred_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 self.scopes_if_atom_pred_4(delta, tm0, tm1, tm2);
 
@@ -89543,7 +90680,7 @@ self.scopes_if_atom_pred_4(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn scopes_if_atom_pred_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn scopes_if_atom_pred_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantIfAtom(_, tm3, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
@@ -89576,7 +90713,7 @@ self.scopes_if_atom_pred_6(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn scopes_if_atom_pred_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: RuleDescendantNode) {
+fn scopes_if_atom_pred_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: RuleDescendantNode) {
 for _ in [()] {
 self.scopes_if_atom_pred_7(delta, tm0, tm1, tm2, tm3);
 
@@ -89585,7 +90722,7 @@ self.scopes_if_atom_pred_7(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn scopes_if_atom_pred_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: RuleDescendantNode) {
+fn scopes_if_atom_pred_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: RuleDescendantNode) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleDescendantTermList(_, tm4, ) in self.rule_descendant_term_list.iter_all_0(tm2, ) {
@@ -89623,7 +90760,7 @@ self.scopes_if_atom_pred_9(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn scopes_if_atom_pred_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode) {
+fn scopes_if_atom_pred_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode) {
 for _ in [()] {
 let exists_already = self.scope_single_child.iter_all_0_1(tm4, tm3).next().is_some();
 if !exists_already {
@@ -110277,10 +111414,26 @@ for _ in [()] {
 self.pred_if_atom_should_be_pred_1(delta, );
 self.pred_if_atom_should_be_pred_2(delta, );
 self.pred_if_atom_should_be_pred_5(delta, );
-self.pred_if_atom_should_be_pred_6(delta, );
-self.pred_if_atom_should_be_pred_7(delta, );
-self.pred_if_atom_should_be_pred_10(delta, );
+self.pred_if_atom_should_be_pred_8(delta, );
+self.pred_if_atom_should_be_pred_11(delta, );
+self.pred_if_atom_should_be_pred_12(delta, );
 self.pred_if_atom_should_be_pred_13(delta, );
+self.pred_if_atom_should_be_pred_16(delta, );
+self.pred_if_atom_should_be_pred_19(delta, );
+self.pred_if_atom_should_be_pred_22(delta, );
+self.pred_if_atom_should_be_pred_23(delta, );
+self.pred_if_atom_should_be_pred_24(delta, );
+self.pred_if_atom_should_be_pred_27(delta, );
+self.pred_if_atom_should_be_pred_30(delta, );
+self.pred_if_atom_should_be_pred_33(delta, );
+
+
+
+
+
+
+
+
 
 
 
@@ -110314,32 +111467,24 @@ self.pred_if_atom_should_be_pred_3(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_should_be_pred_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 self.pred_if_atom_should_be_pred_4(delta, tm0, tm1, tm2);
+self.pred_if_atom_should_be_pred_7(delta, tm0, tm1, tm2);
+
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_should_be_pred_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm5, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_all_0(tm1, ) {
 
-#[allow(unused_variables)]
-for EntryScope(_, tm4, ) in self.entry_scope.iter_all_0(tm5, ) {
+self.pred_if_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3, tm4);
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_all_0(tm4, ) {
-
-self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
 
 }
 
@@ -110350,19 +111495,124 @@ self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 fn pred_if_atom_should_be_pred_5(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, tm5, ) in self.rule_descendant_if_atom.iter_new() {
+for MemberPredExpr(tm1, tm3, tm4, ) in self.member_pred_expr.iter_new() {
 
 #[allow(unused_variables)]
-for EntryScope(_, tm4, ) in self.entry_scope.iter_old_0(tm5, ) {
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
+
+self.pred_if_atom_should_be_pred_6(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+
+}
+}
 
 #[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_old_0(tm4, ) {
+fn pred_if_atom_should_be_pred_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident) {
+for _ in [()] {
+let exists_already = self.absurd.iter_all().next().is_some();
+if !exists_already {
+delta.new_absurd.push(Absurd());
+}
+
+self.pred_if_atom_should_be_pred_15(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_all_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_9(delta, tm0, tm1, tm2, tm5);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm5, ) in self.ambient_pred_expr.iter_new() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
+
+self.pred_if_atom_should_be_pred_9(delta, tm0, tm1, tm2, tm5);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident) {
+for _ in [()] {
+self.pred_if_atom_should_be_pred_10(delta, tm0, tm1, tm2, tm5);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_10(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm8, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm7, ) in self.entry_scope.iter_all_0(tm8, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_all_0(tm7, ) {
+
+self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_11(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, tm8, ) in self.rule_descendant_if_atom.iter_new() {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm7, ) in self.entry_scope.iter_old_0(tm8, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_old_0(tm7, ) {
 
 #[allow(unused_variables)]
 for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
 
-self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
 
+self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
 
 }
 
@@ -110376,50 +111626,24 @@ self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_6(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_should_be_pred_12(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for EntryScope(tm5, tm4, ) in self.entry_scope.iter_new() {
+for EntryScope(tm8, tm7, ) in self.entry_scope.iter_new() {
 
 #[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_old_0(tm4, ) {
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_old_0(tm7, ) {
 
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm5, ) {
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm8, ) {
 
 #[allow(unused_variables)]
 for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
 
-self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
 #[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_7(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for ScopeSymbols(tm4, tm3, ) in self.scope_symbols.iter_new() {
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
 
-#[allow(unused_variables)]
-for EntryScope(tm5, _, ) in self.entry_scope.iter_all_1(tm4, ) {
-
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm5, ) {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
-
-self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
 
 
 }
@@ -110429,84 +111653,6 @@ self.pred_if_atom_should_be_pred_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 }
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_8(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode) {
-for _ in [()] {
-self.pred_if_atom_should_be_pred_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode) {
-for _ in [()] {
-#[allow(unused_variables)]
-for PredSymbol(tm6, ) in self.pred_symbol.iter_all() {
-
-self.pred_if_atom_should_be_pred_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_10(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for PredSymbol(tm6, ) in self.pred_symbol.iter_new() {
-
-#[allow(unused_variables)]
-for ScopeSymbols(tm4, tm3, ) in self.scope_symbols.iter_old() {
-
-#[allow(unused_variables)]
-for EntryScope(tm5, _, ) in self.entry_scope.iter_old_1(tm4, ) {
-
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm5, ) {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
-
-self.pred_if_atom_should_be_pred_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_11(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode, tm6: SymbolKind) {
-for _ in [()] {
-self.pred_if_atom_should_be_pred_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_12(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode, tm6: SymbolKind) {
-for _ in [()] {
-#[allow(unused_variables)]
-for IfAtomNodeLoc(_, tm7, ) in self.if_atom_node_loc.iter_all_0(tm0, ) {
-
-self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
 
 }
 
@@ -110517,24 +111663,133 @@ self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm
 fn pred_if_atom_should_be_pred_13(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for IfAtomNodeLoc(tm0, tm7, ) in self.if_atom_node_loc.iter_new() {
+for ScopeSymbols(tm7, tm6, ) in self.scope_symbols.iter_new() {
 
 #[allow(unused_variables)]
-for PredSymbol(tm6, ) in self.pred_symbol.iter_old() {
+for EntryScope(tm8, _, ) in self.entry_scope.iter_all_1(tm7, ) {
 
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm5, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for EntryScope(_, tm4, ) in self.entry_scope.iter_old_0(tm5, ) {
-
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_old_0(tm4, ) {
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm8, ) {
 
 #[allow(unused_variables)]
 for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
 
-self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_14(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode) {
+for _ in [()] {
+self.pred_if_atom_should_be_pred_18(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_15(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_all_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_17(delta, tm0, tm1, tm2, tm3, tm4, tm9);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_16(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm9, ) in self.ambient_pred_expr.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_17(delta, tm0, tm1, tm2, tm3, tm4, tm9);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_17(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident) {
+for _ in [()] {
+self.pred_if_atom_should_be_pred_21(delta, tm0, tm1, tm2, tm3, tm4, tm9);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_18(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredSymbol(tm10, ) in self.pred_symbol.iter_all() {
+
+self.pred_if_atom_should_be_pred_20(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_19(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredSymbol(tm10, ) in self.pred_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm7, tm6, ) in self.scope_symbols.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(tm8, _, ) in self.entry_scope.iter_old_1(tm7, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm8, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm5, ) in self.ambient_pred_expr.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+self.pred_if_atom_should_be_pred_20(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10);
 
 
 }
@@ -110553,11 +111808,396 @@ self.pred_if_atom_should_be_pred_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_should_be_pred_14(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode, tm6: SymbolKind, tm7: Loc) {
+fn pred_if_atom_should_be_pred_20(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode, tm10: SymbolKind) {
 for _ in [()] {
-let exists_already = self.should_be_symbol.iter_all_0_1_2_3(tm1, tm6, tm3, tm7).next().is_some();
+self.pred_if_atom_should_be_pred_26(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_21(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm13, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm12, ) in self.entry_scope.iter_all_0(tm13, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm11, ) in self.scope_symbols.iter_all_0(tm12, ) {
+
+self.pred_if_atom_should_be_pred_25(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_22(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, tm13, ) in self.rule_descendant_if_atom.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm12, ) in self.entry_scope.iter_old_0(tm13, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm11, ) in self.scope_symbols.iter_old_0(tm12, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_25(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_23(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for EntryScope(tm13, tm12, ) in self.entry_scope.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm13, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm11, ) in self.scope_symbols.iter_old_0(tm12, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_25(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_24(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ScopeSymbols(tm12, tm11, ) in self.scope_symbols.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(tm13, _, ) in self.entry_scope.iter_all_1(tm12, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm13, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_25(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_25(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm11: SymbolScope, tm12: Scope, tm13: RuleDescendantNode) {
+for _ in [()] {
+self.pred_if_atom_should_be_pred_29(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_26(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode, tm10: SymbolKind) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(_, tm14, ) in self.if_atom_node_loc.iter_all_0(tm0, ) {
+
+self.pred_if_atom_should_be_pred_28(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm14);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_27(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(tm0, tm14, ) in self.if_atom_node_loc.iter_new() {
+
+#[allow(unused_variables)]
+for PredSymbol(tm10, ) in self.pred_symbol.iter_old() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm8, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm7, ) in self.entry_scope.iter_old_0(tm8, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_old_0(tm7, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm5, ) in self.ambient_pred_expr.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+self.pred_if_atom_should_be_pred_28(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_28(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode, tm10: SymbolKind, tm14: Loc) {
+for _ in [()] {
+let exists_already = self.should_be_symbol.iter_all_0_1_2_3(tm5, tm10, tm6, tm14).next().is_some();
 if !exists_already {
-delta.new_should_be_symbol.push(ShouldBeSymbol(tm1, tm6, tm3, tm7));
+delta.new_should_be_symbol.push(ShouldBeSymbol(tm5, tm10, tm6, tm14));
+}
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_29(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm11: SymbolScope, tm12: Scope, tm13: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredSymbol(tm15, ) in self.pred_symbol.iter_all() {
+
+self.pred_if_atom_should_be_pred_31(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13, tm15);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_30(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredSymbol(tm15, ) in self.pred_symbol.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm12, tm11, ) in self.scope_symbols.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(tm13, _, ) in self.entry_scope.iter_old_1(tm12, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm13, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm9, ) in self.ambient_pred_expr.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_31(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13, tm15);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_31(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm11: SymbolScope, tm12: Scope, tm13: RuleDescendantNode, tm15: SymbolKind) {
+for _ in [()] {
+self.pred_if_atom_should_be_pred_32(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13, tm15);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_32(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm11: SymbolScope, tm12: Scope, tm13: RuleDescendantNode, tm15: SymbolKind) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(_, tm16, ) in self.if_atom_node_loc.iter_all_0(tm0, ) {
+
+self.pred_if_atom_should_be_pred_34(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13, tm15, tm16);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_33(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(tm0, tm16, ) in self.if_atom_node_loc.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for PredSymbol(tm15, ) in self.pred_symbol.iter_old() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm13, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm12, ) in self.entry_scope.iter_old_0(tm13, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm11, ) in self.scope_symbols.iter_old_0(tm12, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm9, ) in self.ambient_pred_expr.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_should_be_pred_34(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm11, tm12, tm13, tm15, tm16);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_should_be_pred_34(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm11: SymbolScope, tm12: Scope, tm13: RuleDescendantNode, tm15: SymbolKind, tm16: Loc) {
+for _ in [()] {
+let exists_already = self.should_be_symbol.iter_all_0_1_2_3(tm9, tm15, tm11, tm16).next().is_some();
+if !exists_already {
+delta.new_should_be_symbol.push(ShouldBeSymbol(tm9, tm15, tm11, tm16));
 }
 
 
@@ -111995,12 +113635,34 @@ self.pred_if_atom_arg_num_should_match_1(delta, );
 self.pred_if_atom_arg_num_should_match_2(delta, );
 self.pred_if_atom_arg_num_should_match_5(delta, );
 self.pred_if_atom_arg_num_should_match_8(delta, );
-self.pred_if_atom_arg_num_should_match_9(delta, );
-self.pred_if_atom_arg_num_should_match_10(delta, );
-self.pred_if_atom_arg_num_should_match_13(delta, );
+self.pred_if_atom_arg_num_should_match_11(delta, );
 self.pred_if_atom_arg_num_should_match_14(delta, );
-self.pred_if_atom_arg_num_should_match_15(delta, );
+self.pred_if_atom_arg_num_should_match_17(delta, );
 self.pred_if_atom_arg_num_should_match_18(delta, );
+self.pred_if_atom_arg_num_should_match_19(delta, );
+self.pred_if_atom_arg_num_should_match_22(delta, );
+self.pred_if_atom_arg_num_should_match_25(delta, );
+self.pred_if_atom_arg_num_should_match_26(delta, );
+self.pred_if_atom_arg_num_should_match_27(delta, );
+self.pred_if_atom_arg_num_should_match_30(delta, );
+self.pred_if_atom_arg_num_should_match_31(delta, );
+self.pred_if_atom_arg_num_should_match_32(delta, );
+self.pred_if_atom_arg_num_should_match_35(delta, );
+self.pred_if_atom_arg_num_should_match_38(delta, );
+self.pred_if_atom_arg_num_should_match_39(delta, );
+self.pred_if_atom_arg_num_should_match_40(delta, );
+self.pred_if_atom_arg_num_should_match_43(delta, );
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -112037,21 +113699,23 @@ self.pred_if_atom_arg_num_should_match_3(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_arg_num_should_match_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 self.pred_if_atom_arg_num_should_match_4(delta, tm0, tm1, tm2);
+self.pred_if_atom_arg_num_should_match_7(delta, tm0, tm1, tm2);
+
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_arg_num_should_match_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
-for TermListLen(_, tm3, ) in self.term_list_len.iter_all_0(tm2, ) {
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_all_0(tm1, ) {
 
-self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
+self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
@@ -112063,12 +113727,12 @@ self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
 fn pred_if_atom_arg_num_should_match_5(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_new() {
+for MemberPredExpr(tm1, tm3, tm4, ) in self.member_pred_expr.iter_new() {
 
 #[allow(unused_variables)]
-for PredIfAtomNode(tm0, tm1, _, ) in self.pred_if_atom_node.iter_old_2(tm2, ) {
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
 
-self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
+self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
@@ -112079,32 +113743,28 @@ self.pred_if_atom_arg_num_should_match_6(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat) {
+fn pred_if_atom_arg_num_should_match_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident) {
 for _ in [()] {
-self.pred_if_atom_arg_num_should_match_7(delta, tm0, tm1, tm2, tm3);
+let exists_already = self.absurd.iter_all().next().is_some();
+if !exists_already {
+delta.new_absurd.push(Absurd());
+}
+
+self.pred_if_atom_arg_num_should_match_13(delta, tm0, tm1, tm2, tm3, tm4);
+
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat) {
+fn pred_if_atom_arg_num_should_match_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm6, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_all_0(tm1, ) {
 
-#[allow(unused_variables)]
-for EntryScope(_, tm5, ) in self.entry_scope.iter_all_0(tm6, ) {
+self.pred_if_atom_arg_num_should_match_9(delta, tm0, tm1, tm2, tm5);
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_all_0(tm5, ) {
-
-self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
 
 }
 
@@ -112115,28 +113775,13 @@ self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 fn pred_if_atom_arg_num_should_match_8(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, tm6, ) in self.rule_descendant_if_atom.iter_new() {
+for AmbientPredExpr(tm1, tm5, ) in self.ambient_pred_expr.iter_new() {
 
 #[allow(unused_variables)]
-for EntryScope(_, tm5, ) in self.entry_scope.iter_old_0(tm6, ) {
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_old_0(tm5, ) {
+self.pred_if_atom_arg_num_should_match_9(delta, tm0, tm1, tm2, tm5);
 
-#[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_old() {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
-
-self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-
-}
 
 }
 
@@ -112146,33 +113791,22 @@ self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_9(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_arg_num_should_match_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_10(delta, tm0, tm1, tm2, tm5);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_10(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident) {
 for _ in [()] {
 #[allow(unused_variables)]
-for EntryScope(tm6, tm5, ) in self.entry_scope.iter_new() {
+for TermListLen(_, tm6, ) in self.term_list_len.iter_all_0(tm2, ) {
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_old_0(tm5, ) {
+self.pred_if_atom_arg_num_should_match_12(delta, tm0, tm1, tm2, tm5, tm6);
 
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm6, ) {
-
-#[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_old() {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
-
-self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
-
-}
-
-}
 
 }
 
@@ -112180,29 +113814,19 @@ self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_10(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_arg_num_should_match_11(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for ScopeSymbols(tm5, tm4, ) in self.scope_symbols.iter_new() {
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_new() {
 
 #[allow(unused_variables)]
-for EntryScope(tm6, _, ) in self.entry_scope.iter_all_1(tm5, ) {
+for PredIfAtomNode(tm0, tm1, _, ) in self.pred_if_atom_node.iter_old_2(tm2, ) {
 
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm6, ) {
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
 
-#[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_old() {
+self.pred_if_atom_arg_num_should_match_12(delta, tm0, tm1, tm2, tm5, tm6);
 
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
-
-self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
-
-
-}
-
-}
 
 }
 
@@ -112214,81 +113838,22 @@ self.pred_if_atom_arg_num_should_match_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_11(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode) {
+fn pred_if_atom_arg_num_should_match_12(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat) {
 for _ in [()] {
-self.pred_if_atom_arg_num_should_match_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm5, tm6);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_12(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode) {
+fn pred_if_atom_arg_num_should_match_13(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident) {
 for _ in [()] {
 #[allow(unused_variables)]
-for SemanticPred(_, _, tm9, ) in self.semantic_pred.iter_all_0_1(tm4, tm1, ) {
+for AmbientPredExpr(_, tm7, ) in self.ambient_pred_expr.iter_all_0(tm1, ) {
 
-#[allow(unused_variables)]
-for PredArity(_, tm8, ) in self.pred_arity.iter_all_0(tm9, ) {
+self.pred_if_atom_arg_num_should_match_15(delta, tm0, tm1, tm2, tm3, tm4, tm7);
 
-#[allow(unused_variables)]
-for TypeListLen(_, tm7, ) in self.type_list_len.iter_all_0(tm8, ) {
-
-self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
-
-
-}
-
-}
-
-}
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_13(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for SemanticPred(tm4, tm1, tm9, ) in self.semantic_pred.iter_new() {
-
-#[allow(unused_variables)]
-for ScopeSymbols(tm5, _, ) in self.scope_symbols.iter_old_1(tm4, ) {
-
-#[allow(unused_variables)]
-for PredArity(_, tm8, ) in self.pred_arity.iter_old_0(tm9, ) {
-
-#[allow(unused_variables)]
-for TypeListLen(_, tm7, ) in self.type_list_len.iter_old_0(tm8, ) {
-
-#[allow(unused_variables)]
-for EntryScope(tm6, _, ) in self.entry_scope.iter_old_1(tm5, ) {
-
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm6, ) {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
-
-#[allow(unused_variables)]
-for TermListLen(_, tm3, ) in self.term_list_len.iter_old_0(tm2, ) {
-
-self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
-
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
 
 }
 
@@ -112299,39 +113864,19 @@ self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 fn pred_if_atom_arg_num_should_match_14(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for PredArity(tm9, tm8, ) in self.pred_arity.iter_new() {
+for AmbientPredExpr(tm1, tm7, ) in self.ambient_pred_expr.iter_new() {
 
 #[allow(unused_variables)]
-for TypeListLen(_, tm7, ) in self.type_list_len.iter_old_0(tm8, ) {
+for Absurd() in self.absurd.iter_old() {
 
 #[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_old() {
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
 
 #[allow(unused_variables)]
-for SemanticPred(tm4, tm1, _, ) in self.semantic_pred.iter_all_2(tm9, ) {
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
 
-#[allow(unused_variables)]
-for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+self.pred_if_atom_arg_num_should_match_15(delta, tm0, tm1, tm2, tm3, tm4, tm7);
 
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm6, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for EntryScope(_, tm5, ) in self.entry_scope.iter_old_0(tm6, ) {
-
-#[allow(unused_variables)]
-for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm5, tm4, ) {
-
-self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
-
-
-}
-
-}
-
-}
-
-}
 
 }
 
@@ -112345,44 +113890,28 @@ self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_15(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_arg_num_should_match_15(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_21(delta, tm0, tm1, tm2, tm3, tm4, tm7);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_16(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat) {
 for _ in [()] {
 #[allow(unused_variables)]
-for TypeListLen(tm8, tm7, ) in self.type_list_len.iter_new() {
+for RuleDescendantIfAtom(_, tm10, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
 
 #[allow(unused_variables)]
-for PredArity(tm9, _, ) in self.pred_arity.iter_all_1(tm8, ) {
+for EntryScope(_, tm9, ) in self.entry_scope.iter_all_0(tm10, ) {
 
 #[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_old() {
+for ScopeSymbols(_, tm8, ) in self.scope_symbols.iter_all_0(tm9, ) {
 
-#[allow(unused_variables)]
-for SemanticPred(tm4, tm1, _, ) in self.semantic_pred.iter_all_2(tm9, ) {
+self.pred_if_atom_arg_num_should_match_20(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10);
 
-#[allow(unused_variables)]
-for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
-
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm6, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
-
-#[allow(unused_variables)]
-for EntryScope(_, tm5, ) in self.entry_scope.iter_old_0(tm6, ) {
-
-#[allow(unused_variables)]
-for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm5, tm4, ) {
-
-self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
-
-
-}
-
-}
-
-}
-
-}
-
-}
 
 }
 
@@ -112394,22 +113923,38 @@ self.pred_if_atom_arg_num_should_match_16(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_16(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Nat, tm8: TypeList, tm9: Pred) {
-for _ in [()] {
-self.pred_if_atom_arg_num_should_match_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
-
-
-}
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_17(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Nat, tm8: TypeList, tm9: Pred) {
+fn pred_if_atom_arg_num_should_match_17(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for IfAtomNodeLoc(_, tm10, ) in self.if_atom_node_loc.iter_all_0(tm0, ) {
+for RuleDescendantIfAtom(tm0, tm10, ) in self.rule_descendant_if_atom.iter_new() {
 
-self.pred_if_atom_arg_num_should_match_19(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+#[allow(unused_variables)]
+for EntryScope(_, tm9, ) in self.entry_scope.iter_old_0(tm10, ) {
 
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm8, ) in self.scope_symbols.iter_old_0(tm9, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_20(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+
+}
+
+}
 
 }
 
@@ -112420,40 +113965,25 @@ self.pred_if_atom_arg_num_should_match_19(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 fn pred_if_atom_arg_num_should_match_18(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for IfAtomNodeLoc(tm0, tm10, ) in self.if_atom_node_loc.iter_new() {
+for EntryScope(tm10, tm9, ) in self.entry_scope.iter_new() {
 
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm6, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+for ScopeSymbols(_, tm8, ) in self.scope_symbols.iter_old_0(tm9, ) {
 
 #[allow(unused_variables)]
-for EntryScope(_, tm5, ) in self.entry_scope.iter_old_0(tm6, ) {
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm10, ) {
 
 #[allow(unused_variables)]
-for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_old_0(tm5, ) {
-
-#[allow(unused_variables)]
-for TermListLen(tm2, tm3, ) in self.term_list_len.iter_old() {
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_old() {
 
 #[allow(unused_variables)]
 for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
 
 #[allow(unused_variables)]
-for SemanticPred(_, _, tm9, ) in self.semantic_pred.iter_old_0_1(tm4, tm1, ) {
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
 
-#[allow(unused_variables)]
-for PredArity(_, tm8, ) in self.pred_arity.iter_old_0(tm9, ) {
+self.pred_if_atom_arg_num_should_match_20(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10);
 
-#[allow(unused_variables)]
-for TypeListLen(_, tm7, ) in self.type_list_len.iter_old_0(tm8, ) {
-
-self.pred_if_atom_arg_num_should_match_19(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
-
-
-}
-
-}
-
-}
 
 }
 
@@ -112471,11 +114001,885 @@ self.pred_if_atom_arg_num_should_match_19(delta, tm0, tm1, tm2, tm3, tm4, tm5, t
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_arg_num_should_match_19(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Nat, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Nat, tm8: TypeList, tm9: Pred, tm10: Loc) {
+fn pred_if_atom_arg_num_should_match_19(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-let exists_already = self.pred_arg_num_should_match.iter_all_0_1_2(tm3, tm7, tm10).next().is_some();
+#[allow(unused_variables)]
+for ScopeSymbols(tm9, tm8, ) in self.scope_symbols.iter_new() {
+
+#[allow(unused_variables)]
+for EntryScope(tm10, _, ) in self.entry_scope.iter_all_1(tm9, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm10, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_20(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_20(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat, tm8: SymbolScope, tm9: Scope, tm10: RuleDescendantNode) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_24(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_21(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TermListLen(_, tm11, ) in self.term_list_len.iter_all_0(tm2, ) {
+
+self.pred_if_atom_arg_num_should_match_23(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_22(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, tm1, _, ) in self.pred_if_atom_node.iter_old_2(tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm7, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_23(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_23(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_29(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_24(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat, tm8: SymbolScope, tm9: Scope, tm10: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(_, _, tm14, ) in self.semantic_pred.iter_all_0_1(tm8, tm5, ) {
+
+#[allow(unused_variables)]
+for PredArity(_, tm13, ) in self.pred_arity.iter_all_0(tm14, ) {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm12, ) in self.type_list_len.iter_all_0(tm13, ) {
+
+self.pred_if_atom_arg_num_should_match_28(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_25(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(tm8, tm5, tm14, ) in self.semantic_pred.iter_new() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm9, _, ) in self.scope_symbols.iter_old_1(tm8, ) {
+
+#[allow(unused_variables)]
+for PredArity(_, tm13, ) in self.pred_arity.iter_old_0(tm14, ) {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm12, ) in self.type_list_len.iter_old_0(tm13, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm10, _, ) in self.entry_scope.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm10, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for TermListLen(_, tm6, ) in self.term_list_len.iter_old_0(tm2, ) {
+
+self.pred_if_atom_arg_num_should_match_28(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_26(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredArity(tm14, tm13, ) in self.pred_arity.iter_new() {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm12, ) in self.type_list_len.iter_old_0(tm13, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticPred(tm8, tm5, _, ) in self.semantic_pred.iter_all_2(tm14, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm10, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm9, ) in self.entry_scope.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm9, tm8, ) {
+
+self.pred_if_atom_arg_num_should_match_28(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_27(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeListLen(tm13, tm12, ) in self.type_list_len.iter_new() {
+
+#[allow(unused_variables)]
+for PredArity(tm14, _, ) in self.pred_arity.iter_all_1(tm13, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticPred(tm8, tm5, _, ) in self.semantic_pred.iter_all_2(tm14, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm10, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm9, ) in self.entry_scope.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm9, tm8, ) {
+
+self.pred_if_atom_arg_num_should_match_28(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_28(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat, tm8: SymbolScope, tm9: Scope, tm10: RuleDescendantNode, tm12: Nat, tm13: TypeList, tm14: Pred) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_34(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_29(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm17, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm16, ) in self.entry_scope.iter_all_0(tm17, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm15, ) in self.scope_symbols.iter_all_0(tm16, ) {
+
+self.pred_if_atom_arg_num_should_match_33(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_30(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, tm17, ) in self.rule_descendant_if_atom.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm16, ) in self.entry_scope.iter_old_0(tm17, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm15, ) in self.scope_symbols.iter_old_0(tm16, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm7, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_33(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_31(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for EntryScope(tm17, tm16, ) in self.entry_scope.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm17, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm15, ) in self.scope_symbols.iter_old_0(tm16, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm7, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_33(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_32(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ScopeSymbols(tm16, tm15, ) in self.scope_symbols.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(tm17, _, ) in self.entry_scope.iter_all_1(tm16, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm17, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm7, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_33(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_33(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat, tm15: SymbolScope, tm16: Scope, tm17: RuleDescendantNode) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_37(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_34(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat, tm8: SymbolScope, tm9: Scope, tm10: RuleDescendantNode, tm12: Nat, tm13: TypeList, tm14: Pred) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(_, tm18, ) in self.if_atom_node_loc.iter_all_0(tm0, ) {
+
+self.pred_if_atom_arg_num_should_match_36(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14, tm18);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_35(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(tm0, tm18, ) in self.if_atom_node_loc.iter_new() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm10, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm9, ) in self.entry_scope.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm8, ) in self.scope_symbols.iter_old_0(tm9, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm6, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticPred(_, _, tm14, ) in self.semantic_pred.iter_old_0_1(tm8, tm5, ) {
+
+#[allow(unused_variables)]
+for PredArity(_, tm13, ) in self.pred_arity.iter_old_0(tm14, ) {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm12, ) in self.type_list_len.iter_old_0(tm13, ) {
+
+self.pred_if_atom_arg_num_should_match_36(delta, tm0, tm1, tm2, tm5, tm6, tm8, tm9, tm10, tm12, tm13, tm14, tm18);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_36(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: Nat, tm8: SymbolScope, tm9: Scope, tm10: RuleDescendantNode, tm12: Nat, tm13: TypeList, tm14: Pred, tm18: Loc) {
+for _ in [()] {
+let exists_already = self.pred_arg_num_should_match.iter_all_0_1_2(tm6, tm12, tm18).next().is_some();
 if !exists_already {
-delta.new_pred_arg_num_should_match.push(PredArgNumShouldMatch(tm3, tm7, tm10));
+delta.new_pred_arg_num_should_match.push(PredArgNumShouldMatch(tm6, tm12, tm18));
+}
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_37(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat, tm15: SymbolScope, tm16: Scope, tm17: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(_, _, tm21, ) in self.semantic_pred.iter_all_0_1(tm15, tm7, ) {
+
+#[allow(unused_variables)]
+for PredArity(_, tm20, ) in self.pred_arity.iter_all_0(tm21, ) {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm19, ) in self.type_list_len.iter_all_0(tm20, ) {
+
+self.pred_if_atom_arg_num_should_match_41(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_38(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(tm15, tm7, tm21, ) in self.semantic_pred.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm16, _, ) in self.scope_symbols.iter_old_1(tm15, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm17, _, ) in self.entry_scope.iter_old_1(tm16, ) {
+
+#[allow(unused_variables)]
+for PredArity(_, tm20, ) in self.pred_arity.iter_old_0(tm21, ) {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm19, ) in self.type_list_len.iter_old_0(tm20, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm7, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm17, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for TermListLen(_, tm11, ) in self.term_list_len.iter_old_0(tm2, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_41(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_39(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredArity(tm21, tm20, ) in self.pred_arity.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm19, ) in self.type_list_len.iter_old_0(tm20, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticPred(tm15, tm7, _, ) in self.semantic_pred.iter_all_2(tm21, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm7, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm16, _, ) in self.scope_symbols.iter_old_1(tm15, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm17, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, _, ) in self.entry_scope.iter_old_0_1(tm17, tm16, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_41(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_40(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TypeListLen(tm20, tm19, ) in self.type_list_len.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for PredArity(tm21, _, ) in self.pred_arity.iter_all_1(tm20, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticPred(tm15, tm7, _, ) in self.semantic_pred.iter_all_2(tm21, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm7, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm16, _, ) in self.scope_symbols.iter_old_1(tm15, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm17, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, _, ) in self.entry_scope.iter_old_0_1(tm17, tm16, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_41(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_41(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat, tm15: SymbolScope, tm16: Scope, tm17: RuleDescendantNode, tm19: Nat, tm20: TypeList, tm21: Pred) {
+for _ in [()] {
+self.pred_if_atom_arg_num_should_match_42(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_42(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat, tm15: SymbolScope, tm16: Scope, tm17: RuleDescendantNode, tm19: Nat, tm20: TypeList, tm21: Pred) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(_, tm22, ) in self.if_atom_node_loc.iter_all_0(tm0, ) {
+
+self.pred_if_atom_arg_num_should_match_44(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21, tm22);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_43(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for IfAtomNodeLoc(tm0, tm22, ) in self.if_atom_node_loc.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm17, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm16, ) in self.entry_scope.iter_old_0(tm17, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm15, ) in self.scope_symbols.iter_old_0(tm16, ) {
+
+#[allow(unused_variables)]
+for TermListLen(tm2, tm11, ) in self.term_list_len.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, _, ) in self.pred_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm7, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticPred(_, _, tm21, ) in self.semantic_pred.iter_old_0_1(tm15, tm7, ) {
+
+#[allow(unused_variables)]
+for PredArity(_, tm20, ) in self.pred_arity.iter_old_0(tm21, ) {
+
+#[allow(unused_variables)]
+for TypeListLen(_, tm19, ) in self.type_list_len.iter_old_0(tm20, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_arg_num_should_match_44(delta, tm0, tm1, tm2, tm3, tm4, tm7, tm11, tm15, tm16, tm17, tm19, tm20, tm21, tm22);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_arg_num_should_match_44(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm7: Ident, tm11: Nat, tm15: SymbolScope, tm16: Scope, tm17: RuleDescendantNode, tm19: Nat, tm20: TypeList, tm21: Pred, tm22: Loc) {
+for _ in [()] {
+let exists_already = self.pred_arg_num_should_match.iter_all_0_1_2(tm11, tm19, tm22).next().is_some();
+if !exists_already {
+delta.new_pred_arg_num_should_match.push(PredArgNumShouldMatch(tm11, tm19, tm22));
 }
 
 
@@ -118867,7 +121271,7 @@ self.pred_if_atom_structure_3(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_structure_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_structure_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 self.pred_if_atom_structure_4(delta, tm0, tm1, tm2);
 
@@ -118876,7 +121280,7 @@ self.pred_if_atom_structure_4(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_structure_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_structure_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
 for IfAtomStructure(_, tm3, ) in self.if_atom_structure.iter_all_0(tm0, ) {
@@ -118909,7 +121313,7 @@ self.pred_if_atom_structure_6(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_structure_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: Structure) {
+fn pred_if_atom_structure_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: Structure) {
 for _ in [()] {
 let exists_already = self.terms_structure.iter_all_0_1(tm2, tm3).next().is_some();
 if !exists_already {
@@ -125404,11 +127808,29 @@ for _ in [()] {
 self.pred_if_atom_semantics_1(delta, );
 self.pred_if_atom_semantics_2(delta, );
 self.pred_if_atom_semantics_5(delta, );
-self.pred_if_atom_semantics_6(delta, );
-self.pred_if_atom_semantics_7(delta, );
-self.pred_if_atom_semantics_10(delta, );
+self.pred_if_atom_semantics_8(delta, );
 self.pred_if_atom_semantics_11(delta, );
-self.pred_if_atom_semantics_14(delta, );
+self.pred_if_atom_semantics_12(delta, );
+self.pred_if_atom_semantics_13(delta, );
+self.pred_if_atom_semantics_16(delta, );
+self.pred_if_atom_semantics_19(delta, );
+self.pred_if_atom_semantics_20(delta, );
+self.pred_if_atom_semantics_23(delta, );
+self.pred_if_atom_semantics_24(delta, );
+self.pred_if_atom_semantics_25(delta, );
+self.pred_if_atom_semantics_28(delta, );
+self.pred_if_atom_semantics_31(delta, );
+self.pred_if_atom_semantics_32(delta, );
+self.pred_if_atom_semantics_35(delta, );
+
+
+
+
+
+
+
+
+
 
 
 
@@ -125443,32 +127865,24 @@ self.pred_if_atom_semantics_3(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_semantics_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 self.pred_if_atom_semantics_4(delta, tm0, tm1, tm2);
+self.pred_if_atom_semantics_7(delta, tm0, tm1, tm2);
+
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode) {
+fn pred_if_atom_semantics_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm5, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_all_0(tm1, ) {
 
-#[allow(unused_variables)]
-for EntryScope(_, tm4, ) in self.entry_scope.iter_all_0(tm5, ) {
+self.pred_if_atom_semantics_6(delta, tm0, tm1, tm2, tm3, tm4);
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_all_0(tm4, ) {
-
-self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
 
 }
 
@@ -125479,23 +127893,13 @@ self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 fn pred_if_atom_semantics_5(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, tm5, ) in self.rule_descendant_if_atom.iter_new() {
+for MemberPredExpr(tm1, tm3, tm4, ) in self.member_pred_expr.iter_new() {
 
 #[allow(unused_variables)]
-for EntryScope(_, tm4, ) in self.entry_scope.iter_old_0(tm5, ) {
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_old_0(tm4, ) {
+self.pred_if_atom_semantics_6(delta, tm0, tm1, tm2, tm3, tm4);
 
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
-
-self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
 
 }
 
@@ -125505,28 +127909,28 @@ self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_6(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_semantics_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident) {
+for _ in [()] {
+let exists_already = self.absurd.iter_all().next().is_some();
+if !exists_already {
+delta.new_absurd.push(Absurd());
+}
+
+self.pred_if_atom_semantics_15(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode) {
 for _ in [()] {
 #[allow(unused_variables)]
-for EntryScope(tm5, tm4, ) in self.entry_scope.iter_new() {
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_all_0(tm1, ) {
 
-#[allow(unused_variables)]
-for ScopeSymbols(_, tm3, ) in self.scope_symbols.iter_old_0(tm4, ) {
+self.pred_if_atom_semantics_9(delta, tm0, tm1, tm2, tm5);
 
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm5, ) {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
-
-self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
-
-}
 
 }
 
@@ -125534,26 +127938,16 @@ self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_7(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_semantics_8(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for ScopeSymbols(tm4, tm3, ) in self.scope_symbols.iter_new() {
+for AmbientPredExpr(tm1, tm5, ) in self.ambient_pred_expr.iter_new() {
 
 #[allow(unused_variables)]
-for EntryScope(tm5, _, ) in self.entry_scope.iter_all_1(tm4, ) {
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
 
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm5, ) {
+self.pred_if_atom_semantics_9(delta, tm0, tm1, tm2, tm5);
 
-#[allow(unused_variables)]
-for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
-
-self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
-
-
-}
-
-}
 
 }
 
@@ -125563,62 +127957,28 @@ self.pred_if_atom_semantics_8(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_8(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode) {
+fn pred_if_atom_semantics_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident) {
 for _ in [()] {
-self.pred_if_atom_semantics_9(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.pred_if_atom_semantics_10(delta, tm0, tm1, tm2, tm5);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_9(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode) {
+fn pred_if_atom_semantics_10(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident) {
 for _ in [()] {
 #[allow(unused_variables)]
-for SemanticPred(_, _, tm7, ) in self.semantic_pred.iter_all_0_1(tm3, tm1, ) {
+for RuleDescendantIfAtom(_, tm8, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
 
 #[allow(unused_variables)]
-for PredRel(_, tm6, ) in self.pred_rel.iter_all_0(tm7, ) {
-
-self.pred_if_atom_semantics_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-
-}
-
-}
-}
+for EntryScope(_, tm7, ) in self.entry_scope.iter_all_0(tm8, ) {
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_10(&self, delta: &mut ModelDelta, ) {
-for _ in [()] {
-#[allow(unused_variables)]
-for SemanticPred(tm3, tm1, tm7, ) in self.semantic_pred.iter_new() {
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_all_0(tm7, ) {
 
-#[allow(unused_variables)]
-for ScopeSymbols(tm4, _, ) in self.scope_symbols.iter_old_1(tm3, ) {
+self.pred_if_atom_semantics_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
 
-#[allow(unused_variables)]
-for PredRel(_, tm6, ) in self.pred_rel.iter_old_0(tm7, ) {
-
-#[allow(unused_variables)]
-for EntryScope(tm5, _, ) in self.entry_scope.iter_old_1(tm4, ) {
-
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm5, ) {
-
-#[allow(unused_variables)]
-for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
-
-self.pred_if_atom_semantics_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
-
-}
-
-}
-
-}
 
 }
 
@@ -125633,24 +127993,209 @@ self.pred_if_atom_semantics_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
 fn pred_if_atom_semantics_11(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for PredRel(tm7, tm6, ) in self.pred_rel.iter_new() {
+for RuleDescendantIfAtom(tm0, tm8, ) in self.rule_descendant_if_atom.iter_new() {
 
 #[allow(unused_variables)]
-for ScopeSymbols(tm4, tm3, ) in self.scope_symbols.iter_old() {
+for EntryScope(_, tm7, ) in self.entry_scope.iter_old_0(tm8, ) {
 
 #[allow(unused_variables)]
-for SemanticPred(_, tm1, _, ) in self.semantic_pred.iter_all_0_2(tm3, tm7, ) {
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_old_0(tm7, ) {
 
 #[allow(unused_variables)]
-for EntryScope(tm5, _, ) in self.entry_scope.iter_old_1(tm4, ) {
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
 
 #[allow(unused_variables)]
-for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm5, ) {
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_12(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for EntryScope(tm8, tm7, ) in self.entry_scope.iter_new() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm6, ) in self.scope_symbols.iter_old_0(tm7, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm8, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_13(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ScopeSymbols(tm7, tm6, ) in self.scope_symbols.iter_new() {
+
+#[allow(unused_variables)]
+for EntryScope(tm8, _, ) in self.entry_scope.iter_all_1(tm7, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm8, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm5, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_14(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_14(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode) {
+for _ in [()] {
+self.pred_if_atom_semantics_18(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_15(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_all_0(tm1, ) {
+
+self.pred_if_atom_semantics_17(delta, tm0, tm1, tm2, tm3, tm4, tm9);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_16(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm9, ) in self.ambient_pred_expr.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, tm2, ) in self.pred_if_atom_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_17(delta, tm0, tm1, tm2, tm3, tm4, tm9);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_17(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident) {
+for _ in [()] {
+self.pred_if_atom_semantics_22(delta, tm0, tm1, tm2, tm3, tm4, tm9);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_18(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(_, _, tm11, ) in self.semantic_pred.iter_all_0_1(tm6, tm5, ) {
+
+#[allow(unused_variables)]
+for PredRel(_, tm10, ) in self.pred_rel.iter_all_0(tm11, ) {
+
+self.pred_if_atom_semantics_21(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm11);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_19(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(tm6, tm5, tm11, ) in self.semantic_pred.iter_new() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm7, _, ) in self.scope_symbols.iter_old_1(tm6, ) {
+
+#[allow(unused_variables)]
+for PredRel(_, tm10, ) in self.pred_rel.iter_old_0(tm11, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm8, _, ) in self.entry_scope.iter_old_1(tm7, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm8, ) {
 
 #[allow(unused_variables)]
 for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
 
-self.pred_if_atom_semantics_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+self.pred_if_atom_semantics_21(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm11);
 
 
 }
@@ -125666,25 +128211,48 @@ self.pred_if_atom_semantics_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
 }
 
 }
-}
-
-#[allow(unused_variables)]
-fn pred_if_atom_semantics_12(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode, tm6: Rel, tm7: Pred) {
-for _ in [()] {
-self.pred_if_atom_semantics_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
-
 
 }
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_13(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode, tm6: Rel, tm7: Pred) {
+fn pred_if_atom_semantics_20(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
-for SemanticEls(_, tm9, tm8, ) in self.semantic_els.iter_all_0(tm2, ) {
+for PredRel(tm11, tm10, ) in self.pred_rel.iter_new() {
 
-self.pred_if_atom_semantics_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
+#[allow(unused_variables)]
+for ScopeSymbols(tm7, tm6, ) in self.scope_symbols.iter_old() {
 
+#[allow(unused_variables)]
+for SemanticPred(_, tm5, _, ) in self.semantic_pred.iter_all_0_2(tm6, tm11, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm8, _, ) in self.entry_scope.iter_old_1(tm7, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm8, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+self.pred_if_atom_semantics_21(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm11);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
 
 }
 
@@ -125692,39 +128260,28 @@ self.pred_if_atom_semantics_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_14(&self, delta: &mut ModelDelta, ) {
+fn pred_if_atom_semantics_21(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode, tm10: Rel, tm11: Pred) {
+for _ in [()] {
+self.pred_if_atom_semantics_27(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm11);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_22(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident) {
 for _ in [()] {
 #[allow(unused_variables)]
-for SemanticEls(tm2, tm9, tm8, ) in self.semantic_els.iter_new() {
+for RuleDescendantIfAtom(_, tm14, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
 
 #[allow(unused_variables)]
-for PredRel(tm7, tm6, ) in self.pred_rel.iter_old() {
+for EntryScope(_, tm13, ) in self.entry_scope.iter_all_0(tm14, ) {
 
 #[allow(unused_variables)]
-for PredIfAtomNode(tm0, tm1, _, ) in self.pred_if_atom_node.iter_old_2(tm2, ) {
+for ScopeSymbols(_, tm12, ) in self.scope_symbols.iter_all_0(tm13, ) {
 
-#[allow(unused_variables)]
-for RuleDescendantIfAtom(_, tm5, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+self.pred_if_atom_semantics_26(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14);
 
-#[allow(unused_variables)]
-for EntryScope(_, tm4, ) in self.entry_scope.iter_old_0(tm5, ) {
-
-#[allow(unused_variables)]
-for SemanticPred(tm3, _, _, ) in self.semantic_pred.iter_old_1_2(tm1, tm7, ) {
-
-#[allow(unused_variables)]
-for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm4, tm3, ) {
-
-self.pred_if_atom_semantics_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
-
-
-}
-
-}
-
-}
-
-}
 
 }
 
@@ -125736,11 +128293,437 @@ self.pred_if_atom_semantics_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm
 }
 
 #[allow(unused_variables)]
-fn pred_if_atom_semantics_15(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: Ident, tm2: TermListNode, tm3: SymbolScope, tm4: Scope, tm5: RuleDescendantNode, tm6: Rel, tm7: Pred, tm8: ElList, tm9: Structure) {
+fn pred_if_atom_semantics_23(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-let exists_already = self.rel_app.iter_all_0_1(tm6, tm8).next().is_some();
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, tm14, ) in self.rule_descendant_if_atom.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm13, ) in self.entry_scope.iter_old_0(tm14, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm12, ) in self.scope_symbols.iter_old_0(tm13, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_26(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_24(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for EntryScope(tm14, tm13, ) in self.entry_scope.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm14, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm12, ) in self.scope_symbols.iter_old_0(tm13, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_26(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_25(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ScopeSymbols(tm13, tm12, ) in self.scope_symbols.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for EntryScope(tm14, _, ) in self.entry_scope.iter_all_1(tm13, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm14, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, tm1, tm2, ) in self.pred_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(_, tm9, ) in self.ambient_pred_expr.iter_old_0(tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_26(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_26(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm12: SymbolScope, tm13: Scope, tm14: RuleDescendantNode) {
+for _ in [()] {
+self.pred_if_atom_semantics_30(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_27(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode, tm10: Rel, tm11: Pred) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEls(_, tm16, tm15, ) in self.semantic_els.iter_all_0(tm2, ) {
+
+self.pred_if_atom_semantics_29(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm11, tm15, tm16);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_28(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEls(tm2, tm16, tm15, ) in self.semantic_els.iter_new() {
+
+#[allow(unused_variables)]
+for PredRel(tm11, tm10, ) in self.pred_rel.iter_old() {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm5, ) in self.ambient_pred_expr.iter_old() {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm8, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm7, ) in self.entry_scope.iter_old_0(tm8, ) {
+
+#[allow(unused_variables)]
+for SemanticPred(tm6, _, _, ) in self.semantic_pred.iter_old_1_2(tm5, tm11, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm7, tm6, ) {
+
+self.pred_if_atom_semantics_29(delta, tm0, tm1, tm2, tm5, tm6, tm7, tm8, tm10, tm11, tm15, tm16);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_29(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm5: Ident, tm6: SymbolScope, tm7: Scope, tm8: RuleDescendantNode, tm10: Rel, tm11: Pred, tm15: ElList, tm16: Structure) {
+for _ in [()] {
+let exists_already = self.rel_app.iter_all_0_1(tm10, tm15).next().is_some();
 if !exists_already {
-delta.new_rel_app.push(RelApp(tm6, tm8));
+delta.new_rel_app.push(RelApp(tm10, tm15));
+}
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_30(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm12: SymbolScope, tm13: Scope, tm14: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(_, _, tm18, ) in self.semantic_pred.iter_all_0_1(tm12, tm9, ) {
+
+#[allow(unused_variables)]
+for PredRel(_, tm17, ) in self.pred_rel.iter_all_0(tm18, ) {
+
+self.pred_if_atom_semantics_33(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14, tm17, tm18);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_31(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticPred(tm12, tm9, tm18, ) in self.semantic_pred.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm13, _, ) in self.scope_symbols.iter_old_1(tm12, ) {
+
+#[allow(unused_variables)]
+for PredRel(_, tm17, ) in self.pred_rel.iter_old_0(tm18, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm14, _, ) in self.entry_scope.iter_old_1(tm13, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm14, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_33(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14, tm17, tm18);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_32(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for PredRel(tm18, tm17, ) in self.pred_rel.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm13, tm12, ) in self.scope_symbols.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticPred(_, tm9, _, ) in self.semantic_pred.iter_all_0_2(tm12, tm18, ) {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, _, ) in self.ambient_pred_expr.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm14, _, ) in self.entry_scope.iter_old_1(tm13, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm14, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(_, _, tm2, ) in self.pred_if_atom_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_33(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14, tm17, tm18);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_33(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm12: SymbolScope, tm13: Scope, tm14: RuleDescendantNode, tm17: Rel, tm18: Pred) {
+for _ in [()] {
+self.pred_if_atom_semantics_34(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14, tm17, tm18);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_34(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm12: SymbolScope, tm13: Scope, tm14: RuleDescendantNode, tm17: Rel, tm18: Pred) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEls(_, tm20, tm19, ) in self.semantic_els.iter_all_0(tm2, ) {
+
+self.pred_if_atom_semantics_36(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14, tm17, tm18, tm19, tm20);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_35(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEls(tm2, tm20, tm19, ) in self.semantic_els.iter_new() {
+
+#[allow(unused_variables)]
+for Absurd() in self.absurd.iter_old() {
+
+#[allow(unused_variables)]
+for PredRel(tm18, tm17, ) in self.pred_rel.iter_old() {
+
+#[allow(unused_variables)]
+for AmbientPredExpr(tm1, tm9, ) in self.ambient_pred_expr.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticPred(tm12, _, _, ) in self.semantic_pred.iter_old_1_2(tm9, tm18, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm13, _, ) in self.scope_symbols.iter_old_1(tm12, ) {
+
+#[allow(unused_variables)]
+for PredIfAtomNode(tm0, _, _, ) in self.pred_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm14, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, _, ) in self.entry_scope.iter_old_0_1(tm14, tm13, ) {
+
+#[allow(unused_variables)]
+for MemberPredExpr(_, tm3, tm4, ) in self.member_pred_expr.iter_old_0(tm1, ) {
+
+self.pred_if_atom_semantics_36(delta, tm0, tm1, tm2, tm3, tm4, tm9, tm12, tm13, tm14, tm17, tm18, tm19, tm20);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn pred_if_atom_semantics_36(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: PredExprNode, tm2: TermListNode, tm3: TermNode, tm4: Ident, tm9: Ident, tm12: SymbolScope, tm13: Scope, tm14: RuleDescendantNode, tm17: Rel, tm18: Pred, tm19: ElList, tm20: Structure) {
+for _ in [()] {
+let exists_already = self.rel_app.iter_all_0_1(tm17, tm19).next().is_some();
+if !exists_already {
+delta.new_rel_app.push(RelApp(tm17, tm19));
 }
 
 
@@ -132527,6 +135510,8 @@ self.cons_term_list_node.drop_dirt();
 self.ambient_type_expr.drop_dirt();
 self.member_type_expr.drop_dirt();
 self.mor_type_expr.drop_dirt();
+self.ambient_pred_expr.drop_dirt();
+self.member_pred_expr.drop_dirt();
 self.none_term_node.drop_dirt();
 self.some_term_node.drop_dirt();
 self.var_term_node.drop_dirt();
@@ -132656,6 +135641,7 @@ self.decl_node_loc.drop_dirt();
 self.decl_list_node_loc.drop_dirt();
 self.module_node_loc.drop_dirt();
 self.type_expr_node_loc.drop_dirt();
+self.pred_expr_node_loc.drop_dirt();
 self.rule_descendant_rule.drop_dirt();
 self.rule_descendant_term.drop_dirt();
 self.rule_descendant_term_list.drop_dirt();
@@ -132773,6 +135759,7 @@ self.ctor_decl_list_node_old.append(&mut self.ctor_decl_list_node_new);
 self.enum_decl_node_old.append(&mut self.enum_decl_node_new);
 self.term_node_old.append(&mut self.term_node_new);
 self.term_list_node_old.append(&mut self.term_list_node_new);
+self.pred_expr_node_old.append(&mut self.pred_expr_node_new);
 self.opt_term_node_old.append(&mut self.opt_term_node_new);
 self.match_case_node_old.append(&mut self.match_case_node_new);
 self.stmt_list_node_old.append(&mut self.stmt_list_node_new);
@@ -132905,6 +135892,14 @@ impl fmt::Display for Eqlog {
         .header_intersection('┬')
 )
 .fmt(f)?;self.term_list_node_equalities.class_table().with(Header("TermListNode"))
+.with(Modify::new(Segment::all())
+.with(Alignment::center()))
+.with(
+    Style::modern()
+        .top_intersection('─')
+        .header_intersection('┬')
+)
+.fmt(f)?;self.pred_expr_node_equalities.class_table().with(Header("PredExprNode"))
 .with(Modify::new(Segment::all())
 .with(Alignment::center()))
 .with(
@@ -133161,7 +136156,7 @@ impl fmt::Display for Eqlog {
         .header_intersection('┬')
 )
 .fmt(f)?;
-        self.absurd.fmt(f)?;self.type_decl.fmt(f)?;self.arg_decl_node_name.fmt(f)?;self.arg_decl_node_type.fmt(f)?;self.nil_arg_decl_list_node.fmt(f)?;self.cons_arg_decl_list_node.fmt(f)?;self.pred_decl.fmt(f)?;self.func_decl.fmt(f)?;self.ctor_decl.fmt(f)?;self.nil_ctor_decl_list_node.fmt(f)?;self.cons_ctor_decl_list_node.fmt(f)?;self.enum_decl.fmt(f)?;self.nil_term_list_node.fmt(f)?;self.cons_term_list_node.fmt(f)?;self.ambient_type_expr.fmt(f)?;self.member_type_expr.fmt(f)?;self.mor_type_expr.fmt(f)?;self.none_term_node.fmt(f)?;self.some_term_node.fmt(f)?;self.var_term_node.fmt(f)?;self.wildcard_term_node.fmt(f)?;self.app_term_node.fmt(f)?;self.dom_term_node.fmt(f)?;self.cod_term_node.fmt(f)?;self.match_case.fmt(f)?;self.nil_match_case_list_node.fmt(f)?;self.cons_match_case_list_node.fmt(f)?;self.equal_if_atom_node.fmt(f)?;self.defined_if_atom_node.fmt(f)?;self.pred_if_atom_node.fmt(f)?;self.var_if_atom_node.fmt(f)?;self.equal_then_atom_node.fmt(f)?;self.defined_then_atom_node.fmt(f)?;self.pred_then_atom_node.fmt(f)?;self.if_stmt_node.fmt(f)?;self.then_stmt_node.fmt(f)?;self.branch_stmt_node.fmt(f)?;self.match_stmt_node.fmt(f)?;self.nil_stmt_list_node.fmt(f)?;self.cons_stmt_list_node.fmt(f)?;self.nil_stmt_block_list_node.fmt(f)?;self.cons_stmt_block_list_node.fmt(f)?;self.rule_decl.fmt(f)?;self.model_decl.fmt(f)?;self.decl_node_type.fmt(f)?;self.decl_node_pred.fmt(f)?;self.decl_node_func.fmt(f)?;self.decl_node_rule.fmt(f)?;self.decl_node_enum.fmt(f)?;self.decl_node_model.fmt(f)?;self.nil_decl_list_node.fmt(f)?;self.cons_decl_list_node.fmt(f)?;self.decls_module_node.fmt(f)?;self.var_in_scope.fmt(f)?;self.scope_extension.fmt(f)?;self.scope_single_child.fmt(f)?;self.scope_extension_siblings.fmt(f)?;self.is_normal_type.fmt(f)?;self.is_enum_type.fmt(f)?;self.is_model_type.fmt(f)?;self.is_mor_type.fmt(f)?;self.illegal_member_type_expr_in_signature.fmt(f)?;self.is_total_func.fmt(f)?;self.rel_app.fmt(f)?;self.el_type.fmt(f)?;self.el_types.fmt(f)?;self.constrained_el.fmt(f)?;self.constrained_els.fmt(f)?;self.in_ker.fmt(f)?;self.el_in_img.fmt(f)?;self.rel_tuple_in_img.fmt(f)?;self.symbol_scope_extension.fmt(f)?;self.symbol_scope_ancestor.fmt(f)?;self.element_member_symbol_scope.fmt(f)?;self.defined_symbol.fmt(f)?;self.accessible_symbol.fmt(f)?;self.should_be_symbol.fmt(f)?;self.should_be_symbol_2.fmt(f)?;self.should_be_symbol_3.fmt(f)?;self.pred_arg_num_should_match.fmt(f)?;self.func_arg_num_should_match.fmt(f)?;self.cfg_edge.fmt(f)?;self.cfg_edge_stmts_stmt.fmt(f)?;self.cfg_edge_stmt_stmts.fmt(f)?;self.cfg_edge_fork.fmt(f)?;self.cfg_edge_join.fmt(f)?;self.before_stmt_structure.fmt(f)?;self.stmt_morphism.fmt(f)?;self.if_morphism.fmt(f)?;self.surj_then_morphism.fmt(f)?;self.non_surj_then_morphism.fmt(f)?;self.noop_morphism.fmt(f)?;self.stmt_structure.fmt(f)?;self.if_atom_structure.fmt(f)?;self.then_atom_structure.fmt(f)?;self.term_structure.fmt(f)?;self.terms_structure.fmt(f)?;self.opt_term_structure.fmt(f)?;self.type_expr_structure.fmt(f)?;self.dom_must_be_applied_to_mor_type.fmt(f)?;self.dom_must_result_in_model_type.fmt(f)?;self.cod_must_be_applied_to_mor_type.fmt(f)?;self.cod_must_result_in_model_type.fmt(f)?;self.term_should_be_epic_ok.fmt(f)?;self.terms_should_be_epic_ok.fmt(f)?;self.el_should_be_surjective_ok.fmt(f)?;self.el_is_surjective_ok.fmt(f)?;self.should_be_obtained_by_ctor.fmt(f)?;self.is_given_by_ctor.fmt(f)?;self.function_can_be_made_defined.fmt(f)?;self.case_pattern_is_variable.fmt(f)?;self.case_pattern_is_wildcard.fmt(f)?;self.is_pattern_ctor_arg.fmt(f)?;self.are_pattern_ctor_args.fmt(f)?;self.pattern_ctor_arg_is_app.fmt(f)?;self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;self.cases_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor_of_enum.fmt(f)?;self.match_stmt_should_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor.fmt(f)?;self.real_virt_ident.fmt(f)?;self.virt_real_ident.fmt(f)?;self.var.fmt(f)?;self.rule_name.fmt(f)?;self.module_name.fmt(f)?;self.type_decl_node_loc.fmt(f)?;self.arg_decl_node_loc.fmt(f)?;self.arg_decl_list_node_loc.fmt(f)?;self.pred_decl_node_loc.fmt(f)?;self.func_decl_node_loc.fmt(f)?;self.ctor_decl_node_loc.fmt(f)?;self.enum_decl_node_loc.fmt(f)?;self.model_decl_node_loc.fmt(f)?;self.term_node_loc.fmt(f)?;self.term_list_node_loc.fmt(f)?;self.match_case_node_loc.fmt(f)?;self.opt_term_node_loc.fmt(f)?;self.if_atom_node_loc.fmt(f)?;self.then_atom_node_loc.fmt(f)?;self.stmt_node_loc.fmt(f)?;self.stmt_list_node_loc.fmt(f)?;self.rule_decl_node_loc.fmt(f)?;self.decl_node_loc.fmt(f)?;self.decl_list_node_loc.fmt(f)?;self.module_node_loc.fmt(f)?;self.type_expr_node_loc.fmt(f)?;self.rule_descendant_rule.fmt(f)?;self.rule_descendant_term.fmt(f)?;self.rule_descendant_term_list.fmt(f)?;self.rule_descendant_opt_term.fmt(f)?;self.rule_descendant_if_atom.fmt(f)?;self.rule_descendant_then_atom.fmt(f)?;self.rule_descendant_match_case.fmt(f)?;self.rule_descendant_match_case_list.fmt(f)?;self.rule_descendant_stmt.fmt(f)?;self.rule_descendant_stmt_list.fmt(f)?;self.rule_descendant_stmt_block_list.fmt(f)?;self.rule_descendant_type_expr.fmt(f)?;self.entry_scope.fmt(f)?;self.exit_scope.fmt(f)?;self.ctor_enum.fmt(f)?;self.ctors_enum.fmt(f)?;self.cases_discriminee.fmt(f)?;self.case_discriminee.fmt(f)?;self.desugared_case_equality_atom.fmt(f)?;self.desugared_case_equality_stmt.fmt(f)?;self.desugared_case_block.fmt(f)?;self.desugared_case_block_list.fmt(f)?;self.nil_type_list.fmt(f)?;self.cons_type_list.fmt(f)?;self.snoc_type_list.fmt(f)?;self.semantic_type.fmt(f)?;self.decl_symbol_scope.fmt(f)?;self.mor_type.fmt(f)?;self.mor_type_dom_func.fmt(f)?;self.mor_type_cod_func.fmt(f)?;self.type_definition_symbol_scope.fmt(f)?;self.func_rel.fmt(f)?;self.rel_definition_symbol_scope.fmt(f)?;self.domain.fmt(f)?;self.codomain.fmt(f)?;self.type_name.fmt(f)?;self.virtual_symbol_scope.fmt(f)?;self.parent_model_func.fmt(f)?;self.symbol_scope_model.fmt(f)?;self.flat_domain.fmt(f)?;self.semantic_signature_type_expr.fmt(f)?;self.type_symbol.fmt(f)?;self.enum_symbol.fmt(f)?;self.model_symbol.fmt(f)?;self.semantic_arg_type.fmt(f)?;self.arg_symbol_scope.fmt(f)?;self.semantic_arg_types.fmt(f)?;self.semantic_pred.fmt(f)?;self.pred_arity.fmt(f)?;self.semantic_func.fmt(f)?;self.ctor_symbol_scope.fmt(f)?;self.pred_rel.fmt(f)?;self.rel_name.fmt(f)?;self.arity.fmt(f)?;self.dom.fmt(f)?;self.cod.fmt(f)?;self.flat_arity.fmt(f)?;self.module_symbol_scope.fmt(f)?;self.nil_el_list.fmt(f)?;self.cons_el_list.fmt(f)?;self.snoc_el_list.fmt(f)?;self.el_structure.fmt(f)?;self.els_structure.fmt(f)?;self.ambient_type.fmt(f)?;self.instantiated_type.fmt(f)?;self.underlying_type.fmt(f)?;self.nil_element_type_list.fmt(f)?;self.cons_element_type_list.fmt(f)?;self.snoc_element_type_list.fmt(f)?;self.ambient_el_type_list.fmt(f)?;self.func_app.fmt(f)?;self.map_el.fmt(f)?;self.map_els.fmt(f)?;self.ambient_model_el.fmt(f)?;self.pred_symbol.fmt(f)?;self.func_symbol.fmt(f)?;self.rule_symbol.fmt(f)?;self.ctor_symbol.fmt(f)?;self.symbol_scope_parent.fmt(f)?;self.decls_symbol_scope.fmt(f)?;self.args_symbol_scope.fmt(f)?;self.ctors_symbol_scope.fmt(f)?;self.model_member_symbol_scope.fmt(f)?;self.symbol_scope_name.fmt(f)?;self.scope_symbols.fmt(f)?;self.semantic_el.fmt(f)?;self.zero.fmt(f)?;self.succ.fmt(f)?;self.type_list_len.fmt(f)?;self.term_list_len.fmt(f)?;self.before_rule_structure.fmt(f)?;self.ambient_model_el_structure.fmt(f)?;self.ambient_model_el_morphism.fmt(f)?;self.if_atom_morphism.fmt(f)?;self.then_atom_morphism.fmt(f)?;self.branch_stmt_morphism.fmt(f)?;self.match_stmt_morphism.fmt(f)?;self.semantic_name.fmt(f)?;self.semantic_els.fmt(f)?;self.wildcard_name.fmt(f)?;self.rel_app_parent_model_el.fmt(f)?;self.match_case_pattern_ctor.fmt(f)?;self.cases_determined_enum.fmt(f)?;
+        self.absurd.fmt(f)?;self.type_decl.fmt(f)?;self.arg_decl_node_name.fmt(f)?;self.arg_decl_node_type.fmt(f)?;self.nil_arg_decl_list_node.fmt(f)?;self.cons_arg_decl_list_node.fmt(f)?;self.pred_decl.fmt(f)?;self.func_decl.fmt(f)?;self.ctor_decl.fmt(f)?;self.nil_ctor_decl_list_node.fmt(f)?;self.cons_ctor_decl_list_node.fmt(f)?;self.enum_decl.fmt(f)?;self.nil_term_list_node.fmt(f)?;self.cons_term_list_node.fmt(f)?;self.ambient_type_expr.fmt(f)?;self.member_type_expr.fmt(f)?;self.mor_type_expr.fmt(f)?;self.ambient_pred_expr.fmt(f)?;self.member_pred_expr.fmt(f)?;self.none_term_node.fmt(f)?;self.some_term_node.fmt(f)?;self.var_term_node.fmt(f)?;self.wildcard_term_node.fmt(f)?;self.app_term_node.fmt(f)?;self.dom_term_node.fmt(f)?;self.cod_term_node.fmt(f)?;self.match_case.fmt(f)?;self.nil_match_case_list_node.fmt(f)?;self.cons_match_case_list_node.fmt(f)?;self.equal_if_atom_node.fmt(f)?;self.defined_if_atom_node.fmt(f)?;self.pred_if_atom_node.fmt(f)?;self.var_if_atom_node.fmt(f)?;self.equal_then_atom_node.fmt(f)?;self.defined_then_atom_node.fmt(f)?;self.pred_then_atom_node.fmt(f)?;self.if_stmt_node.fmt(f)?;self.then_stmt_node.fmt(f)?;self.branch_stmt_node.fmt(f)?;self.match_stmt_node.fmt(f)?;self.nil_stmt_list_node.fmt(f)?;self.cons_stmt_list_node.fmt(f)?;self.nil_stmt_block_list_node.fmt(f)?;self.cons_stmt_block_list_node.fmt(f)?;self.rule_decl.fmt(f)?;self.model_decl.fmt(f)?;self.decl_node_type.fmt(f)?;self.decl_node_pred.fmt(f)?;self.decl_node_func.fmt(f)?;self.decl_node_rule.fmt(f)?;self.decl_node_enum.fmt(f)?;self.decl_node_model.fmt(f)?;self.nil_decl_list_node.fmt(f)?;self.cons_decl_list_node.fmt(f)?;self.decls_module_node.fmt(f)?;self.var_in_scope.fmt(f)?;self.scope_extension.fmt(f)?;self.scope_single_child.fmt(f)?;self.scope_extension_siblings.fmt(f)?;self.is_normal_type.fmt(f)?;self.is_enum_type.fmt(f)?;self.is_model_type.fmt(f)?;self.is_mor_type.fmt(f)?;self.illegal_member_type_expr_in_signature.fmt(f)?;self.is_total_func.fmt(f)?;self.rel_app.fmt(f)?;self.el_type.fmt(f)?;self.el_types.fmt(f)?;self.constrained_el.fmt(f)?;self.constrained_els.fmt(f)?;self.in_ker.fmt(f)?;self.el_in_img.fmt(f)?;self.rel_tuple_in_img.fmt(f)?;self.symbol_scope_extension.fmt(f)?;self.symbol_scope_ancestor.fmt(f)?;self.element_member_symbol_scope.fmt(f)?;self.defined_symbol.fmt(f)?;self.accessible_symbol.fmt(f)?;self.should_be_symbol.fmt(f)?;self.should_be_symbol_2.fmt(f)?;self.should_be_symbol_3.fmt(f)?;self.pred_arg_num_should_match.fmt(f)?;self.func_arg_num_should_match.fmt(f)?;self.cfg_edge.fmt(f)?;self.cfg_edge_stmts_stmt.fmt(f)?;self.cfg_edge_stmt_stmts.fmt(f)?;self.cfg_edge_fork.fmt(f)?;self.cfg_edge_join.fmt(f)?;self.before_stmt_structure.fmt(f)?;self.stmt_morphism.fmt(f)?;self.if_morphism.fmt(f)?;self.surj_then_morphism.fmt(f)?;self.non_surj_then_morphism.fmt(f)?;self.noop_morphism.fmt(f)?;self.stmt_structure.fmt(f)?;self.if_atom_structure.fmt(f)?;self.then_atom_structure.fmt(f)?;self.term_structure.fmt(f)?;self.terms_structure.fmt(f)?;self.opt_term_structure.fmt(f)?;self.type_expr_structure.fmt(f)?;self.dom_must_be_applied_to_mor_type.fmt(f)?;self.dom_must_result_in_model_type.fmt(f)?;self.cod_must_be_applied_to_mor_type.fmt(f)?;self.cod_must_result_in_model_type.fmt(f)?;self.term_should_be_epic_ok.fmt(f)?;self.terms_should_be_epic_ok.fmt(f)?;self.el_should_be_surjective_ok.fmt(f)?;self.el_is_surjective_ok.fmt(f)?;self.should_be_obtained_by_ctor.fmt(f)?;self.is_given_by_ctor.fmt(f)?;self.function_can_be_made_defined.fmt(f)?;self.case_pattern_is_variable.fmt(f)?;self.case_pattern_is_wildcard.fmt(f)?;self.is_pattern_ctor_arg.fmt(f)?;self.are_pattern_ctor_args.fmt(f)?;self.pattern_ctor_arg_is_app.fmt(f)?;self.pattern_ctor_arg_var_is_not_fresh.fmt(f)?;self.cases_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor_of_enum.fmt(f)?;self.match_stmt_should_contain_ctor.fmt(f)?;self.match_stmt_contains_ctor.fmt(f)?;self.real_virt_ident.fmt(f)?;self.virt_real_ident.fmt(f)?;self.var.fmt(f)?;self.rule_name.fmt(f)?;self.module_name.fmt(f)?;self.type_decl_node_loc.fmt(f)?;self.arg_decl_node_loc.fmt(f)?;self.arg_decl_list_node_loc.fmt(f)?;self.pred_decl_node_loc.fmt(f)?;self.func_decl_node_loc.fmt(f)?;self.ctor_decl_node_loc.fmt(f)?;self.enum_decl_node_loc.fmt(f)?;self.model_decl_node_loc.fmt(f)?;self.term_node_loc.fmt(f)?;self.term_list_node_loc.fmt(f)?;self.match_case_node_loc.fmt(f)?;self.opt_term_node_loc.fmt(f)?;self.if_atom_node_loc.fmt(f)?;self.then_atom_node_loc.fmt(f)?;self.stmt_node_loc.fmt(f)?;self.stmt_list_node_loc.fmt(f)?;self.rule_decl_node_loc.fmt(f)?;self.decl_node_loc.fmt(f)?;self.decl_list_node_loc.fmt(f)?;self.module_node_loc.fmt(f)?;self.type_expr_node_loc.fmt(f)?;self.pred_expr_node_loc.fmt(f)?;self.rule_descendant_rule.fmt(f)?;self.rule_descendant_term.fmt(f)?;self.rule_descendant_term_list.fmt(f)?;self.rule_descendant_opt_term.fmt(f)?;self.rule_descendant_if_atom.fmt(f)?;self.rule_descendant_then_atom.fmt(f)?;self.rule_descendant_match_case.fmt(f)?;self.rule_descendant_match_case_list.fmt(f)?;self.rule_descendant_stmt.fmt(f)?;self.rule_descendant_stmt_list.fmt(f)?;self.rule_descendant_stmt_block_list.fmt(f)?;self.rule_descendant_type_expr.fmt(f)?;self.entry_scope.fmt(f)?;self.exit_scope.fmt(f)?;self.ctor_enum.fmt(f)?;self.ctors_enum.fmt(f)?;self.cases_discriminee.fmt(f)?;self.case_discriminee.fmt(f)?;self.desugared_case_equality_atom.fmt(f)?;self.desugared_case_equality_stmt.fmt(f)?;self.desugared_case_block.fmt(f)?;self.desugared_case_block_list.fmt(f)?;self.nil_type_list.fmt(f)?;self.cons_type_list.fmt(f)?;self.snoc_type_list.fmt(f)?;self.semantic_type.fmt(f)?;self.decl_symbol_scope.fmt(f)?;self.mor_type.fmt(f)?;self.mor_type_dom_func.fmt(f)?;self.mor_type_cod_func.fmt(f)?;self.type_definition_symbol_scope.fmt(f)?;self.func_rel.fmt(f)?;self.rel_definition_symbol_scope.fmt(f)?;self.domain.fmt(f)?;self.codomain.fmt(f)?;self.type_name.fmt(f)?;self.virtual_symbol_scope.fmt(f)?;self.parent_model_func.fmt(f)?;self.symbol_scope_model.fmt(f)?;self.flat_domain.fmt(f)?;self.semantic_signature_type_expr.fmt(f)?;self.type_symbol.fmt(f)?;self.enum_symbol.fmt(f)?;self.model_symbol.fmt(f)?;self.semantic_arg_type.fmt(f)?;self.arg_symbol_scope.fmt(f)?;self.semantic_arg_types.fmt(f)?;self.semantic_pred.fmt(f)?;self.pred_arity.fmt(f)?;self.semantic_func.fmt(f)?;self.ctor_symbol_scope.fmt(f)?;self.pred_rel.fmt(f)?;self.rel_name.fmt(f)?;self.arity.fmt(f)?;self.dom.fmt(f)?;self.cod.fmt(f)?;self.flat_arity.fmt(f)?;self.module_symbol_scope.fmt(f)?;self.nil_el_list.fmt(f)?;self.cons_el_list.fmt(f)?;self.snoc_el_list.fmt(f)?;self.el_structure.fmt(f)?;self.els_structure.fmt(f)?;self.ambient_type.fmt(f)?;self.instantiated_type.fmt(f)?;self.underlying_type.fmt(f)?;self.nil_element_type_list.fmt(f)?;self.cons_element_type_list.fmt(f)?;self.snoc_element_type_list.fmt(f)?;self.ambient_el_type_list.fmt(f)?;self.func_app.fmt(f)?;self.map_el.fmt(f)?;self.map_els.fmt(f)?;self.ambient_model_el.fmt(f)?;self.pred_symbol.fmt(f)?;self.func_symbol.fmt(f)?;self.rule_symbol.fmt(f)?;self.ctor_symbol.fmt(f)?;self.symbol_scope_parent.fmt(f)?;self.decls_symbol_scope.fmt(f)?;self.args_symbol_scope.fmt(f)?;self.ctors_symbol_scope.fmt(f)?;self.model_member_symbol_scope.fmt(f)?;self.symbol_scope_name.fmt(f)?;self.scope_symbols.fmt(f)?;self.semantic_el.fmt(f)?;self.zero.fmt(f)?;self.succ.fmt(f)?;self.type_list_len.fmt(f)?;self.term_list_len.fmt(f)?;self.before_rule_structure.fmt(f)?;self.ambient_model_el_structure.fmt(f)?;self.ambient_model_el_morphism.fmt(f)?;self.if_atom_morphism.fmt(f)?;self.then_atom_morphism.fmt(f)?;self.branch_stmt_morphism.fmt(f)?;self.match_stmt_morphism.fmt(f)?;self.semantic_name.fmt(f)?;self.semantic_els.fmt(f)?;self.wildcard_name.fmt(f)?;self.rel_app_parent_model_el.fmt(f)?;self.match_case_pattern_ctor.fmt(f)?;self.cases_determined_enum.fmt(f)?;
         Ok(())
     }
 }
