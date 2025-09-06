@@ -179,6 +179,7 @@ func rule_descendant_stmt(StmtNode) -> RuleDescendantNode;
 func rule_descendant_stmt_list(StmtListNode) -> RuleDescendantNode;
 func rule_descendant_stmt_block_list(StmtBlockListNode) -> RuleDescendantNode;
 func rule_descendant_type_expr(TypeExprNode) -> RuleDescendantNode;
+func rule_descendant_pred_expr(PredExprNode) -> RuleDescendantNode;
 
 rule rule_descendant_rule_total {
     if rul: RuleDeclNode;
@@ -227,6 +228,10 @@ rule rule_descendant_stmt_block_list_total {
 rule rule_descendant_type_expr_total {
     if type_expr: TypeExprNode;
     then rule_descendant_type_expr(type_expr)!;
+}
+rule rule_descendant_pred_expr_total {
+    if pred_expr: PredExprNode;
+    then rule_descendant_pred_expr(pred_expr)!;
 }
 
 /// ### Scopes
@@ -363,11 +368,12 @@ rule scopes_if_atom_defined {
     then scope_single_child(descendant_tm, atom_descendant);
 }
 rule scopes_if_atom_pred {
-    if pred_if_atom_node(atom, _, tms);
+    if pred_if_atom_node(atom, pred_expr, tms);
     if atom_descendant = rule_descendant_if_atom(atom);
+    if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
     if tms_descendant = rule_descendant_term_list(tms);
 
-    then scope_single_child(tms_descendant, atom_descendant);
+    then scope_extension_siblings(pred_expr_descendant, tms_descendant, atom_descendant);
 }
 rule scopes_if_atom_var {
     if var_if_atom_node(atom, tm, type_expr);
@@ -463,6 +469,12 @@ rule scopes_member_type_expr {
     if type_expr_descendant = rule_descendant_type_expr(type_expr);
     if tm_descendant = rule_descendant_term(tm);
     then scope_single_child(tm_descendant, type_expr_descendant);
+}
+rule scopes_member_pred_expr {
+    if member_pred_expr(pred_expr, tm, _);
+    if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
+    if tm_descendant = rule_descendant_term(tm);
+    then scope_single_child(tm_descendant, pred_expr_descendant);
 }
 
 // ### The enum constructor belong to
@@ -1571,19 +1583,22 @@ rule var_atom_should_be_type_member {
     if loc = if_atom_node_loc(atom);
     then should_be_symbol_3(name, type_kind, enum_kind, model_kind, member_scope, loc);
 }
-rule pred_if_atom_should_be_pred {
-    if pred_if_atom_node(atom, pred_node, _);
-    branch {
-        // pass
-    } along {
-        if member_pred_expr(pred_node, _, _);
-        then absurd();
-    }
+rule ambient_pred_expr_should_be_symbol {
     if ambient_pred_expr(pred_node, pred_name);
-    if scope = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
+    if scope = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_node)));
     if kind = PredSymbol();
-    if loc = if_atom_node_loc(atom);
+    if loc = pred_expr_node_loc(pred_node);
     then should_be_symbol(pred_name, kind, scope, loc);
+}
+rule member_pred_expr_should_be_symbol {
+    if member_pred_expr(pred_expr, tm, pred_name);
+    if el_type(semantic_el(tm, _), tm_el_type);
+
+    if tm_typ = underlying_type(tm_el_type);
+    if member_scope = model_member_symbol_scope(tm_typ);
+    if pred_kind = PredSymbol();
+    if loc = pred_expr_node_loc(pred_expr);
+    then should_be_symbol(pred_name, pred_kind, member_scope, loc);
 }
 rule pred_then_atom_should_be_pred {
     if pred_then_atom_node(atom, pred_name, _);
@@ -1658,18 +1673,27 @@ pred func_arg_num_should_match(
     usage: Loc
 );
 
+func semantic_pred_expr(PredExprNode) -> Pred;
+rule semantic_ambient_pred_expr_rule {
+    if ambient_pred_expr(pred_expr, name);
+    if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
+    if p = semantic_pred(ss, name);
+    then semantic_pred_expr(pred_expr) = p;
+}
+rule semantic_member_pred_expr_rule {
+    if member_pred_expr(pred_expr, tm, name);
+    if el_type(semantic_el(tm, _), tm_el_type);
+
+    if tm_typ = underlying_type(tm_el_type);
+    if ss = model_member_symbol_scope(tm_typ);
+    if p = semantic_pred(ss, name);
+    then semantic_pred_expr(pred_expr) = p;
+}
+
 rule pred_if_atom_arg_num_should_match {
     if pred_if_atom_node(atom, pred_expr, args);
-    branch {
-        // pass
-    } along {
-        if member_pred_expr(pred_expr, _, _);
-        then absurd();
-    }
-    if ambient_pred_expr(pred_expr, name);
     if got_len = term_list_len(args);
-    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if expected_len = type_list_len(pred_arity(semantic_pred(ss, name)));
+    if expected_len = type_list_len(pred_arity(semantic_pred_expr(pred_expr)));
     if loc = if_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
@@ -2300,18 +2324,14 @@ rule equal_if_atom_semantics {
 }
 // No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
 rule pred_if_atom_semantics {
-    if pred_if_atom_node(atom, pred_expr, arg_terms);
-    branch {
-        // pass
-    } along {
-        if member_pred_expr(pred_expr, _, _);
-        then absurd();
-    }
-    if ambient_pred_expr(pred_expr, predicate_name);
-    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if rel = PredRel(semantic_pred(ss, predicate_name));
-    if arg_els = semantic_els(arg_terms, _);
+    if pred_if_atom_node(_, pred_expr, arg_terms);
+    if p = semantic_pred_expr(pred_expr);
+    if rel = PredRel(p);
+    if arg_els = semantic_els(arg_terms, strct);
     then rel_app(rel, arg_els);
+    if member_pred_expr(pred_expr, model_tm, _);
+    if model_el = semantic_el(model_tm, strct);
+    then rel_app_parent_model_el(rel, arg_els) = model_el;
 }
 rule var_if_atom_semantics_ambient {
     if var_if_atom_node(atom, var_term, type_expr);
@@ -2358,10 +2378,13 @@ rule pred_then_atom_semantics {
 
 // ### Implicit parent els in rel apps
 func rel_app_parent_model_el(rel: Rel, args: ElList) -> El;
-rule rel_app_parent_model_el_law {
+rule rel_app_parent_model_el_ambient_law {
     if rel_app(rel, args);
     if structure = els_structure(args);
     if ss = rel_definition_symbol_scope(rel);
+    //     ambient_model_el(ss, structure) is defined
+    // <=> ss is the member symbol scope of an ambient model
+    // <=> rel is a member of an ambient model
     if el = ambient_model_el(ss, structure);
     then rel_app_parent_model_el(rel, args) = el;
 }

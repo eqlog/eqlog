@@ -60,3 +60,19 @@ fn test_singleton_subset_propagates() {
 
     assert!(subset.element(b, c0));
 }
+
+#[test]
+fn test_member_pred_rule_fires() {
+    let mut subset = SubsetRules::new();
+
+    let a = subset.define_a();
+    let b = subset.define_b();
+    let x = subset.new_carrier();
+
+    subset.insert_element(a, x);
+    subset.insert_element(b, x);
+
+    subset.close();
+
+    assert!(subset.ab_element(x));
+}
