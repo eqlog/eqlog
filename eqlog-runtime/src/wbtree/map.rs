@@ -546,6 +546,22 @@ impl<K: Ord + Clone, V: Clone> WBTreeMap<K, V> {
         }
     }
 
+    pub fn iter_mut<'a>(&'a mut self) -> IterMut<'a, K, V> {
+        // Get a mutable pointer to the root if it exists
+        let current = if let Some(ref mut root) = self.root {
+            let root_node = Rc::make_mut(root);
+            Some(root_node as *mut Node<K, V>)
+        } else {
+            None
+        };
+
+        IterMut {
+            stack: Vec::new(),
+            current,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
     pub fn entry<'a>(&'a mut self, key: K) -> Entry<'a, K, V> {
         if self.contains_key(&key) {
             Entry::Occupied(OccupiedEntry { key, map: self })
@@ -608,6 +624,51 @@ impl<'a, K: Clone, V: Clone> Iterator for Iter<'a, K, V> {
             } else if let Some(node) = self.stack.pop() {
                 self.current = &node.right;
                 return Some((&node.key, &node.value));
+            } else {
+                return None;
+            }
+        }
+    }
+}
+
+// Mutable iterator implementation
+pub struct IterMut<'a, K: Clone, V: Clone> {
+    stack: Vec<*mut Node<K, V>>,
+    current: Option<*mut Node<K, V>>,
+    _phantom: std::marker::PhantomData<&'a mut WBTreeMap<K, V>>,
+}
+
+impl<'a, K: Ord + Clone, V: Clone> Iterator for IterMut<'a, K, V> {
+    type Item = (&'a K, &'a mut V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(current_ptr) = self.current {
+                self.stack.push(current_ptr);
+
+                unsafe {
+                    let node = &mut *current_ptr;
+
+                    self.current = if let Some(ref mut left) = node.left {
+                        let left_node = Rc::make_mut(left);
+                        Some(left_node as *mut Node<K, V>)
+                    } else {
+                        None
+                    };
+                }
+            } else if let Some(node_ptr) = self.stack.pop() {
+                unsafe {
+                    let node = &mut *node_ptr;
+
+                    self.current = if let Some(ref mut right) = node.right {
+                        let right_node = Rc::make_mut(right);
+                        Some(right_node as *mut Node<K, V>)
+                    } else {
+                        None
+                    };
+
+                    return Some((&node.key, &mut node.value));
+                }
             } else {
                 return None;
             }
@@ -1942,5 +2003,127 @@ mod tests {
         map2.insert(42, "different_answer");
         let result2 = map1.difference(&map2, |_k, _v1, _v2| None);
         assert!(result2.is_empty());
+    }
+
+    #[test]
+    fn test_iter_mut() {
+        let mut wb_map = WBTreeMap::new();
+        let mut bt_map = BTreeMap::new();
+
+        // Insert initial data
+        for i in 0..20 {
+            wb_map.insert(i, i * 10);
+            bt_map.insert(i, i * 10);
+        }
+
+        // Modify all values using iter_mut
+        for (_key, value) in wb_map.iter_mut() {
+            *value += 100;
+        }
+
+        // Modify BTreeMap for comparison
+        for value in bt_map.values_mut() {
+            *value += 100;
+        }
+
+        // Verify all values match
+        for i in 0..20 {
+            assert_eq!(wb_map.get(&i), bt_map.get(&i));
+        }
+    }
+
+    #[test]
+    fn test_iter_mut_empty() {
+        let mut wb_map: WBTreeMap<i32, i32> = WBTreeMap::new();
+
+        // Should handle empty map gracefully
+        let count = wb_map.iter_mut().count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_iter_mut_single_element() {
+        let mut wb_map = WBTreeMap::new();
+        wb_map.insert(42, "answer");
+
+        // Modify the single element
+        for (_key, value) in wb_map.iter_mut() {
+            *value = "modified";
+        }
+
+        assert_eq!(wb_map.get(&42), Some(&"modified"));
+    }
+
+    #[test]
+    fn test_iter_mut_copy_on_write() {
+        let mut wb_map1 = WBTreeMap::new();
+
+        // Insert some data
+        for i in 0..10 {
+            wb_map1.insert(i, i * 10);
+        }
+
+        // Clone the map - this will share the underlying nodes
+        let wb_map2 = wb_map1.clone();
+
+        // Modify map1 using iter_mut - should trigger copy-on-write
+        for (_key, value) in wb_map1.iter_mut() {
+            *value += 1000;
+        }
+
+        // Verify map1 was modified
+        for i in 0..10 {
+            assert_eq!(wb_map1.get(&i), Some(&(i * 10 + 1000)));
+        }
+
+        // Verify map2 was NOT modified (copy-on-write worked)
+        for i in 0..10 {
+            assert_eq!(wb_map2.get(&i), Some(&(i * 10)));
+        }
+    }
+
+    #[test]
+    fn test_iter_mut_order() {
+        let mut wb_map = WBTreeMap::new();
+
+        // Insert in random order
+        let values = vec![5, 2, 8, 1, 3, 7, 9, 4, 6];
+        for val in values {
+            wb_map.insert(val, val * 100);
+        }
+
+        // Collect keys from iter_mut - should be in sorted order
+        let mut keys = Vec::new();
+        for (key, _value) in wb_map.iter_mut() {
+            keys.push(*key);
+        }
+
+        assert_eq!(keys, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    }
+
+    #[test]
+    fn test_iter_mut_selective_modification() {
+        let mut wb_map = WBTreeMap::new();
+
+        // Insert data
+        for i in 0..20 {
+            wb_map.insert(i, i);
+        }
+
+        // Only modify even keys
+        for (key, value) in wb_map.iter_mut() {
+            if key % 2 == 0 {
+                *value = *value * 1000;
+            }
+        }
+
+        // Verify selective modification
+        for i in 0..20 {
+            if i % 2 == 0 {
+                assert_eq!(wb_map.get(&i), Some(&(i * 1000)));
+            } else {
+                assert_eq!(wb_map.get(&i), Some(&i));
+            }
+        }
     }
 }
