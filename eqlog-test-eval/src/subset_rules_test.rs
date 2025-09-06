@@ -76,3 +76,20 @@ fn test_member_pred_rule_fires() {
 
     assert!(subset.ab_element(x));
 }
+
+#[test]
+fn test_member_pred_rule_doesnt_fire() {
+    let mut subset = SubsetRules::new();
+
+    let a = subset.define_a();
+    let b = subset.define_b();
+    let x = subset.new_carrier();
+    let y = subset.new_carrier();
+
+    subset.insert_element(a, x);
+    subset.insert_element(b, x);
+
+    subset.close();
+
+    assert!(!subset.ab_element(y));
+}
