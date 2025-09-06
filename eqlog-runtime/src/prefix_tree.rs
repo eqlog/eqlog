@@ -805,6 +805,55 @@ impl PrefixTree9 {
     }
 }
 
+// iter_restrictions_mut methods
+impl PrefixTree2 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree1)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree3 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree2)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree4 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree3)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree5 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree4)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree6 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree5)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree7 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree6)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree8 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree7)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
+impl PrefixTree9 {
+    pub fn iter_restrictions_mut(&mut self) -> impl Iterator<Item = (u32, &mut PrefixTree8)> + '_ {
+        self.map.iter_mut().map(|(&k, v)| (k, v))
+    }
+}
+
 // iter methods
 impl PrefixTree0 {
     pub fn iter(&self) -> impl Iterator<Item = [u32; 0]> + '_ {
