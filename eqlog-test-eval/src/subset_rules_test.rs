@@ -1,8 +1,8 @@
-use crate::subset_morphism::*;
+use crate::subset_rules::*;
 
 #[test]
 fn test_ab_inclusion_no_dom() {
-    let mut subset = SubsetMorphism::new();
+    let mut subset = SubsetRules::new();
 
     let a_b = subset.define_a_b();
 
@@ -12,7 +12,7 @@ fn test_ab_inclusion_no_dom() {
 
 #[test]
 fn test_ab_inclusion_dom() {
-    let mut subset = SubsetMorphism::new();
+    let mut subset = SubsetRules::new();
 
     let a = subset.define_a();
     let a_b = subset.define_a_b();
@@ -24,7 +24,7 @@ fn test_ab_inclusion_dom() {
 
 #[test]
 fn test_ab_inclusion_no_cod() {
-    let mut subset = SubsetMorphism::new();
+    let mut subset = SubsetRules::new();
 
     let a_b = subset.define_a_b();
 
@@ -34,7 +34,7 @@ fn test_ab_inclusion_no_cod() {
 
 #[test]
 fn test_ab_inclusion_cod() {
-    let mut subset = SubsetMorphism::new();
+    let mut subset = SubsetRules::new();
 
     let b = subset.define_b();
     let a_b = subset.define_a_b();
@@ -46,7 +46,7 @@ fn test_ab_inclusion_cod() {
 
 #[test]
 fn test_singleton_subset_propagates() {
-    let mut subset = SubsetMorphism::new();
+    let mut subset = SubsetRules::new();
 
     let a = subset.define_a();
     let b = subset.define_b();
