@@ -28,3 +28,14 @@ rule ab_elements_rule {
     if b().element(x);
     then ab_element(x);
 }
+
+func c() -> Subs;
+pred abc_element(Carrier);
+
+// Evaluation of this rule involves looking up a model element given a tuple in
+// one of its member predicates.
+rule ab_c_element_rule {
+    if ab_element(x);
+    if c().element(x);
+    then abc_element(x);
+}
