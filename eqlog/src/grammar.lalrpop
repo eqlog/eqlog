@@ -225,7 +225,7 @@ ThenAtom: ThenAtomNode = {
 
         atom
     },
-    <l: @L> <pred: Id> <args: ArgList> <r: @R> => {
+    <l: @L> <pred: PredExpr> <args: ArgList> <r: @R> => {
         let atom = eqlog.new_then_atom_node();
         eqlog.insert_pred_then_atom_node(atom, pred, args);
 

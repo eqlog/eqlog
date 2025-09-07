@@ -94,7 +94,7 @@ pred var_if_atom_node(IfAtomNode, var: TermNode, type_expr: TypeExprNode);
 type ThenAtomNode;
 pred equal_then_atom_node(ThenAtomNode, lhs: TermNode, rhs: TermNode);
 pred defined_then_atom_node(ThenAtomNode, var: OptTermNode, tm: TermNode);
-pred pred_then_atom_node(ThenAtomNode, predicate: Ident, args: TermListNode);
+pred pred_then_atom_node(ThenAtomNode, predicate: PredExprNode, args: TermListNode);
 
 type StmtNode;
 pred if_stmt_node(StmtNode, IfAtomNode);
@@ -412,11 +412,12 @@ rule scopes_then_atom_defined {
     then scope_extension_siblings(var_tm_descendant, tm_descendant, atom_descendant);
 }
 rule scopes_then_atom_pred {
-    if pred_then_atom_node(atom, _, tms);
+    if pred_then_atom_node(atom, pred_expr, tms);
     if atom_descendant = rule_descendant_then_atom(atom);
+    if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
     if tms_descendant = rule_descendant_term_list(tms);
 
-    then scope_extension_siblings(atom_descendant, tms_descendant, atom_descendant);
+    then scope_extension_siblings(pred_expr_descendant, tms_descendant, atom_descendant);
 }
 
 // No rules for match case nodes -- they're taken care of by desugaring to BlockListNodes.
@@ -1593,19 +1594,11 @@ rule ambient_pred_expr_should_be_symbol {
 rule member_pred_expr_should_be_symbol {
     if member_pred_expr(pred_expr, tm, pred_name);
     if el_type(semantic_el(tm, _), tm_el_type);
-
     if tm_typ = underlying_type(tm_el_type);
     if member_scope = model_member_symbol_scope(tm_typ);
     if pred_kind = PredSymbol();
     if loc = pred_expr_node_loc(pred_expr);
     then should_be_symbol(pred_name, pred_kind, member_scope, loc);
-}
-rule pred_then_atom_should_be_pred {
-    if pred_then_atom_node(atom, pred_name, _);
-    if scope = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
-    if kind = PredSymbol();
-    if loc = then_atom_node_loc(atom);
-    then should_be_symbol(pred_name, kind, scope, loc);
 }
 rule app_atom_should_be_func {
     if app_term_node(term, name, _);
@@ -1698,11 +1691,10 @@ rule pred_if_atom_arg_num_should_match {
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 rule pred_then_atom_arg_num_should_match {
-    if pred_then_atom_node(atom, name, args);
+    if pred_if_atom_node(atom, pred_expr, args);
     if got_len = term_list_len(args);
-    if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
-    if expected_len = type_list_len(pred_arity(semantic_pred(ss, name)));
-    if loc = then_atom_node_loc(atom);
+    if expected_len = type_list_len(pred_arity(semantic_pred_expr(pred_expr)));
+    if loc = if_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 
@@ -2378,11 +2370,14 @@ rule defined_then_atom_semantics {
     then var_el = el;
 }
 rule pred_then_atom_semantics {
-    if pred_then_atom_node(atom, predicate_name, arg_terms);
-    if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
-    if rel = PredRel(semantic_pred(ss, predicate_name));
-    if arg_els = semantic_els(arg_terms, _);
+    if pred_then_atom_node(_, pred_expr, arg_terms);
+    if p = semantic_pred_expr(pred_expr);
+    if rel = PredRel(p);
+    if arg_els = semantic_els(arg_terms, strct);
     then rel_app(rel, arg_els);
+    if member_pred_expr(pred_expr, model_tm, _);
+    if model_el = semantic_el(model_tm, strct);
+    then rel_app_parent_model_el(rel, arg_els) = model_el;
 }
 
 // ### Implicit parent els in rel apps

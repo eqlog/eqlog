@@ -39,3 +39,9 @@ rule ab_c_element_rule {
     if c().element(x);
     then abc_element(x);
 }
+
+func d() -> Subs;
+rule a_subset_d {
+    if a().element(x);
+    then d().element(x);
+}
