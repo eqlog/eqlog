@@ -1993,6 +1993,7 @@ pred term_structure(TermNode, Structure);
 pred terms_structure(TermListNode, Structure);
 pred opt_term_structure(OptTermNode, Structure);
 pred type_expr_structure(TypeExprNode, Structure);
+pred pred_expr_structure(PredExprNode, Structure);
 
 rule stmt_structure_morphism {
     if stmt_morphism(stmt, morph);
@@ -2029,9 +2030,10 @@ rule defined_if_atom_structure {
     then term_structure(term, structure);
 }
 rule pred_if_atom_structure {
-    if pred_if_atom_node(atom, _, arg_terms);
+    if pred_if_atom_node(atom, pred_expr, arg_terms);
     if if_atom_structure(atom, structure);
     then terms_structure(arg_terms, structure);
+    then pred_expr_structure(pred_expr, structure);
 }
 rule var_if_atom_structure {
     if var_if_atom_node(atom, var_term, type_expr);
@@ -2063,6 +2065,13 @@ rule pred_then_atom_structure {
 rule member_type_expr_structure {
     if member_type_expr(type_expr, model_tm, _);
     if type_expr_structure(type_expr, strct);
+    then term_structure(model_tm, strct);
+}
+
+// ### Propagate associated structure through pred exprs.
+rule member_pred_expr_structure {
+    if member_pred_expr(pred_expr, model_tm, _);
+    if pred_expr_structure(pred_expr, strct);
     then term_structure(model_tm, strct);
 }
 
