@@ -6,3 +6,9 @@ model Pointed {
         then pt()!;
     }
 }
+
+rule pt_tautology {
+    if p: Pointed;
+    if pt = p.pt();
+    then pt = pt;
+}

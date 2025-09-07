@@ -62,9 +62,9 @@ Wildcard: TermNode = {
 }
 
 ApplicationTerm: TermNode = {
-    <l: @L> <func: Id> <args: ArgList> <r: @R> => {
+    <l: @L> <func_expr: FuncExpr> <args: ArgList> <r: @R> => {
         let tm = eqlog.new_term_node();
-        eqlog.insert_app_term_node(tm, func, args);
+        eqlog.insert_app_term_node(tm, func_expr, args);
 
         let loc = make_loc(Location(l, r), eqlog, locations);
         eqlog.insert_term_node_loc(tm, loc);
@@ -152,6 +152,28 @@ PredExpr: PredExprNode = {
 
         let loc = make_loc(Location(l, r), eqlog, locations);
         eqlog.insert_pred_expr_node_loc(node, loc);
+ 
+        node
+    },
+}
+
+#[inline]
+FuncExpr: FuncExprNode = {
+    <l: @L> <func_ident: Id> <r: @R> => {
+        let node = eqlog.new_func_expr_node();
+        eqlog.insert_ambient_func_expr(node, func_ident);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_func_expr_node_loc(node, loc);
+
+        node
+    },
+    <l: @L> <tm: Term> "." <func_ident: Id> <r: @R> => {
+        let node = eqlog.new_func_expr_node();
+        eqlog.insert_member_func_expr(node, tm, func_ident);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_func_expr_node_loc(node, loc);
  
         node
     },

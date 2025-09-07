@@ -68,13 +68,17 @@ type PredExprNode;
 pred ambient_pred_expr(node: PredExprNode, pred_ident: Ident);
 pred member_pred_expr(node: PredExprNode, tm: TermNode, pred_ident: Ident);
 
+type FuncExprNode;
+pred ambient_func_expr(node: FuncExprNode, func_ident: Ident);
+pred member_func_expr(node: FuncExprNode, tm: TermNode, func_ident: Ident);
+
 type OptTermNode;
 pred none_term_node(OptTermNode);
 pred some_term_node(OptTermNode, value: TermNode);
 
 pred var_term_node(TermNode, VirtIdent);
 pred wildcard_term_node(TermNode);
-pred app_term_node(TermNode, function: Ident, args: TermListNode);
+pred app_term_node(TermNode, func_expr: FuncExprNode, args: TermListNode);
 pred dom_term_node(TermNode, mor_arg: TermNode);
 pred cod_term_node(TermNode, mor_arg: TermNode);
 
@@ -160,6 +164,7 @@ func decl_list_node_loc(DeclListNode) -> Loc;
 func module_node_loc(ModuleNode) -> Loc;
 func type_expr_node_loc(TypeExprNode) -> Loc;
 func pred_expr_node_loc(PredExprNode) -> Loc;
+func func_expr_node_loc(FuncExprNode) -> Loc;
 
 // ### Descendant nodes of rules
 //
@@ -180,6 +185,7 @@ func rule_descendant_stmt_list(StmtListNode) -> RuleDescendantNode;
 func rule_descendant_stmt_block_list(StmtBlockListNode) -> RuleDescendantNode;
 func rule_descendant_type_expr(TypeExprNode) -> RuleDescendantNode;
 func rule_descendant_pred_expr(PredExprNode) -> RuleDescendantNode;
+func rule_descendant_func_expr(FuncExprNode) -> RuleDescendantNode;
 
 rule rule_descendant_rule_total {
     if rul: RuleDeclNode;
@@ -232,6 +238,10 @@ rule rule_descendant_type_expr_total {
 rule rule_descendant_pred_expr_total {
     if pred_expr: PredExprNode;
     then rule_descendant_pred_expr(pred_expr)!;
+}
+rule rule_descendant_func_expr_total {
+    if func_expr: FuncExprNode;
+    then rule_descendant_func_expr(func_expr)!;
 }
 
 /// ### Scopes
@@ -438,11 +448,12 @@ rule scopes_opt_term_some {
     then scope_single_child(tm_descendant, opt_tm_descendant);
 }
 rule scopes_term_app {
-    if app_term_node(tm, _, args);
+    if app_term_node(tm, func_expr, args);
     if tm_descendant = rule_descendant_term(tm);
+    if func_expr_descendant = rule_descendant_func_expr(func_expr);
     if args_descendant = rule_descendant_term_list(args);
 
-    then scope_single_child(args_descendant, tm_descendant);
+    then scope_extension_siblings(func_expr_descendant, args_descendant, tm_descendant);
 }
 rule scopes_term_dom {
     if dom_term_node(tm, arg_tm);
@@ -476,6 +487,12 @@ rule scopes_member_pred_expr {
     if pred_expr_descendant = rule_descendant_pred_expr(pred_expr);
     if tm_descendant = rule_descendant_term(tm);
     then scope_single_child(tm_descendant, pred_expr_descendant);
+}
+rule scopes_member_func_expr {
+    if member_func_expr(func_expr, tm, _);
+    if func_expr_descendant = rule_descendant_func_expr(func_expr);
+    if tm_descendant = rule_descendant_term(tm);
+    then scope_single_child(tm_descendant, func_expr_descendant);
 }
 
 // ### The enum constructor belong to
@@ -1600,13 +1617,22 @@ rule member_pred_expr_should_be_symbol {
     if loc = pred_expr_node_loc(pred_expr);
     then should_be_symbol(pred_name, pred_kind, member_scope, loc);
 }
-rule app_atom_should_be_func {
-    if app_term_node(term, name, _);
-    if scope = scope_symbols(entry_scope(rule_descendant_term(term)));
+rule ambient_func_expr_should_be_symbol {
+    if ambient_func_expr(func_expr, func_name);
+    if scope = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
     if func_kind = FuncSymbol();
     if ctor_kind = CtorSymbol();
-    if loc = term_node_loc(term);
-    then should_be_symbol_2(name, func_kind, ctor_kind, scope, loc);
+    if loc = func_expr_node_loc(func_expr);
+    then should_be_symbol_2(func_name, func_kind, ctor_kind, scope, loc);
+}
+rule member_func_expr_should_be_symbol {
+    if member_func_expr(func_expr, tm, func_name);
+    if el_type(semantic_el(tm, _), tm_el_type);
+    if tm_typ = underlying_type(tm_el_type);
+    if member_scope = model_member_symbol_scope(tm_typ);
+    if func_kind = FuncSymbol();
+    if loc = func_expr_node_loc(func_expr);
+    then should_be_symbol(func_name, func_kind, member_scope, loc);
 }
 
 // ### Natural numbers and argument numbers
@@ -1683,6 +1709,22 @@ rule semantic_member_pred_expr_rule {
     then semantic_pred_expr(pred_expr) = p;
 }
 
+func semantic_func_expr(FuncExprNode) -> Func;
+rule semantic_ambient_func_expr_rule {
+    if ambient_func_expr(func_expr, name);
+    if ss = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
+    if f = semantic_func(ss, name);
+    then semantic_func_expr(func_expr) = f;
+}
+rule semantic_member_func_expr_rule {
+    if member_func_expr(func_expr, tm, name);
+    if el_type(semantic_el(tm, _), tm_el_type);
+    if tm_typ = underlying_type(tm_el_type);
+    if ss = model_member_symbol_scope(tm_typ);
+    if f = semantic_func(ss, name);
+    then semantic_func_expr(func_expr) = f;
+}
+
 rule pred_if_atom_arg_num_should_match {
     if pred_if_atom_node(atom, pred_expr, args);
     if got_len = term_list_len(args);
@@ -1699,10 +1741,9 @@ rule pred_then_atom_arg_num_should_match {
 }
 
 rule app_term_arg_num_should_match {
-    if app_term_node(tm, name, args);
+    if app_term_node(tm, func_expr, args);
     if got_len = term_list_len(args);
-    if ss = scope_symbols(entry_scope(rule_descendant_term(tm)));
-    if expected_len = type_list_len(domain(semantic_func(ss, name)));
+    if expected_len = type_list_len(domain(semantic_func_expr(func_expr)));
     if loc = term_node_loc(tm);
     then func_arg_num_should_match(got_len, expected_len, loc);
 }
@@ -1986,6 +2027,7 @@ pred terms_structure(TermListNode, Structure);
 pred opt_term_structure(OptTermNode, Structure);
 pred type_expr_structure(TypeExprNode, Structure);
 pred pred_expr_structure(PredExprNode, Structure);
+pred func_expr_structure(FuncExprNode, Structure);
 
 rule stmt_structure_morphism {
     if stmt_morphism(stmt, morph);
@@ -2067,6 +2109,13 @@ rule member_pred_expr_structure {
     then term_structure(model_tm, strct);
 }
 
+// ### Propagate associated structure through func exprs.
+rule member_func_expr_structure {
+    if member_func_expr(func_expr, model_tm, _);
+    if func_expr_structure(func_expr, strct);
+    then term_structure(model_tm, strct);
+}
+
 // #### Propagate associated structures through terms.
 rule cons_term_list_structure {
     if cons_term_list_node(terms, head, tail);
@@ -2082,9 +2131,10 @@ rule some_opt_term_structure {
 }
 
 rule app_term_structure {
-    if app_term_node(term, _, args);
+    if app_term_node(term, func_expr, args);
     if term_structure(term, structure);
     then terms_structure(args, structure);
+    then func_expr_structure(func_expr, structure);
 }
 
 rule dom_term_structure {
@@ -2287,13 +2337,16 @@ rule cod_term_semantics {
 
 // #### Semantics of terms
 rule app_term_semantics {
-    if app_term_node(result_term, func_name, arg_terms);
+    if app_term_node(result_term, func_expr, arg_terms);
     if result_el = semantic_el(result_term, structure);
     if func_arg_els = semantic_els(arg_terms, structure);
-    if ss = scope_symbols(entry_scope(rule_descendant_term(result_term)));
-    if func_rel = FuncRel(semantic_func(ss, func_name));
+    if f = semantic_func_expr(func_expr);
+    if func_rel = FuncRel(f);
     then rel_arg_els := SnocElList(func_arg_els, result_el)!;
     then rel_app(func_rel, rel_arg_els);
+    if member_func_expr(func_expr, model_tm, _);
+    if model_el = semantic_el(model_tm, structure);
+    then rel_app_parent_model_el(func_rel, rel_arg_els) = model_el;
 }
 
 rule var_term_semantics {
@@ -2476,7 +2529,8 @@ rule defined_then_should_be_given_by_ctor {
 pred is_given_by_ctor(TermNode, EnumDeclNode);
 
 rule ctor_app_is_given_by_ctor {
-    if app_term_node(tm, func_ident, _);
+    if app_term_node(tm, func_expr, _);
+    if ambient_func_expr(func_expr, func_ident);
     if ctor_decl(ctor, func_ident, _);
     if ctor_enum(ctor) = enum_decl_node;
     then is_given_by_ctor(tm, enum_decl_node);
@@ -2534,14 +2588,16 @@ func match_case_pattern_ctor(MatchCaseNode) -> CtorDeclNode;
 rule case_pattern_app_should_be_constructor {
     if match_case(match_node, pattern, _);
     if scope = scope_symbols(entry_scope(rule_descendant_match_case(match_node)));
-    if app_term_node(pattern, func_name, _);
+    if app_term_node(pattern, func_expr, _);
+    if ambient_func_expr(func_expr, func_name);
     if pattern_loc = term_node_loc(pattern);
     if ctor_sym = CtorSymbol();
     then should_be_symbol(func_name, ctor_sym, scope, pattern_loc);
 }
 rule match_case_pattern_ctor_defined {
     if match_case(case_node, pattern, _);
-    if app_term_node(pattern, func_name, _);
+    if app_term_node(pattern, func_expr, _);
+    if ambient_func_expr(func_expr, func_name);
     if ctor_decl(ctor, func_name, _);
     then match_case_pattern_ctor(case_node) = ctor;
 }
