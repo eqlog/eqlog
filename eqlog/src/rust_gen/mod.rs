@@ -104,6 +104,10 @@ fn display_imports() -> impl Display {
             use std::ops::Bound;
             #[allow(unused)]
             use std::ptr::NonNull;
+            #[allow(unused)]
+            use std::cell::LazyCell;
+            #[allow(unused)]
+            use std::ops::DerefMut;
         "}
     })
 }
@@ -2136,12 +2140,27 @@ fn display_recompute_model_indices_fn<'a>(
                         index_spec.order.iter().position(|p| *p == 0).expect("Index orders should be permutations");
 
                     let before_model_els_loop_headers =
-                        (0..parent_el_pos).map(|_| {
+                        (0..parent_el_pos).map(|i| {
                             FmtFn(move |f| {
+                                let get_own_mut =
+                                    FmtFn(move |f| {
+                                        if i == 0 {
+                                            // In this case, {index_field_name}_own is a
+                                            // PrefixTree<n>.
+                                            write!(f, "{index_field_name}_own.get_mut(el{i})")
+                                        } else {
+                                            // In this case, {index_field_name}_own is a
+                                            // LazyCell<Option<PrefixTree<n>>>.
+                                            write!(f, "(*{index_field_name}_own)?.get_mut(el{i})")
+                                        }
+                                    });
                                 writedoc!{f, "
-                                    for (_, {index_field_name}_all)
+                                    for (el{i}, {index_field_name}_all)
                                     in {index_field_name}_all.iter_restrictions_mut()
                                     {{
+                                    let mut {index_field_name}_own = LazyCell::new(|| -> Option<_> {{
+                                    {get_own_mut}
+                                    }});
                                 "}
                             })
                         }).format("");
@@ -2155,6 +2174,21 @@ fn display_recompute_model_indices_fn<'a>(
                     let parent_model_type_snake =
                         display_type(parent_model_type, eqlog, identifiers).to_string().to_case(Snake);
 
+                    let remove_from_own =
+                        FmtFn(|f| {
+                            if parent_el_pos == 0 {
+                                writedoc!{f, "
+                                    {index_field_name}_own.remove_restriction(*cod, &dom_set);
+                                "}
+                            } else {
+                                writedoc!{f, "
+                                    if let Some({index_field_name}_own) = {index_field_name}_own.deref_mut() {{
+                                    {index_field_name}_own.remove_restriction(*cod, &dom_set);
+                                    }}
+                                "}
+                            }
+                        });
+
                     writedoc!{f, r#"
                         let mut {index_field_name}_all = self.{index_field_name}_own.clone();
                         let {index_field_name}_own = &mut self.{index_field_name}_own;
@@ -2164,7 +2198,7 @@ fn display_recompute_model_indices_fn<'a>(
                         Some(dom_set) => dom_set.clone(),
                         None => {{ continue; }},
                         }};
-                        {index_field_name}_own.remove_restriction(*cod, &dom_set);
+                        {remove_from_own}
                         {index_field_name}_all.insert_restriction(*cod, dom_set);
                         {before_model_els_loop_footers}
                         }}

@@ -993,6 +993,60 @@ impl PrefixTree9 {
     }
 }
 
+// TODO: The maps in PrefixTrees should maintain the invariant that they map to non-empty sets.
+// This can be violated using the get_mut fns atm. We should instead return some kind of
+// smart-pointer kind of object that checks whether the restriction is empty in its drop impl, and
+// if so removes the whole entry (with key) from the prefix tree.
+//
+// get_mut methods
+impl PrefixTree2 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree1> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree3 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree2> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree4 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree3> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree5 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree4> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree6 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree5> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree7 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree6> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree8 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree7> {
+        self.map.get_mut(&first_el)
+    }
+}
+
+impl PrefixTree9 {
+    pub fn get_mut(&mut self, first_el: u32) -> Option<&mut PrefixTree8> {
+        self.map.get_mut(&first_el)
+    }
+}
+
 // union methods
 impl PrefixTree0 {
     pub fn union(&self, other: &PrefixTree0) -> PrefixTree0 {
