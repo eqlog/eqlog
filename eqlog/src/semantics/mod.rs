@@ -39,6 +39,18 @@ fn iter_match_pattern_is_wildcard_errors<'a>(
         })
 }
 
+fn iter_match_pattern_is_member_func_errors<'a>(
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_case_pattern_is_member_func()
+        .filter_map(move |loc| {
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::MatchPatternIsMemberFunc { location })
+        })
+}
+
 fn iter_match_pattern_ctor_arg_is_app_errors<'a>(
     eqlog: &'a Eqlog,
     locations: &'a BTreeMap<Loc, Location>,
@@ -521,6 +533,7 @@ pub fn check_eqlog(
         .chain(iter_conflicting_type_errors(eqlog, locations))
         .chain(iter_match_pattern_is_variable_errors(eqlog, locations))
         .chain(iter_match_pattern_is_wildcard_errors(eqlog, locations))
+        .chain(iter_match_pattern_is_member_func_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_app_errors(eqlog, locations))
         .chain(iter_match_pattern_ctor_arg_is_not_fresh(eqlog, locations))
         .chain(iter_match_conflicting_enum(eqlog, locations))

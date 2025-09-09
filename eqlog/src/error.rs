@@ -130,6 +130,9 @@ pub enum CompileError {
     IllegalMemberTypeExprInArgDecl {
         location: Location,
     },
+    MatchPatternIsMemberFunc {
+        location: Location,
+    },
 }
 
 impl CompileError {
@@ -172,6 +175,7 @@ impl CompileError {
             CompileError::MatchPatternArgVarIsNotFresh { location } => *location,
             CompileError::MatchNotExhaustive { match_location, .. } => *match_location,
             CompileError::IllegalMemberTypeExprInArgDecl { location } => *location,
+            CompileError::MatchPatternIsMemberFunc { location } => *location,
         }
     }
 }
@@ -481,6 +485,17 @@ impl Display for CompileErrorWithContext {
                     "Member type expressions not allowed in function/predicate arguments\n"
                 )?;
                 write_loc(f, *location)?;
+            }
+            MatchPatternIsMemberFunc { location } => {
+                write!(
+                    f,
+                    "Member function expressions not allowed in match patterns\n"
+                )?;
+                write_loc(f, *location)?;
+                write!(
+                    f,
+                    "Only constructors (ambient functions) may be used in patterns\n"
+                )?;
             }
         }
         Ok(())

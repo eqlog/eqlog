@@ -2569,6 +2569,8 @@ rule function_can_be_defined_if_constructor {
 
 pred case_pattern_is_variable(Loc);
 pred case_pattern_is_wildcard(Loc);
+pred case_pattern_is_member_func(Loc);
+
 rule case_pattern_is_variable_defined {
     if match_case(_, pattern, _);
     if var_term_node(pattern, _);
@@ -2580,6 +2582,13 @@ rule case_pattern_is_wildcard_defined {
     if wildcard_term_node(pattern);
     if pattern_loc = term_node_loc(pattern);
     then case_pattern_is_wildcard(pattern_loc);
+}
+rule case_pattern_is_member_func_defined {
+    if match_case(_, pattern, _);
+    if app_term_node(pattern, func_expr, _);
+    if member_func_expr(func_expr, _, _);
+    if pattern_loc = term_node_loc(pattern);
+    then case_pattern_is_member_func(pattern_loc);
 }
 
 // The constructor of the pattern of a match case, if any, i.e. if the pattern
