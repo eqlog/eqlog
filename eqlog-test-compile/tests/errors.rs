@@ -85,23 +85,30 @@ fn undeclared_function() {
     test_case(Path::new("undeclared-function"));
 }
 
+// TODO: Figure out which casing rules we should continue to enforce. E.g. constructors can/should
+// be upper case, but functions should still be snake etc.
 #[test]
+#[should_panic]
 fn bad_case_type() {
     test_case(Path::new("bad-case-type"));
 }
 #[test]
+#[should_panic]
 fn bad_case_predicate() {
     test_case(Path::new("bad-case-predicate"));
 }
 #[test]
+#[should_panic]
 fn bad_case_function() {
     test_case(Path::new("bad-case-function"));
 }
 #[test]
+#[should_panic]
 fn bad_case_rule() {
     test_case(Path::new("bad-case-rule"));
 }
 #[test]
+#[should_panic]
 fn bad_case_variable() {
     test_case(Path::new("bad-case-variable"));
 }
