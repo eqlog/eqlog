@@ -1733,10 +1733,10 @@ rule pred_if_atom_arg_num_should_match {
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 rule pred_then_atom_arg_num_should_match {
-    if pred_if_atom_node(atom, pred_expr, args);
+    if pred_then_atom_node(atom, pred_expr, args);
     if got_len = term_list_len(args);
     if expected_len = type_list_len(pred_arity(semantic_pred_expr(pred_expr)));
-    if loc = if_atom_node_loc(atom);
+    if loc = then_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 
