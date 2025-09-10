@@ -325,21 +325,14 @@ fn write_digest(in_file: &Path, config: &Config, digest: &[u8]) -> Result<()> {
         let module_path = module_out_path(in_file, config);
 
         if module_path.exists() {
-            let mut content = fs::read_to_string(&module_path)
+            let content = fs::read_to_string(&module_path)
                 .with_context(|| format!("Reading module file {}", module_path.display()))?;
 
-            // Remove existing digest line if present
-            let lines: Vec<&str> = content.lines().collect();
-            if let Some(last_line) = lines.last() {
-                if last_line.starts_with("// DIGEST: ") {
-                    content = lines[..lines.len() - 1].join("\n") + "\n";
-                }
-            }
+            let mut lines: Vec<&str> = content.lines().collect();
+            let digest_line = format!("// DIGEST: {}", encoded_digest);
+            lines.push(digest_line.as_str());
 
-            // Append new digest line
-            content.push_str(&format!("// DIGEST: {}\n", encoded_digest));
-
-            fs::write(&module_path, content)
+            fs::write(&module_path, lines.join("\n"))
                 .with_context(|| format!("Writing module file {}", module_path.display()))
         } else {
             Ok(())
