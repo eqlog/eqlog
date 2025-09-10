@@ -460,7 +460,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
             return Err(CompileErrorWithContext {
                 error,
                 source,
-                source_path: in_file.into(),
+                source_path: config.in_dir.join(in_file),
             }
             .into());
         }
@@ -470,7 +470,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
     check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
         error,
         source,
-        source_path: in_file.into(),
+        source_path: config.in_dir.join(in_file),
     })?;
     assert!(!eqlog.absurd());
 
