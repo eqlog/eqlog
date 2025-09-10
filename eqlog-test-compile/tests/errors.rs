@@ -29,6 +29,7 @@ fn test_case(case_src: &Path) {
     let config = Config {
         in_dir,
         out_dir: PathBuf::from(out_dir.path()),
+        component_build: None,
     };
 
     let actual_error = match process(&config) {

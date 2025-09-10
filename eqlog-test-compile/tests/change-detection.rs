@@ -27,10 +27,11 @@ fn unchanged_file_detected() {
     let config = Config {
         in_dir: PathBuf::from(in_dir.path()),
         out_dir: PathBuf::from(out_dir.path()),
+        component_build: None,
     };
 
     let in_file_path = config.in_dir.join("theory.eql");
-    let out_file_path = config.out_dir.join("theory.rs");
+    let out_file_path = config.out_dir.join("theory.eql.rs");
 
     fs::write(in_file_path.as_path(), src).expect("Failed to write source file");
 
@@ -68,10 +69,11 @@ fn changed_file_detected() {
     let config = Config {
         in_dir: PathBuf::from(in_dir.path()),
         out_dir: PathBuf::from(out_dir.path()),
+        component_build: None,
     };
 
     let in_file_path = config.in_dir.join("theory.eql");
-    let out_file_path = config.out_dir.join("theory.rs");
+    let out_file_path = config.out_dir.join("theory.eql.rs");
 
     fs::write(in_file_path.as_path(), first_src).expect("Failed to write source file");
     process(&config).expect("Initial Eqlog compilation failed");
