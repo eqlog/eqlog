@@ -2,5 +2,5 @@ Error: undeclared symbol "foo"
  --> error-test-source/undeclared-predicate/theory.eql:2
   | 
 2 |     if foo(x, y, z);
-  |        ^^^^^^^^^^^^ 
+  |        ^^^          
   | 

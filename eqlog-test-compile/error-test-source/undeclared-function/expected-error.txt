@@ -2,5 +2,5 @@ Error: undeclared symbol "foo"
  --> error-test-source/undeclared-function/theory.eql:2
   | 
 2 |     if x = foo();
-  |            ^^^^^ 
+  |            ^^^   
   | 

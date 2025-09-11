@@ -2,7 +2,7 @@ Error: expected function, found rule "bar"
   --> error-test-source/bad-symbol-kind-function-rule/theory.eql:10
    | 
 10 |     if x = bar(y);
-   |            ^^^^^^ 
+   |            ^^^    
    | 
 "bar" declared as rule here:
  --> error-test-source/bad-symbol-kind-function-rule/theory.eql:3
