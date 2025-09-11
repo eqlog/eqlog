@@ -402,8 +402,14 @@ impl Ord for CompileError {
         let self_kind = CompileErrorKind::from(self);
         let other_kind = CompileErrorKind::from(other);
 
-        if let Some(ordering) = self_kind.partial_cmp(&other_kind) {
-            return ordering;
+        match self_kind.partial_cmp(&other_kind) {
+            None | Some(Ordering::Equal) => {}
+            Some(Ordering::Less) => {
+                return Ordering::Less;
+            }
+            Some(Ordering::Greater) => {
+                return Ordering::Greater;
+            }
         }
 
         // If the error kinds are not comparable, compare by location.
