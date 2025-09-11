@@ -21,6 +21,8 @@ eqlog-eqlog = { path = "../eqlog-eqlog", version = "= 0.8.0" }
 clap = { version = ">= 0", features = ["derive"] }
 anyhow = ">= 0"
 rayon = ">= 0"
+strum = ">= 0"
+strum_macros = ">= 0"
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }

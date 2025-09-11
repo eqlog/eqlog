@@ -3,9 +3,13 @@ use crate::source_display::*;
 use eqlog_eqlog::*;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::path::PathBuf;
+use std::sync::LazyLock;
+use strum::IntoEnumIterator as _;
+use strum_macros::EnumIter;
 
 fn display_symbol_kind(symbol_kind: SymbolKindCase) -> &'static str {
     match symbol_kind {
@@ -135,6 +139,50 @@ pub enum CompileError {
     },
 }
 
+impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
+    fn from(parse_error: ParseError<usize, Token<'_>, CompileError>) -> CompileError {
+        match parse_error {
+            ParseError::InvalidToken { location } => CompileError::InvalidToken {
+                location: Location(location, location + 1),
+            },
+            ParseError::UnrecognizedEof { location, expected } => CompileError::UnrecognizedEOF {
+                location: Location(location, location + 1),
+                expected,
+            },
+            ParseError::UnrecognizedToken { token, expected } => CompileError::UnrecognizedToken {
+                location: Location(token.0, token.2),
+                expected,
+            },
+            ParseError::ExtraToken { token } => CompileError::ExtraToken {
+                location: Location(token.0, token.2),
+            },
+            ParseError::User { error } => error,
+        }
+    }
+}
+
+impl<'a> From<ParseError<usize, Token<'a>, NeverType>> for CompileError {
+    fn from(parse_error: ParseError<usize, Token<'_>, NeverType>) -> CompileError {
+        match parse_error {
+            ParseError::InvalidToken { location } => CompileError::InvalidToken {
+                location: Location(location, location + 1),
+            },
+            ParseError::UnrecognizedEof { location, expected } => CompileError::UnrecognizedEOF {
+                location: Location(location, location + 1),
+                expected,
+            },
+            ParseError::UnrecognizedToken { token, expected } => CompileError::UnrecognizedToken {
+                location: Location(token.0, token.2),
+                expected,
+            },
+            ParseError::ExtraToken { token } => CompileError::ExtraToken {
+                location: Location(token.0, token.2),
+            },
+            ParseError::User { error } => match error {},
+        }
+    }
+}
+
 impl CompileError {
     pub fn primary_location(&self) -> Location {
         match self {
@@ -180,6 +228,166 @@ impl CompileError {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, EnumIter)]
+pub enum CompileErrorKind {
+    InvalidToken,
+    UnrecognizedEOF,
+    UnrecognizedToken,
+    ExtraToken,
+    SymbolNotCamelCase,
+    SymbolNotSnakeCase,
+    VariableNotSnakeCase,
+    VariableOccursOnlyOnce,
+    FunctionArgumentNumber,
+    PredicateArgumentNumber,
+    UndeclaredSymbol,
+    BadSymbolKind,
+    SymbolDeclaredTwice,
+    UndeterminedTermType,
+    ConflictingTermType,
+    VariableIntroducedInThenStmt,
+    WildcardInThenStmt,
+    SurjectivityViolation,
+    ThenDefinedNotVar,
+    ThenDefinedVarNotNew,
+    EnumCtorsNotSurjective,
+    MatchPatternIsVariable,
+    MatchPatternIsWildcard,
+    MatchPatternCtorArgIsApp,
+    MatchPatternArgVarIsNotFresh,
+    MatchConflictingEnum,
+    MatchNotExhaustive,
+    IllegalMemberTypeExprInArgDecl,
+    MatchPatternIsMemberFunc,
+}
+
+impl From<&CompileError> for CompileErrorKind {
+    fn from(value: &CompileError) -> Self {
+        use CompileError::*;
+        match value {
+            InvalidToken { .. } => CompileErrorKind::InvalidToken,
+            UnrecognizedEOF { .. } => CompileErrorKind::UnrecognizedEOF,
+            UnrecognizedToken { .. } => CompileErrorKind::UnrecognizedToken,
+            ExtraToken { .. } => CompileErrorKind::ExtraToken,
+            SymbolNotCamelCase { .. } => CompileErrorKind::SymbolNotCamelCase,
+            SymbolNotSnakeCase { .. } => CompileErrorKind::SymbolNotSnakeCase,
+            VariableNotSnakeCase { .. } => CompileErrorKind::VariableNotSnakeCase,
+            VariableOccursOnlyOnce { .. } => CompileErrorKind::VariableOccursOnlyOnce,
+            FunctionArgumentNumber { .. } => CompileErrorKind::FunctionArgumentNumber,
+            PredicateArgumentNumber { .. } => CompileErrorKind::PredicateArgumentNumber,
+            UndeclaredSymbol { .. } => CompileErrorKind::UndeclaredSymbol,
+            BadSymbolKind { .. } => CompileErrorKind::BadSymbolKind,
+            SymbolDeclaredTwice { .. } => CompileErrorKind::SymbolDeclaredTwice,
+            UndeterminedTermType { .. } => CompileErrorKind::UndeterminedTermType,
+            ConflictingTermType { .. } => CompileErrorKind::ConflictingTermType,
+            VariableIntroducedInThenStmt { .. } => CompileErrorKind::VariableIntroducedInThenStmt,
+            WildcardInThenStmt { .. } => CompileErrorKind::WildcardInThenStmt,
+            SurjectivityViolation { .. } => CompileErrorKind::SurjectivityViolation,
+            ThenDefinedNotVar { .. } => CompileErrorKind::ThenDefinedNotVar,
+            ThenDefinedVarNotNew { .. } => CompileErrorKind::ThenDefinedVarNotNew,
+            EnumCtorsNotSurjective { .. } => CompileErrorKind::EnumCtorsNotSurjective,
+            MatchPatternIsVariable { .. } => CompileErrorKind::MatchPatternIsVariable,
+            MatchPatternIsWildcard { .. } => CompileErrorKind::MatchPatternIsWildcard,
+            MatchPatternCtorArgIsApp { .. } => CompileErrorKind::MatchPatternCtorArgIsApp,
+            MatchPatternArgVarIsNotFresh { .. } => CompileErrorKind::MatchPatternArgVarIsNotFresh,
+            MatchConflictingEnum { .. } => CompileErrorKind::MatchConflictingEnum,
+            MatchNotExhaustive { .. } => CompileErrorKind::MatchNotExhaustive,
+            IllegalMemberTypeExprInArgDecl { .. } => {
+                CompileErrorKind::IllegalMemberTypeExprInArgDecl
+            }
+            MatchPatternIsMemberFunc { .. } => CompileErrorKind::MatchPatternIsMemberFunc,
+        }
+    }
+}
+
+fn transitive_closure(relation: &mut HashSet<[CompileErrorKind; 2]>) {
+    loop {
+        let mut new_tuples: Vec<[CompileErrorKind; 2]> = Vec::new();
+        for [a, b] in relation.iter().copied() {
+            for [c, d] in relation.iter().copied() {
+                if b != c {
+                    continue;
+                }
+
+                if !relation.contains(&[a, d]) {
+                    new_tuples.push([a, d]);
+                }
+            }
+        }
+
+        if new_tuples.is_empty() {
+            break;
+        }
+
+        for [a, d] in new_tuples {
+            assert!(
+                a == d || !relation.contains(&[d, a]),
+                "Cycle in < relation for compile error kind"
+            );
+            relation.insert([a, d]);
+        }
+    }
+}
+
+// This is the transitive closure over a generator set of tuples and not necessarily total.
+static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = LazyLock::new(|| {
+    use CompileErrorKind::*;
+
+    let mut relation: HashSet<[CompileErrorKind; 2]> =
+        CompileErrorKind::iter().map(|k| [k, k]).collect();
+
+    // UndeclaredSymbol takes precedence over everything.
+    relation.extend(CompileErrorKind::iter().map(|k| [UndeclaredSymbol, k]));
+    transitive_closure(&mut relation);
+
+    // SymbolDeclaredTwice is next.
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, SymbolDeclaredTwice]) {
+            relation.insert([SymbolDeclaredTwice, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    // SymbolDeclaredTwice is next.
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, BadSymbolKind]) {
+            relation.insert([BadSymbolKind, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, UndeterminedTermType]) {
+            relation.insert([UndeterminedTermType, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    relation.insert([MatchConflictingEnum, ConflictingTermType]);
+    transitive_closure(&mut relation);
+
+    relation
+});
+
+impl PartialOrd for CompileErrorKind {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self == other {
+            return Some(Ordering::Equal);
+        }
+
+        let compile_error_kind_order = LazyLock::force(&COMPILE_ERROR_KIND_ORDER);
+        if compile_error_kind_order.contains(&[*self, *other]) {
+            return Some(Ordering::Less);
+        }
+
+        if compile_error_kind_order.contains(&[*other, *self]) {
+            return Some(Ordering::Greater);
+        }
+
+        None
+    }
+}
+
 /// [CompileError] is sorted according to *reverse* priority with respect to reporting:
 /// A smaller [CompileError] should be reported preferably over a larger one.
 ///
@@ -187,84 +395,25 @@ impl CompileError {
 /// with location ordering, where lower locations take precedence over greater ones.
 impl Ord for CompileError {
     fn cmp(&self, other: &Self) -> Ordering {
-        use CompileError::*;
         if self == other {
             return Ordering::Equal;
         }
 
-        // An earlier (lower) location has higher priority.
-        let loc_cmp = self.primary_location().1.cmp(&other.primary_location().1);
+        let self_kind = CompileErrorKind::from(self);
+        let other_kind = CompileErrorKind::from(other);
 
-        // TODO: Far from complete. We probably want to group errors into e.g. parse errors, symbol
-        // lookup errors, inference errors etc and define orders separately and then implement the
-        // ordering hierarchically: First within a group, then among groups.
-        match (self, other) {
-            (UndeclaredSymbol { .. }, UndeclaredSymbol { .. }) => loc_cmp,
-            (UndeclaredSymbol { .. }, _) => Ordering::Less,
-            (SymbolDeclaredTwice { .. }, SymbolDeclaredTwice { .. }) => loc_cmp,
-            (SymbolDeclaredTwice { .. }, _) => Ordering::Less,
-            (BadSymbolKind { .. }, BadSymbolKind { .. }) => loc_cmp,
-            (BadSymbolKind { .. }, _) => Ordering::Less,
-            (UndeterminedTermType { .. }, UndeterminedTermType { .. }) => loc_cmp,
-            // TODO: Is that what we want necessarily? This is here because when there are
-            // conflicting enum constructors in a match statement, then we necessarily infer
-            // different types for the discriminee (it must be equal to both enums). The root cause
-            // is the conflicting enum constructors though, so it's better to report that one. But
-            // if the ConflictingTermType is not the discriminee but something unrelated, then it'd
-            // be better to compare by location.
-            (ConflictingTermType { .. }, MatchConflictingEnum { .. }) => Ordering::Greater,
-            (_, _) => loc_cmp,
+        if let Some(ordering) = self_kind.partial_cmp(&other_kind) {
+            return ordering;
         }
+
+        // If the error kinds are not comparable, compare by location.
+        self.primary_location().1.cmp(&other.primary_location().1)
     }
 }
 
 impl PartialOrd for CompileError {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
-    fn from(parse_error: ParseError<usize, Token<'_>, CompileError>) -> CompileError {
-        match parse_error {
-            ParseError::InvalidToken { location } => CompileError::InvalidToken {
-                location: Location(location, location + 1),
-            },
-            ParseError::UnrecognizedEof { location, expected } => CompileError::UnrecognizedEOF {
-                location: Location(location, location + 1),
-                expected,
-            },
-            ParseError::UnrecognizedToken { token, expected } => CompileError::UnrecognizedToken {
-                location: Location(token.0, token.2),
-                expected,
-            },
-            ParseError::ExtraToken { token } => CompileError::ExtraToken {
-                location: Location(token.0, token.2),
-            },
-            ParseError::User { error } => error,
-        }
-    }
-}
-
-impl<'a> From<ParseError<usize, Token<'a>, NeverType>> for CompileError {
-    fn from(parse_error: ParseError<usize, Token<'_>, NeverType>) -> CompileError {
-        match parse_error {
-            ParseError::InvalidToken { location } => CompileError::InvalidToken {
-                location: Location(location, location + 1),
-            },
-            ParseError::UnrecognizedEof { location, expected } => CompileError::UnrecognizedEOF {
-                location: Location(location, location + 1),
-                expected,
-            },
-            ParseError::UnrecognizedToken { token, expected } => CompileError::UnrecognizedToken {
-                location: Location(token.0, token.2),
-                expected,
-            },
-            ParseError::ExtraToken { token } => CompileError::ExtraToken {
-                location: Location(token.0, token.2),
-            },
-            ParseError::User { error } => match error {},
-        }
     }
 }
 
