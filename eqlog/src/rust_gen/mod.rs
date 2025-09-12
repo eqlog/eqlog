@@ -113,23 +113,37 @@ fn display_imports() -> impl Display {
 }
 
 // #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-// pub struct SortName(pub u32);
-fn display_sort_struct(sort: &str) -> impl Display + '_ {
+// pub struct TypeName(pub u32);
+fn display_type_struct<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
     FmtFn(move |f| {
+        let type_name = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
         writedoc! {f, "
             #[allow(dead_code)]
             #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-            pub struct {sort}(pub u32);
+            pub struct {type_name}(pub u32);
         "}
     })
 }
 
-fn display_sort_impl(sort: &str) -> impl Display + '_ {
+fn display_type_impl<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
     FmtFn(move |f| {
+        let type_name = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
         writedoc! {f, "
-            impl Into<u32> for {sort} {{ fn into(self) -> u32 {{ self.0 }} }}
-            impl From<u32> for {sort} {{ fn from(x: u32) -> Self {{ {sort}(x) }} }}
-            impl fmt::Display for {sort} {{
+            impl Into<u32> for {type_name} {{ fn into(self) -> u32 {{ self.0 }} }}
+            impl From<u32> for {type_name} {{ fn from(x: u32) -> Self {{ {type_name}(x) }} }}
+            impl fmt::Display for {type_name} {{
                 fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {{
                     write!(f, \"{{:?}}\", self)
                 }}
@@ -246,13 +260,18 @@ fn display_func_args_struct<'a>(
     })
 }
 
-fn display_sort_fields(sort: String) -> impl Display {
+fn display_type_fields<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
     FmtFn(move |f| {
-        let sort_snake = sort.to_case(Snake);
+        let typ = display_type(typ, eqlog, identifiers).to_string();
+        let type_snake = typ.to_case(Snake);
         writedoc! {f, "
-            {sort_snake}_equalities: Unification<{sort}>,
-            {sort_snake}_weights: Vec<usize>,
-            {sort_snake}_uprooted: Vec<{sort}>,
+            {type_snake}_equalities: Unification<{typ}>,
+            {type_snake}_weights: Vec<usize>,
+            {type_snake}_uprooted: Vec<{typ}>,
         "}
     })
 }
@@ -339,8 +358,8 @@ fn display_pub_predicate_holds_fn<'a>(
             .iter()
             .enumerate()
             .format_with("\n", |(i, s), f| {
-                let sort_snake = s.to_case(Snake);
-                f(&format_args!("arg{i} = self.root_{sort_snake}(arg{i});"))
+                let type_snake = s.to_case(Snake);
+                f(&format_args!("arg{i} = self.root_{type_snake}(arg{i});"))
             });
 
         let rel_args_doc =
@@ -1230,31 +1249,45 @@ fn display_equate_elements<'a>(
     })
 }
 
-fn display_root_fn(sort: &str) -> impl Display + '_ {
+fn display_root_fn<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
     FmtFn(move |f| {
-        let sort_snake = sort.to_case(Snake);
+        let type_name = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let type_snake = type_name.to_case(Snake);
         writedoc! {f, "
             /// Returns the canonical representative of the equivalence class of `el`.
             #[allow(dead_code)]
-            pub fn root_{sort_snake}(&self, el: {sort}) -> {sort} {{
-                if el.0 as usize >= self.{sort_snake}_equalities.len() {{
+            pub fn root_{type_snake}(&self, el: {type_name}) -> {type_name} {{
+                if el.0 as usize >= self.{type_snake}_equalities.len() {{
                     el
                 }} else {{
-                    self.{sort_snake}_equalities.root_const(el)
+                    self.{type_snake}_equalities.root_const(el)
                 }}
             }}
         "}
     })
 }
 
-fn display_are_equal_fn(sort: &str) -> impl Display + '_ {
+fn display_are_equal_fn<'a>(
+    typ: Type,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+) -> impl 'a + Display {
     FmtFn(move |f| {
-        let sort_snake = sort.to_case(Snake);
+        let type_name = display_type(typ, eqlog, identifiers)
+            .to_string()
+            .to_case(UpperCamel);
+        let type_snake = type_name.to_case(Snake);
         writedoc! {f, "
             /// Returns `true` if `lhs` and `rhs` are in the same equivalence class.
             #[allow(dead_code)]
-            pub fn are_equal_{sort_snake}(&self, lhs: {sort}, rhs: {sort}) -> bool {{
-                self.root_{sort_snake}(lhs) == self.root_{sort_snake}(rhs)
+            pub fn are_equal_{type_snake}(&self, lhs: {type_name}, rhs: {type_name}) -> bool {{
+                self.root_{type_snake}(lhs) == self.root_{type_snake}(rhs)
             }}
         "}
     })
@@ -2677,10 +2710,7 @@ fn display_theory_struct<'a>(
 
         let type_fields = eqlog
             .iter_type()
-            .map(|typ| {
-                let typ = display_type(typ, eqlog, identifiers).to_string();
-                display_sort_fields(typ)
-            })
+            .map(|typ| display_type_fields(typ, eqlog, identifiers))
             .format("\n");
 
         writedoc! {f, "
@@ -2717,17 +2747,13 @@ fn display_theory_impl<'a>(
         write!(f, "{}", close_until_fn)?;
 
         for typ in eqlog.iter_type() {
-            let type_name = display_type(typ, eqlog, identifiers)
-                .to_string()
-                .to_case(UpperCamel);
+            let iter_type_fn = display_iter_type_fn(typ, eqlog, identifiers, index_selection);
+            write!(f, "{}", iter_type_fn)?;
 
-            let iter_sort_fn = display_iter_type_fn(typ, eqlog, identifiers, index_selection);
-            write!(f, "{}", iter_sort_fn)?;
-
-            let root_fn = display_root_fn(type_name.as_str());
+            let root_fn = display_root_fn(typ, eqlog, identifiers);
             write!(f, "{}", root_fn)?;
 
-            let are_equal_fn = display_are_equal_fn(type_name.as_str());
+            let are_equal_fn = display_are_equal_fn(typ, eqlog, identifiers);
             write!(f, "{}", are_equal_fn)?;
 
             writeln!(f, "")?;
@@ -2915,13 +2941,10 @@ pub fn display_module<'a>(
         }
 
         for typ in eqlog.iter_type() {
-            let type_camel = display_type(typ, eqlog, identifiers)
-                .to_string()
-                .to_case(UpperCamel);
-            let sort_struct = display_sort_struct(type_camel.as_str());
-            write!(f, "{}", sort_struct)?;
-            let sort_impl = display_sort_impl(type_camel.as_str());
-            write!(f, "{}", sort_impl)?;
+            let type_struct = display_type_struct(typ, eqlog, identifiers);
+            write!(f, "{}", type_struct)?;
+            let type_impl = display_type_impl(typ, eqlog, identifiers);
+            write!(f, "{}", type_impl)?;
         }
         write!(f, "\n")?;
 
