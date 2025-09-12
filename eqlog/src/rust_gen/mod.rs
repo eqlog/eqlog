@@ -1324,7 +1324,7 @@ fn display_iter_type_fn<'a>(
             .format("\n");
 
         writedoc! {f, "
-            /// Returns and iterator over elements of type `{type_camel}`.
+            /// Returns an iterator over elements of type `{type_camel}`.
             /// The iterator yields canonical representatives only.
             #[allow(dead_code)]
             pub fn iter_{type_snake}(&self) -> impl '_ + Iterator<Item={type_camel}> {{
