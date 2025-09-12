@@ -97,12 +97,25 @@ CodTerm: TermNode = {
     }
 }
 
+MorAppTerm: TermNode = {
+    <l: @L> <mor_term: Term> "@" "(" <arg_term: Term> ")" <r: @R> => {
+        let tm = eqlog.new_term_node();
+        eqlog.insert_mor_app_term_node(tm, mor_term, arg_term);
+
+        let loc = make_loc(Location(l, r), eqlog, locations);
+        eqlog.insert_term_node_loc(tm, loc);
+
+        tm
+    }
+}
+
 Term: TermNode = {
     <var: Variable> => var,
     <wildcard: Wildcard> => wildcard,
     <application: ApplicationTerm> => application,
     <dom_term: DomTerm> => dom_term,
     <cod_term: CodTerm> => cod_term,
+    <app_term: MorAppTerm> => app_term,
 }
 
 TypeExpr: TypeExprNode = {

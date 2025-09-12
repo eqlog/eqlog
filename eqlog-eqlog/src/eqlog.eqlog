@@ -81,6 +81,7 @@ pred wildcard_term_node(TermNode);
 pred app_term_node(TermNode, func_expr: FuncExprNode, args: TermListNode);
 pred dom_term_node(TermNode, mor_arg: TermNode);
 pred cod_term_node(TermNode, mor_arg: TermNode);
+pred mor_app_term_node(TermNode, mor_term: TermNode, arg_term: TermNode);
 
 type MatchCaseNode;
 pred match_case(node: MatchCaseNode, pattern: TermNode, body: StmtListNode);
