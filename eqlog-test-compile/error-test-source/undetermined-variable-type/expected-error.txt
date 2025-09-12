@@ -1,4 +1,4 @@
-Error: sort of term undetermined
+Error: type of term undetermined
  --> error-test-source/undetermined-variable-type/theory.eql:2
   | 
 2 |     if x = y;

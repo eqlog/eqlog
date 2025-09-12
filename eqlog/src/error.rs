@@ -548,7 +548,7 @@ impl Display for CompileErrorWithContext {
                 write_loc(f, *first_declaration)?;
             }
             UndeterminedTermType { location } => {
-                write!(f, "sort of term undetermined\n")?;
+                write!(f, "type of term undetermined\n")?;
                 write_loc(f, *location)?;
             }
             ConflictingTermType { types: _, location } => {
