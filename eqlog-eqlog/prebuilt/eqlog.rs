@@ -1,4 +1,4 @@
-// src-digest: 29BB020722177676CAA7E6389B9DFAF0FCAF6C18A1E4AB277835C697FA63A3D0
+// src-digest: B24964F4258DF5860827FD556525FDE26A62763D161C223889B1B39A5B504FF6
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -7042,15 +7042,17 @@ struct MorAppTermNode(pub TermNode, pub TermNode, pub TermNode);
 struct MorAppTermNodeTable {
     index_new_0_1_2: BTreeSet<(u32, u32, u32, )>,
     index_old_0_1_2: BTreeSet<(u32, u32, u32, )>,
+    index_old_1_2_0: BTreeSet<(u32, u32, u32, )>,
     element_index_term_node: BTreeMap<TermNode, Vec<MorAppTermNode>>,
 }
 impl MorAppTermNodeTable {
 #[allow(unused)]
-const WEIGHT: usize = 9;
+const WEIGHT: usize = 12;
 fn new() -> Self {
     Self {
         index_new_0_1_2: BTreeSet::new(),
         index_old_0_1_2: BTreeSet::new(),
+        index_old_1_2_0: BTreeSet::new(),
     element_index_term_node: BTreeMap::new(),
     }
 }
@@ -7097,6 +7099,12 @@ self.index_old_0_1_2.extend(
     .map(|t| Self::permute_0_1_2(Self::permute_inverse_0_1_2(t)))
 );
 
+self.index_old_1_2_0.extend(
+    self.index_new_0_1_2
+    .iter().copied()
+    .map(|t| Self::permute_1_2_0(Self::permute_inverse_0_1_2(t)))
+);
+
 self.index_new_0_1_2.clear();
 
 }
@@ -7110,6 +7118,14 @@ fn permute_0_1_2(t: MorAppTermNode) -> (u32, u32, u32, ) {
 #[allow(unused)]
 fn permute_inverse_0_1_2(t: (u32, u32, u32, )) -> MorAppTermNode {
     MorAppTermNode(TermNode::from(t.0), TermNode::from(t.1), TermNode::from(t.2))
+}
+#[allow(unused)]
+fn permute_1_2_0(t: MorAppTermNode) -> (u32, u32, u32, ) {
+    (t.1.into(), t.2.into(), t.0.into(), )
+}
+#[allow(unused)]
+fn permute_inverse_1_2_0(t: (u32, u32, u32, )) -> MorAppTermNode {
+    MorAppTermNode(TermNode::from(t.2), TermNode::from(t.0), TermNode::from(t.1))
 }
 #[allow(dead_code)]
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = MorAppTermNode> {
@@ -7141,6 +7157,29 @@ self.index_new_0_1_2
     .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
+fn iter_old_0(&self, arg0: TermNode) -> impl '_ + Iterator<Item = MorAppTermNode> {
+    let arg0 = arg0.0;
+self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg0,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+}
+#[allow(dead_code)]
+fn iter_old_0_1(&self, arg0: TermNode, arg1: TermNode) -> impl '_ + Iterator<Item = MorAppTermNode> {
+    let arg0 = arg0.0;
+    let arg1 = arg1.0;
+self.index_old_0_1_2
+    .range((
+        Bound::Included(&(arg0, arg1,  u32::MIN, )),
+        Bound::Included(&(arg0, arg1,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1_2)
+}
+#[allow(dead_code)]
 fn iter_all_0_1_2(&self, arg0: TermNode, arg1: TermNode, arg2: TermNode) -> impl '_ + Iterator<Item = MorAppTermNode> {
     let arg0 = arg0.0;
     let arg1 = arg1.0;
@@ -7161,6 +7200,18 @@ self.index_new_0_1_2
     .map(Self::permute_inverse_0_1_2)
 )}
 #[allow(dead_code)]
+fn iter_old_1_2(&self, arg1: TermNode, arg2: TermNode) -> impl '_ + Iterator<Item = MorAppTermNode> {
+    let arg1 = arg1.0;
+    let arg2 = arg2.0;
+self.index_old_1_2_0
+    .range((
+        Bound::Included(&(arg1, arg2,  u32::MIN, )),
+        Bound::Included(&(arg1, arg2,  u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_2_0)
+}
+#[allow(dead_code)]
 fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<MorAppTermNode> {
     let mut ts = match self.element_index_term_node.remove(&tm) {
         None => Vec::new(),
@@ -7174,7 +7225,7 @@ fn drain_with_element_term_node(&mut self, tm: TermNode) -> Vec<MorAppTermNode> 
             
             i += 1;
         } else if self.index_old_0_1_2.remove(&Self::permute_0_1_2(t)) {
-            
+            self.index_old_1_2_0.remove(&Self::permute_1_2_0(t));
             i += 1;
         } else {
             ts.swap_remove(i);
@@ -63062,6 +63113,7 @@ self.scopes_opt_term_some_0(&mut delta);
 self.scopes_term_app_0(&mut delta);
 self.scopes_term_dom_0(&mut delta);
 self.scopes_term_cod_0(&mut delta);
+self.scopes_term_mor_app_0(&mut delta);
 self.scopes_term_var_0(&mut delta);
 self.scopes_member_type_expr_0(&mut delta);
 self.scopes_member_pred_expr_0(&mut delta);
@@ -63151,7 +63203,7 @@ self.map_preserves_ambient_model_els_0(&mut delta);
 self.in_ker_rule_0(&mut delta);
 self.el_in_img_rule_0(&mut delta);
 self.rel_tuple_in_img_law_0(&mut delta);
-self.anonymous_rule_131_0(&mut delta);
+self.anonymous_rule_132_0(&mut delta);
 self.symbol_scope_extension_parent_0(&mut delta);
 self.symbol_scope_ancestor_reflexivity_0(&mut delta);
 self.symbol_scope_ancestor_parent_0(&mut delta);
@@ -63261,6 +63313,7 @@ self.some_opt_term_structure_0(&mut delta);
 self.app_term_structure_0(&mut delta);
 self.dom_term_structure_0(&mut delta);
 self.cod_term_structure_0(&mut delta);
+self.mor_app_term_structure_0(&mut delta);
 self.semantic_name_defined_0(&mut delta);
 self.semantic_name_extension_scope_0(&mut delta);
 self.semantic_el_defined_0(&mut delta);
@@ -96190,6 +96243,199 @@ delta.new_scope_single_child.push(ScopeSingleChild(tm3, tm2));
 
 
 #[allow(unused_variables)]
+fn scopes_term_mor_app_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.scopes_term_mor_app_1(delta, );
+self.scopes_term_mor_app_2(delta, );
+self.scopes_term_mor_app_5(delta, );
+self.scopes_term_mor_app_8(delta, );
+self.scopes_term_mor_app_11(delta, );
+
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, tm2, ) in self.mor_app_term_node.iter_new() {
+
+self.scopes_term_mor_app_3(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_3(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+self.scopes_term_mor_app_4(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_4(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantTerm(_, tm3, ) in self.rule_descendant_term.iter_all_0(tm0, ) {
+
+self.scopes_term_mor_app_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantTerm(tm0, tm3, ) in self.rule_descendant_term.iter_new() {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, tm1, tm2, ) in self.mor_app_term_node.iter_old_0(tm0, ) {
+
+self.scopes_term_mor_app_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode) {
+for _ in [()] {
+self.scopes_term_mor_app_7(delta, tm0, tm1, tm2, tm3);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_7(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantTerm(_, tm4, ) in self.rule_descendant_term.iter_all_0(tm1, ) {
+
+self.scopes_term_mor_app_9(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantTerm(tm1, tm4, ) in self.rule_descendant_term.iter_new() {
+
+#[allow(unused_variables)]
+for RuleDescendantTerm(tm0, tm3, ) in self.rule_descendant_term.iter_old() {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, _, tm2, ) in self.mor_app_term_node.iter_old_0_1(tm0, tm1, ) {
+
+self.scopes_term_mor_app_9(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_9(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode) {
+for _ in [()] {
+self.scopes_term_mor_app_10(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_10(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantTerm(_, tm5, ) in self.rule_descendant_term.iter_all_0(tm2, ) {
+
+self.scopes_term_mor_app_12(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_11(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantTerm(tm2, tm5, ) in self.rule_descendant_term.iter_new() {
+
+#[allow(unused_variables)]
+for RuleDescendantTerm(tm1, tm4, ) in self.rule_descendant_term.iter_old() {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, _, ) in self.mor_app_term_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantTerm(_, tm3, ) in self.rule_descendant_term.iter_old_0(tm0, ) {
+
+self.scopes_term_mor_app_12(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn scopes_term_mor_app_12(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: RuleDescendantNode, tm4: RuleDescendantNode, tm5: RuleDescendantNode) {
+for _ in [()] {
+let exists_already = self.scope_extension_siblings.iter_all_0_1_2(tm4, tm5, tm3).next().is_some();
+if !exists_already {
+delta.new_scope_extension_siblings.push(ScopeExtensionSiblings(tm4, tm5, tm3));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
 fn scopes_term_var_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 self.scopes_term_var_1(delta, );
@@ -109391,16 +109637,16 @@ delta.new_rel_tuple_in_img.push(RelTupleInImg(tm3, tm0, tm2));
 
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_0(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_0(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.anonymous_rule_131_1(delta, );
-self.anonymous_rule_131_3(delta, );
-self.anonymous_rule_131_6(delta, );
-self.anonymous_rule_131_9(delta, );
-self.anonymous_rule_131_12(delta, );
-self.anonymous_rule_131_15(delta, );
-self.anonymous_rule_131_18(delta, );
-self.anonymous_rule_131_21(delta, );
+self.anonymous_rule_132_1(delta, );
+self.anonymous_rule_132_3(delta, );
+self.anonymous_rule_132_6(delta, );
+self.anonymous_rule_132_9(delta, );
+self.anonymous_rule_132_12(delta, );
+self.anonymous_rule_132_15(delta, );
+self.anonymous_rule_132_18(delta, );
+self.anonymous_rule_132_21(delta, );
 
 
 
@@ -109414,16 +109660,16 @@ self.anonymous_rule_131_21(delta, );
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_1(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_1(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
-self.anonymous_rule_131_2(delta, );
+self.anonymous_rule_132_2(delta, );
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_2(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_2(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 let tm0 = match self.type_symbol.iter_all().next() {
     Some(TypeSymbol( res)) => res,
@@ -109433,7 +109679,7 @@ let tm0 = match self.type_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_4(delta, tm0);
+self.anonymous_rule_132_4(delta, tm0);
 
 
 
@@ -109441,12 +109687,12 @@ self.anonymous_rule_131_4(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_3(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_3(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_new() {
 
-self.anonymous_rule_131_4(delta, tm0);
+self.anonymous_rule_132_4(delta, tm0);
 
 
 }
@@ -109455,16 +109701,16 @@ self.anonymous_rule_131_4(delta, tm0);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+fn anonymous_rule_132_4(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_131_5(delta, tm0);
+self.anonymous_rule_132_5(delta, tm0);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
+fn anonymous_rule_132_5(&self, delta: &mut ModelDelta, tm0: SymbolKind) {
 for _ in [()] {
 let tm1 = match self.pred_symbol.iter_all().next() {
     Some(PredSymbol( res)) => res,
@@ -109474,7 +109720,7 @@ let tm1 = match self.pred_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_7(delta, tm0, tm1);
+self.anonymous_rule_132_7(delta, tm0, tm1);
 
 
 
@@ -109482,7 +109728,7 @@ self.anonymous_rule_131_7(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_6(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_6(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for PredSymbol(tm1, ) in self.pred_symbol.iter_new() {
@@ -109490,7 +109736,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_new() {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 
-self.anonymous_rule_131_7(delta, tm0, tm1);
+self.anonymous_rule_132_7(delta, tm0, tm1);
 
 
 }
@@ -109501,16 +109747,16 @@ self.anonymous_rule_131_7(delta, tm0, tm1);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+fn anonymous_rule_132_7(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_131_8(delta, tm0, tm1);
+self.anonymous_rule_132_8(delta, tm0, tm1);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
+fn anonymous_rule_132_8(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind) {
 for _ in [()] {
 let tm2 = match self.func_symbol.iter_all().next() {
     Some(FuncSymbol( res)) => res,
@@ -109520,7 +109766,7 @@ let tm2 = match self.func_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_10(delta, tm0, tm1, tm2);
+self.anonymous_rule_132_10(delta, tm0, tm1, tm2);
 
 
 
@@ -109528,7 +109774,7 @@ self.anonymous_rule_131_10(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_9(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_9(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for FuncSymbol(tm2, ) in self.func_symbol.iter_new() {
@@ -109539,7 +109785,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 #[allow(unused_variables)]
 for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 
-self.anonymous_rule_131_10(delta, tm0, tm1, tm2);
+self.anonymous_rule_132_10(delta, tm0, tm1, tm2);
 
 
 }
@@ -109552,16 +109798,16 @@ self.anonymous_rule_131_10(delta, tm0, tm1, tm2);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_10(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
+fn anonymous_rule_132_10(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_131_11(delta, tm0, tm1, tm2);
+self.anonymous_rule_132_11(delta, tm0, tm1, tm2);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_11(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
+fn anonymous_rule_132_11(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind) {
 for _ in [()] {
 let tm3 = match self.rule_symbol.iter_all().next() {
     Some(RuleSymbol( res)) => res,
@@ -109571,7 +109817,7 @@ let tm3 = match self.rule_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_13(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_132_13(delta, tm0, tm1, tm2, tm3);
 
 
 
@@ -109579,7 +109825,7 @@ self.anonymous_rule_131_13(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_12(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_12(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for RuleSymbol(tm3, ) in self.rule_symbol.iter_new() {
@@ -109593,7 +109839,7 @@ for TypeSymbol(tm0, ) in self.type_symbol.iter_old() {
 #[allow(unused_variables)]
 for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 
-self.anonymous_rule_131_13(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_132_13(delta, tm0, tm1, tm2, tm3);
 
 
 }
@@ -109608,16 +109854,16 @@ self.anonymous_rule_131_13(delta, tm0, tm1, tm2, tm3);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_13(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
+fn anonymous_rule_132_13(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_131_14(delta, tm0, tm1, tm2, tm3);
+self.anonymous_rule_132_14(delta, tm0, tm1, tm2, tm3);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_14(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
+fn anonymous_rule_132_14(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind) {
 for _ in [()] {
 let tm4 = match self.enum_symbol.iter_all().next() {
     Some(EnumSymbol( res)) => res,
@@ -109627,7 +109873,7 @@ let tm4 = match self.enum_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_16(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_132_16(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 
@@ -109635,7 +109881,7 @@ self.anonymous_rule_131_16(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_15(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_15(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for EnumSymbol(tm4, ) in self.enum_symbol.iter_new() {
@@ -109652,7 +109898,7 @@ for PredSymbol(tm1, ) in self.pred_symbol.iter_old() {
 #[allow(unused_variables)]
 for FuncSymbol(tm2, ) in self.func_symbol.iter_old() {
 
-self.anonymous_rule_131_16(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_132_16(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
@@ -109669,16 +109915,16 @@ self.anonymous_rule_131_16(delta, tm0, tm1, tm2, tm3, tm4);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_16(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
+fn anonymous_rule_132_16(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_131_17(delta, tm0, tm1, tm2, tm3, tm4);
+self.anonymous_rule_132_17(delta, tm0, tm1, tm2, tm3, tm4);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_17(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
+fn anonymous_rule_132_17(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind) {
 for _ in [()] {
 let tm5 = match self.ctor_symbol.iter_all().next() {
     Some(CtorSymbol( res)) => res,
@@ -109688,7 +109934,7 @@ let tm5 = match self.ctor_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_132_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 
@@ -109696,7 +109942,7 @@ self.anonymous_rule_131_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_18(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_18(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for CtorSymbol(tm5, ) in self.ctor_symbol.iter_new() {
@@ -109716,7 +109962,7 @@ for FuncSymbol(tm2, ) in self.func_symbol.iter_old() {
 #[allow(unused_variables)]
 for RuleSymbol(tm3, ) in self.rule_symbol.iter_old() {
 
-self.anonymous_rule_131_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_132_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 }
@@ -109735,16 +109981,16 @@ self.anonymous_rule_131_19(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_19(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
+fn anonymous_rule_132_19(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
 for _ in [()] {
-self.anonymous_rule_131_20(delta, tm0, tm1, tm2, tm3, tm4, tm5);
+self.anonymous_rule_132_20(delta, tm0, tm1, tm2, tm3, tm4, tm5);
 
 
 }
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_20(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
+fn anonymous_rule_132_20(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind) {
 for _ in [()] {
 let tm6 = match self.model_symbol.iter_all().next() {
     Some(ModelSymbol( res)) => res,
@@ -109754,7 +110000,7 @@ let tm6 = match self.model_symbol.iter_all().next() {
     },
 };
 
-self.anonymous_rule_131_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.anonymous_rule_132_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
 
 
@@ -109762,7 +110008,7 @@ self.anonymous_rule_131_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_21(&self, delta: &mut ModelDelta, ) {
+fn anonymous_rule_132_21(&self, delta: &mut ModelDelta, ) {
 for _ in [()] {
 #[allow(unused_variables)]
 for ModelSymbol(tm6, ) in self.model_symbol.iter_new() {
@@ -109785,7 +110031,7 @@ for RuleSymbol(tm3, ) in self.rule_symbol.iter_old() {
 #[allow(unused_variables)]
 for EnumSymbol(tm4, ) in self.enum_symbol.iter_old() {
 
-self.anonymous_rule_131_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+self.anonymous_rule_132_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 
 
 }
@@ -109806,7 +110052,7 @@ self.anonymous_rule_131_22(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
 }
 
 #[allow(unused_variables)]
-fn anonymous_rule_131_22(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind, tm6: SymbolKind) {
+fn anonymous_rule_132_22(&self, delta: &mut ModelDelta, tm0: SymbolKind, tm1: SymbolKind, tm2: SymbolKind, tm3: SymbolKind, tm4: SymbolKind, tm5: SymbolKind, tm6: SymbolKind) {
 for _ in [()] {
 
 }
@@ -126309,6 +126555,102 @@ let exists_already = self.term_structure.iter_all_0_1(tm1, tm2).next().is_some()
 if !exists_already {
 delta.new_term_structure.push(TermStructure(tm1, tm2));
 }
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_app_term_structure_1(delta, );
+self.mor_app_term_structure_2(delta, );
+self.mor_app_term_structure_5(delta, );
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, tm2, ) in self.mor_app_term_node.iter_new() {
+
+self.mor_app_term_structure_3(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_3(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+self.mor_app_term_structure_4(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_4(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TermStructure(_, tm3, ) in self.term_structure.iter_all_0(tm0, ) {
+
+self.mor_app_term_structure_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for TermStructure(tm0, tm3, ) in self.term_structure.iter_new() {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, tm1, tm2, ) in self.mor_app_term_node.iter_old_0(tm0, ) {
+
+self.mor_app_term_structure_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_term_structure_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: Structure) {
+for _ in [()] {
+let exists_already = self.term_structure.iter_all_0_1(tm1, tm3).next().is_some();
+if !exists_already {
+delta.new_term_structure.push(TermStructure(tm1, tm3));
+}
+
+let exists_already = self.term_structure.iter_all_0_1(tm2, tm3).next().is_some();
+if !exists_already {
+delta.new_term_structure.push(TermStructure(tm2, tm3));
+}
+
 
 
 

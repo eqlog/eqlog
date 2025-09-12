@@ -470,6 +470,14 @@ rule scopes_term_cod {
 
     then scope_single_child(arg_descendant, tm_descendant);
 }
+rule scopes_term_mor_app {
+    if mor_app_term_node(tm, mor_term, arg_term);
+    if tm_descendant = rule_descendant_term(tm);
+    if mor_descendant = rule_descendant_term(mor_term);
+    if arg_descendant = rule_descendant_term(arg_term);
+
+    then scope_extension_siblings(mor_descendant, arg_descendant, tm_descendant);
+}
 rule scopes_term_var {
     if var_term_node(tm, virt_ident);
     if tm_descendant = rule_descendant_term(tm);
@@ -2147,6 +2155,13 @@ rule dom_term_structure {
 rule cod_term_structure {
     if cod_term_node(term, arg_term);
     if term_structure(term, structure);
+    then term_structure(arg_term, structure);
+}
+
+rule mor_app_term_structure {
+    if mor_app_term_node(term, mor_term, arg_term);
+    if term_structure(term, structure);
+    then term_structure(mor_term, structure);
     then term_structure(arg_term, structure);
 }
 // ### Populate associated structures
