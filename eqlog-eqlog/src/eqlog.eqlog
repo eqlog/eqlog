@@ -2383,6 +2383,25 @@ rule cod_term_semantics {
 
     then rel_app(cod_func_rel, mor_el_cod_el);
 }
+rule mor_app_term_semantics {
+    if mor_app_term_node(result_term, mor_term, arg_term);
+    if result_el = semantic_el(result_term, structure);
+    if mor_el = semantic_el(mor_term, structure);
+    if arg_el = semantic_el(arg_term, structure);
+    
+    if el_type(arg_el, arg_el_type);
+    if arg_type = underlying_type(arg_el_type);
+    
+    if app_func = mor_app_func(arg_type);
+    if app_func_rel = FuncRel(app_func);
+    
+    then nil := NilElList(structure)!;
+    then arg_el_single := ConsElList(arg_el, nil)!;
+    then result_el_single := ConsElList(result_el, arg_el_single)!;
+    then mor_el_result_el := ConsElList(mor_el, result_el_single)!;
+    
+    then rel_app(app_func_rel, mor_el_result_el);
+}
 
 // #### Semantics of terms
 rule app_term_semantics {
