@@ -668,6 +668,7 @@ rule semantic_decl_model {
 func mor_type(model_type: Type) -> Type;
 func mor_type_dom_func(mor_type: Type) -> Func;
 func mor_type_cod_func(mor_type: Type) -> Func;
+func mor_app_func(member_type: Type) -> Func;
 
 rule mor_type_defined_for_model {
     if is_model_type(typ);
@@ -722,6 +723,38 @@ rule mor_type_dom_cod_func_codomains {
 
     then codomain(dom_func) = model_type;
     then codomain(cod_func) = model_type;
+}
+
+rule mor_app_func_defined_for_member_types {
+    if type_definition_symbol_scope(member_type) = model_member_symbol_scope(_);
+    then mor_app_func(member_type)!;
+}
+
+rule mor_app_func_symbol_scope {
+    if app_func = mor_app_func(member_type);
+    if app_func_rel = FuncRel(app_func);
+    if member_ss = type_definition_symbol_scope(member_type);
+    if model_type = symbol_scope_model(member_ss);
+    if model_def_ss = type_definition_symbol_scope(model_type);
+    then rel_definition_symbol_scope(app_func_rel) = model_def_ss;
+}
+
+rule mor_app_func_domain {
+    if app_func = mor_app_func(member_type);
+    if member_ss = type_definition_symbol_scope(member_type);
+    if model_type = symbol_scope_model(member_ss);
+    if mor_type = mor_type(model_type);
+    
+    then nil := NilTypeList()!;
+    then member_type_singleton := ConsTypeList(member_type, nil)!;
+    then mor_and_member := ConsTypeList(mor_type, member_type_singleton)!;
+    
+    then domain(app_func) = mor_and_member;
+}
+
+rule mor_app_func_codomain {
+    if app_func = mor_app_func(member_type);
+    then codomain(app_func) = member_type;
 }
 
 func type_name(Type) -> Ident;
