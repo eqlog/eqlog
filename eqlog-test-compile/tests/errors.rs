@@ -263,3 +263,8 @@ fn bad_member_type_not_a_type() {
 fn non_mor_applied_as_mor() {
     test_case(Path::new("non-mor-applied-as-mor"));
 }
+
+#[test]
+fn mor_applied_to_non_member() {
+    test_case(Path::new("mor-applied-to-non-member"));
+}

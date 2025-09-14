@@ -527,6 +527,23 @@ pub fn iter_non_morphism_applied_as_morphism_errors<'a>(
     })
 }
 
+pub fn iter_morphism_applied_to_non_member_errors<'a>(
+    eqlog: &'a Eqlog,
+    _identifiers: &'a BTreeMap<Ident, String>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog
+        .iter_should_be_member_element()
+        .filter_map(|(el, model_type, loc)| {
+            if !eqlog.is_member_element(el, model_type) {
+                let location = *locations.get(&loc).unwrap();
+                Some(CompileError::MorphismAppliedToNonMember { location })
+            } else {
+                None
+            }
+        })
+}
+
 pub fn check_eqlog(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
@@ -568,6 +585,11 @@ pub fn check_eqlog(
         ))
         .chain(iter_illegal_rel_arg_errors(eqlog, identifiers, locations))
         .chain(iter_non_morphism_applied_as_morphism_errors(
+            eqlog,
+            identifiers,
+            locations,
+        ))
+        .chain(iter_morphism_applied_to_non_member_errors(
             eqlog,
             identifiers,
             locations,

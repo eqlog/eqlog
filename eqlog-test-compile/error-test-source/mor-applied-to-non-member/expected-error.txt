@@ -1,0 +1,6 @@
+Error: Morphisms can only be applied to member elements
+ --> error-test-source/mor-applied-to-non-member/theory.eql:9
+  | 
+9 |     then f@(x) = f@(x);
+  |             ^          
+  | 

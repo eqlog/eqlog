@@ -1,4 +1,4 @@
-// src-digest: ABB7BAB18ED90B7F6FAA966C4AC882EB287892F03AE441768A68CE52D0BFAAEC
+// src-digest: 845084D7BD606F19FA986CB90A8A3FCF8E9CBC27D8CC1CB1FF001A80DC08462C
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -4308,6 +4308,17 @@ fn permute_inverse_1_0(t: (u32, u32, )) -> MorTypeExpr {
 fn iter_new(&self, ) -> impl '_ + Iterator<Item = MorTypeExpr> {
 
 self.index_new_0_1
+    .range((
+        Bound::Included(&( u32::MIN, u32::MIN, )),
+        Bound::Included(&( u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_0_1)
+}
+#[allow(dead_code)]
+fn iter_old(&self, ) -> impl '_ + Iterator<Item = MorTypeExpr> {
+
+self.index_old_0_1
     .range((
         Bound::Included(&( u32::MIN, u32::MIN, )),
         Bound::Included(&( u32::MAX, u32::MAX, ))
@@ -64657,6 +64668,7 @@ self.wildcard_term_semantics_0(&mut delta);
 self.equal_if_atom_semantics_0(&mut delta);
 self.pred_if_atom_semantics_0(&mut delta);
 self.var_if_atom_semantics_ambient_0(&mut delta);
+self.var_if_atom_semantics_morphism_0(&mut delta);
 self.var_if_atom_semantics_member_0(&mut delta);
 self.equal_then_atom_semantics_0(&mut delta);
 self.defined_then_atom_semantics_0(&mut delta);
@@ -138768,6 +138780,510 @@ for _ in [()] {
 let exists_already = self.el_type.iter_all_0_1(tm9, tm7).next().is_some();
 if !exists_already {
 delta.new_el_type.push(ElType(tm9, tm7));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.var_if_atom_semantics_morphism_1(delta, );
+self.var_if_atom_semantics_morphism_2(delta, );
+self.var_if_atom_semantics_morphism_5(delta, );
+self.var_if_atom_semantics_morphism_8(delta, );
+self.var_if_atom_semantics_morphism_9(delta, );
+self.var_if_atom_semantics_morphism_10(delta, );
+self.var_if_atom_semantics_morphism_13(delta, );
+self.var_if_atom_semantics_morphism_16(delta, );
+self.var_if_atom_semantics_morphism_17(delta, );
+self.var_if_atom_semantics_morphism_20(delta, );
+
+
+
+
+
+
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for VarIfAtomNode(tm0, tm1, tm2, ) in self.var_if_atom_node.iter_new() {
+
+self.var_if_atom_semantics_morphism_3(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_3(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode) {
+for _ in [()] {
+self.var_if_atom_semantics_morphism_4(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_4(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeExpr(_, tm3, ) in self.mor_type_expr.iter_all_0(tm2, ) {
+
+self.var_if_atom_semantics_morphism_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeExpr(tm2, tm3, ) in self.mor_type_expr.iter_new() {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(tm0, tm1, _, ) in self.var_if_atom_node.iter_old_2(tm2, ) {
+
+self.var_if_atom_semantics_morphism_6(delta, tm0, tm1, tm2, tm3);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_6(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident) {
+for _ in [()] {
+self.var_if_atom_semantics_morphism_7(delta, tm0, tm1, tm2, tm3);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_7(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm6, ) in self.rule_descendant_if_atom.iter_all_0(tm0, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm5, ) in self.entry_scope.iter_all_0(tm6, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_all_0(tm5, ) {
+
+self.var_if_atom_semantics_morphism_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, tm6, ) in self.rule_descendant_if_atom.iter_new() {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm5, ) in self.entry_scope.iter_old_0(tm6, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_old_0(tm5, ) {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(_, tm1, tm2, ) in self.var_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(_, tm3, ) in self.mor_type_expr.iter_old_0(tm2, ) {
+
+self.var_if_atom_semantics_morphism_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_9(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for EntryScope(tm6, tm5, ) in self.entry_scope.iter_new() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, tm4, ) in self.scope_symbols.iter_old_0(tm5, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm6, ) {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(_, tm1, tm2, ) in self.var_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(_, tm3, ) in self.mor_type_expr.iter_old_0(tm2, ) {
+
+self.var_if_atom_semantics_morphism_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_10(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ScopeSymbols(tm5, tm4, ) in self.scope_symbols.iter_new() {
+
+#[allow(unused_variables)]
+for EntryScope(tm6, _, ) in self.entry_scope.iter_all_1(tm5, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_all_1(tm6, ) {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(_, tm1, tm2, ) in self.var_if_atom_node.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(_, tm3, ) in self.mor_type_expr.iter_old_0(tm2, ) {
+
+self.var_if_atom_semantics_morphism_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_11(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode) {
+for _ in [()] {
+self.var_if_atom_semantics_morphism_12(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_12(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticType(_, _, tm7, ) in self.semantic_type.iter_all_0_1(tm4, tm3, ) {
+
+self.var_if_atom_semantics_morphism_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_13(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticType(tm4, tm3, tm7, ) in self.semantic_type.iter_new() {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm5, _, ) in self.scope_symbols.iter_old_1(tm4, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(tm2, _, ) in self.mor_type_expr.iter_old_1(tm3, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm6, _, ) in self.entry_scope.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm6, ) {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(_, tm1, _, ) in self.var_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+self.var_if_atom_semantics_morphism_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_14(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Type) {
+for _ in [()] {
+self.var_if_atom_semantics_morphism_15(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_15(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorType(_, tm9, ) in self.mor_type.iter_all_0(tm7, ) {
+
+#[allow(unused_variables)]
+for AmbientType(_, tm8, ) in self.ambient_type.iter_all_0(tm9, ) {
+
+self.var_if_atom_semantics_morphism_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_16(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorType(tm7, tm9, ) in self.mor_type.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(_, tm8, ) in self.ambient_type.iter_old_0(tm9, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm5, tm4, ) in self.scope_symbols.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticType(_, tm3, _, ) in self.semantic_type.iter_old_0_2(tm4, tm7, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(tm2, _, ) in self.mor_type_expr.iter_old_1(tm3, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm6, _, ) in self.entry_scope.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm6, ) {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(_, tm1, _, ) in self.var_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+self.var_if_atom_semantics_morphism_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_17(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientType(tm9, tm8, ) in self.ambient_type.iter_new() {
+
+#[allow(unused_variables)]
+for MorType(tm7, _, ) in self.mor_type.iter_all_1(tm9, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(tm5, tm4, ) in self.scope_symbols.iter_old() {
+
+#[allow(unused_variables)]
+for SemanticType(_, tm3, _, ) in self.semantic_type.iter_old_0_2(tm4, tm7, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(tm2, _, ) in self.mor_type_expr.iter_old_1(tm3, ) {
+
+#[allow(unused_variables)]
+for EntryScope(tm6, _, ) in self.entry_scope.iter_old_1(tm5, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(tm0, _, ) in self.rule_descendant_if_atom.iter_old_1(tm6, ) {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(_, tm1, _, ) in self.var_if_atom_node.iter_old_0_2(tm0, tm2, ) {
+
+self.var_if_atom_semantics_morphism_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_18(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Type, tm8: ElementType, tm9: Type) {
+for _ in [()] {
+self.var_if_atom_semantics_morphism_19(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_19(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Type, tm8: ElementType, tm9: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(_, tm11, tm10, ) in self.semantic_el.iter_all_0(tm1, ) {
+
+self.var_if_atom_semantics_morphism_21(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_20(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm11, tm10, ) in self.semantic_el.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(tm9, tm8, ) in self.ambient_type.iter_old() {
+
+#[allow(unused_variables)]
+for MorType(tm7, _, ) in self.mor_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for MorTypeExpr(tm2, tm3, ) in self.mor_type_expr.iter_old() {
+
+#[allow(unused_variables)]
+for VarIfAtomNode(tm0, _, _, ) in self.var_if_atom_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for RuleDescendantIfAtom(_, tm6, ) in self.rule_descendant_if_atom.iter_old_0(tm0, ) {
+
+#[allow(unused_variables)]
+for SemanticType(tm4, _, _, ) in self.semantic_type.iter_old_1_2(tm3, tm7, ) {
+
+#[allow(unused_variables)]
+for EntryScope(_, tm5, ) in self.entry_scope.iter_old_0(tm6, ) {
+
+#[allow(unused_variables)]
+for ScopeSymbols(_, _, ) in self.scope_symbols.iter_old_0_1(tm5, tm4, ) {
+
+self.var_if_atom_semantics_morphism_21(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn var_if_atom_semantics_morphism_21(&self, delta: &mut ModelDelta, tm0: IfAtomNode, tm1: TermNode, tm2: TypeExprNode, tm3: Ident, tm4: SymbolScope, tm5: Scope, tm6: RuleDescendantNode, tm7: Type, tm8: ElementType, tm9: Type, tm10: El, tm11: Structure) {
+for _ in [()] {
+let exists_already = self.el_type.iter_all_0_1(tm10, tm8).next().is_some();
+if !exists_already {
+delta.new_el_type.push(ElType(tm10, tm8));
 }
 
 

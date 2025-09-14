@@ -2547,6 +2547,15 @@ rule var_if_atom_semantics_ambient {
     if var_el = semantic_el(var_term, _);
     then el_type(var_el, el_typ);
 }
+rule var_if_atom_semantics_morphism {
+    if var_if_atom_node(atom, var_term, type_expr);
+    if mor_type_expr(type_expr, model_type_name);
+    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
+    if model_type = semantic_type(ss, model_type_name);
+    if el_typ = AmbientType(mor_type(model_type));
+    if var_el = semantic_el(var_term, _);
+    then el_type(var_el, el_typ);
+}
 rule var_if_atom_semantics_member {
     if var_if_atom_node(_, var_term, type_expr);
     if member_type_expr(type_expr, model_term, type_name);

@@ -140,6 +140,9 @@ pub enum CompileError {
     NonMorphismAppliedAsMorphism {
         location: Location,
     },
+    MorphismAppliedToNonMember {
+        location: Location,
+    },
 }
 
 impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
@@ -228,6 +231,7 @@ impl CompileError {
             CompileError::IllegalMemberTypeExprInArgDecl { location } => *location,
             CompileError::MatchPatternIsMemberFunc { location } => *location,
             CompileError::NonMorphismAppliedAsMorphism { location } => *location,
+            CompileError::MorphismAppliedToNonMember { location } => *location,
         }
     }
 }
@@ -264,6 +268,7 @@ pub enum CompileErrorKind {
     IllegalMemberTypeExprInArgDecl,
     MatchPatternIsMemberFunc,
     NonMorphismAppliedAsMorphism,
+    MorphismAppliedToNonMember,
 }
 
 impl From<&CompileError> for CompileErrorKind {
@@ -302,6 +307,7 @@ impl From<&CompileError> for CompileErrorKind {
             }
             MatchPatternIsMemberFunc { .. } => CompileErrorKind::MatchPatternIsMemberFunc,
             NonMorphismAppliedAsMorphism { .. } => CompileErrorKind::NonMorphismAppliedAsMorphism,
+            MorphismAppliedToNonMember { .. } => CompileErrorKind::MorphismAppliedToNonMember,
         }
     }
 }
@@ -365,6 +371,13 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
     for k in CompileErrorKind::iter() {
         if !relation.contains(&[k, NonMorphismAppliedAsMorphism]) {
             relation.insert([NonMorphismAppliedAsMorphism, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, MorphismAppliedToNonMember]) {
+            relation.insert([MorphismAppliedToNonMember, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -667,6 +680,10 @@ impl Display for CompileErrorWithContext {
             }
             NonMorphismAppliedAsMorphism { location } => {
                 write!(f, "Expression is not a morphism\n")?;
+                write_loc(f, *location)?;
+            }
+            MorphismAppliedToNonMember { location } => {
+                write!(f, "Morphisms can only be applied to member elements\n")?;
                 write_loc(f, *location)?;
             }
         }
