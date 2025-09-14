@@ -666,6 +666,7 @@ rule semantic_decl_model {
 }
 
 func mor_type(model_type: Type) -> Type;
+func mor_model_type(mor_type: Type) -> Type;
 func mor_type_dom_func(mor_type: Type) -> Func;
 func mor_type_cod_func(mor_type: Type) -> Func;
 func mor_app_func(member_type: Type) -> Func;
@@ -675,6 +676,10 @@ rule mor_type_defined_for_model {
     then mor_type := mor_type(typ)!;
     then mor_type_dom_func(mor_type)!;
     then mor_type_cod_func(mor_type)!;
+}
+rule mor_model_type_law_for_morphisms {
+    if mt = mor_type(model_type);
+    then mor_model_type(mt) = model_type;
 }
 
 rule mor_type_is_mor_type {
@@ -2355,13 +2360,51 @@ rule cod_el_type_up {
 
 // #### Typing rules for mor_app_term
 
+pred is_mor_el(el: El);
+pred should_be_mor_el(el: El, loc: Loc);
+
+rule mor_is_mor_el {
+    if el_type(el, AmbientType(mor_type(_)));
+    then is_mor_el(el);
+}
+rule mor_app_term_node_should_be_mor {
+    if mor_app_term_node(_, mor_term, _);
+    if mor_loc = term_node_loc(mor_term);
+    if mor_el = semantic_el(mor_term, _);
+    then should_be_mor_el(mor_el, mor_loc);
+}
+
+// TODO: Add more specific versions that assert that an element is/should be a
+// morphism for a fixed model type?
+
+// Member elements are elements of type InstantiatedType(model_el, _) for some model_el.
+pred is_member_element(el: El, model_type: Type);
+pred should_be_member_element(el: El, model_type: Type, loc: Loc);
+
+rule member_element_definition {
+    if el_type(arg_el, InstantiatedType(model_el, _));
+    if el_type(model_el, AmbientType(model_type));
+    then is_member_element(arg_el, model_type);
+}
+rule argument_of_morphism_should_be_member {
+    if mor_app_term_node(_, mor_term, arg_term);
+    if arg_el = semantic_el(arg_term, structure);
+    if arg_loc = term_node_loc(arg_term);
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, AmbientType(mor_type(model_ty)));
+    then should_be_member_element(arg_el, model_ty, arg_loc);
+}
+rule result_of_morphism_should_be_member {
+    if mor_app_term_node(result_term, mor_term, _);
+    if result_el = semantic_el(result_term, structure);
+    if result_loc = term_node_loc(result_term);
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, AmbientType(mor_type(model_ty)));
+    then should_be_member_element(result_el, model_ty, result_loc);
+}
+
 // If arg_el has type InstantiatedType(d, member_type), then dom(mor)
 // should be defined and equal to d.
-// Note that, conversely, if we only now that dom(mor) is defined, we can't say
-// something about the type of arg_el yet, since we don't know what member_type
-// it should have.
-// We could possibly add a new predicate member_element(arg_el, model_type)
-// which would hold whenever the type of arg_el is a type of model_type though.
 rule mor_app_domain_type_from_arg {
     if mor_app_term_node(_, mor_term, arg_term);
     if arg_el = semantic_el(arg_term, structure);
