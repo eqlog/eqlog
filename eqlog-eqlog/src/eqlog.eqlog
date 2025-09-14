@@ -2353,6 +2353,47 @@ rule cod_el_type_up {
     }
 }
 
+// #### Typing rules for mor_app_term
+
+// If arg_el has type InstantiatedType(d, member_type), then dom(mor)
+// should be defined and equal to d.
+// Note that, conversely, if we only now that dom(mor) is defined, we can't say
+// something about the type of arg_el yet, since we don't know what member_type
+// it should have.
+// We could possibly add a new predicate member_element(arg_el, model_type)
+// which would hold whenever the type of arg_el is a type of model_type though.
+rule mor_app_domain_type_from_arg {
+    if mor_app_term_node(_, mor_term, arg_term);
+    if arg_el = semantic_el(arg_term, structure);
+    if el_type(arg_el, InstantiatedType(domain_el, _));
+
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, AmbientType(mor_type));
+
+    if dom_func = mor_type_dom_func(mor_type);
+
+    then nil := NilElList(structure)!;
+    then mor_el_singleton := ConsElList(mor_el, nil)!;
+    then func_app(dom_func, mor_el_singleton) = domain_el;
+}
+
+// The analogue of mor_app_domain_type_from_arg for the result of applying a
+// morphism to a member element.
+rule mor_app_codomain_type_from_arg {
+    if mor_app_term_node(result_term, mor_term, _);
+    if result_el = semantic_el(result_term, structure);
+    if el_type(result_el, InstantiatedType(codomain_el, _));
+
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, AmbientType(mor_type));
+
+    if cod_func = mor_type_cod_func(mor_type);
+
+    then nil := NilElList(structure)!;
+    then mor_el_singleton := ConsElList(mor_el, nil)!;
+    then func_app(cod_func, mor_el_singleton) = codomain_el;
+}
+
 rule dom_term_semantics {
     if dom_term_node(dom_term, mor_term);
     if dom_el = semantic_el(dom_term, structure);

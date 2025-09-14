@@ -1,4 +1,4 @@
-// src-digest: 41D7450BC630D48B9F650A0AC7F4DF47C3F24A8C67945391FED476E651BB6BD0
+// src-digest: 0BADE3BE2755DFE5746B1B7E5FA85327BEAC514FFF7A4F7BF8B6DE4634986A6F
 #[allow(unused)]
 use std::collections::{BTreeSet, BTreeMap};
 use std::fmt;
@@ -7226,6 +7226,17 @@ self.index_old_2_0_1
     ))
     .copied()
     .map(Self::permute_inverse_2_0_1)
+}
+#[allow(dead_code)]
+fn iter_old_1(&self, arg1: TermNode) -> impl '_ + Iterator<Item = MorAppTermNode> {
+    let arg1 = arg1.0;
+self.index_old_1_2_0
+    .range((
+        Bound::Included(&(arg1,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg1,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_1_2_0)
 }
 #[allow(dead_code)]
 fn iter_old_1_2(&self, arg1: TermNode, arg2: TermNode) -> impl '_ + Iterator<Item = MorAppTermNode> {
@@ -50315,6 +50326,17 @@ self.index_old_1_0_2
     .map(Self::permute_inverse_1_0_2)
 }
 #[allow(dead_code)]
+fn iter_old_2(&self, arg2: ElementType) -> impl '_ + Iterator<Item = InstantiatedType> {
+    let arg2 = arg2.0;
+self.index_old_2_0_1
+    .range((
+        Bound::Included(&(arg2,  u32::MIN, u32::MIN, )),
+        Bound::Included(&(arg2,  u32::MAX, u32::MAX, ))
+    ))
+    .copied()
+    .map(Self::permute_inverse_2_0_1)
+}
+#[allow(dead_code)]
 fn iter_all_2(&self, arg2: ElementType) -> impl '_ + Iterator<Item = InstantiatedType> {
     let arg2 = arg2.0;
 self.index_new_2_0_1
@@ -63672,6 +63694,8 @@ self.dom_el_type_down_0(&mut delta);
 self.cod_el_type_down_0(&mut delta);
 self.dom_el_type_up_0(&mut delta);
 self.cod_el_type_up_0(&mut delta);
+self.mor_app_domain_type_from_arg_0(&mut delta);
+self.mor_app_codomain_type_from_arg_0(&mut delta);
 self.dom_term_semantics_0(&mut delta);
 self.cod_term_semantics_0(&mut delta);
 self.mor_app_term_semantics_0(&mut delta);
@@ -131112,6 +131136,1214 @@ for _ in [()] {
 let exists_already = self.el_type.iter_all_0_1(tm11, tm10).next().is_some();
 if !exists_already {
 delta.new_el_type.push(ElType(tm11, tm10));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_1(delta, );
+self.mor_app_domain_type_from_arg_2(delta, );
+self.mor_app_domain_type_from_arg_5(delta, );
+self.mor_app_domain_type_from_arg_8(delta, );
+self.mor_app_domain_type_from_arg_9(delta, );
+self.mor_app_domain_type_from_arg_12(delta, );
+self.mor_app_domain_type_from_arg_15(delta, );
+self.mor_app_domain_type_from_arg_16(delta, );
+self.mor_app_domain_type_from_arg_19(delta, );
+self.mor_app_domain_type_from_arg_22(delta, );
+self.mor_app_domain_type_from_arg_25(delta, );
+
+
+
+
+
+
+
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, tm2, ) in self.mor_app_term_node.iter_new() {
+
+self.mor_app_domain_type_from_arg_3(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_3(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_4(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_4(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(_, tm4, tm3, ) in self.semantic_el.iter_all_0(tm2, ) {
+
+self.mor_app_domain_type_from_arg_6(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(tm2, tm4, tm3, ) in self.semantic_el.iter_new() {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, _, ) in self.mor_app_term_node.iter_old_2(tm2, ) {
+
+self.mor_app_domain_type_from_arg_6(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_7(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_7(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_all_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_all_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_10(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(tm3, tm5, ) in self.el_type.iter_new() {
+
+#[allow(unused_variables)]
+for SemanticEl(tm2, tm4, _, ) in self.semantic_el.iter_old_2(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, _, ) in self.mor_app_term_node.iter_old_2(tm2, ) {
+
+self.mor_app_domain_type_from_arg_10(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_9(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, tm5, ) in self.instantiated_type.iter_new() {
+
+#[allow(unused_variables)]
+for ElType(tm3, _, ) in self.el_type.iter_all_1(tm5, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm2, tm4, _, ) in self.semantic_el.iter_old_2(tm3, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, _, ) in self.mor_app_term_node.iter_old_2(tm2, ) {
+
+self.mor_app_domain_type_from_arg_10(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_10(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_11(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm8, ) in self.semantic_el.iter_all_0_1(tm1, tm4, ) {
+
+self.mor_app_domain_type_from_arg_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_12(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, tm8, ) in self.semantic_el.iter_new() {
+
+#[allow(unused_variables)]
+for SemanticEl(tm2, _, tm3, ) in self.semantic_el.iter_old_1(tm4, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, _, ) in self.mor_app_term_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_13(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_14(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(_, tm9, ) in self.el_type.iter_all_0(tm8, ) {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, _, ) in self.ambient_type.iter_all_1(tm9, ) {
+
+self.mor_app_domain_type_from_arg_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_15(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(tm8, tm9, ) in self.el_type.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, _, ) in self.ambient_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, _, ) in self.semantic_el.iter_old_2(tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm2, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_16(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientType(tm10, tm9, ) in self.ambient_type.iter_new() {
+
+#[allow(unused_variables)]
+for ElType(tm8, _, ) in self.el_type.iter_all_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, _, ) in self.semantic_el.iter_old_2(tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm2, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_17(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_18(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm11, ) in self.mor_type_dom_func.iter_all_0(tm10, ) {
+
+self.mor_app_domain_type_from_arg_20(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_19(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeDomFunc(tm10, tm11, ) in self.mor_type_dom_func.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(_, tm9, ) in self.ambient_type.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ElType(tm8, _, ) in self.el_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, _, ) in self.semantic_el.iter_old_2(tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm2, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_20(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_20(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_21(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_21(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func) {
+for _ in [()] {
+let tm12 = match self.nil_el_list.iter_all_0(tm4).next() {
+    Some(NilElList(_,  res)) => res,
+    None => { 
+        delta.new_nil_el_list_def.push(NilElListArgs(tm4));
+        break;
+    },
+};
+
+self.mor_app_domain_type_from_arg_23(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_22(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for NilElList(tm4, tm12, ) in self.nil_el_list.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, tm9, ) in self.ambient_type.iter_old() {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm11, ) in self.mor_type_dom_func.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ElType(tm8, _, ) in self.el_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, _, _, ) in self.semantic_el.iter_old_1_2(tm4, tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm2, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_23(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_23(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func, tm12: ElList) {
+for _ in [()] {
+self.mor_app_domain_type_from_arg_24(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_24(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func, tm12: ElList) {
+for _ in [()] {
+let tm13 = match self.cons_el_list.iter_all_0_1(tm8, tm12).next() {
+    Some(ConsElList(_, _,  res)) => res,
+    None => { 
+        delta.new_cons_el_list_def.push(ConsElListArgs(tm8, tm12));
+        break;
+    },
+};
+
+self.mor_app_domain_type_from_arg_26(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12, tm13);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_25(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ConsElList(tm8, tm12, tm13, ) in self.cons_el_list.iter_new() {
+
+#[allow(unused_variables)]
+for NilElList(tm4, _, ) in self.nil_el_list.iter_old_1(tm12, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, _, _, ) in self.semantic_el.iter_old_1_2(tm4, tm8, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm9, ) in self.el_type.iter_old_0(tm8, ) {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, _, ) in self.ambient_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for MorTypeDomFunc(_, tm11, ) in self.mor_type_dom_func.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm2, _, tm3, ) in self.semantic_el.iter_old_1(tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, _, ) in self.mor_app_term_node.iter_old_1_2(tm1, tm2, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_domain_type_from_arg_26(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12, tm13);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_domain_type_from_arg_26(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func, tm12: ElList, tm13: ElList) {
+for _ in [()] {
+let exists_already = self.func_app.iter_all_0_1_2(tm11, tm13, tm6).next().is_some();
+if !exists_already {
+delta.new_func_app.push(FuncApp(tm11, tm13, tm6));
+}
+
+
+
+}
+}
+
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_0(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_1(delta, );
+self.mor_app_codomain_type_from_arg_2(delta, );
+self.mor_app_codomain_type_from_arg_5(delta, );
+self.mor_app_codomain_type_from_arg_8(delta, );
+self.mor_app_codomain_type_from_arg_9(delta, );
+self.mor_app_codomain_type_from_arg_12(delta, );
+self.mor_app_codomain_type_from_arg_15(delta, );
+self.mor_app_codomain_type_from_arg_16(delta, );
+self.mor_app_codomain_type_from_arg_19(delta, );
+self.mor_app_codomain_type_from_arg_22(delta, );
+self.mor_app_codomain_type_from_arg_25(delta, );
+
+
+
+
+
+
+
+
+
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_1(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_2(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, tm1, tm2, ) in self.mor_app_term_node.iter_new() {
+
+self.mor_app_codomain_type_from_arg_3(delta, tm0, tm1, tm2);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_3(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_4(delta, tm0, tm1, tm2);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_4(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(_, tm4, tm3, ) in self.semantic_el.iter_all_0(tm0, ) {
+
+self.mor_app_codomain_type_from_arg_6(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_5(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(tm0, tm4, tm3, ) in self.semantic_el.iter_new() {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, tm1, tm2, ) in self.mor_app_term_node.iter_old_0(tm0, ) {
+
+self.mor_app_codomain_type_from_arg_6(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_6(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_7(delta, tm0, tm1, tm2, tm3, tm4);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_7(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_all_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_all_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_10(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_8(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(tm3, tm5, ) in self.el_type.iter_new() {
+
+#[allow(unused_variables)]
+for SemanticEl(tm0, tm4, _, ) in self.semantic_el.iter_old_2(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, tm1, tm2, ) in self.mor_app_term_node.iter_old_0(tm0, ) {
+
+self.mor_app_codomain_type_from_arg_10(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_9(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, tm5, ) in self.instantiated_type.iter_new() {
+
+#[allow(unused_variables)]
+for ElType(tm3, _, ) in self.el_type.iter_all_1(tm5, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm0, tm4, _, ) in self.semantic_el.iter_old_2(tm3, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, tm1, tm2, ) in self.mor_app_term_node.iter_old_0(tm0, ) {
+
+self.mor_app_codomain_type_from_arg_10(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_10(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_11(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_11(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm8, ) in self.semantic_el.iter_all_0_1(tm1, tm4, ) {
+
+self.mor_app_codomain_type_from_arg_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_12(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, tm8, ) in self.semantic_el.iter_new() {
+
+#[allow(unused_variables)]
+for SemanticEl(tm0, _, tm3, ) in self.semantic_el.iter_old_1(tm4, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, _, tm2, ) in self.mor_app_term_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_13(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_13(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_14(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_14(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(_, tm9, ) in self.el_type.iter_all_0(tm8, ) {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, _, ) in self.ambient_type.iter_all_1(tm9, ) {
+
+self.mor_app_codomain_type_from_arg_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_15(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ElType(tm8, tm9, ) in self.el_type.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, _, ) in self.ambient_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, _, ) in self.semantic_el.iter_old_2(tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm0, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_16(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for AmbientType(tm10, tm9, ) in self.ambient_type.iter_new() {
+
+#[allow(unused_variables)]
+for ElType(tm8, _, ) in self.el_type.iter_all_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, _, ) in self.semantic_el.iter_old_2(tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm0, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_17(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_17(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_18(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_18(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm11, ) in self.mor_type_cod_func.iter_all_0(tm10, ) {
+
+self.mor_app_codomain_type_from_arg_20(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_19(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for MorTypeCodFunc(tm10, tm11, ) in self.mor_type_cod_func.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(_, tm9, ) in self.ambient_type.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ElType(tm8, _, ) in self.el_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, tm4, _, ) in self.semantic_el.iter_old_2(tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm0, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_20(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_20(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_21(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_21(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func) {
+for _ in [()] {
+let tm12 = match self.nil_el_list.iter_all_0(tm4).next() {
+    Some(NilElList(_,  res)) => res,
+    None => { 
+        delta.new_nil_el_list_def.push(NilElListArgs(tm4));
+        break;
+    },
+};
+
+self.mor_app_codomain_type_from_arg_23(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_22(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for NilElList(tm4, tm12, ) in self.nil_el_list.iter_new() {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, tm9, ) in self.ambient_type.iter_old() {
+
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm11, ) in self.mor_type_cod_func.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for ElType(tm8, _, ) in self.el_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, _, _, ) in self.semantic_el.iter_old_1_2(tm4, tm8, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(tm0, _, tm2, ) in self.mor_app_term_node.iter_old_1(tm1, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(_, _, tm3, ) in self.semantic_el.iter_old_0_1(tm0, tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_23(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_23(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func, tm12: ElList) {
+for _ in [()] {
+self.mor_app_codomain_type_from_arg_24(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12);
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_24(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func, tm12: ElList) {
+for _ in [()] {
+let tm13 = match self.cons_el_list.iter_all_0_1(tm8, tm12).next() {
+    Some(ConsElList(_, _,  res)) => res,
+    None => { 
+        delta.new_cons_el_list_def.push(ConsElListArgs(tm8, tm12));
+        break;
+    },
+};
+
+self.mor_app_codomain_type_from_arg_26(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12, tm13);
+
+
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_25(&self, delta: &mut ModelDelta, ) {
+for _ in [()] {
+#[allow(unused_variables)]
+for ConsElList(tm8, tm12, tm13, ) in self.cons_el_list.iter_new() {
+
+#[allow(unused_variables)]
+for NilElList(tm4, _, ) in self.nil_el_list.iter_old_1(tm12, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm1, _, _, ) in self.semantic_el.iter_old_1_2(tm4, tm8, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm9, ) in self.el_type.iter_old_0(tm8, ) {
+
+#[allow(unused_variables)]
+for AmbientType(tm10, _, ) in self.ambient_type.iter_old_1(tm9, ) {
+
+#[allow(unused_variables)]
+for MorTypeCodFunc(_, tm11, ) in self.mor_type_cod_func.iter_old_0(tm10, ) {
+
+#[allow(unused_variables)]
+for SemanticEl(tm0, _, tm3, ) in self.semantic_el.iter_old_1(tm4, ) {
+
+#[allow(unused_variables)]
+for ElType(_, tm5, ) in self.el_type.iter_old_0(tm3, ) {
+
+#[allow(unused_variables)]
+for MorAppTermNode(_, _, tm2, ) in self.mor_app_term_node.iter_old_0_1(tm0, tm1, ) {
+
+#[allow(unused_variables)]
+for InstantiatedType(tm6, tm7, _, ) in self.instantiated_type.iter_old_2(tm5, ) {
+
+self.mor_app_codomain_type_from_arg_26(delta, tm0, tm1, tm2, tm3, tm4, tm5, tm6, tm7, tm8, tm9, tm10, tm11, tm12, tm13);
+
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+}
+
+#[allow(unused_variables)]
+fn mor_app_codomain_type_from_arg_26(&self, delta: &mut ModelDelta, tm0: TermNode, tm1: TermNode, tm2: TermNode, tm3: El, tm4: Structure, tm5: ElementType, tm6: El, tm7: Type, tm8: El, tm9: ElementType, tm10: Type, tm11: Func, tm12: ElList, tm13: ElList) {
+for _ in [()] {
+let exists_already = self.func_app.iter_all_0_1_2(tm11, tm13, tm6).next().is_some();
+if !exists_already {
+delta.new_func_app.push(FuncApp(tm11, tm13, tm6));
 }
 
 
