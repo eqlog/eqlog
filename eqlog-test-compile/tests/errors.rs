@@ -268,3 +268,8 @@ fn non_mor_applied_as_mor() {
 fn mor_applied_to_non_member() {
     test_case(Path::new("mor-applied-to-non-member"));
 }
+
+#[test]
+fn mor_applied_to_false_member() {
+    test_case(Path::new("mor-applied-to-false-member"));
+}

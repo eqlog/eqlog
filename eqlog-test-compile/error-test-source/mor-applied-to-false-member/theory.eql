@@ -1,0 +1,13 @@
+model M {
+}
+
+model N {
+    type X;
+}
+
+rule {
+    if f: Mor(M);
+    if n: N;
+    if x: n.X;
+    then f@(x) = f@(x);
+}
