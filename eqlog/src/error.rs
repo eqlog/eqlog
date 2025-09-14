@@ -137,6 +137,9 @@ pub enum CompileError {
     MatchPatternIsMemberFunc {
         location: Location,
     },
+    NonMorphismAppliedAsMorphism {
+        location: Location,
+    },
 }
 
 impl<'a> From<ParseError<usize, Token<'a>, CompileError>> for CompileError {
@@ -224,6 +227,7 @@ impl CompileError {
             CompileError::MatchNotExhaustive { match_location, .. } => *match_location,
             CompileError::IllegalMemberTypeExprInArgDecl { location } => *location,
             CompileError::MatchPatternIsMemberFunc { location } => *location,
+            CompileError::NonMorphismAppliedAsMorphism { location } => *location,
         }
     }
 }
@@ -259,6 +263,7 @@ pub enum CompileErrorKind {
     MatchNotExhaustive,
     IllegalMemberTypeExprInArgDecl,
     MatchPatternIsMemberFunc,
+    NonMorphismAppliedAsMorphism,
 }
 
 impl From<&CompileError> for CompileErrorKind {
@@ -296,6 +301,7 @@ impl From<&CompileError> for CompileErrorKind {
                 CompileErrorKind::IllegalMemberTypeExprInArgDecl
             }
             MatchPatternIsMemberFunc { .. } => CompileErrorKind::MatchPatternIsMemberFunc,
+            NonMorphismAppliedAsMorphism { .. } => CompileErrorKind::NonMorphismAppliedAsMorphism,
         }
     }
 }
@@ -352,6 +358,13 @@ static COMPILE_ERROR_KIND_ORDER: LazyLock<HashSet<[CompileErrorKind; 2]>> = Lazy
     for k in CompileErrorKind::iter() {
         if !relation.contains(&[k, BadSymbolKind]) {
             relation.insert([BadSymbolKind, k]);
+        }
+    }
+    transitive_closure(&mut relation);
+
+    for k in CompileErrorKind::iter() {
+        if !relation.contains(&[k, NonMorphismAppliedAsMorphism]) {
+            relation.insert([NonMorphismAppliedAsMorphism, k]);
         }
     }
     transitive_closure(&mut relation);
@@ -651,6 +664,10 @@ impl Display for CompileErrorWithContext {
                     f,
                     "Only constructors (ambient functions) may be used in patterns\n"
                 )?;
+            }
+            NonMorphismAppliedAsMorphism { location } => {
+                write!(f, "Expression is not a morphism\n")?;
+                write_loc(f, *location)?;
             }
         }
         Ok(())

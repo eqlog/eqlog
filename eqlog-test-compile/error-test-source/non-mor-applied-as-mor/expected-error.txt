@@ -1,0 +1,6 @@
+Error: Expression is not a morphism
+  --> error-test-source/non-mor-applied-as-mor/theory.eql:10
+   | 
+10 |     then f@(x) = f@(x);
+   |          ^             
+   | 

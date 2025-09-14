@@ -512,6 +512,21 @@ pub fn iter_illegal_rel_arg_errors<'a>(
         })
 }
 
+pub fn iter_non_morphism_applied_as_morphism_errors<'a>(
+    eqlog: &'a Eqlog,
+    _identifiers: &'a BTreeMap<Ident, String>,
+    locations: &'a BTreeMap<Loc, Location>,
+) -> impl 'a + Iterator<Item = CompileError> {
+    eqlog.iter_should_be_mor_el().filter_map(|(el, loc)| {
+        if !eqlog.is_mor_el(el) {
+            let location = *locations.get(&loc).unwrap();
+            Some(CompileError::NonMorphismAppliedAsMorphism { location })
+        } else {
+            None
+        }
+    })
+}
+
 pub fn check_eqlog(
     eqlog: &Eqlog,
     identifiers: &BTreeMap<Ident, String>,
@@ -552,6 +567,11 @@ pub fn check_eqlog(
             locations,
         ))
         .chain(iter_illegal_rel_arg_errors(eqlog, identifiers, locations))
+        .chain(iter_non_morphism_applied_as_morphism_errors(
+            eqlog,
+            identifiers,
+            locations,
+        ))
         .min();
 
     if let Some(err) = first_error {

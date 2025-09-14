@@ -1,0 +1,11 @@
+type F;
+type X;
+
+model M {
+}
+
+rule {
+    if f: F;
+    if x: X;
+    then f@(x) = f@(x);
+}
