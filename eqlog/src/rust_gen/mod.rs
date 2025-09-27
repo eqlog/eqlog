@@ -71,6 +71,7 @@ fn display_func<'a>(
         return format!("{mor_type}_cod");
     }
 
+    // Handle func = parent_model_func(member_type).
     if let Some(member_type) =
         eqlog
             .iter_parent_model_func()
@@ -86,6 +87,23 @@ fn display_func<'a>(
             .to_string()
             .to_case(Snake);
         return format!("{member_type}_parent");
+    }
+
+    // Handle func = mor_app_func(member_type).
+    if let Some(member_type) = eqlog
+        .iter_mor_app_func()
+        .find_map(|(member_type, mor_app_func)| {
+            if eqlog.are_equal_func(mor_app_func, func) {
+                Some(member_type)
+            } else {
+                None
+            }
+        })
+    {
+        let member_type = display_type(member_type, eqlog, identifiers)
+            .to_string()
+            .to_case(Snake);
+        return format!("{member_type}_mor_app");
     }
 
     panic!("Unexpected func, neither a semantic_func or a mor_type_{{cod, dom}}_func")
@@ -2457,13 +2475,52 @@ fn display_define_fn<'a>(
             .format(", ");
 
         let codomain_parent_func = eqlog.parent_model_func(codomain);
-        let parent_arg = FmtFn(move |f| {
+
+        let parent_var: &str = if codomain_parent_func.is_none() {
+            ""
+        } else {
+            "parent_el"
+        };
+
+        let define_parent_var = FmtFn(move |f| {
             if codomain_parent_func.is_none() {
                 return Ok(());
             }
 
-            let parent_var = ElVar::from(0);
-            write!(f, "{parent_var}")
+            let member_scope = eqlog.type_definition_symbol_scope(codomain).unwrap();
+            let model_type = eqlog.symbol_scope_model(member_scope).unwrap();
+
+            let func_is_mor_app = eqlog
+                .iter_mor_app_func()
+                .any(|(_member_type, mor_app_func)| eqlog.are_equal_func(mor_app_func, func));
+
+            if !func_is_mor_app {
+                let func_def_scope = eqlog
+                    .rel_definition_symbol_scope(eqlog.func_rel(func).unwrap())
+                    .unwrap();
+
+                // This works if `func` is a model member function, in which case its first argument is
+                // parent model. That's OK for now, but when we introduce dependent types in function
+                // signatures it will break, since then the codomain might be a member type while the
+                // function is not a member.
+                assert!(eqlog.are_equal_symbol_scope(func_def_scope, member_scope));
+                let parent_arg = ElVar::from(0);
+                writedoc! {f, "
+                    let {parent_var} = {parent_arg};"
+                }?;
+                return Ok(());
+            }
+
+            let morphism_type = eqlog.mor_type(model_type).unwrap();
+            let cod_func = eqlog.mor_type_cod_func(morphism_type).unwrap();
+            let cod_func_snake = display_func(cod_func, eqlog, identifiers);
+
+            assert!(func_is_mor_app);
+            let mor_arg = ElVar::from(0);
+            writedoc! {f, "
+                let {parent_var} = self.define_{cod_func_snake}({mor_arg});
+            "}?;
+            Ok(())
         });
 
         writedoc! {f, "
@@ -2473,10 +2530,8 @@ fn display_define_fn<'a>(
                 match self.{func_snake}({args}) {{
                     Some(result) => result,
                     None => {{
-                        // TODO: The parent var, if any, is only correct if the codomain type
-                        // is defined in the same model (and not a parent model) that the function
-                        // is declared in.
-                        let {result_var} = self.new_{codomain_snake}_internal({parent_arg});
+                        {define_parent_var}
+                        let {result_var} = self.new_{codomain_snake}_internal({parent_var});
                         self.insert_{func_snake}({rel_args});
                         {result_var}
                     }}

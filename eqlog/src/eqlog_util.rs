@@ -316,6 +316,13 @@ pub fn display_rel<'a>(
                         None
                     }
                 });
+        if let Some(domain_for_mor_type) = domain_for_mor_type {
+            let mor_type = display_type(domain_for_mor_type, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            return format!("{mor_type}_dom");
+        }
+
         let codomain_for_mor_type: Option<Type> =
             eqlog
                 .iter_mor_type_cod_func()
@@ -326,27 +333,30 @@ pub fn display_rel<'a>(
                         None
                     }
                 });
+        if let Some(codomain_for_mor_type) = codomain_for_mor_type {
+            let mor_type = display_type(codomain_for_mor_type, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            return format!("{mor_type}_cod");
+        }
 
-        let (mor_type, func_str): (Type, &str) = match (domain_for_mor_type, codomain_for_mor_type)
-        {
-            (Some(_), Some(_)) => {
-                panic!(
-                    "Func should be only one of domain or codomain func for a mor type, not both"
-                )
-            }
-            (Some(mor_type), None) => (mor_type, "dom"),
-            (None, Some(mor_type)) => (mor_type, "cod"),
-            (None, None) => {
-                panic!(
-                    "Func should be either a domain or codomain func for a mor type, not neither"
-                )
-            }
-        };
+        let app_func_member_type: Option<Type> =
+            eqlog.iter_mor_app_func().find_map(|(member_type, func0)| {
+                if eqlog.are_equal_func(func0, func) {
+                    Some(member_type)
+                } else {
+                    None
+                }
+            });
 
-        let mor_type = display_type(mor_type, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        return format!("{mor_type}_{func_str}");
+        if let Some(app_func_member_type) = app_func_member_type {
+            let app_func_member_type = display_type(app_func_member_type, eqlog, identifiers)
+                .to_string()
+                .to_case(Snake);
+            return format!("{app_func_member_type}_mor_app");
+        }
+
+        panic!("Func should be a parent func for a member type, domain or codomain for a type of morphisms or the morphism application func for a member type")
     }
 
     panic!("Rel should be either pred or func")
