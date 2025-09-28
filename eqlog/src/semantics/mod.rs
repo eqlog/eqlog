@@ -1,6 +1,5 @@
 mod check_epic;
 
-use std::collections::btree_map;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::iter;
@@ -207,27 +206,73 @@ pub fn iter_variable_occurs_twice<'a>(
     })
 }
 
+fn element_type_to_string<'a>(
+    typ: ElementType,
+    eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
+    _locations: &'a BTreeMap<Loc, Location>,
+) -> String {
+    match eqlog.element_type_case(typ) {
+        ElementTypeCase::AmbientType(typ) => display_type(typ, eqlog, identifiers).to_string(),
+        ElementTypeCase::InstantiatedType(el, typ) => {
+            let typ = display_type(typ, eqlog, identifiers).to_string();
+
+            let name = match eqlog
+                .iter_var()
+                .find_map(|(_, name, el0)| eqlog.are_equal_el(el0, el).then_some(name))
+            {
+                Some(name) => name,
+                None => {
+                    // TODO: Do better here. This happens if the model element is not given by a
+                    // variable but by a composed term.
+                    return format!("?.{typ}");
+                }
+            };
+
+            let virt_ident = eqlog
+                .iter_semantic_name()
+                .find_map(|(virt_ident, _scope, name0)| {
+                    eqlog.are_equal_el_name(name0, name).then_some(virt_ident)
+                })
+                .expect(
+                    "Every semantic name should be given by a virtual identifier in some scope",
+                );
+
+            let ident = match eqlog.virt_real_ident(virt_ident) {
+                Some(ident) => ident,
+                None => {
+                    // The variable is a wildcard.
+                    return format!("_.{typ}");
+                }
+            };
+            let s = identifiers.get(&ident).unwrap();
+
+            return format!("{s}.{typ}");
+        }
+    }
+}
+
 pub fn iter_conflicting_type_errors<'a>(
     eqlog: &'a Eqlog,
+    identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    let mut el_type: BTreeMap<El, ElementType> = BTreeMap::new();
-    eqlog
-        .iter_el_type()
-        .filter_map(move |(el, ty)| match el_type.entry(el) {
-            btree_map::Entry::Vacant(vacant) => {
-                vacant.insert(ty);
-                None
-            }
-            btree_map::Entry::Occupied(occupied) => {
-                if eqlog.are_equal_element_type(*occupied.get(), ty) {
-                    None
-                } else {
-                    Some(el)
-                }
-            }
-        })
-        .flat_map(move |el| {
+    let mut el_types: BTreeMap<El, Vec<ElementType>> = BTreeMap::new();
+    for (el, ty) in eqlog.iter_el_type() {
+        let tys = el_types.entry(el).or_default();
+        if !tys.contains(&ty) {
+            tys.push(ty);
+        }
+    }
+
+    el_types
+        .into_iter()
+        .filter(|(_, tys)| tys.len() > 1)
+        .flat_map(move |(el, tys)| {
+            let types: Vec<String> = tys
+                .into_iter()
+                .map(|ty| element_type_to_string(ty, eqlog, identifiers, locations))
+                .collect();
             eqlog.iter_semantic_el().filter_map(move |(tm, _, e)| {
                 if !eqlog.are_equal_el(e, el) {
                     return None;
@@ -237,7 +282,7 @@ pub fn iter_conflicting_type_errors<'a>(
                 let location = *locations.get(&loc).unwrap();
 
                 Some(CompileError::ConflictingTermType {
-                    types: Vec::new(),
+                    types: types.clone(),
                     location,
                 })
             })
@@ -562,7 +607,7 @@ pub fn check_eqlog(
         .chain(iter_then_defined_variable_errors(eqlog, locations))
         .chain(iter_variable_introduced_in_then_errors(eqlog, locations))
         .chain(iter_wildcard_in_then_errors(eqlog, locations))
-        .chain(iter_conflicting_type_errors(eqlog, locations))
+        .chain(iter_conflicting_type_errors(eqlog, identifiers, locations))
         .chain(iter_match_pattern_is_variable_errors(eqlog, locations))
         .chain(iter_match_pattern_is_wildcard_errors(eqlog, locations))
         .chain(iter_match_pattern_is_member_func_errors(eqlog, locations))

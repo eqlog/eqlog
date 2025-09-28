@@ -1,6 +1,8 @@
-Error: term has conflicting types
+Error: term has conflicting types:
  --> error-test-source/conflicting-term-type-app-arg/theory.eql:8
   | 
 8 |     if bar(foo()) = x;
   |            ^^^^^      
   | 
+- Could be B
+- Could be A

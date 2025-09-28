@@ -577,9 +577,12 @@ impl Display for CompileErrorWithContext {
                 write!(f, "type of term undetermined\n")?;
                 write_loc(f, *location)?;
             }
-            ConflictingTermType { types: _, location } => {
-                write!(f, "term has conflicting types\n")?;
+            ConflictingTermType { types, location } => {
+                write!(f, "term has conflicting types:\n")?;
                 write_loc(f, *location)?;
+                for ty in types {
+                    write!(f, "- Could be {ty}\n")?;
+                }
             }
             VariableIntroducedInThenStmt { location } => {
                 write!(f, "variable introduced in then statement\n")?;
