@@ -932,35 +932,35 @@ rule semantic_type_scope_extension {
     then semantic_type(larger, ident) = typ;
 }
 
-func arity(Rel) -> TypeList;
-rule arity_laws {
+func dep_arity(Rel) -> TypeList;
+rule dep_arity_laws {
     if rel: Rel;
     match rel {
         PredRel(predicate) => {
             if tys = pred_arity(predicate);
-            then arity(rel) = tys;
+            then dep_arity(rel) = tys;
         }
         FuncRel(function) => {
             if dom = domain(function);
             if cod = codomain(function);
             then tys := SnocTypeList(dom, cod)!;
-            then arity(rel) = tys;
+            then dep_arity(rel) = tys;
         }
     }
 }
 
-func flat_arity(Rel) -> TypeList;
+func arity(Rel) -> TypeList;
 func flat_domain(Func) -> TypeList;
 
-rule top_level_flat_arity_law {
+rule top_level_arity_law {
     if ss = rel_definition_symbol_scope(rel);
     branch {
         if ss = module_symbol_scope(_);
     } along {
         if ss = virtual_symbol_scope();
     }
-    if ar = arity(rel);
-    then flat_arity(rel) = ar;
+    if ar = dep_arity(rel);
+    then arity(rel) = ar;
 }
 rule top_level_flat_domain_law {
     if ss = rel_definition_symbol_scope(FuncRel(function));
@@ -972,12 +972,12 @@ rule top_level_flat_domain_law {
     if d = domain(function);
     then flat_domain(function) = d;
 }
-rule member_flat_arity_law {
+rule member_arity_law {
     if ss = rel_definition_symbol_scope(rel);
     if model_ty = symbol_scope_model(ss);
-    if ar = arity(rel);
+    if ar = dep_arity(rel);
     then cons_ar := ConsTypeList(model_ty, ar)!;
-    then flat_arity(rel) = cons_ar;
+    then arity(rel) = cons_ar;
 }
 rule member_flat_domain_law {
     if ss = rel_definition_symbol_scope(FuncRel(function));
@@ -1147,7 +1147,7 @@ rule snoc_el_types_reverse {
 
 rule rel_app_types {
     if rel_app(rel, els);
-    if ambient_el_type_list(arity(rel)) = tys;
+    if ambient_el_type_list(dep_arity(rel)) = tys;
     then el_types(els, tys);
 }
 

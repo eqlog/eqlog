@@ -20,9 +20,9 @@ pub enum FlatInRel {
 impl FlatInRel {
     pub fn arity(&self, eqlog: &Eqlog) -> Vec<Type> {
         match self {
-            FlatInRel::EqlogRel(rel) => type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog),
+            FlatInRel::EqlogRel(rel) => type_list_vec(eqlog.arity(*rel).unwrap(), eqlog),
             FlatInRel::EqlogRelWithDiagonals { rel, equalities } => {
-                let arity = type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog);
+                let arity = type_list_vec(eqlog.arity(*rel).unwrap(), eqlog);
                 assert_eq!(equalities.len(), arity.len());
 
                 arity
@@ -74,7 +74,7 @@ pub enum FlatOutRel {
 impl FlatOutRel {
     pub fn arity(&self, eqlog: &Eqlog) -> Vec<Type> {
         match self {
-            FlatOutRel::EqlogRel(rel) => type_list_vec(eqlog.flat_arity(*rel).unwrap(), eqlog),
+            FlatOutRel::EqlogRel(rel) => type_list_vec(eqlog.arity(*rel).unwrap(), eqlog),
             FlatOutRel::Equality(typ) => {
                 vec![*typ, *typ]
             }

@@ -357,7 +357,7 @@ fn display_pub_predicate_holds_fn<'a>(
         let relation_snake = display_rel(rel, eqlog, identifiers)
             .to_string()
             .to_case(Snake);
-        let arity_types: Vec<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_types: Vec<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
         let arity_camel: Vec<String> = arity_types
             .iter()
             .map(|&typ| {
@@ -553,7 +553,7 @@ fn display_pub_iter_fn<'a>(
             .to_string()
             .to_case(Snake);
         let rel_snake = rel_snake.as_str();
-        let arity_tys: Vec<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_tys: Vec<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
         let arity_tys = &arity_tys;
         let arity: Vec<String> = arity_tys
             .iter()
@@ -773,7 +773,7 @@ fn display_pub_insert_relation<'a>(
             .to_case(Snake);
         let rel_snake = rel_snake.as_str();
 
-        let arity_types = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity_types = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
         let arity_camel: Vec<String> = arity_types
             .iter()
             .map(|&typ| {
@@ -1407,7 +1407,7 @@ fn display_canonicalize_rel_block<'a>(
             .to_string()
             .to_case(Snake);
 
-        let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+        let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
         let arity_len = arity.len();
         let types: BTreeSet<_> = arity.iter().copied().collect();
         let row_args: Vec<ElVar> = (0..arity.len()).map(ElVar::from).collect();
@@ -1638,7 +1638,7 @@ fn display_canonicalize_fn<'a>(
 
 fn display_rel_row_type<'a>(rel: Rel, eqlog: &'a Eqlog) -> impl 'a + Display {
     FmtFn(move |f| {
-        let arity_len = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
+        let arity_len = type_list_vec(eqlog.arity(rel).unwrap(), eqlog).len();
         write!(f, "[u32; {arity_len}]")
     })
 }
@@ -1864,7 +1864,7 @@ fn display_model_delta_apply_tuples_fn<'a>(
             .iter_rel()
             .map(|rel| {
                 FmtFn(move |f| {
-                    let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+                    let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
                     let rel_snake = display_rel(rel, eqlog, identifiers)
                         .to_string()
                         .to_case(Snake);
@@ -2414,7 +2414,7 @@ fn display_new_fn<'a>(
             }
         }
         for rel in eqlog.iter_rel() {
-            let type_set: BTreeSet<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+            let type_set: BTreeSet<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
                 .into_iter()
                 .collect();
             for typ in type_set {
@@ -2665,7 +2665,7 @@ fn display_weight_static<'a>(
     FmtFn(move |f| {
         let static_name = display_weight_static_name(rel, eqlog, identifiers);
 
-        let el_lookup_weight = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog).len();
+        let el_lookup_weight = type_list_vec(eqlog.arity(rel).unwrap(), eqlog).len();
 
         let relevant_indices: BTreeSet<(FlatInRel, IndexSpec)> = index_selection
             .iter()
@@ -2745,7 +2745,7 @@ fn display_theory_struct<'a>(
         let element_index_fields = eqlog
             .iter_rel()
             .map(|rel| {
-                let arity: Vec<Type> = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog)
+                let arity: Vec<Type> = type_list_vec(eqlog.arity(rel).unwrap(), eqlog)
                     .into_iter()
                     .collect();
                 let arity_len = arity.len();
@@ -2874,7 +2874,7 @@ fn display_theory_impl<'a>(
 
         for pred in eqlog.iter_pred() {
             let rel = eqlog.pred_rel(pred).unwrap();
-            let arity = type_list_vec(eqlog.flat_arity(rel).unwrap(), eqlog);
+            let arity = type_list_vec(eqlog.arity(rel).unwrap(), eqlog);
             let arity: Vec<String> = arity
                 .into_iter()
                 .map(|typ| display_type(typ, eqlog, identifiers).to_string())
