@@ -1,0 +1,15 @@
+// Deactivated at the moment because x is inferred to have conflicting
+// types ("S" and "s_0.S") due to `arity` not being aware of dependent
+// types.
+
+model Set {
+    type S;
+}
+
+rule set_mors_are_total {
+    if f: Mor(Set);
+    if s_0 = dom(f);
+    if x: s_0.S;
+    if cod(f)!;
+    then f@(x)!;
+}
