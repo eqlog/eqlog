@@ -207,14 +207,14 @@ pub fn iter_variable_occurs_twice<'a>(
 }
 
 fn element_type_to_string<'a>(
-    typ: ElementType,
+    typ: DepType,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
     _locations: &'a BTreeMap<Loc, Location>,
 ) -> String {
-    match eqlog.element_type_case(typ) {
-        ElementTypeCase::AmbientType(typ) => display_type(typ, eqlog, identifiers).to_string(),
-        ElementTypeCase::InstantiatedType(el, typ) => {
+    match eqlog.dep_type_case(typ) {
+        DepTypeCase::AmbientType(typ) => display_type(typ, eqlog, identifiers).to_string(),
+        DepTypeCase::InstantiatedType(el, typ) => {
             let typ = display_type(typ, eqlog, identifiers).to_string();
 
             let name = match eqlog
@@ -257,7 +257,7 @@ pub fn iter_conflicting_type_errors<'a>(
     identifiers: &'a BTreeMap<Ident, String>,
     locations: &'a BTreeMap<Loc, Location>,
 ) -> impl 'a + Iterator<Item = CompileError> {
-    let mut el_types: BTreeMap<El, Vec<ElementType>> = BTreeMap::new();
+    let mut el_types: BTreeMap<El, Vec<DepType>> = BTreeMap::new();
     for (el, ty) in eqlog.iter_el_type() {
         let tys = el_types.entry(el).or_default();
         if !tys.contains(&ty) {

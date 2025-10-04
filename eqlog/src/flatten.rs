@@ -131,8 +131,8 @@ fn flatten_if_arbitrary(
         let age = QueryAge::All;
         let el_type = el_type(el, eqlog).unwrap();
 
-        let if_stmt = match eqlog.element_type_case(el_type) {
-            ElementTypeCase::AmbientType(typ) => {
+        let if_stmt = match eqlog.dep_type_case(el_type) {
+            DepTypeCase::AmbientType(typ) => {
                 let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
                 let el_struct = eqlog.el_structure(el).unwrap();
                 let model_el = eqlog.ambient_model_el(typ_def_sym_scope, el_struct);
@@ -159,7 +159,7 @@ fn flatten_if_arbitrary(
                     }
                 }
             }
-            ElementTypeCase::InstantiatedType(model_el, typ) => {
+            DepTypeCase::InstantiatedType(model_el, typ) => {
                 let parent_var = el_vars.get(&model_el).unwrap().clone();
                 let rel: Rel = eqlog
                     .func_rel(eqlog.parent_model_func(typ).unwrap())

@@ -130,7 +130,7 @@ pub fn iter_in_ker<'a>(
     })
 }
 
-pub fn el_type(el: El, eqlog: &Eqlog) -> Option<ElementType> {
+pub fn el_type(el: El, eqlog: &Eqlog) -> Option<DepType> {
     eqlog.iter_el_type().find_map(|(e, t)| {
         if eqlog.are_equal_el(e, el) {
             Some(t)

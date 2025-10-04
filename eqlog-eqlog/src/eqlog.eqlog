@@ -1071,7 +1071,7 @@ rule var_structure {
 
 // ### Symbol access/instantiation
 
-enum ElementType {
+enum DepType {
     AmbientType(Type),
     InstantiatedType(El, Type)
 }
@@ -1081,92 +1081,92 @@ rule ambient_type_total {
     then AmbientType(ty)!;
 }
 
-func underlying_type(ElementType) -> Type;
+func underlying_type(DepType) -> Type;
 rule underlying_type_law {
-    if el_type: ElementType;
-    match el_type {
+    if dep_type: DepType;
+    match dep_type {
         AmbientType(typ) => {
-            then underlying_type(el_type) = typ;
+            then underlying_type(dep_type) = typ;
         }
         InstantiatedType(_, typ) => {
-            then underlying_type(el_type) = typ;
+            then underlying_type(dep_type) = typ;
         }
     }
 }
 
-enum ElementTypeList {
-    NilElementTypeList(),
-    ConsElementTypeList(head: ElementType, tail: ElementTypeList),
-    SnocElementTypeList(init: ElementTypeList, last: ElementType)
+enum DepTypeList {
+    NilDepTypeList(),
+    ConsDepTypeList(head: DepType, tail: DepTypeList),
+    SnocDepTypeList(init: DepTypeList, last: DepType)
 }
 
-func ambient_el_type_list(TypeList) -> ElementTypeList;
-rule ambient_el_type_list_nil {
+func ambient_dep_type_list(TypeList) -> DepTypeList;
+rule ambient_dep_type_list_nil {
     if tys = NilTypeList();
-    then el_tys := NilElementTypeList()!;
-    then ambient_el_type_list(tys) = el_tys;
+    then dep_tys := NilDepTypeList()!;
+    then ambient_dep_type_list(tys) = dep_tys;
 }
-rule ambient_el_type_list_cons {
+rule ambient_dep_type_list_cons {
     if tys = ConsTypeList(head_type, tail_types);
-    if tail_el_types = ambient_el_type_list(tail_types);
-    if head_el_type = AmbientType(head_type);
-    then el_tys := ConsElementTypeList(head_el_type, tail_el_types)!;
-    then ambient_el_type_list(tys) = el_tys;
+    if tail_dep_types = ambient_dep_type_list(tail_types);
+    if head_dep_type = AmbientType(head_type);
+    then dep_tys := ConsDepTypeList(head_dep_type, tail_dep_types)!;
+    then ambient_dep_type_list(tys) = dep_tys;
 }
-rule ambient_el_type_list_snoc {
+rule ambient_dep_type_list_snoc {
     if tys = SnocTypeList(init_types, last_type);
-    if init_el_types = ambient_el_type_list(init_types);
-    if last_el_type = AmbientType(last_type);
-    then el_tys := SnocElementTypeList(init_el_types, last_el_type)!;
-    then ambient_el_type_list(tys) = el_tys;
+    if init_dep_types = ambient_dep_type_list(init_types);
+    if last_dep_type = AmbientType(last_type);
+    then dep_tys := SnocDepTypeList(init_dep_types, last_dep_type)!;
+    then ambient_dep_type_list(tys) = dep_tys;
 }
 
 // ### The types of elements
-pred el_type(El, ElementType);
-pred el_types(ElList, ElementTypeList);
+pred el_type(El, DepType);
+pred el_types(ElList, DepTypeList);
 
-rule nil_el_types {
+rule nil_dep_types {
     if els = NilElList(_);
-    then tys := NilElementTypeList()!;
+    then tys := NilDepTypeList()!;
     then el_types(els, tys);
 }
-rule cons_el_types {
+rule cons_dep_types {
     if els = ConsElList(head, tail);
     if el_type(head, head_type);
     if el_types(tail, tail_types);
-    then tys := ConsElementTypeList(head_type, tail_types)!;
+    then tys := ConsDepTypeList(head_type, tail_types)!;
     then el_types(els, tys);
 }
-rule cons_el_types_reverse {
+rule cons_dep_types_reverse {
     if els = ConsElList(head, tail);
-    if el_types(els, ConsElementTypeList(head_type, tail_types));
+    if el_types(els, ConsDepTypeList(head_type, tail_types));
     then el_type(head, head_type);
     then el_types(tail, tail_types);
 }
 
-rule snoc_el_types {
+rule snoc_dep_types {
     if els = SnocElList(init, last);
     if el_types(init, init_types);
     if el_type(last, last_type);
-    then tys := SnocElementTypeList(init_types, last_type)!;
+    then tys := SnocDepTypeList(init_types, last_type)!;
     then el_types(els, tys);
 }
-rule snoc_el_types_reverse {
+rule snoc_dep_types_reverse {
     if els = SnocElList(init, last);
-    if el_types(els, SnocElementTypeList(init_types, last_type));
+    if el_types(els, SnocDepTypeList(init_types, last_type));
     then el_types(init, init_types);
     then el_type(last, last_type);
 }
 
 rule rel_app_dep_types {
     if rel_app_dep(rel, els);
-    if ambient_el_type_list(dep_arity(rel)) = tys;
+    if ambient_dep_type_list(dep_arity(rel)) = tys;
     then el_types(els, tys);
 }
 
 rule rel_app_types {
     if rel_app(rel, els);
-    if ambient_el_type_list(arity(rel)) = tys;
+    if ambient_dep_type_list(arity(rel)) = tys;
     then el_types(els, tys);
 }
 
@@ -1275,23 +1275,23 @@ rule map_rel_app_dep {
 }
 
 // Morphisms preserve and reflect types.
-rule map_preserves_el_type {
-    if el_type(el, el_typ);
+rule map_preserves_dep_type {
+    if el_type(el, dep_typ);
     if mapped_el = map_el(morph, el);
-    match el_typ {
+    match dep_typ {
         AmbientType(typ) => {
             then el_type(mapped_el, AmbientType(typ));
         }
         InstantiatedType(model_el, local_typ) => {
             if mapped_model_el = map_el(morph, model_el);
-            then mapped_el_typ := InstantiatedType(mapped_model_el, local_typ)!;
-            then el_type(mapped_el, mapped_el_typ);
+            then mapped_dep_typ := InstantiatedType(mapped_model_el, local_typ)!;
+            then el_type(mapped_el, mapped_dep_typ);
         }
     }
 }
-rule map_reflects_el_type {
-    if el_type(map_el(_, el), mapped_el_typ);
-    match mapped_el_typ {
+rule map_reflects_dep_type {
+    if el_type(map_el(_, el), mapped_dep_typ);
+    match mapped_dep_typ {
         AmbientType(typ) => {
             then el_type(el, AmbientType(typ));
         }
@@ -1492,8 +1492,8 @@ rule model_symbol_scope_law {
 // The symbol scope that can be accessd via an element of model type.
 pred element_member_symbol_scope(El, SymbolScope);
 rule element_member_symbol_scope_laws {
-    if el_type(el, el_type);
-    if typ = underlying_type(el_type);
+    if el_type(el, dep_type);
+    if typ = underlying_type(dep_type);
     if sym_scope = model_member_symbol_scope(typ);
     then element_member_symbol_scope(el, sym_scope);
 }
@@ -1663,8 +1663,8 @@ rule var_atom_should_be_type_ambient {
 rule var_atom_should_be_type_member {
     if var_if_atom_node(atom, _, type_expr);
     if member_type_expr(type_expr, tm, name);
-    if el_type(semantic_el(tm, _), tm_el_type);
-    if tm_typ = underlying_type(tm_el_type);
+    if el_type(semantic_el(tm, _), tm_dep_type);
+    if tm_typ = underlying_type(tm_dep_type);
     if member_scope = model_member_symbol_scope(tm_typ);
     if type_kind = TypeSymbol();
     if enum_kind = EnumSymbol();
@@ -1681,8 +1681,8 @@ rule ambient_pred_expr_should_be_symbol {
 }
 rule member_pred_expr_should_be_symbol {
     if member_pred_expr(pred_expr, tm, pred_name);
-    if el_type(semantic_el(tm, _), tm_el_type);
-    if tm_typ = underlying_type(tm_el_type);
+    if el_type(semantic_el(tm, _), tm_dep_type);
+    if tm_typ = underlying_type(tm_dep_type);
     if member_scope = model_member_symbol_scope(tm_typ);
     if pred_kind = PredSymbol();
     if loc = pred_expr_node_loc(pred_expr);
@@ -1698,8 +1698,8 @@ rule ambient_func_expr_should_be_symbol {
 }
 rule member_func_expr_should_be_symbol {
     if member_func_expr(func_expr, tm, func_name);
-    if el_type(semantic_el(tm, _), tm_el_type);
-    if tm_typ = underlying_type(tm_el_type);
+    if el_type(semantic_el(tm, _), tm_dep_type);
+    if tm_typ = underlying_type(tm_dep_type);
     if member_scope = model_member_symbol_scope(tm_typ);
     if func_kind = FuncSymbol();
     if loc = func_expr_node_loc(func_expr);
@@ -1772,9 +1772,9 @@ rule semantic_ambient_pred_expr_rule {
 }
 rule semantic_member_pred_expr_rule {
     if member_pred_expr(pred_expr, tm, name);
-    if el_type(semantic_el(tm, _), tm_el_type);
+    if el_type(semantic_el(tm, _), tm_dep_type);
 
-    if tm_typ = underlying_type(tm_el_type);
+    if tm_typ = underlying_type(tm_dep_type);
     if ss = model_member_symbol_scope(tm_typ);
     if p = semantic_pred(ss, name);
     then semantic_pred_expr(pred_expr) = p;
@@ -1789,8 +1789,8 @@ rule semantic_ambient_func_expr_rule {
 }
 rule semantic_member_func_expr_rule {
     if member_func_expr(func_expr, tm, name);
-    if el_type(semantic_el(tm, _), tm_el_type);
-    if tm_typ = underlying_type(tm_el_type);
+    if el_type(semantic_el(tm, _), tm_dep_type);
+    if tm_typ = underlying_type(tm_dep_type);
     if ss = model_member_symbol_scope(tm_typ);
     if f = semantic_func(ss, name);
     then semantic_func_expr(func_expr) = f;
@@ -1968,8 +1968,8 @@ rule ambient_model_el_parent_law {
     if el = ambient_model_el(ss, ams);
     if parent_el = ambient_model_el(symbol_scope_parent(ss), ams);
 
-    if el_typ = symbol_scope_model(ss);
-    if parent_func = parent_model_func(el_typ);
+    if dep_typ = symbol_scope_model(ss);
+    if parent_func = parent_model_func(dep_typ);
     if parent_rel = FuncRel(parent_func);
     then nil := NilElList(ams)!;
     then parent_el_nil := ConsElList(parent_el, nil)!;
@@ -2284,11 +2284,11 @@ rule ambient_model_el_struct {
 }
 
 // #### Types of ambient model els
-rule ambient_model_el_type {
+rule ambient_model_dep_type {
     if el = ambient_model_el(member_scope, _);
     if model_type = symbol_scope_model(member_scope);
-    if model_el_type = AmbientType(model_type);
-    then el_type(el, model_el_type);
+    if model_dep_type = AmbientType(model_type);
+    then el_type(el, model_dep_type);
 }
 
 pred dom_must_be_applied_to_mor_type(Type, Loc);
@@ -2297,7 +2297,7 @@ pred cod_must_be_applied_to_mor_type(Type, Loc);
 pred cod_must_result_in_model_type(Type, Loc);
 
 // #### Types of dom and cod terms.
-rule dom_el_type_down {
+rule dom_dep_type_down {
     // The conclusion from the type of a term `dom(f)` to the type of `f`.
     if dom_term_node(dom_term, mor_term);
     if loc = term_node_loc(dom_term);
@@ -2318,7 +2318,7 @@ rule dom_el_type_down {
         }
     }
 }
-rule cod_el_type_down {
+rule cod_dep_type_down {
     // The conclusion from the type of a term `cod(f)` to the type of `f`.
     if cod_term_node(cod_term, mor_term);
     if loc = term_node_loc(cod_term);
@@ -2339,7 +2339,7 @@ rule cod_el_type_down {
         }
     }
 }
-rule dom_el_type_up {
+rule dom_dep_type_up {
     // The conclusion from the type of a term `f` to the type of `dom(f)`.
     if dom_term_node(dom_term, mor_term);
     if loc = term_node_loc(dom_term);
@@ -2349,9 +2349,9 @@ rule dom_el_type_up {
         AmbientType(typ) => {
             then dom_must_be_applied_to_mor_type(typ, loc);
             if typ = mor_type(model_type);
-            if model_el_type = AmbientType(model_type);
+            if model_dep_type = AmbientType(model_type);
             if dom_el = semantic_el(dom_term, structure);
-            then el_type(dom_el, model_el_type);
+            then el_type(dom_el, model_dep_type);
         }
         InstantiatedType(_, member_type) => {
             // At the moment, this is necessarily an error, since model types
@@ -2360,7 +2360,7 @@ rule dom_el_type_up {
         }
     }
 }
-rule cod_el_type_up {
+rule cod_dep_type_up {
     // The conclusion from the type of a term `f` to the type of `cod(f)`.
     if cod_term_node(cod_term, mor_term);
     if loc = term_node_loc(cod_term);
@@ -2370,9 +2370,9 @@ rule cod_el_type_up {
         AmbientType(typ) => {
             then cod_must_be_applied_to_mor_type(typ, loc);
             if typ = mor_type(model_type);
-            if model_el_type = AmbientType(model_type);
+            if model_dep_type = AmbientType(model_type);
             if cod_el = semantic_el(cod_term, structure);
-            then el_type(cod_el, model_el_type);
+            then el_type(cod_el, model_dep_type);
         }
         InstantiatedType(_, member_type) => {
             // At the moment, this is necessarily an error, since model types
@@ -2515,8 +2515,8 @@ rule mor_app_term_semantics {
     if mor_el = semantic_el(mor_term, structure);
     if arg_el = semantic_el(arg_term, structure);
     
-    if el_type(arg_el, arg_el_type);
-    if arg_type = underlying_type(arg_el_type);
+    if el_type(arg_el, arg_dep_type);
+    if arg_type = underlying_type(arg_dep_type);
     
     if app_func = mor_app_func(arg_type);
     if app_func_rel = FuncRel(app_func);
@@ -2579,18 +2579,18 @@ rule var_if_atom_semantics_ambient {
     if var_if_atom_node(atom, var_term, type_expr);
     if ambient_type_expr(type_expr, type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if el_typ = AmbientType(semantic_type(ss, type_name));
+    if dep_typ = AmbientType(semantic_type(ss, type_name));
     if var_el = semantic_el(var_term, _);
-    then el_type(var_el, el_typ);
+    then el_type(var_el, dep_typ);
 }
 rule var_if_atom_semantics_morphism {
     if var_if_atom_node(atom, var_term, type_expr);
     if mor_type_expr(type_expr, model_type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if model_type = semantic_type(ss, model_type_name);
-    if el_typ = AmbientType(mor_type(model_type));
+    if dep_typ = AmbientType(mor_type(model_type));
     if var_el = semantic_el(var_term, _);
-    then el_type(var_el, el_typ);
+    then el_type(var_el, dep_typ);
 }
 rule var_if_atom_semantics_member {
     if var_if_atom_node(_, var_term, type_expr);
@@ -2601,8 +2601,8 @@ rule var_if_atom_semantics_member {
 
     if element_member_symbol_scope(model_el, member_ss);
     if member_type = semantic_type(member_ss, type_name);
-    then el_typ := InstantiatedType(model_el, member_type)!;
-    then el_type(var_el, el_typ);
+    then dep_typ := InstantiatedType(model_el, member_type)!;
+    then el_type(var_el, dep_typ);
 }
 
 // #### Semantics of then atoms
