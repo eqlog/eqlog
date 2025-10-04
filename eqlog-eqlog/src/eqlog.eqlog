@@ -1038,7 +1038,8 @@ rule snoc_cons_to_cons_snoc {
     then els = ConsElList(first, tail);
 }
 
-pred rel_app_dep(Rel, ElList);
+pred dep_pred_app(predicate: Pred, ElList);
+func dep_func_app(function: Func, args: ElList) -> El;
 pred rel_app(Rel, ElList);
 
 type ElName;
@@ -1158,25 +1159,30 @@ rule snoc_dep_types_reverse {
     then el_type(last, last_type);
 }
 
-rule rel_app_dep_types {
-    if rel_app_dep(rel, els);
-    if ambient_dep_type_list(dep_arity(rel)) = tys;
+rule dep_pred_app_types {
+    if dep_pred_app(predicate, els);
+    if ambient_dep_type_list(pred_arity(predicate)) = tys;
     then el_types(els, tys);
 }
 
-rule rel_app_types {
-    if rel_app(rel, els);
-    if ambient_dep_type_list(arity(rel)) = tys;
-    then el_types(els, tys);
+rule dep_func_app_domain_types {
+    if dep_func_app(function, args)!;
+    if ambient_dep_type_list(domain(function)) = tys;
+    then el_types(args, tys);
 }
 
-// This is only used from Rust. If it's removed we need to
-// add an explicit functionality law for rel_app of
-// FuncRel relations though.
+rule dep_func_app_codomain_type {
+    if dep_func_app(function, _) = result;
+    if GlobalType(codomain(function)) = codomain_type;
+    then el_type(result, codomain_type);
+}
+
 func func_app(function: Func, args: ElList) -> El;
-rule rel_app_func_app {
-    if rel_app(FuncRel(function), SnocElList(args, result));
-    then result = func_app(function, args);
+rule func_app_to_rel_app {
+    if func_app(function, args) = result;
+    if func_rel = FuncRel(function);
+    then rel_args := SnocElList(args, result)!;
+    then rel_app(func_rel, rel_args);
 }
 
 // ### Constrained elements
@@ -1268,14 +1274,20 @@ rule map_rel_app {
     if mapped_args = map_els(_, args);
     then rel_app(rel, mapped_args);
 }
-rule map_rel_app_dep {
-    if rel_app_dep(rel, args);
+rule map_dep_pred_app {
+    if dep_pred_app(predicate, args);
     if mapped_args = map_els(_, args);
-    then rel_app_dep(rel, mapped_args);
+    then dep_pred_app(predicate, mapped_args);
+}
+rule map_dep_func_app {
+    if dep_func_app(function, args) = result;
+    if mapped_args = map_els(_, args);
+    if mapped_result = map_el(_, result);
+    then dep_func_app(function, mapped_args) = mapped_result;
 }
 
 // Morphisms preserve and reflect types.
-rule map_preserves_dep_type {
+rule map_preserves_el_type {
     if el_type(el, dep_typ);
     if mapped_el = map_el(morph, el);
     match dep_typ {
@@ -2535,9 +2547,7 @@ rule app_term_semantics {
     if result_el = semantic_el(result_term, structure);
     if func_arg_els = semantic_els(arg_terms, structure);
     if f = semantic_func_expr(func_expr);
-    if func_rel = FuncRel(f);
-    then rel_arg_els := SnocElList(func_arg_els, result_el)!;
-    then rel_app_dep(func_rel, rel_arg_els);
+    then dep_func_app(f, func_arg_els) = result_el;
 }
 
 rule var_term_semantics {
@@ -2571,9 +2581,8 @@ rule equal_if_atom_semantics {
 rule pred_if_atom_semantics {
     if pred_if_atom_node(_, pred_expr, arg_terms);
     if p = semantic_pred_expr(pred_expr);
-    if rel = PredRel(p);
     if arg_els = semantic_els(arg_terms, _);
-    then rel_app_dep(rel, arg_els);
+    then dep_pred_app(p, arg_els);
 }
 rule var_if_atom_semantics_ambient {
     if var_if_atom_node(atom, var_term, type_expr);
@@ -2622,32 +2631,48 @@ rule defined_then_atom_semantics {
 rule pred_then_atom_semantics {
     if pred_then_atom_node(_, pred_expr, arg_terms);
     if p = semantic_pred_expr(pred_expr);
-    if rel = PredRel(p);
     if arg_els = semantic_els(arg_terms, _);
-    then rel_app_dep(rel, arg_els);
+    then dep_pred_app(p, arg_els);
 }
 
-// ### Converting between rel_app_dep and rel_app
+// ### Lowering dependent applications to non-dependent ones
+//
 // For member relations, rel_app includes the parent model element as the first argument
-// For top-level relations, rel_app and rel_app_dep are the same
+// For global relations, rel_app and dep_pred_app/dep_func_app are the same
 
-// If the relation is global, then rel_app_dep is equivalent to rel_app.
-rule rel_app_dep_to_rel_app_top_level {
-    if rel_app_dep(rel, args);
-    if module_symbol_scope(_) = rel_definition_symbol_scope(rel);
-    then rel_app(rel, args);
+// If the relation is global, then dep_pred_app and dep_func_app are equivalent to the non-dependent version.
+rule dep_pred_app_to_rel_app_global {
+    if dep_pred_app(predicate, args);
+    if pred_rel = PredRel(predicate);
+    if module_symbol_scope(_) = rel_definition_symbol_scope(pred_rel);
+    then rel_app(pred_rel, args);
+}
+rule dep_func_app_to_rel_app_top_level {
+    if dep_func_app(function, args) = result;
+    if module_symbol_scope(_) = rel_definition_symbol_scope(FuncRel(function));
+    then func_app(function, args) = result;
 }
 
 // For member relations in an ambient model scope, the first argument to
 // the underlying non-dependent relation is the the ambient model el
 // ("self" in Rust).
-rule rel_app_dep_to_rel_app_ambient_member {
-    if rel_app_dep(rel, dep_args);
+rule dep_pred_app_to_rel_app_ambient_member {
+    if dep_pred_app(predicate, dep_args);
+    if pred_rel = PredRel(predicate);
     if structure = els_structure(dep_args);
-    if ss = rel_definition_symbol_scope(rel);
+    if ss = rel_definition_symbol_scope(pred_rel);
     if parent_el = ambient_model_el(ss, structure);
     then full_args := ConsElList(parent_el, dep_args)!;
-    then rel_app(rel, full_args);
+    then rel_app(pred_rel, full_args);
+}
+rule dep_func_app_to_rel_app_ambient_member {
+    if dep_func_app(function, dep_args) = result;
+    if func_rel = FuncRel(function);
+    if structure = els_structure(dep_args);
+    if ss = rel_definition_symbol_scope(func_rel);
+    if parent_el = ambient_model_el(ss, structure);
+    then full_args := ConsElList(parent_el, dep_args)!;
+    then func_app(function, full_args) = result;
 }
 
 // TODO: Need to deal with PredExprs.
