@@ -1026,6 +1026,19 @@ rule el_list_snoc_nil {
     then absurd();
 }
 
+rule cons_snoc_to_snoc_cons {
+    if els = ConsElList(first, SnocElList(middle, last));
+    then init := ConsElList(first, middle)!;
+    then els = SnocElList(init, last);
+}
+
+rule snoc_cons_to_cons_snoc {
+    if els = SnocElList(ConsElList(first, middle), last);
+    then tail := SnocElList(middle, last)!;
+    then els = ConsElList(first, tail);
+}
+
+pred rel_app_dep(Rel, ElList);
 pred rel_app(Rel, ElList);
 
 type ElName;
@@ -1145,9 +1158,15 @@ rule snoc_el_types_reverse {
     then el_type(last, last_type);
 }
 
+rule rel_app_dep_types {
+    if rel_app_dep(rel, els);
+    if ambient_el_type_list(dep_arity(rel)) = tys;
+    then el_types(els, tys);
+}
+
 rule rel_app_types {
     if rel_app(rel, els);
-    if ambient_el_type_list(dep_arity(rel)) = tys;
+    if ambient_el_type_list(arity(rel)) = tys;
     then el_types(els, tys);
 }
 
@@ -1248,6 +1267,11 @@ rule map_rel_app {
     if rel_app(rel, args);
     if mapped_args = map_els(_, args);
     then rel_app(rel, mapped_args);
+}
+rule map_rel_app_dep {
+    if rel_app_dep(rel, args);
+    if mapped_args = map_els(_, args);
+    then rel_app_dep(rel, mapped_args);
 }
 
 // Morphisms preserve and reflect types.
@@ -2513,10 +2537,7 @@ rule app_term_semantics {
     if f = semantic_func_expr(func_expr);
     if func_rel = FuncRel(f);
     then rel_arg_els := SnocElList(func_arg_els, result_el)!;
-    then rel_app(func_rel, rel_arg_els);
-    if member_func_expr(func_expr, model_tm, _);
-    if model_el = semantic_el(model_tm, structure);
-    then rel_app_parent_model_el(func_rel, rel_arg_els) = model_el;
+    then rel_app_dep(func_rel, rel_arg_els);
 }
 
 rule var_term_semantics {
@@ -2551,11 +2572,8 @@ rule pred_if_atom_semantics {
     if pred_if_atom_node(_, pred_expr, arg_terms);
     if p = semantic_pred_expr(pred_expr);
     if rel = PredRel(p);
-    if arg_els = semantic_els(arg_terms, strct);
-    then rel_app(rel, arg_els);
-    if member_pred_expr(pred_expr, model_tm, _);
-    if model_el = semantic_el(model_tm, strct);
-    then rel_app_parent_model_el(rel, arg_els) = model_el;
+    if arg_els = semantic_els(arg_terms, _);
+    then rel_app_dep(rel, arg_els);
 }
 rule var_if_atom_semantics_ambient {
     if var_if_atom_node(atom, var_term, type_expr);
@@ -2605,25 +2623,34 @@ rule pred_then_atom_semantics {
     if pred_then_atom_node(_, pred_expr, arg_terms);
     if p = semantic_pred_expr(pred_expr);
     if rel = PredRel(p);
-    if arg_els = semantic_els(arg_terms, strct);
-    then rel_app(rel, arg_els);
-    if member_pred_expr(pred_expr, model_tm, _);
-    if model_el = semantic_el(model_tm, strct);
-    then rel_app_parent_model_el(rel, arg_els) = model_el;
+    if arg_els = semantic_els(arg_terms, _);
+    then rel_app_dep(rel, arg_els);
 }
 
-// ### Implicit parent els in rel apps
-func rel_app_parent_model_el(rel: Rel, args: ElList) -> El;
-rule rel_app_parent_model_el_ambient_law {
-    if rel_app(rel, args);
-    if structure = els_structure(args);
-    if ss = rel_definition_symbol_scope(rel);
-    //     ambient_model_el(ss, structure) is defined
-    // <=> ss is the member symbol scope of an ambient model
-    // <=> rel is a member of an ambient model
-    if el = ambient_model_el(ss, structure);
-    then rel_app_parent_model_el(rel, args) = el;
+// ### Converting between rel_app_dep and rel_app
+// For member relations, rel_app includes the parent model element as the first argument
+// For top-level relations, rel_app and rel_app_dep are the same
+
+// If the relation is global, then rel_app_dep is equivalent to rel_app.
+rule rel_app_dep_to_rel_app_top_level {
+    if rel_app_dep(rel, args);
+    if module_symbol_scope(_) = rel_definition_symbol_scope(rel);
+    then rel_app(rel, args);
 }
+
+// For member relations in an ambient model scope, the first argument to
+// the underlying non-dependent relation is the the ambient model el
+// ("self" in Rust).
+rule rel_app_dep_to_rel_app_ambient_member {
+    if rel_app_dep(rel, dep_args);
+    if structure = els_structure(dep_args);
+    if ss = rel_definition_symbol_scope(rel);
+    if parent_el = ambient_model_el(ss, structure);
+    then full_args := ConsElList(parent_el, dep_args)!;
+    then rel_app(rel, full_args);
+}
+
+// TODO: Need to deal with PredExprs.
 
 // ## Epic check
 

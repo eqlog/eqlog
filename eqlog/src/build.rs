@@ -438,6 +438,7 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         .to_case(Case::Snake);
     let module_out_path = module_out_path(in_file, config);
 
+    println!("Reading {}", in_file.display());
     let source = fs::read_to_string(config.in_dir.join(in_file))
         .with_context(|| format!("Reading file {}", in_file.display()))?;
 

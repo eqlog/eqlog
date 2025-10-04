@@ -113,12 +113,10 @@ fn flatten_if_arbitrary(
             continue;
         }
 
-        let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, els);
         let els_vec: Vec<El> = el_list_vec(els, eqlog);
-        let args: Vec<FlatVar> = model_el
-            .into_iter()
-            .chain(els_vec)
-            .map(|el| el_vars.get(&el).unwrap().clone())
+        let args: Vec<FlatVar> = els_vec
+            .iter()
+            .map(|el| el_vars.get(el).unwrap().clone())
             .collect();
 
         let age = QueryAge::All;
@@ -211,12 +209,10 @@ fn flatten_surj_then(
             continue;
         }
 
-        let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, els);
         let els_vec: Vec<El> = el_list_vec(els, eqlog);
-        let args: Vec<FlatVar> = model_el
-            .into_iter()
-            .chain(els_vec)
-            .map(|el| el_vars.get(&el).unwrap().clone())
+        let args: Vec<FlatVar> = els_vec
+            .iter()
+            .map(|el| el_vars.get(el).unwrap().clone())
             .collect();
 
         let rel = FlatOutRel::EqlogRel(rel);
@@ -290,13 +286,10 @@ fn flatten_non_surj_then(
     );
 
     let rel = eqlog.func_rel(func).unwrap();
-    let rel_arg_els = eqlog.snoc_el_list(func_arg_els, new_el).unwrap();
-    let model_el: Option<El> = eqlog.rel_app_parent_model_el(rel, rel_arg_els);
 
-    let flat_func_args: Vec<FlatVar> = model_el
-        .into_iter()
-        .chain(func_arg_els_vec)
-        .map(|el| el_vars.get(&el).unwrap().clone())
+    let flat_func_args: Vec<FlatVar> = func_arg_els_vec
+        .iter()
+        .map(|el| el_vars.get(el).unwrap().clone())
         .collect();
 
     let result_var = el_vars.get(&new_el).unwrap().clone();
