@@ -132,7 +132,7 @@ fn flatten_if_arbitrary(
         let el_type = el_type(el, eqlog).unwrap();
 
         let if_stmt = match eqlog.dep_type_case(el_type) {
-            DepTypeCase::AmbientType(typ) => {
+            DepTypeCase::GlobalType(typ) => {
                 let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
                 let el_struct = eqlog.el_structure(el).unwrap();
                 let model_el = eqlog.ambient_model_el(typ_def_sym_scope, el_struct);

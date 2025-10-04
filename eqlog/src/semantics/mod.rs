@@ -213,7 +213,7 @@ fn element_type_to_string<'a>(
     _locations: &'a BTreeMap<Loc, Location>,
 ) -> String {
     match eqlog.dep_type_case(typ) {
-        DepTypeCase::AmbientType(typ) => display_type(typ, eqlog, identifiers).to_string(),
+        DepTypeCase::GlobalType(typ) => display_type(typ, eqlog, identifiers).to_string(),
         DepTypeCase::InstantiatedType(el, typ) => {
             let typ = display_type(typ, eqlog, identifiers).to_string();
 

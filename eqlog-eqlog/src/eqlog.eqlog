@@ -1072,20 +1072,20 @@ rule var_structure {
 // ### Symbol access/instantiation
 
 enum DepType {
-    AmbientType(Type),
+    GlobalType(Type),
     InstantiatedType(El, Type)
 }
 
-rule ambient_type_total {
+rule global_type_total {
     if ty: Type;
-    then AmbientType(ty)!;
+    then GlobalType(ty)!;
 }
 
 func underlying_type(DepType) -> Type;
 rule underlying_type_law {
     if dep_type: DepType;
     match dep_type {
-        AmbientType(typ) => {
+        GlobalType(typ) => {
             then underlying_type(dep_type) = typ;
         }
         InstantiatedType(_, typ) => {
@@ -1109,14 +1109,14 @@ rule ambient_dep_type_list_nil {
 rule ambient_dep_type_list_cons {
     if tys = ConsTypeList(head_type, tail_types);
     if tail_dep_types = ambient_dep_type_list(tail_types);
-    if head_dep_type = AmbientType(head_type);
+    if head_dep_type = GlobalType(head_type);
     then dep_tys := ConsDepTypeList(head_dep_type, tail_dep_types)!;
     then ambient_dep_type_list(tys) = dep_tys;
 }
 rule ambient_dep_type_list_snoc {
     if tys = SnocTypeList(init_types, last_type);
     if init_dep_types = ambient_dep_type_list(init_types);
-    if last_dep_type = AmbientType(last_type);
+    if last_dep_type = GlobalType(last_type);
     then dep_tys := SnocDepTypeList(init_dep_types, last_dep_type)!;
     then ambient_dep_type_list(tys) = dep_tys;
 }
@@ -1279,8 +1279,8 @@ rule map_preserves_dep_type {
     if el_type(el, dep_typ);
     if mapped_el = map_el(morph, el);
     match dep_typ {
-        AmbientType(typ) => {
-            then el_type(mapped_el, AmbientType(typ));
+        GlobalType(typ) => {
+            then el_type(mapped_el, GlobalType(typ));
         }
         InstantiatedType(model_el, local_typ) => {
             if mapped_model_el = map_el(morph, model_el);
@@ -1292,8 +1292,8 @@ rule map_preserves_dep_type {
 rule map_reflects_dep_type {
     if el_type(map_el(_, el), mapped_dep_typ);
     match mapped_dep_typ {
-        AmbientType(typ) => {
-            then el_type(el, AmbientType(typ));
+        GlobalType(typ) => {
+            then el_type(el, GlobalType(typ));
         }
         InstantiatedType(_, _) => {
             // Can we say something in this case? Note that if
@@ -2287,7 +2287,7 @@ rule ambient_model_el_struct {
 rule ambient_model_dep_type {
     if el = ambient_model_el(member_scope, _);
     if model_type = symbol_scope_model(member_scope);
-    if model_dep_type = AmbientType(model_type);
+    if model_dep_type = GlobalType(model_type);
     then el_type(el, model_dep_type);
 }
 
@@ -2304,10 +2304,10 @@ rule dom_dep_type_down {
     if dom_el = semantic_el(dom_term, structure);
     if el_type(dom_el, domain_type);
     match domain_type {
-        AmbientType(typ) => {
+        GlobalType(typ) => {
             then dom_must_result_in_model_type(typ, loc);
-            // AmbientType is total though, no need to assert that it must be defined here.
-            if mor_typ = AmbientType(mor_type(typ));
+            // GlobalType is total though, no need to assert that it must be defined here.
+            if mor_typ = GlobalType(mor_type(typ));
             if mor_el = semantic_el(mor_term, structure);
             then el_type(mor_el, mor_typ);
         }
@@ -2325,10 +2325,10 @@ rule cod_dep_type_down {
     if cod_el = semantic_el(cod_term, structure);
     if el_type(cod_el, codomain_type);
     match codomain_type {
-        AmbientType(typ) => {
+        GlobalType(typ) => {
             then cod_must_result_in_model_type(typ, loc);
-            // AmbientType is total though, no need to assert that it must be defined here.
-            if mor_typ = AmbientType(mor_type(typ));
+            // GlobalType is total though, no need to assert that it must be defined here.
+            if mor_typ = GlobalType(mor_type(typ));
             if mor_el = semantic_el(mor_term, structure);
             then el_type(mor_el, mor_typ);
         }
@@ -2346,10 +2346,10 @@ rule dom_dep_type_up {
     if mor_el = semantic_el(mor_term, structure);
     if el_type(mor_el, mor_type);
     match mor_type {
-        AmbientType(typ) => {
+        GlobalType(typ) => {
             then dom_must_be_applied_to_mor_type(typ, loc);
             if typ = mor_type(model_type);
-            if model_dep_type = AmbientType(model_type);
+            if model_dep_type = GlobalType(model_type);
             if dom_el = semantic_el(dom_term, structure);
             then el_type(dom_el, model_dep_type);
         }
@@ -2367,10 +2367,10 @@ rule cod_dep_type_up {
     if mor_el = semantic_el(mor_term, structure);
     if el_type(mor_el, mor_type);
     match mor_type {
-        AmbientType(typ) => {
+        GlobalType(typ) => {
             then cod_must_be_applied_to_mor_type(typ, loc);
             if typ = mor_type(model_type);
-            if model_dep_type = AmbientType(model_type);
+            if model_dep_type = GlobalType(model_type);
             if cod_el = semantic_el(cod_term, structure);
             then el_type(cod_el, model_dep_type);
         }
@@ -2388,7 +2388,7 @@ pred is_mor_el(el: El);
 pred should_be_mor_el(el: El, loc: Loc);
 
 rule mor_is_mor_el {
-    if el_type(el, AmbientType(mor_type(_)));
+    if el_type(el, GlobalType(mor_type(_)));
     then is_mor_el(el);
 }
 rule mor_app_term_node_should_be_mor {
@@ -2407,7 +2407,7 @@ pred should_be_member_element(el: El, model_type: Type, loc: Loc);
 
 rule member_element_definition {
     if el_type(arg_el, InstantiatedType(model_el, _));
-    if el_type(model_el, AmbientType(model_type));
+    if el_type(model_el, GlobalType(model_type));
     then is_member_element(arg_el, model_type);
 }
 rule argument_of_morphism_should_be_member {
@@ -2415,7 +2415,7 @@ rule argument_of_morphism_should_be_member {
     if arg_el = semantic_el(arg_term, structure);
     if arg_loc = term_node_loc(arg_term);
     if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, AmbientType(mor_type(model_ty)));
+    if el_type(mor_el, GlobalType(mor_type(model_ty)));
     then should_be_member_element(arg_el, model_ty, arg_loc);
 }
 //rule result_of_morphism_should_be_member {
@@ -2423,7 +2423,7 @@ rule argument_of_morphism_should_be_member {
 //    if result_el = semantic_el(result_term, structure);
 //    if result_loc = term_node_loc(result_term);
 //    if mor_el = semantic_el(mor_term, structure);
-//    if el_type(mor_el, AmbientType(mor_type(model_ty)));
+//    if el_type(mor_el, GlobalType(mor_type(model_ty)));
 //    then should_be_member_element(result_el, model_ty, result_loc);
 //}
 
@@ -2435,7 +2435,7 @@ rule mor_app_domain_type_from_arg {
     if el_type(arg_el, InstantiatedType(domain_el, _));
 
     if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, AmbientType(mor_type));
+    if el_type(mor_el, GlobalType(mor_type));
 
     if dom_func = mor_type_dom_func(mor_type);
 
@@ -2452,7 +2452,7 @@ rule mor_app_codomain_type_from_arg {
     if el_type(result_el, InstantiatedType(codomain_el, _));
 
     if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, AmbientType(mor_type));
+    if el_type(mor_el, GlobalType(mor_type));
 
     if cod_func = mor_type_cod_func(mor_type);
 
@@ -2469,7 +2469,7 @@ rule mor_app_result_type {
     if arg_el = semantic_el(arg_term, structure);
 
     if el_type(arg_el, InstantiatedType(_, member_type));
-    if el_type(mor_el, AmbientType(mor_type));
+    if el_type(mor_el, GlobalType(mor_type));
 
     if cod_func = mor_type_cod_func(mor_type);
     if mor_singleton = ConsElList(mor_el, NilElList(structure));
@@ -2484,7 +2484,7 @@ rule dom_term_semantics {
     if dom_el = semantic_el(dom_term, structure);
     if mor_el = semantic_el(mor_term, structure);
 
-    if el_type(mor_el, AmbientType(mor_type));
+    if el_type(mor_el, GlobalType(mor_type));
     if dom_func = mor_type_dom_func(mor_type);
     if dom_func_rel = FuncRel(dom_func);
 
@@ -2499,7 +2499,7 @@ rule cod_term_semantics {
     if cod_el = semantic_el(cod_term, structure);
     if mor_el = semantic_el(mor_term, structure);
 
-    if el_type(mor_el, AmbientType(mor_type));
+    if el_type(mor_el, GlobalType(mor_type));
     if cod_func = mor_type_cod_func(mor_type);
     if cod_func_rel = FuncRel(cod_func);
 
@@ -2579,7 +2579,7 @@ rule var_if_atom_semantics_ambient {
     if var_if_atom_node(atom, var_term, type_expr);
     if ambient_type_expr(type_expr, type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if dep_typ = AmbientType(semantic_type(ss, type_name));
+    if dep_typ = GlobalType(semantic_type(ss, type_name));
     if var_el = semantic_el(var_term, _);
     then el_type(var_el, dep_typ);
 }
@@ -2588,7 +2588,7 @@ rule var_if_atom_semantics_morphism {
     if mor_type_expr(type_expr, model_type_name);
     if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
     if model_type = semantic_type(ss, model_type_name);
-    if dep_typ = AmbientType(mor_type(model_type));
+    if dep_typ = GlobalType(mor_type(model_type));
     if var_el = semantic_el(var_term, _);
     then el_type(var_el, dep_typ);
 }
@@ -2727,7 +2727,7 @@ rule defined_then_should_be_given_by_ctor {
     if defined_then_atom_node(atom, _, tm);
     if ss = scope_symbols(entry_scope(rule_descendant_then_atom(atom)));
     if el = semantic_el(tm, _);
-    if el_type(el, AmbientType(semantic_type(ss, ty_name)));
+    if el_type(el, GlobalType(semantic_type(ss, ty_name)));
     if enum_decl(enum_decl_node, ty_name, _);
     then should_be_obtained_by_ctor(tm, enum_decl_node);
 }
@@ -2892,7 +2892,7 @@ rule match_term_type_if_cases_determine_enum {
     if enum_decl_node = cases_determined_enum(cases);
     if ss = scope_symbols(entry_scope(rule_descendant_term(match_term)));
     if enum_decl(enum_decl_node, ident, _);
-    if enum_type = AmbientType(semantic_type(ss, ident));
+    if enum_type = GlobalType(semantic_type(ss, ident));
     if match_el = semantic_el(match_term, _);
     then el_type(match_el, enum_type);
 }
@@ -2902,7 +2902,7 @@ rule match_term_type_if_cases_determine_enum {
 pred match_stmt_should_contain_ctor(StmtNode, CtorDeclNode);
 rule match_stmt_should_contain_ctor_defined {
     if match_stmt_node(stmt, match_term, _);
-    if el_type(semantic_el(match_term, _), AmbientType(enum_type));
+    if el_type(semantic_el(match_term, _), GlobalType(enum_type));
     if ss = scope_symbols(entry_scope(rule_descendant_term(match_term)));
     if semantic_type(ss, enum_ident) = enum_type;
     if enum_decl(enum_decl_node, enum_ident, _);
