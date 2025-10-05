@@ -2221,9 +2221,10 @@ rule defined_then_atom_structure {
     then term_structure(term, structure);
 }
 rule pred_then_atom_structure {
-    if pred_then_atom_node(atom, _, arg_terms);
+    if pred_then_atom_node(atom, pred_expr, arg_terms);
     if then_atom_structure(atom, structure);
     then terms_structure(arg_terms, structure);
+    then pred_expr_structure(pred_expr, structure);
 }
 
 // ### Propagate associated structure through type exprs.
