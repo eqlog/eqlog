@@ -1072,6 +1072,8 @@ rule var_structure {
 
 // ### Symbol access/instantiation
 
+// #### Dependent types
+
 enum DepType {
     GlobalType(Type),
     InstantiatedType(El, Type)
@@ -1120,6 +1122,56 @@ rule ambient_dep_type_list_snoc {
     if last_dep_type = GlobalType(last_type);
     then dep_tys := SnocDepTypeList(init_dep_types, last_dep_type)!;
     then ambient_dep_type_list(tys) = dep_tys;
+}
+
+// #### Dependent functions
+
+enum DepFunc {
+    GlobalFunc(Func),
+    MemberFunc(El, Func)
+}
+
+rule global_func_total {
+    if function: Func;
+    then GlobalFunc(function)!;
+}
+
+func underlying_func(DepFunc) -> Func;
+rule underlying_func_law {
+    if dep_func: DepFunc;
+    match dep_func {
+        GlobalFunc(function) => {
+            then underlying_func(dep_func) = function;
+        }
+        MemberFunc(_, function) => {
+            then underlying_func(dep_func) = function;
+        }
+    }
+}
+
+// #### Dependent predicates
+
+enum DepPred {
+    GlobalPred(Pred),
+    MemberPred(El, Pred)
+}
+
+rule global_pred_total {
+    if predicate: Pred;
+    then GlobalPred(predicate)!;
+}
+
+func underlying_pred(DepPred) -> Pred;
+rule underlying_pred_law {
+    if dep_pred: DepPred;
+    match dep_pred {
+        GlobalPred(predicate) => {
+            then underlying_pred(dep_pred) = predicate;
+        }
+        MemberPred(_, predicate) => {
+            then underlying_pred(dep_pred) = predicate;
+        }
+    }
 }
 
 // ### The types of elements
