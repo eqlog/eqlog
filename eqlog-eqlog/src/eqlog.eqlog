@@ -1038,7 +1038,7 @@ rule snoc_cons_to_cons_snoc {
     then els = ConsElList(first, tail);
 }
 
-pred dep_pred_app(predicate: Pred, ElList);
+pred dep_pred_app(predicate: DepPred, ElList);
 func dep_func_app(function: Func, args: ElList) -> El;
 pred rel_app(Rel, ElList);
 
@@ -1213,7 +1213,8 @@ rule snoc_dep_types_reverse {
 
 rule dep_pred_app_types {
     if dep_pred_app(predicate, els);
-    if ambient_dep_type_list(pred_arity(predicate)) = tys;
+    if p = underlying_pred(predicate);
+    if ambient_dep_type_list(pred_arity(p)) = tys;
     then el_types(els, tys);
 }
 
@@ -1827,21 +1828,14 @@ pred func_arg_num_should_match(
     usage: Loc
 );
 
-func semantic_pred_expr(PredExprNode) -> Pred;
+func semantic_pred_expr(PredExprNode, Structure) -> DepPred;
+
 rule semantic_ambient_pred_expr_rule {
     if ambient_pred_expr(pred_expr, name);
     if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
-    if p = semantic_pred(ss, name);
-    then semantic_pred_expr(pred_expr) = p;
-}
-rule semantic_member_pred_expr_rule {
-    if member_pred_expr(pred_expr, tm, name);
-    if el_type(semantic_el(tm, _), tm_dep_type);
-
-    if tm_typ = underlying_type(tm_dep_type);
-    if ss = model_member_symbol_scope(tm_typ);
-    if p = semantic_pred(ss, name);
-    then semantic_pred_expr(pred_expr) = p;
+    if p = GlobalPred(semantic_pred(ss, name));
+    if pred_expr_structure(pred_expr, structure);
+    then semantic_pred_expr(pred_expr, structure) = p;
 }
 
 func semantic_func_expr(FuncExprNode) -> Func;
@@ -1863,14 +1857,16 @@ rule semantic_member_func_expr_rule {
 rule pred_if_atom_arg_num_should_match {
     if pred_if_atom_node(atom, pred_expr, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(pred_arity(semantic_pred_expr(pred_expr)));
+    if p = underlying_pred(semantic_pred_expr(pred_expr, _));
+    if expected_len = type_list_len(pred_arity(p));
     if loc = if_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
 rule pred_then_atom_arg_num_should_match {
     if pred_then_atom_node(atom, pred_expr, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(pred_arity(semantic_pred_expr(pred_expr)));
+    if p = underlying_pred(semantic_pred_expr(pred_expr, _));
+    if expected_len = type_list_len(pred_arity(p));
     if loc = then_atom_node_loc(atom);
     then pred_arg_num_should_match(got_len, expected_len, loc);
 }
@@ -2632,8 +2628,8 @@ rule equal_if_atom_semantics {
 // No rule for `defined_if_atom` -- this is already taken care of because `semantic_el` is total.
 rule pred_if_atom_semantics {
     if pred_if_atom_node(_, pred_expr, arg_terms);
-    if p = semantic_pred_expr(pred_expr);
-    if arg_els = semantic_els(arg_terms, _);
+    if p = semantic_pred_expr(pred_expr, structure);
+    if arg_els = semantic_els(arg_terms, structure);
     then dep_pred_app(p, arg_els);
 }
 rule var_if_atom_semantics_ambient {
@@ -2682,8 +2678,8 @@ rule defined_then_atom_semantics {
 }
 rule pred_then_atom_semantics {
     if pred_then_atom_node(_, pred_expr, arg_terms);
-    if p = semantic_pred_expr(pred_expr);
-    if arg_els = semantic_els(arg_terms, _);
+    if p = semantic_pred_expr(pred_expr, structure);
+    if arg_els = semantic_els(arg_terms, structure);
     then dep_pred_app(p, arg_els);
 }
 
@@ -2695,7 +2691,7 @@ rule pred_then_atom_semantics {
 // If the relation is global, then dep_pred_app and dep_func_app are equivalent to the non-dependent version.
 rule dep_pred_app_to_rel_app_global {
     if dep_pred_app(predicate, args);
-    if pred_rel = PredRel(predicate);
+    if pred_rel = PredRel(underlying_pred(predicate));
     if module_symbol_scope(_) = rel_definition_symbol_scope(pred_rel);
     then rel_app(pred_rel, args);
 }
@@ -2710,7 +2706,7 @@ rule dep_func_app_to_rel_app_top_level {
 // ("self" in Rust).
 rule dep_pred_app_to_rel_app_ambient_member {
     if dep_pred_app(predicate, dep_args);
-    if pred_rel = PredRel(predicate);
+    if pred_rel = PredRel(underlying_pred(predicate));
     if structure = els_structure(dep_args);
     if ss = rel_definition_symbol_scope(pred_rel);
     if parent_el = ambient_model_el(ss, structure);
