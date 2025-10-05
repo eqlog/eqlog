@@ -1830,12 +1830,31 @@ pred func_arg_num_should_match(
 
 func semantic_pred_expr(PredExprNode, Structure) -> DepPred;
 
-rule semantic_ambient_pred_expr_rule {
+rule semantic_ambient_global_pred_expr_rule {
     if ambient_pred_expr(pred_expr, name);
     if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
-    if p = GlobalPred(semantic_pred(ss, name));
+    if p = semantic_pred(ss, name);
+    if p_scope = rel_definition_symbol_scope(PredRel(p));
+    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
+    branch {
+        if p_scope = virtual_symbol_scope();
+    } along {
+        if p_scope = module_symbol_scope(_);
+    }
     if pred_expr_structure(pred_expr, structure);
-    then semantic_pred_expr(pred_expr, structure) = p;
+    then dep_pred := GlobalPred(p)!;
+    then semantic_pred_expr(pred_expr, structure) = dep_pred;
+}
+
+rule semantic_ambient_member_pred_expr_rule {
+    if ambient_pred_expr(pred_expr, name);
+    if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
+    if p = semantic_pred(ss, name);
+    if p_scope = rel_definition_symbol_scope(PredRel(p));
+    if pred_expr_structure(pred_expr, structure);
+    if parent_el = ambient_model_el(p_scope, structure);
+    then dep_pred := MemberPred(parent_el, p)!;
+    then semantic_pred_expr(pred_expr, structure) = dep_pred;
 }
 
 func semantic_func_expr(FuncExprNode) -> Func;
