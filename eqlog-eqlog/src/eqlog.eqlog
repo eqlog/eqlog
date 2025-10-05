@@ -1315,6 +1315,20 @@ rule map_els_defined {
     }
 }
 
+func map_dep_pred(Morphism, DepPred) -> DepPred;
+
+rule map_dep_pred_global {
+    if dom_pred = GlobalPred(_);
+    if mor: Morphism;
+    then map_dep_pred(mor, dom_pred) = dom_pred;
+}
+rule map_dep_pred_member {
+    if dom_pred = MemberPred(dom_el, p);
+    if cod_el = map_el(mor, dom_el);
+    then MemberPred(cod_el, p)!;
+    then map_dep_pred(mor, dom_pred) = MemberPred(cod_el, p);
+}
+
 // Morphisms commute with relations and variables.
 rule map_var {
     if el = var(_, name);
@@ -1328,9 +1342,10 @@ rule map_rel_app {
     then rel_app(rel, mapped_args);
 }
 rule map_dep_pred_app {
-    if dep_pred_app(predicate, args);
-    if mapped_args = map_els(_, args);
-    then dep_pred_app(predicate, mapped_args);
+    if dep_pred_app(dep_pred, args);
+    if mapped_args = map_els(mor, args);
+    if mapped_dep_pred = map_dep_pred(mor, dep_pred);
+    then dep_pred_app(mapped_dep_pred, mapped_args);
 }
 rule map_dep_func_app {
     if dep_func_app(function, args) = result;
@@ -2721,30 +2736,28 @@ rule pred_then_atom_semantics {
 
 // If the relation is global, then dep_pred_app and dep_func_app are equivalent to the non-dependent version.
 rule dep_pred_app_to_rel_app_global {
-    if dep_pred_app(predicate, args);
-    if pred_rel = PredRel(underlying_pred(predicate));
+    if dep_pred_app(dep_pred, args);
+    if dep_pred = GlobalPred(predicate);
+    if pred_rel = PredRel(predicate);
     if module_symbol_scope(_) = rel_definition_symbol_scope(pred_rel);
     then rel_app(pred_rel, args);
 }
-rule dep_func_app_to_rel_app_top_level {
+
+rule dep_pred_app_to_rel_app_member {
+    if dep_pred_app(dep_pred, args);
+    if dep_pred = MemberPred(model_el, predicate);
+    if pred_rel = PredRel(predicate);
+    then full_args := ConsElList(model_el, args)!;
+    then rel_app(pred_rel, full_args);
+}
+
+rule dep_func_app_to_rel_app_global {
     if dep_func_app(function, args) = result;
     if module_symbol_scope(_) = rel_definition_symbol_scope(FuncRel(function));
     then func_app(function, args) = result;
 }
 
-// For member relations in an ambient model scope, the first argument to
-// the underlying non-dependent relation is the the ambient model el
-// ("self" in Rust).
-rule dep_pred_app_to_rel_app_ambient_member {
-    if dep_pred_app(predicate, dep_args);
-    if pred_rel = PredRel(underlying_pred(predicate));
-    if structure = els_structure(dep_args);
-    if ss = rel_definition_symbol_scope(pred_rel);
-    if parent_el = ambient_model_el(ss, structure);
-    then full_args := ConsElList(parent_el, dep_args)!;
-    then rel_app(pred_rel, full_args);
-}
-rule dep_func_app_to_rel_app_ambient_member {
+rule dep_func_app_to_rel_app_member {
     if dep_func_app(function, dep_args) = result;
     if func_rel = FuncRel(function);
     if structure = els_structure(dep_args);

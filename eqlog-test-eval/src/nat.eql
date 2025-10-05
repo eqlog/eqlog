@@ -12,15 +12,15 @@ rule zero_plus {
     then a = n;
 }
 
-rule plus_induction_second_arg {
-    if plus(m, n) = k;
-    match n {
-        Zero() => {
-            then k = m;
-        }
-        Succ(p) => {
-            then Succ(m)!;
-            then k = plus(Succ(m), p);
-        }
-    }
-}
+//rule plus_induction_second_arg {
+//    if plus(m, n) = k;
+//    match n {
+//        Zero() => {
+//            then k = m;
+//        }
+//        Succ(p) => {
+//            then Succ(m)!;
+//            then k = plus(Succ(m), p);
+//        }
+//    }
+//}
