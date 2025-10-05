@@ -43,5 +43,6 @@ rule ab_c_element_rule {
 func d() -> Subs;
 rule a_subset_d {
     if a().element(x);
+    if d()!;
     then d().element(x);
 }

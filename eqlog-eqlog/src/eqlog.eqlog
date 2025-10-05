@@ -1857,6 +1857,17 @@ rule semantic_ambient_member_pred_expr_rule {
     then semantic_pred_expr(pred_expr, structure) = dep_pred;
 }
 
+rule semantic_external_member_pred_expr_rule {
+    if member_pred_expr(pred_expr, model_tm, member_name);
+    if model_el = semantic_el(model_tm, structure);
+    if el_type(model_el, GlobalType(model_el_ty));
+    if member_ss = model_member_symbol_scope(model_el_ty);
+    if member_pred = semantic_pred(member_ss, member_name);
+
+    then dep_pred := MemberPred(model_el, member_pred)!;
+    then semantic_pred_expr(pred_expr, structure) = dep_pred;
+}
+
 func semantic_func_expr(FuncExprNode) -> Func;
 rule semantic_ambient_func_expr_rule {
     if ambient_func_expr(func_expr, name);
