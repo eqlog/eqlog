@@ -159,7 +159,7 @@ fn flatten_if_arbitrary(
                     }
                 }
             }
-            DepTypeCase::InstantiatedType(model_el, typ) => {
+            DepTypeCase::MemberType(model_el, typ) => {
                 let parent_var = el_vars.get(&model_el).unwrap().clone();
                 let rel: Rel = eqlog
                     .func_rel(eqlog.parent_model_func(typ).unwrap())

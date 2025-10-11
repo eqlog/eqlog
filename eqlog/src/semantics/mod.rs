@@ -214,7 +214,7 @@ fn element_type_to_string<'a>(
 ) -> String {
     match eqlog.dep_type_case(typ) {
         DepTypeCase::GlobalType(typ) => display_type(typ, eqlog, identifiers).to_string(),
-        DepTypeCase::InstantiatedType(el, typ) => {
+        DepTypeCase::MemberType(el, typ) => {
             let typ = display_type(typ, eqlog, identifiers).to_string();
 
             let name = match eqlog

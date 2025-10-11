@@ -1076,7 +1076,7 @@ rule var_structure {
 
 enum DepType {
     GlobalType(Type),
-    InstantiatedType(El, Type)
+    MemberType(El, Type)
 }
 
 rule global_type_total {
@@ -1091,7 +1091,7 @@ rule underlying_type_law {
         GlobalType(typ) => {
             then underlying_type(dep_type) = typ;
         }
-        InstantiatedType(_, typ) => {
+        MemberType(_, typ) => {
             then underlying_type(dep_type) = typ;
         }
     }
@@ -1166,9 +1166,35 @@ rule underlying_pred_law {
     }
 }
 
-// ### Instantiated type lists
+// ### Instantiated types
+pred should_instantiate_type(model_el: El, typ: Type);
+func instantiated_type(model_el: El, typ: Type) -> DepType;
+
+rule instantiated_type_global {
+    if should_instantiate_type(model_el, typ);
+    if def_scope = type_definition_symbol_scope(typ);
+    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
+    branch {
+        if def_scope = virtual_symbol_scope();
+    } along {
+        if def_scope = module_symbol_scope(_);
+    }
+    then GlobalType(typ)!;
+    then instantiated_type(model_el, typ) = GlobalType(typ);
+}
+rule instantiated_type_member {
+    if should_instantiate_type(model_el, typ);
+    if type_scope = type_definition_symbol_scope(typ);
+    if el_type(model_el, GlobalType(model_type));
+    if member_scope = model_member_symbol_scope(model_type);
+    if type_scope = member_scope;
+    then MemberType(model_el, typ)!;
+    then instantiated_type(model_el, typ) = MemberType(model_el, typ);
+}
+
 pred should_instantiate_types(model_el: El, types: TypeList);
 func instantiated_types(model: El, types: TypeList) -> DepTypeList;
+
 rule instantiated_types_nil {
     if should_instantiate_types(model_el, tys);
     if tys = NilTypeList();
@@ -1178,8 +1204,9 @@ rule instantiated_types_nil {
 rule instantiated_types_cons {
     if should_instantiate_types(model_el, tys);
     if tys = ConsTypeList(head_ty, tail_tys);
-    then head_dep_ty := InstantiatedType(model_el, head_ty)!;
+    then should_instantiate_type(model_el, head_ty);
     then should_instantiate_types(model_el, tail_tys);
+    if head_dep_ty = instantiated_type(model_el, head_ty);
     if tail_dep_tys = instantiated_types(model_el, tail_tys);
     then dep_tys := ConsDepTypeList(head_dep_ty, tail_dep_tys)!;
     then instantiated_types(model_el, tys) = dep_tys;
@@ -1246,7 +1273,7 @@ rule dep_func_app_codomain_type_global {
 rule dep_func_app_codomain_type_member {
     if dep_func_app(MemberFunc(model_el, function), _) = result;
     if ty = codomain(function);
-    then dep_ty := InstantiatedType(model_el, ty)!;
+    then dep_ty := MemberType(model_el, ty)!;
     then el_type(result, dep_ty);
 }
 
@@ -1396,9 +1423,9 @@ rule map_preserves_el_type {
         GlobalType(typ) => {
             then el_type(mapped_el, GlobalType(typ));
         }
-        InstantiatedType(model_el, local_typ) => {
+        MemberType(model_el, local_typ) => {
             if mapped_model_el = map_el(morph, model_el);
-            then mapped_dep_typ := InstantiatedType(mapped_model_el, local_typ)!;
+            then mapped_dep_typ := MemberType(mapped_model_el, local_typ)!;
             then el_type(mapped_el, mapped_dep_typ);
         }
     }
@@ -1409,10 +1436,10 @@ rule map_reflects_dep_type {
         GlobalType(typ) => {
             then el_type(el, GlobalType(typ));
         }
-        InstantiatedType(_, _) => {
+        MemberType(_, _) => {
             // Can we say something in this case? Note that if
             //
-            // mapped_el_typ = InstantiatedType(mapped_model_el, local_type)
+            // mapped_el_typ = MemberType(mapped_model_el, local_type)
             //
             // and map_el(morph, model_el) = mapped_model_el, then we don't want to necessarily
             // say that el_type(Instantiatedtype(model_el, local_type). Consider the case where we
@@ -1421,7 +1448,7 @@ rule map_reflects_dep_type {
             //
             // What we actually want to do here, probably, is to assert that an element
             // preimage_model_el exists in the domain that maps to model_el such that el has type
-            // InstantiatedType(preimage_model_el, typ). This would be similar to Hindley-Milner,
+            // MemberType(preimage_model_el, typ). This would be similar to Hindley-Milner,
             // but I'm not sure the existing machinery can deal with elements that are introduced
             // in this way.
         }
@@ -2475,7 +2502,7 @@ rule dom_dep_type_down {
             if mor_el = semantic_el(mor_term, structure);
             then el_type(mor_el, mor_typ);
         }
-        InstantiatedType(_, member_type) => {
+        MemberType(_, member_type) => {
             // At the moment, this is necessarily an error, since model types
             // cannot be nested, so that member_type cannot be a model type.
             then dom_must_result_in_model_type(member_type, loc);
@@ -2496,7 +2523,7 @@ rule cod_dep_type_down {
             if mor_el = semantic_el(mor_term, structure);
             then el_type(mor_el, mor_typ);
         }
-        InstantiatedType(_, member_type) => {
+        MemberType(_, member_type) => {
             // At the moment, this is necessarily an error, since model types
             // cannot be nested, so that member_type cannot be a model type.
             then cod_must_result_in_model_type(member_type, loc);
@@ -2517,7 +2544,7 @@ rule dom_dep_type_up {
             if dom_el = semantic_el(dom_term, structure);
             then el_type(dom_el, model_dep_type);
         }
-        InstantiatedType(_, member_type) => {
+        MemberType(_, member_type) => {
             // At the moment, this is necessarily an error, since model types
             // cannot be nested, so that member_type cannot be a model type.
             then dom_must_be_applied_to_mor_type(member_type, loc);
@@ -2538,7 +2565,7 @@ rule cod_dep_type_up {
             if cod_el = semantic_el(cod_term, structure);
             then el_type(cod_el, model_dep_type);
         }
-        InstantiatedType(_, member_type) => {
+        MemberType(_, member_type) => {
             // At the moment, this is necessarily an error, since model types
             // cannot be nested, so that member_type cannot be a model type.
             then cod_must_be_applied_to_mor_type(member_type, loc);
@@ -2565,12 +2592,12 @@ rule mor_app_term_node_should_be_mor {
 // TODO: Add more specific versions that assert that an element is/should be a
 // morphism for a fixed model type?
 
-// Member elements are elements of type InstantiatedType(model_el, _) for some model_el.
+// Member elements are elements of type MemberType(model_el, _) for some model_el.
 pred is_member_element(el: El, model_type: Type);
 pred should_be_member_element(el: El, model_type: Type, loc: Loc);
 
 rule member_element_definition {
-    if el_type(arg_el, InstantiatedType(model_el, _));
+    if el_type(arg_el, MemberType(model_el, _));
     if el_type(model_el, GlobalType(model_type));
     then is_member_element(arg_el, model_type);
 }
@@ -2591,12 +2618,12 @@ rule argument_of_morphism_should_be_member {
 //    then should_be_member_element(result_el, model_ty, result_loc);
 //}
 
-// If arg_el has type InstantiatedType(d, member_type), then dom(mor)
+// If arg_el has type MemberType(d, member_type), then dom(mor)
 // should be defined and equal to d.
 rule mor_app_domain_type_from_arg {
     if mor_app_term_node(_, mor_term, arg_term);
     if arg_el = semantic_el(arg_term, structure);
-    if el_type(arg_el, InstantiatedType(domain_el, _));
+    if el_type(arg_el, MemberType(domain_el, _));
 
     if mor_el = semantic_el(mor_term, structure);
     if el_type(mor_el, GlobalType(mor_type));
@@ -2613,7 +2640,7 @@ rule mor_app_domain_type_from_arg {
 rule mor_app_codomain_type_from_arg {
     if mor_app_term_node(result_term, mor_term, _);
     if result_el = semantic_el(result_term, structure);
-    if el_type(result_el, InstantiatedType(codomain_el, _));
+    if el_type(result_el, MemberType(codomain_el, _));
 
     if mor_el = semantic_el(mor_term, structure);
     if el_type(mor_el, GlobalType(mor_type));
@@ -2632,14 +2659,14 @@ rule mor_app_result_type {
     if mor_el = semantic_el(mor_term, structure);
     if arg_el = semantic_el(arg_term, structure);
 
-    if el_type(arg_el, InstantiatedType(_, member_type));
+    if el_type(arg_el, MemberType(_, member_type));
     if el_type(mor_el, GlobalType(mor_type));
 
     if cod_func = mor_type_cod_func(mor_type);
     if mor_singleton = ConsElList(mor_el, NilElList(structure));
     if cod_el = func_app(cod_func, mor_singleton);
 
-    then result_ty := InstantiatedType(cod_el, member_type)!;
+    then result_ty := MemberType(cod_el, member_type)!;
     then el_type(result_el, result_ty);
 }
 
@@ -2762,7 +2789,7 @@ rule var_if_atom_semantics_member {
 
     if element_member_symbol_scope(model_el, member_ss);
     if member_type = semantic_type(member_ss, type_name);
-    then dep_typ := InstantiatedType(model_el, member_type)!;
+    then dep_typ := MemberType(model_el, member_type)!;
     then el_type(var_el, dep_typ);
 }
 
