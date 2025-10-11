@@ -1,0 +1,12 @@
+model EndoSet {
+    type El;
+
+    func endo(el: El) -> El;
+}
+
+rule bad_rule {
+    if s_0: EndoSet;
+    if s_1: EndoSet;
+    if el: s_0.El;
+    then s_1.endo(el)!;
+}

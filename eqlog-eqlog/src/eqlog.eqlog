@@ -1039,7 +1039,7 @@ rule snoc_cons_to_cons_snoc {
 }
 
 pred dep_pred_app(predicate: DepPred, ElList);
-func dep_func_app(function: Func, args: ElList) -> El;
+func dep_func_app(function: DepFunc, args: ElList) -> El;
 pred rel_app(Rel, ElList);
 
 type ElName;
@@ -1224,16 +1224,30 @@ rule dep_pred_app_types_member {
     then el_types(els, dep_tys);
 }
 
-rule dep_func_app_domain_types {
-    if dep_func_app(function, args)!;
+rule dep_func_app_domain_types_global {
+    if dep_func_app(GlobalFunc(function), args)!;
     if ambient_dep_type_list(domain(function)) = tys;
     then el_types(args, tys);
 }
 
-rule dep_func_app_codomain_type {
-    if dep_func_app(function, _) = result;
-    if GlobalType(codomain(function)) = codomain_type;
-    then el_type(result, codomain_type);
+rule dep_func_app_domain_types_member {
+    if dep_func_app(MemberFunc(model_el, function), args)!;
+    if tys = domain(function);
+    then should_instantiate_types(model_el, tys);
+    if dep_tys = instantiated_types(model_el, tys);
+    then el_types(args, dep_tys);
+}
+
+rule dep_func_app_codomain_type_global {
+    if dep_func_app(GlobalFunc(function), _) = result;
+    if ty = GlobalType(codomain(function));
+    then el_type(result, ty);
+}
+rule dep_func_app_codomain_type_member {
+    if dep_func_app(MemberFunc(model_el, function), _) = result;
+    if ty = codomain(function);
+    then dep_ty := InstantiatedType(model_el, ty)!;
+    then el_type(result, dep_ty);
 }
 
 func func_app(function: Func, args: ElList) -> El;
@@ -1889,20 +1903,43 @@ rule semantic_external_member_pred_expr_rule {
     then semantic_pred_expr(pred_expr, structure) = dep_pred;
 }
 
-func semantic_func_expr(FuncExprNode) -> Func;
-rule semantic_ambient_func_expr_rule {
+func semantic_func_expr(FuncExprNode, Structure) -> DepFunc;
+rule semantic_ambient_global_func_expr_rule {
     if ambient_func_expr(func_expr, name);
     if ss = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
     if f = semantic_func(ss, name);
-    then semantic_func_expr(func_expr) = f;
+    if f_scope = rel_definition_symbol_scope(FuncRel(f));
+    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
+    branch {
+        if f_scope = virtual_symbol_scope();
+    } along {
+        if f_scope = module_symbol_scope(_);
+    }
+    if func_expr_structure(func_expr, structure);
+    then dep_func := GlobalFunc(f)!;
+    then semantic_func_expr(func_expr, structure) = dep_func;
 }
-rule semantic_member_func_expr_rule {
-    if member_func_expr(func_expr, tm, name);
-    if el_type(semantic_el(tm, _), tm_dep_type);
-    if tm_typ = underlying_type(tm_dep_type);
-    if ss = model_member_symbol_scope(tm_typ);
+
+rule semantic_ambient_member_func_expr_rule {
+    if ambient_func_expr(func_expr, name);
+    if ss = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
     if f = semantic_func(ss, name);
-    then semantic_func_expr(func_expr) = f;
+    if f_scope = rel_definition_symbol_scope(FuncRel(f));
+    if func_expr_structure(func_expr, structure);
+    if parent_el = ambient_model_el(f_scope, structure);
+    then dep_func := MemberFunc(parent_el, f)!;
+    then semantic_func_expr(func_expr, structure) = dep_func;
+}
+
+rule semantic_external_member_func_expr_rule {
+    if member_func_expr(func_expr, model_tm, member_name);
+    if model_el = semantic_el(model_tm, structure);
+    if el_type(model_el, GlobalType(model_el_ty));
+    if member_ss = model_member_symbol_scope(model_el_ty);
+    if member_func = semantic_func(member_ss, member_name);
+
+    then dep_func := MemberFunc(model_el, member_func)!;
+    then semantic_func_expr(func_expr, structure) = dep_func;
 }
 
 rule pred_if_atom_arg_num_should_match {
@@ -1925,7 +1962,8 @@ rule pred_then_atom_arg_num_should_match {
 rule app_term_arg_num_should_match {
     if app_term_node(tm, func_expr, args);
     if got_len = term_list_len(args);
-    if expected_len = type_list_len(domain(semantic_func_expr(func_expr)));
+    if f = underlying_func(semantic_func_expr(func_expr, _));
+    if expected_len = type_list_len(domain(f));
     if loc = term_node_loc(tm);
     then func_arg_num_should_match(got_len, expected_len, loc);
 }
@@ -2646,7 +2684,7 @@ rule app_term_semantics {
     if app_term_node(result_term, func_expr, arg_terms);
     if result_el = semantic_el(result_term, structure);
     if func_arg_els = semantic_els(arg_terms, structure);
-    if f = semantic_func_expr(func_expr);
+    if f = semantic_func_expr(func_expr, structure);
     then dep_func_app(f, func_arg_els) = result_el;
 }
 
@@ -2758,18 +2796,13 @@ rule dep_pred_app_to_rel_app_member {
 }
 
 rule dep_func_app_to_rel_app_global {
-    if dep_func_app(function, args) = result;
-    if module_symbol_scope(_) = rel_definition_symbol_scope(FuncRel(function));
+    if dep_func_app(GlobalFunc(function), args) = result;
     then func_app(function, args) = result;
 }
 
 rule dep_func_app_to_rel_app_member {
-    if dep_func_app(function, dep_args) = result;
-    if func_rel = FuncRel(function);
-    if structure = els_structure(dep_args);
-    if ss = rel_definition_symbol_scope(func_rel);
-    if parent_el = ambient_model_el(ss, structure);
-    then full_args := ConsElList(parent_el, dep_args)!;
+    if dep_func_app(MemberFunc(model_el, function), dep_args) = result;
+    then full_args := ConsElList(model_el, dep_args)!;
     then func_app(function, full_args) = result;
 }
 

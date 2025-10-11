@@ -1,0 +1,8 @@
+Error: term has conflicting types:
+  --> error-test-source/bad-dep-func-result-type/theory.eql:10
+   | 
+10 |     if s_0.endo(el_0)!;
+   |                 ^^^^   
+   | 
+- Could be s_0.El
+- Could be s_1.El

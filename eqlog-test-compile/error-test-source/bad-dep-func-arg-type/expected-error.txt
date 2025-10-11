@@ -1,0 +1,8 @@
+Error: term has conflicting types:
+  --> error-test-source/bad-dep-func-arg-type/theory.eql:11
+   | 
+11 |     then s_1.endo(el)!;
+   |                   ^^   
+   | 
+- Could be s_0.El
+- Could be s_1.El

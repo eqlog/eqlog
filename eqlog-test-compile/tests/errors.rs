@@ -278,3 +278,13 @@ fn mor_applied_to_false_member() {
 fn bad_dep_pred_arg_type() {
     test_case(Path::new("bad-dep-pred-arg-type"));
 }
+
+#[test]
+fn bad_dep_func_arg_type() {
+    test_case(Path::new("bad-dep-func-arg-type"));
+}
+
+#[test]
+fn bad_dep_func_result_type() {
+    test_case(Path::new("bad-dep-func-result-type"));
+}
