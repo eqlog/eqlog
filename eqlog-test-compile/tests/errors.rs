@@ -273,3 +273,8 @@ fn mor_applied_to_non_member() {
 fn mor_applied_to_false_member() {
     test_case(Path::new("mor-applied-to-false-member"));
 }
+
+#[test]
+fn bad_dep_pred_arg_type() {
+    test_case(Path::new("bad-dep-pred-arg-type"));
+}

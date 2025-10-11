@@ -1,0 +1,12 @@
+model Marked {
+    type El;
+
+    pred mark(el: El);
+}
+
+rule asdf {
+    if m_0: Marked;
+    if m_1: Marked;
+    if m_0.mark(e);
+    then m_1.mark(e);
+}

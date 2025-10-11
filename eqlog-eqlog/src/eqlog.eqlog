@@ -1099,8 +1099,7 @@ rule underlying_type_law {
 
 enum DepTypeList {
     NilDepTypeList(),
-    ConsDepTypeList(head: DepType, tail: DepTypeList),
-    SnocDepTypeList(init: DepTypeList, last: DepType)
+    ConsDepTypeList(head: DepType, tail: DepTypeList)
 }
 
 func ambient_dep_type_list(TypeList) -> DepTypeList;
@@ -1114,13 +1113,6 @@ rule ambient_dep_type_list_cons {
     if tail_dep_types = ambient_dep_type_list(tail_types);
     if head_dep_type = GlobalType(head_type);
     then dep_tys := ConsDepTypeList(head_dep_type, tail_dep_types)!;
-    then ambient_dep_type_list(tys) = dep_tys;
-}
-rule ambient_dep_type_list_snoc {
-    if tys = SnocTypeList(init_types, last_type);
-    if init_dep_types = ambient_dep_type_list(init_types);
-    if last_dep_type = GlobalType(last_type);
-    then dep_tys := SnocDepTypeList(init_dep_types, last_dep_type)!;
     then ambient_dep_type_list(tys) = dep_tys;
 }
 
@@ -1174,6 +1166,27 @@ rule underlying_pred_law {
     }
 }
 
+// ### Instantiated type lists
+pred should_instantiate_types(model_el: El, types: TypeList);
+func instantiated_types(model: El, types: TypeList) -> DepTypeList;
+rule instantiated_types_nil {
+    if should_instantiate_types(model_el, tys);
+    if tys = NilTypeList();
+    then NilDepTypeList()!;
+    then instantiated_types(model_el, tys) = NilDepTypeList();
+}
+rule instantiated_types_cons {
+    if should_instantiate_types(model_el, tys);
+    if tys = ConsTypeList(head_ty, tail_tys);
+    then head_dep_ty := InstantiatedType(model_el, head_ty)!;
+    then should_instantiate_types(model_el, tail_tys);
+    if tail_dep_tys = instantiated_types(model_el, tail_tys);
+    then dep_tys := ConsDepTypeList(head_dep_ty, tail_dep_tys)!;
+    then instantiated_types(model_el, tys) = dep_tys;
+}
+
+func dep_pred_arity(DepPred) -> DepTypeList;
+
 // ### The types of elements
 pred el_type(El, DepType);
 pred el_types(ElList, DepTypeList);
@@ -1197,25 +1210,18 @@ rule cons_dep_types_reverse {
     then el_types(tail, tail_types);
 }
 
-rule snoc_dep_types {
-    if els = SnocElList(init, last);
-    if el_types(init, init_types);
-    if el_type(last, last_type);
-    then tys := SnocDepTypeList(init_types, last_type)!;
+rule dep_pred_app_types_global {
+    if dep_pred_app(GlobalPred(predicate), els);
+    if ambient_dep_type_list(pred_arity(predicate)) = tys;
     then el_types(els, tys);
-}
-rule snoc_dep_types_reverse {
-    if els = SnocElList(init, last);
-    if el_types(els, SnocDepTypeList(init_types, last_type));
-    then el_types(init, init_types);
-    then el_type(last, last_type);
 }
 
-rule dep_pred_app_types {
-    if dep_pred_app(predicate, els);
-    if p = underlying_pred(predicate);
-    if ambient_dep_type_list(pred_arity(p)) = tys;
-    then el_types(els, tys);
+rule dep_pred_app_types_member {
+    if dep_pred_app(MemberPred(model_el, predicate), els);
+    if tys = pred_arity(predicate);
+    then should_instantiate_types(model_el, tys);
+    if dep_tys = instantiated_types(model_el, tys);
+    then el_types(els, dep_tys);
 }
 
 rule dep_func_app_domain_types {
