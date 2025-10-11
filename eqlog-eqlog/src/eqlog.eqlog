@@ -1336,6 +1336,7 @@ rule map_els_defined {
 }
 
 func map_dep_pred(Morphism, DepPred) -> DepPred;
+func map_dep_func(Morphism, DepFunc) -> DepFunc;
 
 rule map_dep_pred_global {
     if dom_pred = GlobalPred(_);
@@ -1347,6 +1348,18 @@ rule map_dep_pred_member {
     if cod_el = map_el(mor, dom_el);
     then MemberPred(cod_el, p)!;
     then map_dep_pred(mor, dom_pred) = MemberPred(cod_el, p);
+}
+
+rule map_dep_func_global {
+    if dom_func = GlobalFunc(_);
+    if mor: Morphism;
+    then map_dep_func(mor, dom_func) = dom_func;
+}
+rule map_dep_func_member {
+    if dom_func = MemberFunc(dom_el, f);
+    if cod_el = map_el(mor, dom_el);
+    then MemberFunc(cod_el, f)!;
+    then map_dep_func(mor, dom_func) = MemberFunc(cod_el, f);
 }
 
 // Morphisms commute with relations and variables.
@@ -1368,10 +1381,11 @@ rule map_dep_pred_app {
     then dep_pred_app(mapped_dep_pred, mapped_args);
 }
 rule map_dep_func_app {
-    if dep_func_app(function, args) = result;
-    if mapped_args = map_els(_, args);
-    if mapped_result = map_el(_, result);
-    then dep_func_app(function, mapped_args) = mapped_result;
+    if dep_func_app(dep_func, args) = result;
+    if mapped_args = map_els(mor, args);
+    if mapped_result = map_el(mor, result);
+    if mapped_dep_func = map_dep_func(mor, dep_func);
+    then dep_func_app(mapped_dep_func, mapped_args) = mapped_result;
 }
 
 // Morphisms preserve and reflect types.

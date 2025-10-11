@@ -1,0 +1,11 @@
+model EndoSet {
+    type El;
+
+    func endo(el: El) -> El;
+}
+
+rule bad_rule {
+    if s_0: EndoSet;
+    if s_0.endo(el_0)!;
+    then el_0 = s_0.endo(el_0);
+}
