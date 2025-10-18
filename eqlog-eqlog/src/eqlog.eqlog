@@ -2577,6 +2577,7 @@ rule cod_dep_type_up {
 
 pred is_mor_el(el: El);
 pred should_be_mor_el(el: El, loc: Loc);
+pred should_be_mor_for_model_el(el: El, model_type: Type, loc: Loc);
 
 rule mor_is_mor_el {
     if el_type(el, GlobalType(mor_type(_)));
@@ -2588,9 +2589,15 @@ rule mor_app_term_node_should_be_mor {
     if mor_el = semantic_el(mor_term, _);
     then should_be_mor_el(mor_el, mor_loc);
 }
-
-// TODO: Add more specific versions that assert that an element is/should be a
-// morphism for a fixed model type?
+rule mor_app_term_node_should_be_mor_for_model {
+    if mor_app_term_node(_, mor_term, arg_term);
+    if arg_el = semantic_el(arg_term, structure);
+    if mor_el = semantic_el(mor_term, structure);
+    if mor_loc = term_node_loc(mor_term);
+    if el_type(arg_el, MemberType(model_el, _));
+    if el_type(model_el, GlobalType(model_ty));
+    then should_be_mor_for_model_el(mor_el, model_ty, mor_loc);
+}
 
 // Member elements are elements of type MemberType(model_el, _) for some model_el.
 pred is_member_element(el: El, model_type: Type);
@@ -2609,14 +2616,14 @@ rule argument_of_morphism_should_be_member {
     if el_type(mor_el, GlobalType(mor_type(model_ty)));
     then should_be_member_element(arg_el, model_ty, arg_loc);
 }
-//rule result_of_morphism_should_be_member {
-//    if mor_app_term_node(result_term, mor_term, _);
-//    if result_el = semantic_el(result_term, structure);
-//    if result_loc = term_node_loc(result_term);
-//    if mor_el = semantic_el(mor_term, structure);
-//    if el_type(mor_el, GlobalType(mor_type(model_ty)));
-//    then should_be_member_element(result_el, model_ty, result_loc);
-//}
+rule result_of_morphism_should_be_member {
+    if mor_app_term_node(result_term, mor_term, _);
+    if result_el = semantic_el(result_term, structure);
+    if result_loc = term_node_loc(result_term);
+    if mor_el = semantic_el(mor_term, structure);
+    if el_type(mor_el, GlobalType(mor_type(model_ty)));
+    then should_be_member_element(result_el, model_ty, result_loc);
+}
 
 // If arg_el has type MemberType(d, member_type), then dom(mor)
 // should be defined and equal to d.
