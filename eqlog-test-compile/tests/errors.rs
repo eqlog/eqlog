@@ -200,6 +200,10 @@ fn surjectivity_violation_nested_application() {
 fn surjectivity_violation_branch() {
     test_case(Path::new("surjectivity-violation-branch"));
 }
+#[test]
+fn surjectivity_violation_mor_app() {
+    test_case(Path::new("surjectivity-violation-mor-app"));
+}
 
 #[test]
 fn surjectivity_violation_in_then_defined() {

@@ -1278,6 +1278,13 @@ rule dep_func_app_codomain_type_member {
 }
 
 func func_app(function: Func, args: ElList) -> El;
+
+rule func_app_result_structure {
+    if func_app(_, els) = result;
+    if els_structure(els) = strct; 
+    then el_structure(result) = strct;
+}
+
 rule func_app_to_rel_app {
     if func_app(function, args) = result;
     if func_rel = FuncRel(function);
@@ -1401,6 +1408,19 @@ rule map_rel_app {
     if mapped_args = map_els(_, args);
     then rel_app(rel, mapped_args);
 }
+rule map_func_app {
+    // This is necessary even though we have the map_rel_app rule already.
+    // That's because we only have a one-sided implication
+    //
+    //   func_app(f, <args) = <result> => rel_app(f, <args>, result)
+    //
+    // but not the other direction.
+    if func_app(function, args) = result;
+    if mapped_args = map_els(mor, args);
+    if mapped_result = map_el(mor, result);
+    then func_app(function, mapped_args) = mapped_result;
+}
+
 rule map_dep_pred_app {
     if dep_pred_app(dep_pred, args);
     if mapped_args = map_els(mor, args);
@@ -2497,7 +2517,6 @@ rule dom_dep_type_down {
     match domain_type {
         GlobalType(typ) => {
             then dom_must_result_in_model_type(typ, loc);
-            // GlobalType is total though, no need to assert that it must be defined here.
             if mor_typ = GlobalType(mor_type(typ));
             if mor_el = semantic_el(mor_term, structure);
             then el_type(mor_el, mor_typ);
@@ -2518,7 +2537,6 @@ rule cod_dep_type_down {
     match codomain_type {
         GlobalType(typ) => {
             then cod_must_result_in_model_type(typ, loc);
-            // GlobalType is total though, no need to assert that it must be defined here.
             if mor_typ = GlobalType(mor_type(typ));
             if mor_el = semantic_el(mor_term, structure);
             then el_type(mor_el, mor_typ);
@@ -2616,14 +2634,6 @@ rule argument_of_morphism_should_be_member {
     if el_type(mor_el, GlobalType(mor_type(model_ty)));
     then should_be_member_element(arg_el, model_ty, arg_loc);
 }
-rule result_of_morphism_should_be_member {
-    if mor_app_term_node(result_term, mor_term, _);
-    if result_el = semantic_el(result_term, structure);
-    if result_loc = term_node_loc(result_term);
-    if mor_el = semantic_el(mor_term, structure);
-    if el_type(mor_el, GlobalType(mor_type(model_ty)));
-    then should_be_member_element(result_el, model_ty, result_loc);
-}
 
 // If arg_el has type MemberType(d, member_type), then dom(mor)
 // should be defined and equal to d.
@@ -2677,6 +2687,8 @@ rule mor_app_result_type {
     then el_type(result_el, result_ty);
 }
 
+// #### Semantics of terms
+
 rule dom_term_semantics {
     if dom_term_node(dom_term, mor_term);
     if dom_el = semantic_el(dom_term, structure);
@@ -2684,14 +2696,13 @@ rule dom_term_semantics {
 
     if el_type(mor_el, GlobalType(mor_type));
     if dom_func = mor_type_dom_func(mor_type);
-    if dom_func_rel = FuncRel(dom_func);
 
     then nil := NilElList(structure)!;
     then mor_el_single := ConsElList(mor_el, nil)!;
-    then mor_el_dom_el := SnocElList(mor_el_single, dom_el)!;
 
-    then rel_app(dom_func_rel, mor_el_dom_el);
+    then func_app(dom_func, mor_el_single) = dom_el;
 }
+
 rule cod_term_semantics {
     if cod_term_node(cod_term, mor_term);
     if cod_el = semantic_el(cod_term, structure);
@@ -2699,13 +2710,11 @@ rule cod_term_semantics {
 
     if el_type(mor_el, GlobalType(mor_type));
     if cod_func = mor_type_cod_func(mor_type);
-    if cod_func_rel = FuncRel(cod_func);
 
     then nil := NilElList(structure)!;
     then mor_el_single := ConsElList(mor_el, nil)!;
-    then mor_el_cod_el := SnocElList(mor_el_single, cod_el)!;
 
-    then rel_app(cod_func_rel, mor_el_cod_el);
+    then func_app(cod_func, mor_el_single) = cod_el;
 }
 rule mor_app_term_semantics {
     if mor_app_term_node(result_term, mor_term, arg_term);
@@ -2717,17 +2726,14 @@ rule mor_app_term_semantics {
     if arg_type = underlying_type(arg_dep_type);
     
     if app_func = mor_app_func(arg_type);
-    if app_func_rel = FuncRel(app_func);
     
     then nil := NilElList(structure)!;
     then arg_single := ConsElList(arg_el, nil)!;
     then mor_arg := ConsElList(mor_el, arg_single)!;
-    then mor_arg_result := SnocElList(mor_arg, result_el)!;
     
-    then rel_app(app_func_rel, mor_arg_result);
+    then func_app(app_func, mor_arg) = result_el;
 }
 
-// #### Semantics of terms
 rule app_term_semantics {
     if app_term_node(result_term, func_expr, arg_terms);
     if result_el = semantic_el(result_term, structure);

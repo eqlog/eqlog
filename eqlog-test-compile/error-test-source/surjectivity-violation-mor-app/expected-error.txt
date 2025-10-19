@@ -1,0 +1,6 @@
+Error: type of term undetermined
+ --> error-test-source/surjectivity-violation-mor-app/theory.eql:9
+  | 
+9 |     then f@(x)!;
+  |          ^^^^^  
+  | 
