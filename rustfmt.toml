@@ -1,3 +1,0 @@
-ignore = [
-    "eqlog-runtime/src/collections",
-]
