@@ -477,10 +477,8 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
                 None => None,
             };
             let name: &str = name.unwrap_or("<anonymous>");
-            println!("Rule {name}:");
-            display_morphisms(rule, &eqlog, &locations, &identifiers, &source);
-            let separator: String = ['='; 80].into_iter().collect();
-            debug!("{separator}");
+            let morphisms = display_morphisms(rule, &eqlog, &locations, &identifiers, &source);
+            debug!("Rule {name}:\n{morphisms}");
         }
     }
 

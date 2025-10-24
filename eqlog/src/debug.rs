@@ -1,4 +1,5 @@
 use crate::eqlog_util::*;
+use crate::fmt_util::FmtFn;
 use crate::grammar_util::*;
 use crate::source_display::SourceDisplay;
 use eqlog_eqlog::*;
@@ -56,21 +57,13 @@ fn assign_el_names(
     names
 }
 
-struct StructureDisplay<'a> {
+fn display_structure<'a>(
     structure: Structure,
     eqlog: &'a Eqlog,
     identifiers: &'a BTreeMap<Ident, String>,
-}
-
-impl<'a> Display for StructureDisplay<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let Self {
-            structure,
-            eqlog,
-            identifiers,
-        } = self;
-
-        let el_names = assign_el_names(*structure, eqlog, *identifiers);
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let el_names = assign_el_names(structure, eqlog, identifiers);
         writeln!(f, "Elements:")?;
         for (el, name) in el_names.iter() {
             writeln!(f, "- {name} {el:?}")?;
@@ -79,11 +72,11 @@ impl<'a> Display for StructureDisplay<'a> {
         writeln!(f, "Functions:")?;
         for (func, args, result) in eqlog.iter_func_app() {
             let structure0 = eqlog.els_structure(args).unwrap();
-            if !eqlog.are_equal_structure(structure0, *structure) {
+            if !eqlog.are_equal_structure(structure0, structure) {
                 continue;
             }
             let structure0 = eqlog.el_structure(result).unwrap();
-            assert!(eqlog.are_equal_structure(structure0, *structure));
+            assert!(eqlog.are_equal_structure(structure0, structure));
 
             let args = el_list_vec(args, eqlog)
                 .into_iter()
@@ -99,7 +92,7 @@ impl<'a> Display for StructureDisplay<'a> {
         writeln!(f, "Relations:")?;
         for (rel, args) in eqlog.iter_rel_app() {
             let structure0 = eqlog.els_structure(args).unwrap();
-            if !eqlog.are_equal_structure(structure0, *structure) {
+            if !eqlog.are_equal_structure(structure0, structure) {
                 continue;
             }
             let args = el_list_vec(args, eqlog)
@@ -110,56 +103,55 @@ impl<'a> Display for StructureDisplay<'a> {
             writeln!(f, "- {rel}({args})")?;
         }
         Ok(())
-    }
+    })
 }
 
-pub fn display_structure<'a>(
-    structure: Structure,
-    eqlog: &'a Eqlog,
-    identifiers: &'a BTreeMap<Ident, String>,
-) -> impl 'a + Display {
-    StructureDisplay {
-        structure,
-        eqlog,
-        identifiers,
-    }
-}
-
-pub fn display_morphisms(
+pub fn display_morphisms<'a>(
     rule: RuleDeclNode,
-    eqlog: &Eqlog,
-    locations: &BTreeMap<Loc, Location>,
-    identifiers: &BTreeMap<Ident, String>,
-    source: &str,
-) {
-    let mut displayed_structures: BTreeSet<Structure> = BTreeSet::new();
-    for morphisms in iter_rule_morphisms(rule, eqlog) {
-        for morphism in morphisms {
-            let dom = eqlog.dom(morphism).unwrap();
-            let cod = eqlog.cod(morphism).unwrap();
-            println!("{morphism:?}: {dom:?} -> {cod:?}");
-            for (stmt, morphism0) in eqlog.iter_stmt_morphism() {
-                if !eqlog.are_equal_morphism(morphism, morphism0) {
-                    continue;
+    eqlog: &'a Eqlog,
+    locations: &'a BTreeMap<Loc, Location>,
+    identifiers: &'a BTreeMap<Ident, String>,
+    source: &'a str,
+) -> impl 'a + Display {
+    FmtFn(move |f| {
+        let mut displayed_structures: BTreeSet<Structure> = BTreeSet::new();
+        for morphisms in iter_rule_morphisms(rule, eqlog) {
+            for morphism in morphisms {
+                let dom = eqlog.dom(morphism).unwrap();
+                let cod = eqlog.cod(morphism).unwrap();
+                writeln!(f, "{morphism:?}: {dom:?} -> {cod:?}")?;
+                for (stmt, morphism0) in eqlog.iter_stmt_morphism() {
+                    if !eqlog.are_equal_morphism(morphism, morphism0) {
+                        continue;
+                    }
+                    if let Some(loc) = eqlog.stmt_node_loc(stmt) {
+                        let location = *locations
+                            .get(&loc)
+                            .expect("Every Loc should have a Location");
+                        writeln!(f, "{}", SourceDisplay::new(source, location))?;
+                    } else {
+                        writeln!(f, "Anonymous stmt")?;
+                    }
                 }
-                if let Some(loc) = eqlog.stmt_node_loc(stmt) {
-                    let location = *locations
-                        .get(&loc)
-                        .expect("Every Loc should have a Location");
-                    println!("{}", SourceDisplay::new(source, location));
-                } else {
-                    println!("Anonymous stmt");
-                }
-            }
 
-            if !displayed_structures.contains(&dom) {
-                println!("{dom:?} =\n{}", display_structure(dom, eqlog, identifiers));
-                displayed_structures.insert(dom);
-            }
-            if !displayed_structures.contains(&cod) {
-                println!("{cod:?} =\n{}", display_structure(cod, eqlog, identifiers));
-                displayed_structures.insert(cod);
+                if !displayed_structures.contains(&dom) {
+                    writeln!(
+                        f,
+                        "{dom:?} =\n{}",
+                        display_structure(dom, eqlog, identifiers)
+                    )?;
+                    displayed_structures.insert(dom);
+                }
+                if !displayed_structures.contains(&cod) {
+                    writeln!(
+                        f,
+                        "{cod:?} =\n{}",
+                        display_structure(cod, eqlog, identifiers)
+                    )?;
+                    displayed_structures.insert(cod);
+                }
             }
         }
-    }
+        Ok(())
+    })
 }
