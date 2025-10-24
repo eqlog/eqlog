@@ -9,3 +9,5 @@ maplit = "*"
 
 [build-dependencies]
 eqlog = { path = "../eqlog", features = ["rebuild"] }
+env_logger = "*"
+log = "*"

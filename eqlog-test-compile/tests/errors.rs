@@ -5,6 +5,11 @@ use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 
 fn test_case(case_src: &Path) {
+    let _ = env_logger::builder()
+        .filter_level(log::LevelFilter::max())
+        .is_test(true)
+        .try_init();
+
     let in_dir = Path::new("error-test-source").join(case_src);
     assert!(
         in_dir.exists(),

@@ -23,6 +23,7 @@ anyhow = ">= 0"
 rayon = ">= 0"
 strum = ">= 0"
 strum_macros = ">= 0"
+log = ">= 0"
 
 [build-dependencies]
 lalrpop = { version = ">= 0", features = [ "lexer" ] }

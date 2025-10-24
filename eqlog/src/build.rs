@@ -1,3 +1,4 @@
+use crate::debug::display_morphisms;
 use crate::error::*;
 use crate::flat_eqlog::*;
 use crate::flatten::*;
@@ -14,6 +15,8 @@ pub use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use eqlog_eqlog::*;
 use indoc::{formatdoc, indoc};
+use log::debug;
+use log::log_enabled;
 use rayon::iter::ParallelBridge as _;
 use rayon::iter::ParallelIterator as _;
 use sha2::{Digest as _, Sha256};
@@ -466,6 +469,20 @@ fn process_file<'a>(in_file: &'a Path, config: &'a Config) -> Result<()> {
         }
     };
     eqlog.close();
+
+    if log_enabled!(log::Level::Debug) {
+        for rule in eqlog.iter_rule_decl_node() {
+            let name: Option<&str> = match eqlog.rule_name(rule) {
+                Some(name) => Some(identifiers.get(&name).unwrap().as_str()),
+                None => None,
+            };
+            let name: &str = name.unwrap_or("<anonymous>");
+            println!("Rule {name}:");
+            display_morphisms(rule, &eqlog, &locations, &identifiers, &source);
+            let separator: String = ['='; 80].into_iter().collect();
+            debug!("{separator}");
+        }
+    }
 
     check_eqlog(&eqlog, &identifiers, &locations).map_err(|error| CompileErrorWithContext {
         error,

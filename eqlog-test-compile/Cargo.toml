@@ -9,3 +9,6 @@ edition = "2021"
 eqlog = { path = "../eqlog", features = ["rebuild"] }
 indoc = "*"
 tempdir = "*"
+log = "*"
+test-log = "*"
+env_logger = "*"
