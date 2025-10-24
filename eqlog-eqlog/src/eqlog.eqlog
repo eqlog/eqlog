@@ -773,27 +773,26 @@ rule virtual_symbol_scope_total {
     then virtual_symbol_scope()!;
 }
 
-func parent_model_func(nested_type: Type) -> Func;
-rule parent_model_func_defined_and_codomain {
+func model_member_pred(nested_type: Type) -> Pred;
+rule model_member_pred_defined {
     if ss = type_definition_symbol_scope(typ);
-    if parent_type = symbol_scope_model(ss);
-    then parent_func := parent_model_func(typ)!;
-    then codomain(parent_func) = parent_type;
+    if symbol_scope_model(ss)!; // This is true iff typ is a member type.
+    then model_member_pred(typ)!;
 }
 
-rule parent_model_func_def_scope {
+rule model_member_pred_def_scope {
     if ss = virtual_symbol_scope();
-    if parent_func = parent_model_func(_);
-    if rel = FuncRel(parent_func);
+    if rel = PredRel(model_member_pred(_));
     then rel_definition_symbol_scope(rel) = ss;
 }
 
-rule parent_model_func_domain {
-    if parent_func = parent_model_func(typ);
+rule parent_model_rel_arity {
+    if rel = PredRel(model_member_pred(member_type));
+    if parent_type = symbol_scope_model(type_definition_symbol_scope(member_type));
     then nil := NilTypeList()!;
-    then typ_nil := ConsTypeList(typ, nil)!;
-    then domain(parent_func) = typ_nil;
-    then flat_domain(parent_func) = typ_nil;
+    then member_nil := ConsTypeList(member_type, nil)!;
+    then parent_member_nil := ConsTypeList(parent_type, member_nil)!;
+    then arity(rel) = parent_member_nil;
 }
 
 pred illegal_member_type_expr_in_signature(type_expr: TypeExprNode);
@@ -986,15 +985,6 @@ rule member_flat_domain_law {
     then cons_d := ConsTypeList(model_ty, d)!;
     then flat_domain(function) = cons_d;
 }
-
-
-pred is_total_func(Func);
-
-rule parent_func_is_total {
-    if function = parent_model_func(_);
-    then is_total_func(function);
-}
-
 
 // ## Structures
 type Structure;
@@ -2003,6 +1993,56 @@ rule semantic_external_member_func_expr_rule {
     then semantic_func_expr(func_expr, structure) = dep_func;
 }
 
+func semantic_type_expr(TypeExprNode, Structure) -> DepType;
+
+rule semantic_ambient_global_type_expr_rule {
+    if ambient_type_expr(type_expr, name);
+    if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
+    if t = semantic_type(ss, name);
+    if t_scope = type_definition_symbol_scope(t);
+    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
+    branch {
+        if t_scope = virtual_symbol_scope();
+    } along {
+        if t_scope = module_symbol_scope(_);
+    }
+    if type_expr_structure(type_expr, structure);
+    then dep_type := GlobalType(t)!;
+    then semantic_type_expr(type_expr, structure) = dep_type;
+}
+
+rule semantic_ambient_member_type_expr_rule {
+    if ambient_type_expr(type_expr, name);
+    if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
+    if t = semantic_type(ss, name);
+    if t_scope = type_definition_symbol_scope(t);
+    if type_expr_structure(type_expr, structure);
+    if parent_el = ambient_model_el(t_scope, structure);
+    then dep_type := MemberType(parent_el, t)!;
+    then semantic_type_expr(type_expr, structure) = dep_type;
+}
+
+rule semantic_external_member_type_expr_rule {
+    if member_type_expr(type_expr, model_tm, member_name);
+    if type_expr_structure(type_expr, structure);
+    if model_el = semantic_el(model_tm, structure);
+    if el_type(model_el, GlobalType(model_el_ty));
+    if member_ss = model_member_symbol_scope(model_el_ty);
+    if member_type = semantic_type(member_ss, member_name);
+    then dep_type := MemberType(model_el, member_type)!;
+    then semantic_type_expr(type_expr, structure) = dep_type;
+}
+
+rule semantic_morphism_type_expr_rule {
+    if mor_type_expr(type_expr, model_type_name);
+    if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
+    if model_type = semantic_type(ss, model_type_name);
+    if mor_typ = mor_type(model_type);
+    if type_expr_structure(type_expr, structure);
+    then dep_type := GlobalType(mor_typ)!;
+    then semantic_type_expr(type_expr, structure) = dep_type;
+}
+
 rule pred_if_atom_arg_num_should_match {
     if pred_if_atom_node(atom, pred_expr, args);
     if got_len = term_list_len(args);
@@ -2172,19 +2212,6 @@ rule ambient_model_el_structure_els {
     if symbol_scope_ancestor(ss, ancestor_scope);
     if _ = symbol_scope_model(ancestor_scope);
     then ambient_model_el(ancestor_scope, ams)!;
-}
-rule ambient_model_el_parent_law {
-    if ams = ambient_model_el_structure(_);
-    if el = ambient_model_el(ss, ams);
-    if parent_el = ambient_model_el(symbol_scope_parent(ss), ams);
-
-    if dep_typ = symbol_scope_model(ss);
-    if parent_func = parent_model_func(dep_typ);
-    if parent_rel = FuncRel(parent_func);
-    then nil := NilElList(ams)!;
-    then parent_el_nil := ConsElList(parent_el, nil)!;
-    then el_parent_el_nil := ConsElList(el, parent_el_nil)!;
-    then rel_app(parent_rel, el_parent_el_nil);
 }
 
 rule before_first_rule_stmt {
@@ -2635,6 +2662,16 @@ rule argument_of_morphism_should_be_member {
     then should_be_member_element(arg_el, model_ty, arg_loc);
 }
 
+rule model_member_pred_app_defined {
+    if el_type(member_el, MemberType(model_el, member_type));
+    if member_rel = PredRel(model_member_pred(member_type));
+    if strct = el_structure(member_el);
+    then nil := NilElList(strct)!;
+    then member_nil := ConsElList(member_el, nil)!;
+    then model_member_nil := ConsElList(model_el, member_nil)!;
+    then rel_app(member_rel, model_member_nil);
+}
+
 // If arg_el has type MemberType(d, member_type), then dom(mor)
 // should be defined and equal to d.
 rule mor_app_domain_type_from_arg {
@@ -2776,33 +2813,10 @@ rule pred_if_atom_semantics {
     if arg_els = semantic_els(arg_terms, structure);
     then dep_pred_app(p, arg_els);
 }
-rule var_if_atom_semantics_ambient {
-    if var_if_atom_node(atom, var_term, type_expr);
-    if ambient_type_expr(type_expr, type_name);
-    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if dep_typ = GlobalType(semantic_type(ss, type_name));
-    if var_el = semantic_el(var_term, _);
-    then el_type(var_el, dep_typ);
-}
-rule var_if_atom_semantics_morphism {
-    if var_if_atom_node(atom, var_term, type_expr);
-    if mor_type_expr(type_expr, model_type_name);
-    if ss = scope_symbols(entry_scope(rule_descendant_if_atom(atom)));
-    if model_type = semantic_type(ss, model_type_name);
-    if dep_typ = GlobalType(mor_type(model_type));
-    if var_el = semantic_el(var_term, _);
-    then el_type(var_el, dep_typ);
-}
-rule var_if_atom_semantics_member {
+rule var_if_atom_semantics {
     if var_if_atom_node(_, var_term, type_expr);
-    if member_type_expr(type_expr, model_term, type_name);
-
-    if var_el = semantic_el(var_term, strct);
-    if model_el = semantic_el(model_term, strct);
-
-    if element_member_symbol_scope(model_el, member_ss);
-    if member_type = semantic_type(member_ss, type_name);
-    then dep_typ := MemberType(model_el, member_type)!;
+    if var_el = semantic_el(var_term, structure);
+    if dep_typ = semantic_type_expr(type_expr, structure);
     then el_type(var_el, dep_typ);
 }
 

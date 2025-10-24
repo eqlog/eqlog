@@ -42,12 +42,12 @@ fn merge_initial_models() {
 
     assert_eq!(model.iter_pointed().count(), 2);
     assert_eq!(model.iter_p().count(), 2);
-    assert_eq!(model.iter_p_parent().count(), 2);
+    assert_eq!(model.iter_pointed_member_p().count(), 2);
 
     model.equate_pointed(pointed0, pointed1);
     model.close();
 
     assert_eq!(model.iter_pointed().count(), 1);
     assert_eq!(model.iter_p().count(), 1);
-    assert_eq!(model.iter_p_parent().count(), 1);
+    assert_eq!(model.iter_pointed_member_p().count(), 1);
 }

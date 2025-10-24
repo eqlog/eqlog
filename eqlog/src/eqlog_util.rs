@@ -210,6 +210,24 @@ pub fn display_rel<'a>(
         }
     });
     if let Some(pred) = pred {
+        if let Some(member_type) = eqlog
+            .iter_model_member_pred()
+            .find_map(|(member_type, p)| eqlog.are_equal_pred(p, pred).then_some(member_type))
+        {
+            {
+                let model_type = eqlog
+                    .symbol_scope_model(eqlog.type_definition_symbol_scope(member_type).unwrap())
+                    .unwrap();
+                let model_type = display_type(model_type, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                let member_type = display_type(member_type, eqlog, identifiers)
+                    .to_string()
+                    .to_case(Snake);
+                return format!("{model_type}_member_{member_type}");
+            }
+        }
+
         let ident = eqlog
             .iter_semantic_pred()
             .find_map(|(_scope, ident, pred0)| eqlog.are_equal_pred(pred0, pred).then_some(ident))
@@ -231,22 +249,6 @@ pub fn display_rel<'a>(
             .find_map(|(_, ident, func0)| eqlog.are_equal_func(func0, func).then_some(ident));
         if let Some(semantic_func_ident) = semantic_func_ident {
             return identifiers.get(&semantic_func_ident).unwrap().clone();
-        }
-
-        let nested_type = eqlog
-            .iter_parent_model_func()
-            .find_map(|(nested_type, func0)| {
-                if eqlog.are_equal_func(func, func0) {
-                    Some(nested_type)
-                } else {
-                    None
-                }
-            });
-        if let Some(nested_type) = nested_type {
-            let type_name = display_type(nested_type, eqlog, identifiers)
-                .to_string()
-                .to_case(Snake);
-            return format!("{type_name}_parent");
         }
 
         let domain_for_mor_type: Option<Type> =

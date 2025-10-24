@@ -65,8 +65,25 @@ fn display_structure<'a>(
     FmtFn(move |f| {
         let el_names = assign_el_names(structure, eqlog, identifiers);
         writeln!(f, "Elements:")?;
-        for (el, name) in el_names.iter() {
-            writeln!(f, "- {name} {el:?}")?;
+        for (&el, name) in el_names.iter() {
+            write!(f, "- {name} {el:?}")?;
+            for dep_type in eqlog
+                .iter_el_type()
+                .filter_map(|(el0, dep_type)| eqlog.are_equal_el(el0, el).then_some(dep_type))
+            {
+                match eqlog.dep_type_case(dep_type) {
+                    DepTypeCase::GlobalType(typ) => {
+                        let typ = display_type(typ, eqlog, identifiers);
+                        writeln!(f, " of type {typ}")?;
+                    }
+                    DepTypeCase::MemberType(model_el, typ) => {
+                        let typ = display_type(typ, eqlog, identifiers);
+                        let model_name = el_names.get(&model_el).unwrap();
+                        writeln!(f, " of type {model_name}.{typ}")?;
+                    }
+                }
+            }
+            writeln!(f, "")?;
         }
 
         writeln!(f, "Functions:")?;
@@ -102,6 +119,7 @@ fn display_structure<'a>(
             let rel = display_rel(rel, eqlog, identifiers);
             writeln!(f, "- {rel}({args})")?;
         }
+
         Ok(())
     })
 }

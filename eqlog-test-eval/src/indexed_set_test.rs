@@ -22,9 +22,9 @@ fn singleton_set() {
     let set = model.new_set();
     let a = model.new_s(set);
 
-    assert!(model.are_equal_set(model.s_parent(a), set));
+    assert!(model.set_member_s(set, a));
     model.close();
-    assert!(model.are_equal_set(model.s_parent(a), set));
+    assert!(model.set_member_s(set, a));
 
     assert_eq!(model.iter_set().count(), 1);
     assert_eq!(model.iter_s().count(), 1);

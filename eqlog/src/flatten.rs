@@ -133,36 +133,17 @@ fn flatten_if_arbitrary(
 
         let if_stmt = match eqlog.dep_type_case(el_type) {
             DepTypeCase::GlobalType(typ) => {
-                let typ_def_sym_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
-                let el_struct = eqlog.el_structure(el).unwrap();
-                let model_el = eqlog.ambient_model_el(typ_def_sym_scope, el_struct);
-                match model_el {
-                    Some(model_el) => {
-                        let parent_var = el_vars.get(&model_el).unwrap().clone();
-                        let rel: Rel = eqlog
-                            .func_rel(eqlog.parent_model_func(typ).unwrap())
-                            .unwrap();
-                        let rel = FlatInRel::EqlogRel(rel);
-                        FlatIfStmt {
-                            rel,
-                            args: vec![var, parent_var],
-                            age,
-                        }
-                    }
-                    None => {
-                        let rel = FlatInRel::TypeSet(typ);
-                        FlatIfStmt {
-                            rel,
-                            args: vec![var],
-                            age,
-                        }
-                    }
+                let rel = FlatInRel::TypeSet(typ);
+                FlatIfStmt {
+                    rel,
+                    args: vec![var],
+                    age,
                 }
             }
             DepTypeCase::MemberType(model_el, typ) => {
                 let parent_var = el_vars.get(&model_el).unwrap().clone();
                 let rel: Rel = eqlog
-                    .func_rel(eqlog.parent_model_func(typ).unwrap())
+                    .pred_rel(eqlog.model_member_pred(typ).unwrap())
                     .unwrap();
                 let rel = FlatInRel::EqlogRel(rel);
                 FlatIfStmt {

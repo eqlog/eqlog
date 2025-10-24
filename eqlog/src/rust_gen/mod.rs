@@ -71,24 +71,6 @@ fn display_func<'a>(
         return format!("{mor_type}_cod");
     }
 
-    // Handle func = parent_model_func(member_type).
-    if let Some(member_type) =
-        eqlog
-            .iter_parent_model_func()
-            .find_map(|(member_type, parent_func)| {
-                if eqlog.are_equal_func(parent_func, func) {
-                    Some(member_type)
-                } else {
-                    None
-                }
-            })
-    {
-        let member_type = display_type(member_type, eqlog, identifiers)
-            .to_string()
-            .to_case(Snake);
-        return format!("{member_type}_parent");
-    }
-
     // Handle func = mor_app_func(member_type).
     if let Some(member_type) = eqlog
         .iter_mor_app_func()
@@ -454,14 +436,6 @@ fn display_pub_function_eval_fn<'a>(
             })
             .format("");
 
-        let result_type = FmtFn(move |f| {
-            if eqlog.is_total_func(func) {
-                write!(f, "{cod_camel}")
-            } else {
-                write!(f, "Option<{cod_camel}>")
-            }
-        });
-
         let canonicalize = flat_dom
             .iter()
             .copied()
@@ -514,16 +488,12 @@ fn display_pub_function_eval_fn<'a>(
             })
             .format("\n");
 
-        let result = if eqlog.is_total_func(func) {
-            "result.unwrap().into()"
-        } else {
-            "result.map(|x| x.into())"
-        };
+        let result = "result.map(|x| x.into())";
 
         writedoc! {f, "
             /// Evaluates `{relation_snake}({doc_args})`.
             #[allow(dead_code)]
-            pub fn {relation_snake}(&self, {params}) -> {result_type} {{
+            pub fn {relation_snake}(&self, {params}) -> Option<{cod_camel}> {{
             {canonicalize}
 
             let result: Option<u32> =
@@ -951,14 +921,16 @@ fn display_new_element_fn_internal<'a>(
         let type_snake = type_camel.to_case(Snake);
         let type_snake = type_snake.as_str();
 
-        let parent_func = eqlog.parent_model_func(typ);
+        let parent_pred = eqlog.model_member_pred(typ);
         let parent_param = FmtFn(move |f| {
-            let parent_func = match parent_func {
-                Some(parent_func) => parent_func,
-                None => return Ok(()),
-            };
+            if parent_pred.is_none() {
+                return Ok(());
+            }
 
-            let parent_type = eqlog.codomain(parent_func).unwrap();
+            // If parent_pred is Some, then in particular typ must be a member type, so we can
+            // unwrap here.
+            let member_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
+            let parent_type = eqlog.symbol_scope_model(member_scope).unwrap();
             write!(
                 f,
                 "parent: {}",
@@ -967,11 +939,16 @@ fn display_new_element_fn_internal<'a>(
         });
 
         let insert_parent = FmtFn(move |f| {
-            if parent_func.is_none() {
-                return Ok(());
-            }
+            let parent_pred = match parent_pred {
+                Some(parent_pred) => parent_pred,
+                None => {
+                    return Ok(());
+                }
+            };
+            let parent_rel = eqlog.pred_rel(parent_pred).unwrap();
+            let parent_pred = display_rel(parent_rel, eqlog, identifiers);
 
-            write!(f, "self.insert_{type_snake}_parent(el.into(), parent);")
+            write!(f, "self.insert_{parent_pred}(parent, el.into());")
         });
 
         let new_index = IndexSpec {
@@ -1015,14 +992,16 @@ fn display_new_element_fn<'a>(
             .to_case(UpperCamel);
         let type_snake = type_camel.to_case(Snake);
 
-        let parent_func = eqlog.parent_model_func(typ);
+        let parent_pred = eqlog.model_member_pred(typ);
         let parent_param = FmtFn(move |f| {
-            let parent_func = match parent_func {
-                Some(parent_func) => parent_func,
-                None => return Ok(()),
-            };
+            if parent_pred.is_none() {
+                return Ok(());
+            }
 
-            let parent_type = eqlog.codomain(parent_func).unwrap();
+            // If parent_pred is Some, then in particular typ must be a member type, so we can
+            // unwrap here.
+            let member_scope = eqlog.type_definition_symbol_scope(typ).unwrap();
+            let parent_type = eqlog.symbol_scope_model(member_scope).unwrap();
             write!(
                 f,
                 "parent: {}",
@@ -1031,7 +1010,7 @@ fn display_new_element_fn<'a>(
         });
 
         let parent_arg = FmtFn(move |f| {
-            if parent_func.is_none() {
+            if parent_pred.is_none() {
                 return Ok(());
             }
             write!(f, "parent")
@@ -1719,7 +1698,7 @@ fn display_model_delta_struct<'a>(
 
         let new_defines = eqlog
             .iter_func()
-            .filter(|func| eqlog.function_can_be_made_defined(*func) && !eqlog.is_total_func(*func))
+            .filter(|func| eqlog.function_can_be_made_defined(*func))
             .map(|func| {
                 FmtFn(move |f| {
                     let rel = eqlog.func_rel(func).unwrap();
@@ -1801,7 +1780,7 @@ fn display_model_delta_new_fn<'a>(
             .format("\n");
         let new_defines = eqlog
             .iter_func()
-            .filter(|&func| eqlog.function_can_be_made_defined(func) && !eqlog.is_total_func(func))
+            .filter(|&func| eqlog.function_can_be_made_defined(func))
             .map(|func| {
                 FmtFn(move |f| {
                     let rel = eqlog.func_rel(func).unwrap();
@@ -1909,9 +1888,6 @@ fn display_model_delta_apply_def_fn<'a>(
             .iter_func()
             .filter_map(|func| {
                 if !eqlog.function_can_be_made_defined(func) {
-                    return None;
-                }
-                if eqlog.is_total_func(func) {
                     return None;
                 }
 
@@ -2474,16 +2450,16 @@ fn display_define_fn<'a>(
             .map(display_var)
             .format(", ");
 
-        let codomain_parent_func = eqlog.parent_model_func(codomain);
+        let codomain_parent_pred: Option<Pred> = eqlog.model_member_pred(codomain);
 
-        let parent_var: &str = if codomain_parent_func.is_none() {
+        let parent_var: &str = if codomain_parent_pred.is_none() {
             ""
         } else {
             "parent_el"
         };
 
         let define_parent_var = FmtFn(move |f| {
-            if codomain_parent_func.is_none() {
+            if codomain_parent_pred.is_none() {
                 return Ok(());
             }
 
@@ -2866,7 +2842,7 @@ fn display_theory_impl<'a>(
         }
 
         for func in eqlog.iter_func() {
-            if eqlog.function_can_be_made_defined(func) && !eqlog.is_total_func(func) {
+            if eqlog.function_can_be_made_defined(func) {
                 let define_fn = display_define_fn(func, eqlog, identifiers);
                 write!(f, "{}", define_fn)?;
             }
