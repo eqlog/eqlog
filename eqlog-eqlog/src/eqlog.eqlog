@@ -773,6 +773,16 @@ rule virtual_symbol_scope_total {
     then virtual_symbol_scope()!;
 }
 
+pred global_symbol_scope(scope: SymbolScope);
+rule global_symbol_scope_virtual {
+    if scope = virtual_symbol_scope();
+    then global_symbol_scope(scope);
+}
+rule global_symbol_scope_module {
+    if scope = module_symbol_scope(_);
+    then global_symbol_scope(scope);
+}
+
 func model_member_pred(nested_type: Type) -> Pred;
 rule model_member_pred_defined {
     if ss = type_definition_symbol_scope(typ);
@@ -1163,12 +1173,7 @@ func instantiated_type(model_el: El, typ: Type) -> DepType;
 rule instantiated_type_global {
     if should_instantiate_type(model_el, typ);
     if def_scope = type_definition_symbol_scope(typ);
-    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
-    branch {
-        if def_scope = virtual_symbol_scope();
-    } along {
-        if def_scope = module_symbol_scope(_);
-    }
+    if global_symbol_scope(def_scope);
     then GlobalType(typ)!;
     then instantiated_type(model_el, typ) = GlobalType(typ);
 }
@@ -1921,12 +1926,7 @@ rule semantic_ambient_global_pred_expr_rule {
     if ss = scope_symbols(entry_scope(rule_descendant_pred_expr(pred_expr)));
     if p = semantic_pred(ss, name);
     if p_scope = rel_definition_symbol_scope(PredRel(p));
-    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
-    branch {
-        if p_scope = virtual_symbol_scope();
-    } along {
-        if p_scope = module_symbol_scope(_);
-    }
+    if global_symbol_scope(p_scope);
     if pred_expr_structure(pred_expr, structure);
     then dep_pred := GlobalPred(p)!;
     then semantic_pred_expr(pred_expr, structure) = dep_pred;
@@ -1960,12 +1960,7 @@ rule semantic_ambient_global_func_expr_rule {
     if ss = scope_symbols(entry_scope(rule_descendant_func_expr(func_expr)));
     if f = semantic_func(ss, name);
     if f_scope = rel_definition_symbol_scope(FuncRel(f));
-    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
-    branch {
-        if f_scope = virtual_symbol_scope();
-    } along {
-        if f_scope = module_symbol_scope(_);
-    }
+    if global_symbol_scope(f_scope);
     if func_expr_structure(func_expr, structure);
     then dep_func := GlobalFunc(f)!;
     then semantic_func_expr(func_expr, structure) = dep_func;
@@ -2000,12 +1995,7 @@ rule semantic_ambient_global_type_expr_rule {
     if ss = scope_symbols(entry_scope(rule_descendant_type_expr(type_expr)));
     if t = semantic_type(ss, name);
     if t_scope = type_definition_symbol_scope(t);
-    // TODO: Introduce global_symbol_scope(SymbolScope) predicate?
-    branch {
-        if t_scope = virtual_symbol_scope();
-    } along {
-        if t_scope = module_symbol_scope(_);
-    }
+    if global_symbol_scope(t_scope);
     if type_expr_structure(type_expr, structure);
     then dep_type := GlobalType(t)!;
     then semantic_type_expr(type_expr, structure) = dep_type;
