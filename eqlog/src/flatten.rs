@@ -114,6 +114,18 @@ fn flatten_if_arbitrary(
         }
 
         let els_vec: Vec<El> = el_list_vec(els, eqlog);
+
+        let is_model_member_predicate = eqlog.iter_model_member_pred().any(|(_, member_pred)| {
+            let member_rel = eqlog.pred_rel(member_pred).unwrap();
+            eqlog.are_equal_rel(member_rel, rel)
+        });
+
+        if is_model_member_predicate {
+            assert_eq!(els_vec.len(), 2, "model member predicates have arity 2");
+            if eqlog.constrained_el(els_vec[1]) {
+                continue;
+            }
+        }
         let args: Vec<FlatVar> = els_vec
             .iter()
             .map(|el| el_vars.get(el).unwrap().clone())
@@ -140,17 +152,10 @@ fn flatten_if_arbitrary(
                     age,
                 }
             }
-            DepTypeCase::MemberType(model_el, typ) => {
-                let parent_var = el_vars.get(&model_el).unwrap().clone();
-                let rel: Rel = eqlog
-                    .pred_rel(eqlog.model_member_pred(typ).unwrap())
-                    .unwrap();
-                let rel = FlatInRel::EqlogRel(rel);
-                FlatIfStmt {
-                    rel,
-                    args: vec![var, parent_var],
-                    age,
-                }
+            DepTypeCase::MemberType(_, _) => {
+                // This is already handled by querying Rels: For unconstrained els, we query the
+                // member relation.
+                continue;
             }
         };
         stmts.push(if_stmt);

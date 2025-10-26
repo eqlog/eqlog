@@ -1294,10 +1294,36 @@ rule func_app_to_rel_app {
 // application of a predicate.
 pred constrained_el(El);
 pred constrained_els(ElList);
-rule rel_app_constrained {
-    if rel_app(_, args);
+
+// We can't check the non-dependent app versions here, since those include
+// applications of model_member_pred predicate. This would imply that every
+// member element is constrained, which would mean that we never query for
+// model membership.
+rule dep_pred_app_constrains {
+    if dep_pred_app(_, args);
     then constrained_els(args);
 }
+rule dep_func_app_constrains {
+    if dep_func_app(_, args) = result;
+    then constrained_els(args);
+    then constrained_el(result);
+}
+rule dom_func_app_constrains {
+    if func_app(mor_type_dom_func(_), args) = result;
+    then constrained_els(args);
+    then constrained_el(result);
+}
+rule cod_func_app_constrains {
+    if func_app(mor_type_cod_func(_), args) = result;
+    then constrained_els(args);
+    then constrained_el(result);
+}
+rule mor_app_constraints {
+    if func_app(mor_app_func(_), args) = result;
+    then constrained_els(args);
+    then constrained_el(result);
+}
+
 rule constrained_head_tail {
     if constrained_els(ConsElList(head, tail));
     then constrained_el(head);

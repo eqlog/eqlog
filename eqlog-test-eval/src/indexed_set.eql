@@ -16,14 +16,14 @@ model Set {
     }
 }
 
-rule pointed_reflexivity_global {
+rule reflexivity_global {
     if set: Set;
     if x: set.S;
     then x = x;
 }
 
 pred is_subterminal_set(set: Set);
-rule pointed_collapse_convoluted {
+rule is_subterminal_set_collapse {
     if set_0: Set;
     if set_1: Set;
     if x: set_0.S;

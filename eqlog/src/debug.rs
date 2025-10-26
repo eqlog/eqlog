@@ -74,14 +74,19 @@ fn display_structure<'a>(
                 match eqlog.dep_type_case(dep_type) {
                     DepTypeCase::GlobalType(typ) => {
                         let typ = display_type(typ, eqlog, identifiers);
-                        writeln!(f, " of type {typ}")?;
+                        write!(f, " of type {typ}")?;
                     }
                     DepTypeCase::MemberType(model_el, typ) => {
                         let typ = display_type(typ, eqlog, identifiers);
                         let model_name = el_names.get(&model_el).unwrap();
-                        writeln!(f, " of type {model_name}.{typ}")?;
+                        write!(f, " of type {model_name}.{typ}")?;
                     }
                 }
+            }
+            if eqlog.constrained_el(el) {
+                write!(f, " (constrained)")?;
+            } else {
+                write!(f, " (unconstrained)")?;
             }
             writeln!(f, "")?;
         }
