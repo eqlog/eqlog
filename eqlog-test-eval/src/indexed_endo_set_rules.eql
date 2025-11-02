@@ -4,7 +4,7 @@ model EndoSet {
     func endo(el: El) -> El;
 }
 
-rule bad_rule {
+rule endo_is_id {
     if s_0: EndoSet;
     if s_0.endo(el_0)!;
     then el_0 = s_0.endo(el_0);
