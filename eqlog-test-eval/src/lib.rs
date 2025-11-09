@@ -23,6 +23,7 @@ eqlog_mod!(triple_join);
 eqlog_mod!(int);
 eqlog_mod!(indexed_set);
 eqlog_mod!(indexed_pointed);
+eqlog_mod!(indexed_abelian_group);
 eqlog_mod!(empty);
 eqlog_mod!(subset);
 eqlog_mod!(subset_rules);
@@ -44,6 +45,8 @@ mod monoid_test;
 //mod pca_test;
 #[cfg(test)]
 mod branches_test;
+#[cfg(test)]
+mod indexed_abelian_group_test;
 #[cfg(test)]
 mod indexed_pointed_test;
 #[cfg(test)]

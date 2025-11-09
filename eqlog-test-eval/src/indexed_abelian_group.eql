@@ -1,0 +1,73 @@
+model AbelianGroup {
+    type El;
+
+    func mul(El, El) -> El;
+    func id() -> El;
+    func inv(El) -> El;
+
+    rule mul_total {
+        if x: El;
+        if y: El;
+        then mul(x, y)!;
+    }
+
+    rule id_total {
+        then id()!;
+    }
+
+    rule inv_total {
+        if x: El;
+        then inv(x)!;
+    }
+
+    rule right_to_left_associativity {
+        if x: El;
+        if y: El;
+        if z: El;
+        if t_0 = mul(x, y);
+        if t_1 = z;
+        if to = mul(x, mul(y, z));
+        then mul(t_0, t_1) = to;
+    }
+
+    rule left_to_right_associativity {
+        if x: El;
+        if y: El;
+        if z: El;
+        if t_0 = x;
+        if t_1 = mul(y, z);
+        if to = mul(mul(x, y), z);
+        then mul(t_0, t_1) = to;
+    }
+
+    rule right_identity {
+        if x: El;
+        if t_0 = x;
+        if t_1 = id();
+        if to = x;
+        then mul(t_0, t_1) = to;
+    }
+
+    rule right_inverse_0 {
+        if x: El;
+        if t_0 = x;
+        if t_1 = inv(x);
+        if to = id();
+        then mul(t_0, t_1) = to;
+    }
+
+    rule right_inverse_1 {
+        if x: El;
+        if to = mul(x, inv(x));
+        then id() = to;
+    }
+
+    rule commutativity {
+        if x: El;
+        if y: El;
+        if t_0 = x;
+        if t_1 = y;
+        if to = mul(y, x);
+        then mul(t_0, t_1) = to;
+    }
+}
