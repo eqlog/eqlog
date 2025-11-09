@@ -9,6 +9,36 @@ pub struct WBTreeMap<K: Clone, V: Clone> {
     len: usize,
 }
 
+// TODO: Introcude new type of node which represents applying a mapping to all keys and values
+// under the mapping node. The map can be assumed to be monotone on keys. The idea is that one can
+// create a new map with keys shifted according to a monotone map and values changed arbitrarily
+// without creating a full copy of a wbtree. Instead, you can simply wrap the root of the old tree
+// inside this new mapping node to obtain the new map.
+// Things to consider:
+// - The new node could be called something like MapNode, but that's ambiguous because the "Map"
+//   here refers to the monotone mapping, not the map as in the WBTreeMap the node is part of.
+// - The monotone mapping on keys should be represented as a WBTreeMap<K, K>, at least for now.
+//   Introduce a type alias for it though; later on we want to transition to a more efficient
+//   representation.
+// - The new `Node` type should be an enum: Either the `Node` as it is currently (find an
+//   appropriate name) or the new mapping node that represents a transformation of the subtree.
+// - In terms of balancing, ignore the mapping nodes: mapping nodes shouldn't contribute to the
+//   of a node/subtree.
+// - Balancing might require shifting mapping nodes around, cloning them, I'm not sure. Figure it
+//   out.
+// - The map on values should be given by an Fn(V) -> V. Use sometihg like an Rc<dyn Fn ...> to
+//   hold it, the concrete type of the function shouldn't be part of WBTreeMap.
+// - In principle you could imagine applying a mapping on keys separately from values, but this is
+//   never actually used. So the mapping node should do both at the same time.
+// - Keep in mind that there might be multiple mapping nodes on the way from the root node down to
+//   some specific node. You'll need to apply multiple mappings, potentially.
+// - When inserting a (key, value) pair, that (key, value) pair might belong somewhere under a
+//   mapping node. But we don't have reverse mappings or something like that, and insertions
+//   currently recreate the path from the root node anyway. So just continue doing that: Recreate
+//   the path from the new root node. However, this might require splitting a subtree under a
+//   mapping node, in which both parts of the split must be put under a mapping node.
+// - The apply-monotone-mapping functionality should be exposed only from WBTreeMap, and as a
+//   function `monotone_map(key_mapping, value_mapping) -> Self` method.
 #[derive(Clone)]
 struct Node<K: Clone, V: Clone> {
     key: K,
