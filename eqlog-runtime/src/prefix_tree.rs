@@ -1363,3 +1363,261 @@ impl PrefixTree9 {
         }
     }
 }
+
+// mapped methods
+
+// TODO: This currently clones the whole tree. Instead, we should use copy-on-write semantics here.
+// The idea would be to introduce new type of node in WBTreeMap which represents applying a mapping
+// to all keys and values under the mapping node.
+// Things to consider:
+// - The new node could be called something like MapNode, but that's ambiguous because the "Map"
+//   here refers to the monotone mapping, not the map as in the WBTreeMap the node is part of.
+// - The monotone mapping on keys should be represented as a WBTreeMap<K, K>, at least for now.
+//   Introduce a type alias for it though; later on we want to transition to a more efficient
+//   representation.
+// - The new `Node` type should be an enum: Either the `Node` as it is currently (find an
+//   appropriate name) or the new mapping node that represents a transformation of the subtree.
+// - In terms of balancing, ignore the mapping nodes at first: mapping nodes shouldn't
+//   contribute to the of a node/subtree. This might be close to the best thing that we can do,
+//   as mapped subtrees will usually be shared with other trees, so allowing more imbalance in
+//   order to avoid cloning might be a reasonable trade-off.
+// - Balancing might require shifting mapping nodes around, cloning them, I'm not sure. Figure it
+//   out.
+// - The map on values should be given by an Fn(V) -> V. Use sometihg like an Rc<dyn Fn ...> to
+//   hold it, the concrete type of the function shouldn't be part of WBTreeMap.
+// - In principle you could imagine applying a mapping on keys separately from values, but this is
+//   never actually used. So the mapping node should do both at the same time.
+// - Keep in mind that there might be multiple mapping nodes on the way from the root node down to
+//   some specific node. You'll need to apply multiple mappings, potentially.
+// - When inserting a (key, value) pair, that (key, value) pair might belong somewhere under a
+//   mapping node. But we don't have reverse mappings or something like that, and insertions
+//   currently recreate the path from the root node anyway. So just continue doing that: Recreate
+//   the path from the new root node. However, this might require splitting a subtree under a
+//   mapping node, in which both parts of the split must be put under separate mapping node.
+impl PrefixTree0 {
+    pub fn mapped(&self) -> Self {
+        self.clone()
+    }
+}
+
+impl PrefixTree1 {
+    pub fn mapped(&self, map0: Option<&WBTreeMap<u32, u32>>) -> Self {
+        if let Some(map) = map0 {
+            let mut result = Self::new();
+            for el in self.set.iter() {
+                let mapped = map
+                    .get(el)
+                    .expect("map undefined on value in prefix tree")
+                    .clone();
+                result.set.insert(mapped);
+            }
+            result
+        } else {
+            self.clone()
+        }
+    }
+}
+
+impl PrefixTree2 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree3 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree4 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+        map3: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2, map3);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree5 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+        map3: Option<&WBTreeMap<u32, u32>>,
+        map4: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2, map3, map4);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree6 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+        map3: Option<&WBTreeMap<u32, u32>>,
+        map4: Option<&WBTreeMap<u32, u32>>,
+        map5: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2, map3, map4, map5);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree7 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+        map3: Option<&WBTreeMap<u32, u32>>,
+        map4: Option<&WBTreeMap<u32, u32>>,
+        map5: Option<&WBTreeMap<u32, u32>>,
+        map6: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2, map3, map4, map5, map6);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree8 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+        map3: Option<&WBTreeMap<u32, u32>>,
+        map4: Option<&WBTreeMap<u32, u32>>,
+        map5: Option<&WBTreeMap<u32, u32>>,
+        map6: Option<&WBTreeMap<u32, u32>>,
+        map7: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2, map3, map4, map5, map6, map7);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
+
+impl PrefixTree9 {
+    pub fn mapped(
+        &self,
+        map0: Option<&WBTreeMap<u32, u32>>,
+        map1: Option<&WBTreeMap<u32, u32>>,
+        map2: Option<&WBTreeMap<u32, u32>>,
+        map3: Option<&WBTreeMap<u32, u32>>,
+        map4: Option<&WBTreeMap<u32, u32>>,
+        map5: Option<&WBTreeMap<u32, u32>>,
+        map6: Option<&WBTreeMap<u32, u32>>,
+        map7: Option<&WBTreeMap<u32, u32>>,
+        map8: Option<&WBTreeMap<u32, u32>>,
+    ) -> Self {
+        let mut result = Self::new();
+        for (k, v) in self.map.iter() {
+            let new_k = if let Some(m) = map0 {
+                m.get(k)
+                    .expect("map undefined on value in prefix tree")
+                    .clone()
+            } else {
+                k.clone()
+            };
+            let new_v = v.mapped(map1, map2, map3, map4, map5, map6, map7, map8);
+            result.insert_restriction(new_k, new_v);
+        }
+        result
+    }
+}
