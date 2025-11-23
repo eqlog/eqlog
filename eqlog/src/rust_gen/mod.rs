@@ -2158,6 +2158,12 @@ fn display_recompute_model_indices_fn<'a>(
             })
             .map(|(flat_in_rel, index_spec, parent_model_type)| {
                 FmtFn(move |f| {
+                    let flat_in_rel = &flat_in_rel;
+                    let arity: Vec<Type> = flat_in_rel.arity(eqlog);
+                    let arity: Vec<Type> =
+                        index_spec.order.iter().copied().map(|i| arity[i]).collect();
+                    let arity: &[Type] = arity.as_slice();
+
                     let index_field_name = display_index_field_name(&flat_in_rel, &index_spec, eqlog, identifiers).to_string();
                     let index_field_name = index_field_name.as_str();
 
@@ -2166,6 +2172,9 @@ fn display_recompute_model_indices_fn<'a>(
                     let parent_el_pos =
                         index_spec.order.iter().position(|p| *p == 0).expect("Index orders should be permutations");
 
+                    // TODO: This doesn't work in case an element before the parent el position is
+                    // a member element. In that case, we need to distinguish
+                    // {index_field_name}_own for domain and codomain.
                     let before_model_els_loop_headers =
                         (0..parent_el_pos).map(|i| {
                             FmtFn(move |f| {
@@ -2205,28 +2214,74 @@ fn display_recompute_model_indices_fn<'a>(
                         FmtFn(|f| {
                             if parent_el_pos == 0 {
                                 writedoc!{f, "
-                                    {index_field_name}_own.remove_restriction(*cod, &dom_set);
+                                    {index_field_name}_own.remove_restriction(*cod, &mapped_dom_set);
                                 "}
                             } else {
                                 writedoc!{f, "
                                     if let Some({index_field_name}_own) = {index_field_name}_own.deref_mut() {{
-                                    {index_field_name}_own.remove_restriction(*cod, &dom_set);
+                                    {index_field_name}_own.remove_restriction(*cod, &mapped_dom_set);
                                     }}
                                 "}
                             }
                         });
 
+                    let dom_cod_maps =
+                        ((parent_el_pos + 1)..arity.len()).map(|i| {
+                            FmtFn(move |f| {
+                                let typ = arity[i];
+                                let def_ss: SymbolScope = eqlog.type_definition_symbol_scope(typ).unwrap();
+                                let _parent_model: Type = match eqlog.symbol_scope_model(def_ss) {
+                                    None => {
+                                        // typ is not a member type, don't apply mapping.
+                                        write!(f, "None")?;
+                                        return Ok(())
+                                    }
+                                    Some(parent_model) => parent_model,
+                                };
+                                // TODO: Check that parent_model is actually the model type we're
+                                // mapping over?
+
+                                let mor_app_func = eqlog.mor_app_func(typ).expect("mor_app_func should be defined for member types");
+                                let mor_app_rel: Rel = eqlog.func_rel(mor_app_func).unwrap();
+                                let mor_app_rel: FlatInRel = FlatInRel::EqlogRel(mor_app_rel);
+
+                                let mor_app_eval_index_new = IndexSpec {
+                                    order: vec![0, 1, 2].into(),
+                                    age: IndexAge::New,
+                                };
+                                let mor_app_eval_index_old = IndexSpec {
+                                    order: vec![0, 1, 2].into(),
+                                    age: IndexAge::Old,
+                                };
+
+                                let mor_app_eval_index_new_name = display_index_field_name(&mor_app_rel, &mor_app_eval_index_new, eqlog, identifiers);
+                                let mor_app_eval_index_old_name = display_index_field_name(&mor_app_rel, &mor_app_eval_index_old, eqlog, identifiers);
+
+                                writedoc!{f, "
+                                    Some(
+                                    self.{mor_app_eval_index_new_name}.get(*morph).unwrap_or_else(||PrefixTree2::empty())
+                                    .union(self.{mor_app_eval_index_old_name}.get(*morph).unwrap_or_else(|| PrefixTree2::empty()))
+                                    ),
+                                "}
+                            })
+                        })
+                        .format("\n");
+
                     writedoc!{f, r#"
                         let mut {index_field_name}_all = self.{index_field_name}_own.clone();
                         let {index_field_name}_own = &mut self.{index_field_name}_own;
-                        for MorphismWithSignature {{ morph: _, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
+                        #[allow(unused)]
+                        for MorphismWithSignature {{ morph, dom, cod }} in ordered_{parent_model_type_snake}_mor.iter() {{
                         {before_model_els_loop_headers}
                         let dom_set = match {index_field_name}_all.get(*dom) {{
                         Some(dom_set) => dom_set.clone(),
                         None => {{ continue; }},
                         }};
+                        let mapped_dom_set = dom_set.mapped(
+                        {dom_cod_maps}
+                        );
                         {remove_from_own}
-                        {index_field_name}_all.insert_restriction(*cod, dom_set);
+                        {index_field_name}_all.insert_restriction(*cod, mapped_dom_set);
                         {before_model_els_loop_footers}
                         }}
                         self.{index_field_name}_all = {index_field_name}_all;

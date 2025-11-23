@@ -40,10 +40,7 @@ fn single_z2() {
     assert_eq!(product_elements.len(), 2);
 }
 
-// The tests here don't pass or don't terminate at all because propagation of member relations
-// along morphism currently don't take into account whether or not an element in a relation is a
-// member type (-> needs to be mapped first) or not.
-//#[test]
+#[test]
 fn id_on_z2() {
     let mut model = IndexedAbelianGroup::new();
 
@@ -62,15 +59,12 @@ fn id_on_z2() {
     model.insert_abelian_group_mor_dom(f, z2);
     model.insert_abelian_group_mor_cod(f, z2_copy);
 
-    model.define_el_mor_app(f, a);
-    model.define_el_mor_app(f, id);
-
     model.close();
 
     assert_eq!(model.iter_el().count(), 4);
 }
 
-//#[test]
+#[test]
 fn z2_times_z2_coproduct() {
     let mut model = IndexedAbelianGroup::new();
 
@@ -101,30 +95,31 @@ fn z2_times_z2_coproduct() {
     model.insert_abelian_group_mor_dom(f2, z2_2);
     model.insert_abelian_group_mor_cod(f2, product);
 
-    // Map the generators to distinct elements in the product
-    let a_image = model.define_el_mor_app(f1, a);
-    let b_image = model.define_el_mor_app(f2, b);
-
     model.close();
+
+    // Make `model` non-mut so that we don't accidentally change it.
+    let model = model;
+
+    // Map the generators to elements in the product
+    let a_image = model.el_mor_app(f1, a).unwrap();
+    let b_image = model.el_mor_app(f2, b).unwrap();
 
     // In Z/2Z x Z/2Z, we should have 4 elements: id, a, b, ab
     let product_id = model.id(product).unwrap();
     let ab = model.mul(product, a_image, b_image).unwrap();
 
-    model.close();
-
     // Verify that a, b commute (they should since it's abelian)
-    let ba = model.define_mul(product, b_image, a_image);
+    let ba = model.mul(product, b_image, a_image).unwrap();
     assert!(model.are_equal_el(ab, ba));
 
     // Verify that a^2 = id, b^2 = id, (ab)^2 = id
-    let a_img_squared = model.define_mul(product, a_image, a_image);
+    let a_img_squared = model.mul(product, a_image, a_image).unwrap();
     assert!(model.are_equal_el(a_img_squared, product_id));
 
-    let b_img_squared = model.define_mul(product, b_image, b_image);
+    let b_img_squared = model.mul(product, b_image, b_image).unwrap();
     assert!(model.are_equal_el(b_img_squared, product_id));
 
-    let ab_squared = model.define_mul(product, ab, ab);
+    let ab_squared = model.mul(product, ab, ab).unwrap();
     assert!(model.are_equal_el(ab_squared, product_id));
 
     // Check we have exactly 4 elements in the product
@@ -137,7 +132,7 @@ fn z2_times_z2_coproduct() {
     assert_eq!(product_elements.len(), 4);
 }
 
-//#[test]
+#[test]
 fn z2_plus_z3_equals_z6_coproduct() {
     let mut model = IndexedAbelianGroup::new();
 
@@ -168,36 +163,38 @@ fn z2_plus_z3_equals_z6_coproduct() {
     model.insert_abelian_group_mor_dom(g, z3);
     model.insert_abelian_group_mor_cod(g, z6);
 
-    // Map the generators
-    let a_in_z6 = model.define_el_mor_app(f, a);
-    let b_in_z6 = model.define_el_mor_app(g, b);
+    model.close();
+
+    let a_in_z6 = model.el_mor_app(f, a).unwrap();
+    let b_in_z6 = model.el_mor_app(g, b).unwrap();
 
     model.close();
+    let model = model;
 
     // In Z/6Z, we should have 6 elements
     // Since gcd(2,3) = 1, the coproduct should be Z/6Z
     // We can verify this by checking that a_in_z6 has order 2, b_in_z6 has order 3,
     // and their product has order 6
 
-    let id6 = model.define_id(z6);
+    let id6 = model.id(z6).unwrap();
 
     // Verify a has order 2
-    let a_z6_squared = model.define_mul(z6, a_in_z6, a_in_z6);
+    let a_z6_squared = model.mul(z6, a_in_z6, a_in_z6).unwrap();
     assert!(model.are_equal_el(a_z6_squared, id6));
 
     // Verify b has order 3
-    let b_z6_squared = model.define_mul(z6, b_in_z6, b_in_z6);
-    let b_z6_cubed = model.define_mul(z6, b_z6_squared, b_in_z6);
+    let b_z6_squared = model.mul(z6, b_in_z6, b_in_z6).unwrap();
+    let b_z6_cubed = model.mul(z6, b_z6_squared, b_in_z6).unwrap();
     assert!(model.are_equal_el(b_z6_cubed, id6));
 
     // Verify that ab has order 6
-    let ab = model.define_mul(z6, a_in_z6, b_in_z6);
+    let ab = model.mul(z6, a_in_z6, b_in_z6).unwrap();
 
-    let ab_2 = model.define_mul(z6, ab, ab);
-    let ab_3 = model.define_mul(z6, ab_2, ab);
-    let ab_4 = model.define_mul(z6, ab_3, ab);
-    let ab_5 = model.define_mul(z6, ab_4, ab);
-    let ab_6 = model.define_mul(z6, ab_5, ab);
+    let ab_2 = model.mul(z6, ab, ab).unwrap();
+    let ab_3 = model.mul(z6, ab_2, ab).unwrap();
+    let ab_4 = model.mul(z6, ab_3, ab).unwrap();
+    let ab_5 = model.mul(z6, ab_4, ab).unwrap();
+    let ab_6 = model.mul(z6, ab_5, ab).unwrap();
 
     // ab should not equal id until the 6th power
     assert!(!model.are_equal_el(ab, id6));
@@ -217,7 +214,7 @@ fn z2_plus_z3_equals_z6_coproduct() {
     assert_eq!(z6_elements.len(), 6);
 }
 
-//#[test]
+#[test]
 fn morphism_composition() {
     let mut model = IndexedAbelianGroup::new();
 
@@ -234,13 +231,32 @@ fn morphism_composition() {
     model.insert_abelian_group_mor_cod(g, g3);
 
     let x = model.new_el(g1);
+    let x_squared = model.define_mul(g1, x, x);
+    let id = model.define_id(g1);
+    model.equate_el(x_squared, id);
 
     model.close();
 
-    // Verify that morphism properties are preserved
-    let fx = model.define_el_mor_app(f, x);
-    let gfx = model.define_el_mor_app(g, fx);
+    let fx = model.el_mor_app(f, x).unwrap();
+    let gfx = model.el_mor_app(g, fx).unwrap();
 
-    // Just check that composition works
-    assert!(model.abelian_group_member_el(g3, gfx));
+    let mut g1_count = 0;
+    let mut g2_count = 0;
+    let mut g3_count = 0;
+
+    for (grp, el) in model.iter_abelian_group_member_el() {
+        if model.are_equal_abelian_group(grp, g1) {
+            g1_count += 1;
+        } else if model.are_equal_abelian_group(grp, g2) {
+            g2_count += 1;
+        } else if model.are_equal_abelian_group(grp, g3) {
+            g3_count += 1;
+        } else {
+            panic!("Unexpected group: {grp}");
+        }
+    }
+
+    assert_eq!(g1_count, 2);
+    assert_eq!(g2_count, 2);
+    assert_eq!(g3_count, 2);
 }

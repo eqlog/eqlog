@@ -71,3 +71,11 @@ model AbelianGroup {
         then mul(t_0, t_1) = to;
     }
 }
+
+rule morphisms_total {
+    if grp: AbelianGroup;
+    if x: grp.El;
+    if dom(f) = grp;
+    if cod(f)!;
+    then f@(x)!;
+}
