@@ -237,14 +237,11 @@ fn morphism_composition() {
 
     model.close();
 
-    let fx = model.el_mor_app(f, x).unwrap();
-    let gfx = model.el_mor_app(g, fx).unwrap();
-
     let mut g1_count = 0;
     let mut g2_count = 0;
     let mut g3_count = 0;
 
-    for (grp, el) in model.iter_abelian_group_member_el() {
+    for (grp, _) in model.iter_abelian_group_member_el() {
         if model.are_equal_abelian_group(grp, g1) {
             g1_count += 1;
         } else if model.are_equal_abelian_group(grp, g2) {
